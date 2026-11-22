@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { sampleShaftIntensity } from './dapple.js';
+import { renderLightField } from './field.js';
 import { DEFAULT_FOREST_LIGHTING } from './schema.js';
+import { FIXTURE_SKY } from '../fixture/sky-preset.js';
 
 const WIDTH = 640;
 const HEIGHT = 360;
@@ -27,8 +29,8 @@ function shaftBoxes(timeMs: number): { shaft: Box; shadow: Box } {
   return { shaft: boxes[0]!, shadow: boxes.at(-1)! };
 }
 
-async function open(page: Page, renderer: string, quality: string, lighting: 0 | 1): Promise<void> {
-  await page.goto(`/hd2d/?renderer=${renderer}&quality=${quality}&lighting=${lighting}&seed=1`);
+async function open(page: Page, renderer: string, quality: string, lighting: 0 | 1, sky = 0): Promise<void> {
+  await page.goto(`/hd2d/?renderer=${renderer}&quality=${quality}&lighting=${lighting}&seed=1&sky=${sky}`);
   await expect.poll(() => page.evaluate(() => window.__hd2d?.ready)).toBe(true);
 }
 
@@ -86,6 +88,55 @@ for (const renderer of ['phaser', 'three'] as const)
       const startGain = start.luma[0]! - unlitStart.luma[0]!;
       const laterGain = later.luma[0]! - unlitLater.luma[0]!;
       expect(laterGain - startGain).toBeGreaterThan(20);
+    });
+
+/** Keeps boxes clear of the lantern, whose own glow would swamp the sky light. */
+const clearOfLantern = ({ x, y }: Box) => Math.hypot(x - LANTERN.x, y - LANTERN.y) > 110;
+
+/**
+ * Boxes picked from the expected light field of the `sky=1` preset at `timeMs`: the brightest beam pool and the
+ * darkest spot at pool height, and the deepest cloud shadow and sunniest open ground in the lower half (no beams there).
+ */
+function skyBoxes(timeMs: number): { pool: Box; dim: Box; cloud: Box; sun: Box } {
+  const field = new Uint8ClampedArray(WIDTH * HEIGHT * 4);
+  renderLightField(field, WIDTH, HEIGHT, FIXTURE_SKY, timeMs, 1, []);
+  const mean = (x: number, y: number, channel: number) => {
+    let sum = 0;
+    for (let sy = 0; sy < BOX; sy += 2)
+      for (let sx = 0; sx < BOX; sx += 2) sum += field[((y + sy) * WIDTH + x + sx) * 4 + channel]!;
+    return sum / (BOX * BOX) / 4;
+  };
+  const boxes: Array<Box & { light: number; keep: number }> = [];
+  for (let y = 0; y <= HEIGHT - BOX; y += 8)
+    for (let x = 0; x <= WIDTH - BOX; x += 8)
+      if (clearOfLantern({ x, y })) boxes.push({ x, y, light: mean(x, y, 0), keep: mean(x, y, 3) });
+  const poolBand = boxes.filter((box) => box.y > HEIGHT * 0.25 && box.y < HEIGHT * 0.5);
+  const lower = boxes.filter((box) => box.y > HEIGHT * 0.6);
+  const by = <T>(list: T[], score: (item: T) => number) => list.reduce((a, b) => (score(b) > score(a) ? b : a));
+  return {
+    pool: by(poolBand, (box) => box.light),
+    dim: by(poolBand, (box) => -box.light - (255 - box.keep)),
+    cloud: by(lower, (box) => -box.keep),
+    sun: by(lower, (box) => box.keep + box.light),
+  };
+}
+
+for (const renderer of ['phaser', 'three'] as const)
+  for (const quality of ['high', 'low'] as const)
+    test(`${renderer} sky at quality=${quality} lights beam pools and shades under clouds`, async ({ page }) => {
+      const { pool, dim, cloud, sun } = skyBoxes(1000);
+      const boxes = [pool, dim, cloud, sun];
+      await open(page, renderer, quality, 0, 1);
+      const unlit = await sample(page, 1000, boxes);
+      await open(page, renderer, quality, 1, 1);
+      const lit = await sample(page, 1000, boxes);
+      // Lit minus unlit cancels the test art under each box, leaving only what the sky did there.
+      const gain = lit.luma.map((value, index) => value - unlit.luma[index]!);
+      expect(gain[0]!).toBeGreaterThan(gain[1]! + 15);
+      expect(gain[3]!).toBeGreaterThan(gain[2]! + 10);
+      // The clouds drift: the same scene a few seconds on is shaded differently.
+      const later = await sample(page, 6000, boxes);
+      expect(later.hash).not.toBe(lit.hash);
     });
 
 declare global {

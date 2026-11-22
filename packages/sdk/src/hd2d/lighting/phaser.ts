@@ -116,7 +116,7 @@ export function createPhaserLighting(
     });
     const { keep, light } = overlays;
     const { width, height } = keep.pixels;
-    renderLightField(field, width, height, preset, timeMs, seed, screen);
+    renderLightField(field, width, height, preset, timeMs, seed, screen, view.width / view.height);
     const shade = keep.pixels.data;
     const glow = light.pixels.data;
     for (let i = 0; i < field.length; i += 4) {

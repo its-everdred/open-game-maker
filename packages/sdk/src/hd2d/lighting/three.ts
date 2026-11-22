@@ -161,7 +161,17 @@ export function createThreeLighting(
         falloff: light.falloff ?? 2,
       });
     });
-    renderLightField(fieldData, field.image.width, field.image.height, preset, timeMs, seed, screenLights);
+    renderLightField(
+      fieldData,
+      field.image.width,
+      field.image.height,
+      preset,
+      timeMs,
+      seed,
+      screenLights,
+      // The last drawn frame's size; before the first render the field's own shape stands in.
+      size.y > 0 ? size.x / size.y : undefined,
+    );
     field.needsUpdate = true;
   }
 

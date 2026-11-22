@@ -2,14 +2,16 @@ import { Mesh, type MeshBasicMaterial } from 'three';
 import type Phaser from 'phaser';
 import { createLighting, DEFAULT_FOREST_LIGHTING, type LightingSprite } from '../lighting/index.js';
 import type { Mount } from './mount.js';
+import { FIXTURE_SKY } from './sky-preset.js';
 
-/** The forest preset plus one flickering lantern beside the path; the hero gets its normal map. */
+/** The forest preset (or, with `sky=1`, short beams and clouds) plus one flickering lantern; the hero gets its normal map. */
 const mountLighting: Mount = (ctx) => {
   const three = ctx.three;
   // Lights are in world units: Phaser is y-down screen pixels, the three.js fixture is y-up.
   const lantern = { id: 'lantern', x: 470, y: three ? 360 - 285 : 285, radius: 80, color: '#ffb35c', intensity: 0.9 };
+  const sky = new URLSearchParams(location.search).get('sky') === '1';
   const preset = {
-    ...DEFAULT_FOREST_LIGHTING,
+    ...(sky ? FIXTURE_SKY : DEFAULT_FOREST_LIGHTING),
     // Seed 2 swings from dim at 0 ms to bright at 500 ms, which the browser spec checks.
     lights: [{ ...lantern, flicker: { amount: 0.55, rate: 6, seed: 2 } }],
   };
