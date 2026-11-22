@@ -36,3 +36,37 @@ it('uses each measured kind’s facing at shared exterior edges and preserves co
   }
   expect(() => edgeRun(cells, 'fence', [{ cell: cells[0]!, edge: 'xMax' }])).toThrow('exterior');
 });
+
+it('assembles an open polyline and leaves its selected opening', () => {
+  const run = edgeRun(
+    {
+      vertices: [
+        { x: 1, y: 1 },
+        { x: 3, y: 1 },
+        { x: 3, y: 3 },
+      ],
+      interior: 'right',
+    },
+    'fence',
+    [{ cell: { x: 1, y: 1 }, edge: 'yMin' }],
+  );
+  expect(run.placements).toHaveLength(3);
+  expect(run.postVertices).toEqual([
+    { x: 1, y: 1 },
+    { x: 2, y: 1 },
+  ]);
+  expect(new IsoMap(assemblyMap(4, 4, run.placements)).pieces('wall')).toHaveLength(3);
+  expect(() =>
+    edgeRun(
+      {
+        vertices: [
+          { x: 1, y: 1 },
+          { x: 3, y: 1 },
+        ],
+        interior: 'right',
+      },
+      'fence',
+      [{ cell: { x: 2, y: 1 }, edge: 'xMax' }],
+    ),
+  ).toThrow('exterior');
+});

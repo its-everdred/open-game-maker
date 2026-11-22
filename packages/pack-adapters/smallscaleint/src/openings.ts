@@ -6,7 +6,11 @@ const sameEdge = (a: BoundaryEdge, b: BoundaryEdge) =>
 
 /** Grid vertices at the two ends of each exterior opening, suitable for later post placement. */
 export function openingVertices(cells: readonly Cell[], openings: readonly BoundaryEdge[]): Cell[] {
-  const exterior = boundary(cells);
+  return verticesForOpenings(boundary(cells), openings);
+}
+
+/** Endpoints of openings selected from an explicit set of edges. */
+export function verticesForOpenings(exterior: readonly BoundaryEdge[], openings: readonly BoundaryEdge[]): Cell[] {
   const vertices = new Map<string, { cell: Cell; count: number }>();
   const seen = new Set<string>();
   for (const opening of openings) {

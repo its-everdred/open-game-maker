@@ -1,7 +1,8 @@
 import type { AssemblyPlacement } from './assembly-map.js';
 import { boundary, type BoundaryEdge, type CellEdge } from './boundary.js';
 import type { TileFacing } from './map.js';
-import { openingVertices } from './openings.js';
+import { verticesForOpenings } from './openings.js';
+import { polylineEdges, type EdgePolyline } from './polyline-edges.js';
 import type { Cell } from './placement.js';
 import { fenceB1Edges, wallC1Edges, wallF1Edges } from './structural-bounds.js';
 
@@ -22,15 +23,19 @@ const STYLES = {
 } as const;
 
 /** Boundary placements and opening endpoints; post sprites are not bound until their anchors are verified. */
-export function edgeRun(cells: readonly Cell[], kind: EdgeKind, openings: readonly BoundaryEdge[] = []) {
+export function edgeRun(shape: readonly Cell[] | EdgePolyline, kind: EdgeKind, openings: readonly BoundaryEdge[] = []) {
   if (!Object.hasOwn(STYLES, kind)) throw new Error('unknown edge kind');
   const style = STYLES[kind];
-  const postVertices = openingVertices(cells, openings);
-  const placements: AssemblyPlacement[] = boundary(cells, openings).map(({ cell, edge }) => {
-    const facing = (Object.entries(style.edges.value) as [TileFacing, CellEdge][]).find(
-      ([, value]) => value === edge,
-    )![0];
-    return { cell, layer: 'wall', asset: style.asset, facing, solid: true };
-  });
+  const edges = Array.isArray(shape) ? boundary(shape) : polylineEdges(shape as EdgePolyline);
+  const postVertices = verticesForOpenings(edges, openings);
+  const omitted = new Set(openings.map(({ cell, edge }) => `${cell.x},${cell.y}:${edge}`));
+  const placements: AssemblyPlacement[] = edges
+    .filter(({ cell, edge }) => !omitted.has(`${cell.x},${cell.y}:${edge}`))
+    .map(({ cell, edge }) => {
+      const facing = (Object.entries(style.edges.value) as [TileFacing, CellEdge][]).find(
+        ([, value]) => value === edge,
+      )![0];
+      return { cell, layer: 'wall', asset: style.asset, facing, solid: true };
+    });
   return { placements, postVertices };
 }
