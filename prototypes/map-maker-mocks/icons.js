@@ -21,6 +21,17 @@ window.IC = {
   person:'<circle cx="12" cy="6" r="3"/><path d="M6 21v-5a6 6 0 0 1 12 0v5"/>',
   roof:'<path d="m3 12 9-8 9 8M5 10v10h14V10"/>',
   play:'<path d="M7 4v16l13-8z"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon:'<path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/>',
+  bulb:'<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>',
+  focus:'<circle cx="12" cy="12" r="3"/><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/>',
+  sparkle:'<path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/><path d="M19 3v4M17 5h4"/>',
+  map:'<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>',
+  bot:'<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/>',
+  filter:'<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
+  chest:'<rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9a9 4 0 0 1 18 0M12 12v3"/>',
+  door:'<path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M3 21h18M14 12h.01"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
   magnet:'<path d="M6 15V7a6 6 0 0 1 12 0v8"/><path d="M6 15h4M14 15h4M6 11h4M14 11h4"/>',
 };
 window.ic = (n) => `<svg viewBox="0 0 24 24">${IC[n]}</svg>`;

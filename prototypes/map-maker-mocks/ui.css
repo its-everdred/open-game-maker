@@ -15,3 +15,21 @@ body{margin:0;background:#0f0e16;font-family:'Nunito',system-ui,sans-serif;color
 .tile.on{outline:3px solid var(--yellow-b);background:color-mix(in srgb,var(--yellow-b) 18%,transparent)}
 .chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:999px;background:var(--paper-2);font:700 14px Nunito,sans-serif;color:var(--ink);white-space:nowrap}
 .chip.on{background:var(--yellow-b);color:var(--dark)}
+.finger{position:absolute;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.3);border:3px solid #fff;z-index:900004;transform:translate(-50%,-50%)}
+.lab{display:flex;flex-direction:column;gap:4px;font:700 12px Nunito,sans-serif;color:var(--muted);text-align:center}
+.row{display:flex;gap:6px;overflow:hidden}
+.count{font:700 13px Nunito,sans-serif;color:var(--muted)}
+.scard{flex:none;border-radius:16px;background:var(--paper-2);overflow:hidden}
+.scard.on{outline:3px solid var(--yellow-b)}
+.sthumb{position:relative;overflow:hidden;background:#1c1528}
+.sname{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;font:700 14px Nunito,sans-serif}
+.who{display:grid;place-items:center;width:26px;height:26px;border-radius:50%}
+.who.person{background:var(--yellow-b);color:var(--dark)}.who.bot{background:var(--aqua-b);color:var(--dark)}
+.who svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.look{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.look.vert{grid-template-columns:1fr}
+.lk{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border-radius:18px;background:var(--paper-2)}
+.look.vert .lk{flex-direction:row;padding:6px 10px}
+.lk.on{background:color-mix(in srgb,var(--yellow-b) 22%,transparent);outline:2px solid var(--yellow-b)}
+.lk svg{width:28px;height:28px;flex:none;stroke:var(--ink);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.lk input{width:100%;accent-color:#ffbf32}

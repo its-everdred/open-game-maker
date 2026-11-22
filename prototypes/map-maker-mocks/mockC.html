@@ -9,12 +9,31 @@
 .vars .v .tile{border-radius:50%;height:100%}
 .vars .v.on{outline:3px solid var(--yellow-b);outline-offset:1px}
 .trail{position:absolute;z-index:900001;pointer-events:none}
-.finger{position:absolute;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.3);border:3px solid #fff;z-index:900002;transform:translate(-50%,-50%)}
+
+.sheet{position:absolute;z-index:900000;padding:14px;display:flex;flex-direction:column;gap:12px}
+.sec{display:flex;flex-direction:column;gap:8px}
+.sec h3{margin:0;display:flex;align-items:center;gap:8px;font:800 15px Nunito,sans-serif}
+.sec h3 svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2}
+.circ{display:flex;gap:10px;flex-wrap:wrap}
+.circ .brush{width:72px;height:72px}
+.slot{width:68px;height:68px;border-radius:50%;border:3px dashed var(--green-b);flex:none}
+.wire{position:absolute;inset:0;z-index:1;pointer-events:none}
+.pin{position:absolute;z-index:900002;width:36px;height:36px;border-radius:50% 50% 50% 0;transform:translate(-50%,-100%) rotate(-45deg);background:var(--aqua-b);display:grid;place-items:center}
+.pin svg{width:20px;height:20px;transform:rotate(45deg);stroke:var(--dark);fill:none;stroke-width:2.4}
 </style></head><body><div class="stage"><div class="world" id="w"></div></div>
-<script src="iso.js"></script><script src="scene.js"></script><script src="icons.js"></script><script>
-const v=new URLSearchParams(location.search).get('v')||'phone', P=v==='phone';
+<script src="iso.js"></script><script src="scene.js"></script><script src="icons.js"></script><script src="panels.js"></script><script>
+const Q=new URLSearchParams(location.search), P=(Q.get('v')||'phone')==='phone', st=Q.get('s')||'edit';
 const VW=innerWidth, VH=innerHeight, s=P?0.38:0.72, ox=P?VW/2-6:VW/2+50, oy=P?290:160;
 const L=document.getElementById('w');
+const H=(h)=>document.body.insertAdjacentHTML('beforeend',h);
+const top3=`<div class="bar glass" style="left:${P?10:12}px;top:${P?10:12}px">${btn('close')}${btn('map',st==='scenes'?'on':'','scenes')}</div>
+ <div class="bar glass" style="left:50%;top:${P?10:12}px;transform:translateX(-50%)">${btn('undo')}${btn('redo')}</div>
+ <div class="bar glass" style="right:${P?10:12}px;top:${P?10:12}px">${P?'':btn('play','','test play')}${btn('check','go','save')}</div>`;
+const brushes=[{ground:'ground_a2_e'},{ground:'ground_h1_e'},{fence:'b1'},{fence:'a1'},{wall:'wall_f1_s'},{prop:'stone_a13_e'},{prop:'tree_a1_e'},{char:'knight_idle'}];
+const vars=[{fence:'b1'},{fence:'b3'},{fence:'b2'},{fence:'a6'}];
+const B=(k,i,on=2)=>`<div class="brush ${i===on?'on':''}">${mini(k,false,68)}</div>`;
+const V=(k,i)=>`<div class="v ${i===0?'on':''}">${mini(k,false,52)}</div>`;
+if(st==='edit'){
 // The west fence is being drawn by one drag: finished part solid, the rest still to come.
 buildScene(L,ox,oy,s,{skipFence:(x,y,e)=>e==='xMin'&&y>=3});
 for(const y of [3,4]){Iso.fence(L,'b1',0,y,'xMin',ox,oy,s,'filter:drop-shadow(0 0 5px #94d742)');}
@@ -23,25 +42,47 @@ mark(L,0,4,ox,oy,s,'background:rgba(148,215,66,.45)');mark(L,0,3,ox,oy,s,'backgr
 const pts=[[0,2.9],[0,4.8]].map(([x,y])=>at(x,y,ox,oy,s));
 const [a,b]=pts;
 document.body.insertAdjacentHTML('beforeend',`<svg class="trail" style="left:0;top:0;width:100%;height:100%"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#94d742" stroke-width="6" stroke-linecap="round" stroke-dasharray="2 12"/></svg><div class="finger" style="left:${b[0]}px;top:${b[1]}px"></div>`);
-const brushes=[{ground:'ground_a2_e'},{ground:'ground_h1_e'},{fence:'b1'},{fence:'a1'},{wall:'wall_f1_s'},{prop:'stone_a13_e'},{prop:'tree_a1_e'},{char:'knight_idle'}];
-const vars=[{fence:'b1'},{fence:'b3'},{fence:'b2'},{fence:'a6'}];
-const B=(k,i)=>`<div class="brush ${i===2?'on':''}">${mini(k,false,68)}</div>`;
-const V=(k,i)=>`<div class="v ${i===0?'on':''}">${mini(k,false,52)}</div>`;
 if(P){
  document.body.insertAdjacentHTML('beforeend',`
- <div class="bar glass" style="left:10px;top:10px">${btn('close')}</div>
- <div class="bar glass" style="left:50%;top:10px;transform:translateX(-50%)">${btn('undo')}${btn('redo')}</div>
- <div class="bar glass" style="right:10px;top:10px">${btn('check','go','save')}</div>
- <div class="bar glass" style="right:10px;top:84px;flex-direction:column;border-radius:30px">${btn('select')}${btn('erase')}${btn('eye','', 'see through roofs')}</div>
+ ${top3}
+ <div class="bar glass" style="right:10px;top:84px;flex-direction:column;border-radius:30px">${btn('select')}${btn('erase')}${btn('eye','', 'see through roofs')}${btn('sun','','light and mood')}</div>
  <div class="vars glass" style="left:50%;bottom:118px;transform:translateX(-50%)">${vars.map(V).join('')}</div>
  <div class="brushes glass" style="left:8px;right:8px;bottom:14px;overflow:hidden">${brushes.map(B).join('')}</div>`);
 } else {
  document.body.insertAdjacentHTML('beforeend',`
- <div class="bar glass" style="left:12px;top:12px">${btn('close')}</div>
- <div class="bar glass" style="left:50%;top:12px;transform:translateX(-50%)">${btn('undo')}${btn('redo')}</div>
- <div class="bar glass" style="right:12px;top:12px">${btn('play','', 'test play')}${btn('check','go','save')}</div>
+ ${top3}
  <div class="brushes glass" style="left:12px;top:84px;flex-direction:column;border-radius:46px">${brushes.map(B).join('')}</div>
  <div class="vars glass" style="left:110px;top:${84+2*78}px">${vars.map(V).join('')}</div>
- <div class="bar glass" style="right:12px;bottom:12px">${btn('select')}${btn('erase')}${btn('eye','', 'see through roofs')}</div>`);
+ <div class="bar glass" style="right:12px;bottom:12px">${btn('select')}${btn('erase')}${btn('eye','', 'see through roofs')}${btn('sun','','light and mood')}</div>`);
+}
+}
+const lights=[['bulb',0],['moon',1],['focus',0],['sparkle',0]];
+const lightRing=(vert)=>`<div class="brushes glass" style="${vert?'left:12px;top:84px;flex-direction:column;border-radius:46px':'left:8px;right:8px;bottom:14px;justify-content:center'}">${lights.map(([n,on])=>`<div class="brush ${on?'on':''}" style="display:grid;place-items:center">${'<svg viewBox="0 0 24 24" style="width:34px;height:34px;stroke:#f2ead6;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round">'+IC[n]+'</svg>'}</div>`).join('')}${btn('brush','','back to brushes')}</div>`;
+if(st==='look'){
+  buildScene(L,ox,oy,s); applyLook(L,ox,oy,s,VW,VH);
+  const [px,py]=at(4,3,ox,oy,s);
+  H(top3+`<div class="pin" style="left:${px}px;top:${py}px">${'<svg viewBox="0 0 24 24">'+IC.focus+'</svg>'}</div>`+lightRing(!P)
+   +`<div class="vars glass" style="${P?'left:50%;bottom:118px;transform:translateX(-50%)':'left:110px;top:'+(84+78)+'px'};padding:10px 18px"><input type="range" value="80" style="width:${P?240:260}px;accent-color:#ffbf32"></div>`);
+}
+if(st==='browse'){
+  buildScene(L,ox,oy,s);
+  const secs=[['tree','Nature',LIB.items.slice(0,8).map(x=>x[0])],['fence','Fences',[{fence:'b1'},{fence:'b3'},{fence:'b6'},{fence:'a1'},{fence:'a3'}]],['chest','Props',[{prop:'chest_a1_e'},{prop:'chest_b1_e'},{prop:'misc_a5_e'},{prop:'misc_b1_e'},{prop:'door_a1_e'}]]];
+  const sheetPos=P?'left:0;right:0;top:0;bottom:104px;border-radius:0 0 26px 26px':'left:110px;top:84px;width:560px;bottom:12px;border-radius:26px';
+  H(`<div class="sheet glass" style="${sheetPos}">
+   <div style="display:flex;gap:8px;align-items:center">${btn('close','','close library')}<div class="search" style="flex:1;display:flex;align-items:center;gap:8px;height:44px;padding:0 14px;border-radius:999px;background:var(--paper-2);color:var(--muted)">${'<svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2.2">'+IC.search+'</svg>'}<span style="flex:1"></span><span class="count">${LIB.total}</span></div></div>
+   <div class="row">${LIB.tags.map((t,i)=>`<span class="chip ${i===0?'on':''}">${t}</span>`).join('')}</div>
+   ${secs.map(([icn,name,list])=>`<div class="sec"><h3>${'<svg viewBox="0 0 24 24">'+IC[icn]+'</svg>'}${name}</h3><div class="circ">${list.map((k,i)=>`<div class="brush ${name==='Nature'&&i===1?'on':''}">${mini(k,false,72)}</div>`).join('')}</div></div>`).join('')}</div>`);
+  const ring=brushes.slice(0,P?3:6).map((k,i)=>B(k,i,-1)).join('');
+  H(`<div class="brushes glass" style="${P?'left:8px;right:8px;bottom:14px':'left:12px;top:84px;flex-direction:column;border-radius:46px'}">${ring}<div class="slot"></div></div>`);
+  const sl=document.querySelector('.slot').getBoundingClientRect();
+  H(dragGhost(sl.left+sl.width/2+(P?0:40),sl.top+(P?-30:sl.height/2+40),{prop:'tree_a3_e'}));
+}
+if(st==='scenes'){
+  // Scenes laid out as a world: each scene a card, linked by the doors and paths between them.
+  const pos=P?[[30,150],[140,370],[30,590]]:[[160,140],[560,320],[900,120]];
+  const w=P?220:300, h=P?130:170;
+  const wires=[[0,1],[1,2]].map(([a,b])=>`<line x1="${pos[a][0]+w/2}" y1="${pos[a][1]+h/2}" x2="${pos[b][0]+w/2}" y2="${pos[b][1]+h/2}" stroke="#94d742" stroke-width="5" stroke-dasharray="2 12" stroke-linecap="round"/>`).join('');
+  H(`<svg class="wire" style="width:100%;height:100%">${wires}</svg>`+SCENES.map((c,i)=>`<div style="position:absolute;left:${pos[i][0]}px;top:${pos[i][1]}px;z-index:2">${sceneCard(c,w,h,i)}</div>`).join('')
+   +`<div style="position:absolute;left:${P?250:1000}px;top:${P?640:500}px;z-index:2">${btn('plus','','new scene')}</div>`+top3);
 }
 </script></body></html>

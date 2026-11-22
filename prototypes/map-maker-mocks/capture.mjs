@@ -7,21 +7,25 @@ const require = createRequire(new URL('../../apps/web/package.json', import.meta
 const { chromium } = require('@playwright/test');
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = resolve(process.argv[2] ?? 'out');
+const only = process.argv[3];
 const shots = [
-  ...['A', 'B', 'C'].flatMap((m) => [
-    [`mock${m}.html?v=phone`, `${m}-phone.png`, 390, 844, 2],
-    [`mock${m}.html?v=desk`, `${m}-desk.png`, 1280, 800, 1],
-  ]),
+  ...['A', 'B', 'C'].flatMap((m) =>
+    ['edit', 'browse', 'scenes', 'look'].flatMap((s) => [
+      [`mock${m}.html?v=phone&s=${s}`, `${m}-phone-${s}.png`, 390, 844, 2],
+      [`mock${m}.html?v=desk&s=${s}`, `${m}-desk-${s}.png`, 1280, 800, 1],
+    ]),
+  ),
   ...['snap', 'free', 'drag', 'tap', 'lock', 'agent'].map((q) => [`mockD.html?q=${q}`, `D-${q}.png`, 640, 480, 1]),
 ];
 const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });
 const missing = [];
-for (const [page, file, width, height, scale] of shots) {
+for (const [page, file, width, height, scale] of shots.filter(([, f]) => !only || f.startsWith(only))) {
   const tab = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: scale });
   // Local files are the sprites and mock code: a failed one means a broken picture. Web fonts may fall back.
   tab.on('requestfailed', (request) => {
     if (request.url().startsWith('file:')) missing.push(`${page}: ${decodeURI(request.url())}`);
   });
+  tab.on('pageerror', (error) => missing.push(`${page}: ${error.message}`));
   await tab.goto(`file://${here}${page}`);
   await tab.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
   await tab.evaluate(() => Promise.all([...document.images].map((image) => image.decode().catch(() => {}))));
@@ -31,6 +35,6 @@ for (const [page, file, width, height, scale] of shots) {
 }
 await browser.close();
 if (missing.length) {
-  console.error(`missing local files (run stage-sprites.sh):\n${[...new Set(missing)].join('\n')}`);
+  console.error(`broken pages (missing files: run stage-sprites.sh):\n${[...new Set(missing)].join('\n')}`);
   process.exit(1);
 }
