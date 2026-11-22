@@ -23,6 +23,12 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
   edges with the `GameInstance.validatePlacement` result shape.
 - `conventions`: the pack facts, each with how it was verified (sheet row order E, SE, S, SW, W, NW, N, NE, measured
   pixel by pixel against the angle-named frame files), and `layerForCategory` for tileset pieces.
+- Assemblers: `edgeRun(cells | polyline, 'fence' | 'stone' | 'timber', openings)` places measured facings on every
+  boundary edge and returns the gate post vertices; `building(footprint, 'stone', door, walkable)` makes a shell, a gable
+  over the footprint and a door onto a walkable entry; `path(from, to, style)` lays seeded stepping stones between
+  entries; `scatter(region, palette, density, rules)` adds clustered dressing that never covers reserved cells.
+  `assemblyMap(width, height, placements)` writes their output as the Tiled subset `IsoMap` reads. Gate posts, steps
+  and other building styles are not bound yet.
 - `structuralImageBounds`: inclusive alpha bounds for twenty-one measured structural or paving assets, keyed by asset card id.
   Bounds do not establish an anchor or connection socket. `fenceB1Edges`, `wallF1Edges`, and `wallC1Edges` record measured fence, stone and timber wall facings.
   `structuralCardFacts(id)` returns the known card fields without fabricating unmeasured facts.
