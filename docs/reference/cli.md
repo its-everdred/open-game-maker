@@ -202,6 +202,13 @@ stylesheets, at 390x844, 844x390, 820x1180 and 1180x820 with touch on (`--viewpo
 default `~/.config/ogm/qa/storage.json`, minted on the host by `ops/bin/ogm-qa-signin`) and answers the app's requests
 for the game build from `./dist`. `--frame bare` captures the game page alone, as before.
 
+`gm scene match <mock.png> <brief.json> --pack <id> --facing <direction> --out <new.json>` searches the
+specified pack locally using the reviewed regions in the brief. It checks pack rights and source hashes; the
+caller must establish that local vision processing of the mock is allowed. The output includes embeddings and
+reports whether the search was truncated. `--encoder siglip` selects a cached SigLIP model instead of CLIP;
+models must already be available locally.
+Use `--python <path>` when the local tagging worker's Python environment is elsewhere.
+
 `gm scene identify <mock.png> <brief.json> <match.json>` ranks up to three sprite candidates per reviewed
 brief region from a local scene-matcher result. It checks the mock hash and crop coordinates, and reports the
 searched pack, facing and completeness. Candidate selection and kit-gap decisions still require review; the
