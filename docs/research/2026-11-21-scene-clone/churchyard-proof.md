@@ -149,3 +149,11 @@ broken approach second. It preserves the already-connected fence and marks the
 gate pillars, torches, grave arrangement and growth as unobserved. The inputs
 were manually reviewed from the unregistered screenshot; this is not automatic
 image inference, a matched-framing result, or a kit-gap finding.
+
+A partial human annotation of the five inspected crops is saved locally as
+`assets-local/review/1154/churchyard-manual-inference.json`. It records rough
+image-space bounds, an approximate grave footpoint and visible-height ratio,
+layer and visible occlusion hints; cardinal facings and unmeasured or clipped
+footpoints are explicitly null. The ratios are screen-space estimates, not
+registered tile positions or physical scale. This is a partial manual reference
+for evaluating future inference, not a complete scene document.
