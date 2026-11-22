@@ -208,6 +208,10 @@ caller must establish that local vision processing of the mock is allowed. The o
 reports whether the search was truncated. `--encoder siglip` selects a cached SigLIP model instead of CLIP;
 models must already be available locally.
 Use `--python <path>` when the local tagging worker's Python environment is elsewhere.
+The brief is JSON: `image` `{width,height}` (must equal the mock's size), `story`, `mood`, `light`, `focalRegion`
+(a region id) and `regions` entries with `id`, `label`, `layer` (`ground`, `background`, `landmark`, `prop`,
+`character`, `light` or `effect`) and `bounds` `{x,y,width,height}` in mock pixels. The `--out` file feeds
+`gm scene identify`.
 
 `gm scene identify <mock.png> <brief.json> <match.json>` ranks up to three sprite candidates per reviewed
 brief region from a local scene-matcher result. It checks the mock hash and crop coordinates, and reports the
