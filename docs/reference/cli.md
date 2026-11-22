@@ -202,6 +202,32 @@ stylesheets, at 390x844, 844x390, 820x1180 and 1180x820 with touch on (`--viewpo
 default `~/.config/ogm/qa/storage.json`, minted on the host by `ops/bin/ogm-qa-signin`) and answers the app's requests
 for the game build from `./dist`. `--frame bare` captures the game page alone, as before.
 
+`gm scene match <mock.png> <brief.json> --pack <id> --facing <direction> --out <new.json>` searches the
+specified pack locally using the reviewed regions in the brief. It checks pack rights and source hashes; the
+caller must establish that local vision processing of the mock is allowed. The output includes embeddings and
+reports whether the search was truncated. `--encoder siglip` selects a cached SigLIP model instead of CLIP;
+models must already be available locally.
+Use `--python <path>` when the local tagging worker's Python environment is elsewhere.
+The brief is JSON: `image` `{width,height}` (must equal the mock's size), `story`, `mood`, `light`, `focalRegion`
+(a region id) and `regions` entries with `id`, `label`, `layer` (`ground`, `background`, `landmark`, `prop`,
+`character`, `light` or `effect`) and `bounds` `{x,y,width,height}` in mock pixels. The `--out` file feeds
+`gm scene identify`.
+
+`gm scene identify <mock.png> <brief.json> <match.json>` ranks up to three sprite candidates per reviewed
+brief region from a local scene-matcher result. It checks the mock hash and crop coordinates, and reports the
+searched pack, facing and completeness. Candidate selection and kit-gap decisions still require review; the
+command does not validate the provenance or usage rights of a supplied match file.
+
+`gm scene compare-ground <reference.png> <render.png> <registration.json>` ranks ground-plane regions by
+image mismatch using four supplied corresponding points. The JSON has `anchors` entries with `reference` and
+`render` pixel points, and `regions` entries with an `id` and `{x,y,w,h}` bounds in reference pixels. Confirm the
+points and regions by eye: a ground-plane warp does not align elevated objects, detect missing assets, verify
+camera framing, or explain a mismatch. Regions without complete render coverage are rejected. Output records
+the hashes of both images and the registration file.
+Add `--out <new-sheet.png>` for reference, warped render and 50% overlay side by side; uncovered pixels are
+magenta in the render panel. The command refuses to overwrite an existing file. The sheet is a ground-plane
+diagnostic, so elevated objects may not align.
+
 `gm look score <target.png> <candidate.png>` compares images locally and prints JSON. It writes `look-score.png` (or
 `--out <path>`) with target, candidate, difference heatmap and 50% overlay, plus a provenance sidecar. The crop applied to both inputs
 `--crop x,y,w,h` and repeatable `--region name=x,y,w,h` use pixel coordinates; regions refer to the cropped target. When none are named, a 3-by-3 grid supplies the worst five regions.

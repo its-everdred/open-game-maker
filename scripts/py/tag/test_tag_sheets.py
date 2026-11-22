@@ -277,3 +277,59 @@ def test_visual_worker_rejects_collection_directory_alias(tmp_path):
     alias.symlink_to(real, target_is_directory=True)
     with pytest.raises(ValueError, match="collection directory symlinks"):
         t.eligible_cards(alias, "model")
+
+
+def test_search_may_include_reviewed_cards_but_requires_both_rights(tmp_path):
+    import hashlib
+
+    pack = tmp_path / "pack"
+    (pack / "cards").mkdir(parents=True)
+    (pack / "v1" / "extracted" / "models").mkdir(parents=True)
+    (pack / "pack.json").write_text(json.dumps({"current": "v1"}))
+    (pack / "v1" / "extracted" / "models" / "SM_Bld_Prop_Torch_01.glb").write_bytes(b"glb")
+    collection = card()
+    collection.update({"id": "t1:pack@v1", "card_type": "collection"})
+    collection["rights"]["uses"] = ["vision-input", "in-game"]
+    (pack / "collection.card.json").write_text(json.dumps(collection))
+    asset = card()
+    asset["status"] = "reviewed"
+    asset["source"]["files"][0]["sha256"] = "sha256:" + hashlib.sha256(b"glb").hexdigest()
+    asset["rights"]["uses"] = ["vision-input", "in-game"]
+    asset["previews"]["sheet"] = t.expected_sheet_key(asset, collection["rights"])
+    (pack / "cards" / "torch.card.json").write_text(json.dumps(asset))
+    assert t.eligible_cards(pack) == []
+    assert len(t.eligible_cards(pack, include_reviewed=True, required_uses=("vision-input", "in-game"))) == 1
+    asset["rights"]["uses"] = ["vision-input"]
+    (pack / "cards" / "torch.card.json").write_text(json.dumps(asset))
+    assert t.eligible_cards(pack, include_reviewed=True, required_uses=("vision-input", "in-game")) == []
+
+
+def test_directional_search_checks_the_selected_source_and_its_alias_rights(tmp_path):
+    import hashlib
+
+    pack = tmp_path / "pack"
+    extracted = pack / "v1" / "extracted" / "models"
+    extracted.mkdir(parents=True)
+    (pack / "cards").mkdir()
+    (pack / "pack.json").write_text(json.dumps({"current": "v1"}))
+    collection = card()
+    collection.update({"id": "t1:pack@v1", "card_type": "collection"})
+    collection["rights"]["uses"] = ["vision-input", "in-game"]
+    (pack / "collection.card.json").write_text(json.dumps(collection))
+    for name in ("east.png", "south.png"):
+        (extracted / name).write_bytes(name.encode())
+    asset = card()
+    asset.update({"kind": "sprite", "status": "reviewed", "sprite": {"facings": {"E": "models/east.png", "S": "models/south.png"}}})
+    asset["rights"]["uses"] = ["vision-input", "in-game"]
+    asset["source"]["files"] = [{"path": f"models/{name}", "sha256": "sha256:" + hashlib.sha256(name.encode()).hexdigest(), "role": "primary" if name == "east.png" else "companion"} for name in ("east.png", "south.png")]
+    (pack / "cards" / "sprite.card.json").write_text(json.dumps(asset))
+    rows = t.eligible_cards(pack, "sprite", include_reviewed=True, required_uses=("vision-input", "in-game"), facing="E")
+    assert len(rows) == 1 and rows[0]["preview"].name == "east.png"
+    alias = json.loads(json.dumps(asset))
+    alias["id"] += "-restricted"
+    alias["source"]["files"] = [asset["source"]["files"][1]]
+    alias["rights"]["uses"] = ["vision-input"]
+    (pack / "cards" / "restricted.card.json").write_text(json.dumps(alias))
+    assert not t.eligible_cards(pack, "sprite", include_reviewed=True, required_uses=("vision-input", "in-game"), facing="S")
+    (extracted / "east.png").write_bytes(b"tampered")
+    assert not t.eligible_cards(pack, "sprite", include_reviewed=True, required_uses=("vision-input", "in-game"), facing="E")
