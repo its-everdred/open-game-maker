@@ -62,7 +62,7 @@ export function SceneStrip({ gameId }: { gameId: string }) {
           className="scene-strip-add"
           type="button"
           aria-label="New scene"
-          disabled={!canCreateScene(source)}
+          disabled={!canCreateScene()}
           onClick={() => {
             const card = newScene(scenes);
             setScenes([...scenes, card]);

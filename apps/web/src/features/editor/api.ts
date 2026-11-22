@@ -103,6 +103,13 @@ export function getScenerySource(gameId: string, branch = 'main', buildId?: stri
   );
 }
 
+/** The game's scene documents, each with who wrote its head revision. */
+export function getEditorScenes(
+  gameId: string,
+): Promise<{ scenes: { id: string; rev: number; author: string; updatedAt: string }[] }> {
+  return api(`/games/${segment(gameId)}/editor/scenes`);
+}
+
 export function getFallbackPalette(gameId: string): Promise<FallbackPalette> {
   return api(`/games/${segment(gameId)}/editor/fallback`);
 }

@@ -55,6 +55,7 @@ export async function installGameApi(
     if (path === '/games/game/workers' && request.method() === 'GET') return json(route, { workers: [] });
     if (path === '/games/game/editor/fallback' && request.method() === 'GET')
       return json(route, { mode: 'request', palette: { categories: [], items: [] } });
+    if (path === '/games/game/editor/scenes' && request.method() === 'GET') return json(route, { scenes: [] });
     if (path === '/games/game/published') return json(route, { error: 'not_found' }, 404);
     if (path === '/games/game/saves') return json(route, { error: 'not_found' }, 404);
     if (path === '/games/game/branches/main/design' && request.method() === 'GET') {
