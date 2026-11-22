@@ -249,7 +249,7 @@ RECIPES: list[dict] = [
      "close": 0},
     {"id": "grime-worn-path", "gap": "grime", "op": "decal", "shape": "Ground J9", "texture": "Ground I1"},
     {"id": "clutter-pots-crates", "gap": "clutter", "op": "compose",
-     "parts": [["Misc B2", "S", [-0.2, -0.2]], ["Misc A3", "E", [0.25, -0.05]], ["Misc A2", "S", [0.05, 0.3]]]},
+     "parts": [["Misc B2", "S", [-0.2, -0.2]], ["Misc A3", "E", [0.15, 0.05]], ["Misc A2", "S", [0.05, 0.15]]]},
     {"id": "clutter-farmyard", "gap": "clutter", "op": "compose",
      "parts": [["Misc E1", "E", [-0.2, -0.15]], ["Misc B1", "S", [0.25, 0.05]], ["Misc A8", "S", [-0.05, 0.3]],
                ["Misc E9", "S", [0.2, 0.3]]]},
