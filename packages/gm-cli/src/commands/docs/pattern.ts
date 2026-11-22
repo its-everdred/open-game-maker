@@ -49,12 +49,7 @@ function printList(ctx: GmContext, cards: readonly PatternCard[]): void {
   if (ctx.json) {
     for (const card of cards) {
       ctx.out(
-        JSON.stringify({
-          topic: card.topic,
-          engine: card.engine,
-          aliases: card.aliases,
-          ...(card.set ? { set: card.set } : {}),
-        }),
+        JSON.stringify({ topic: card.topic, engine: card.engine, aliases: card.aliases, ...(card.set ? { set: card.set } : {}) }),
       );
     }
     return;
@@ -72,10 +67,7 @@ async function runPattern(ctx: GmContext, args: string[], flags: Record<string, 
 
   if (flags.list === true) {
     if (args.length > 0) throw new UsageError('--list does not take a topic', 'gm docs pattern --list');
-    printList(
-      ctx,
-      cards.filter((card) => !engine || card.engine === 'both' || card.engine === engine),
-    );
+    printList(ctx, cards.filter((card) => !engine || card.engine === 'both' || card.engine === engine));
     return EXIT.ok;
   }
   if (args.length !== 1) throw new UsageError('pattern topic is required', 'gm docs pattern --list');
