@@ -356,8 +356,10 @@ test('answered cards collapse to the title and the saved answer, and reopen to c
   await capture(page, testInfo, 'parity-collapsed');
 
   // A closed Command reopens read-only: the saved answer, and the worker already has it.
+  // The row is the session's copy until the ledger poll lands; either one reopens to the same answer.
   await answered.click();
-  await expect(dialog.getByText('Liked Serif', { exact: true })).toBeVisible();
+  await expect(dialog.locator('.worker-review-saved')).toContainText('Liked Serif');
+  await expect(dialog.locator('.worker-review-saved')).toContainText('Serif after all');
   await expect(dialog.getByRole('status')).toHaveText('The worker already has this answer.');
 
   // A core Command has no ledger: its row keeps the answer the deck sent, in Kevin's words.
