@@ -51,8 +51,9 @@ settings, each tile cell, each object, and each HD-2D section. A unit is the sma
 **Revisions.** Every write appends a `SceneRevision`: `rev`, `parentRev` (the head it was applied on), `baseRev` (what
 the writer started from), `author` (`kevin` or `agent:<ticket>`), `source` (`editor`, `cli`, `migration`), a label, a
 timestamp, the unit changes with their before and after values, and the hash of the resulting document. The before
-values let the store rebuild any earlier revision from the head, so the log is the history and the head file is a
-cache.
+values let the store rebuild any earlier revision from the head. A write appends to the log, then replaces the head;
+the head is the commit point, so a revision logged past it (a write that stopped between the two) is dropped on the
+next read.
 
 **Ownership.** When a creator revision changes a unit, the unit gets `lockedBy: "creator"` (objects, tile cells, layers
 and HD-2D sections carry the field; a locked layer covers its tiles and objects). Agents can never set or clear it.
@@ -63,6 +64,8 @@ unit, then applies the changes on the current head:
 - a unit Kevin has locked (or one inside a locked layer) refuses any agent change, even if Kevin touched it before the
   agent's base;
 - a unit someone else changed after the base, to a different value, refuses the change (stale);
+- a tile or object left in a layer that is gone (one writer deleted the layer while another added to it) goes with the
+  layer when Kevin deleted it, and refuses the agent's change otherwise;
 - anything else applies, and a stale base rebases silently.
 
 If any change is refused, the whole push is refused with a list of conflicts naming each unit, why, and Kevin's value.

@@ -232,6 +232,88 @@ describe('scene round trip between Kevin and agents', () => {
       conflicts: [{ unit: 'object:grave-1', reason: 'changed_since_base', by: 'agent:1208' }],
     });
   });
+
+  // Kevin's delete of a whole layer must win even when an agent painted into it after the copy he deleted from.
+  it("takes an agent's newer tiles with the layer when Kevin's stale editor deletes it", () => {
+    const at = store();
+    const kevinDoc = edit(at, 0, (doc) => {
+      delete doc.layers.floor;
+    });
+    push(at, {
+      author: 'agent:1207',
+      baseRev: 0,
+      doc: edit(at, 0, (doc) => {
+        doc.layers.floor!.tiles!['2,0'] = { asset: 'path-a' };
+      }),
+    });
+
+    expect(push(at, { author: 'kevin', baseRev: 0, doc: kevinDoc })).toMatchObject({ ok: true });
+    expect(at.head.doc.layers.floor).toBeUndefined();
+  });
+
+  it('refuses an agent painting into or placing on a layer Kevin deleted, rather than failing', () => {
+    const at = store();
+    const agentDoc = edit(at, 0, (doc) => {
+      doc.layers.floor!.tiles!['2,0'] = { asset: 'path-a' };
+      doc.objects['grave-2'] = { asset: 'grave', layer: 'decor', pose: { x: 6, y: 1 } };
+    });
+    push(at, {
+      author: 'kevin',
+      baseRev: 0,
+      doc: edit(at, 0, (doc) => {
+        delete doc.layers.floor;
+        delete doc.layers.decor;
+        doc.objects = {};
+      }),
+    });
+
+    const result = push(at, { author: 'agent:1207', baseRev: 0, doc: agentDoc });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.conflicts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ unit: 'tile:floor:2,0', reason: 'creator_locked', by: 'kevin' }),
+        expect.objectContaining({ unit: 'object:grave-2', reason: 'creator_locked', by: 'kevin' }),
+      ]),
+    );
+  });
+
+  it("refuses an agent deleting a layer that holds Kevin's newer tile", () => {
+    const at = store();
+    const agentDoc = edit(at, 0, (doc) => {
+      delete doc.layers.floor;
+    });
+    push(at, {
+      author: 'kevin',
+      baseRev: 0,
+      doc: edit(at, 0, (doc) => {
+        doc.layers.floor!.tiles!['5,5'] = { asset: 'flowers' };
+      }),
+    });
+
+    expect(push(at, { author: 'agent:1207', baseRev: 0, doc: agentDoc })).toMatchObject({
+      ok: false,
+      conflicts: [{ unit: 'tile:floor:5,5', reason: 'creator_locked', by: 'kevin' }],
+    });
+    expect(at.head.doc.layers.floor?.tiles?.['5,5']).toMatchObject({ asset: 'flowers' });
+  });
+
+  it('accepts an agent deleting what Kevin already deleted', () => {
+    const at = store();
+    const agentDoc = edit(at, 0, (doc) => {
+      delete doc.objects['grave-1'];
+    });
+    push(at, {
+      author: 'kevin',
+      baseRev: 0,
+      doc: edit(at, 0, (doc) => {
+        delete doc.objects['grave-1'];
+      }),
+    });
+
+    expect(push(at, { author: 'agent:1207', baseRev: 0, doc: agentDoc })).toMatchObject({ ok: true, revision: null });
+  });
 });
 
 describe('scene revisions', () => {

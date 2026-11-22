@@ -188,6 +188,8 @@ export function commitScene(input: CommitSceneInput): CommitSceneResult {
     }
     if (!edited) continue;
     const theirs = current.get(unit);
+    // Already what the agent wants (both deleted it, or both made the same change): nothing to write or refuse.
+    if ((theirs === undefined) === (value === undefined) && same(unlocked(theirs), unlocked(value))) continue;
     const by = lastChange.get(unit);
     const creatorDeleted = theirs === undefined && by !== undefined && !isAgent(by.author);
     const lockedHere =
@@ -207,6 +209,27 @@ export function commitScene(input: CommitSceneInput): CommitSceneResult {
     }
     if (value === undefined) next.delete(unit);
     else next.set(unit, unlocked(value));
+  }
+  // A tile or object whose layer is gone (one writer deleted the layer while another added to it): a creator's delete
+  // takes its contents with it; an agent's add into, or delete of, a layer it no longer shares is refused.
+  for (const [unit, value] of [...next]) {
+    const [layer] = containers(unit, value);
+    if (layer === undefined || next.has(layer)) continue;
+    if (!agent) {
+      next.delete(unit);
+      continue;
+    }
+    // Either the agent added `unit` to a layer someone else deleted, or deleted a layer someone else added `unit` to.
+    const added = mine.has(layer);
+    const by = lastChange.get(added ? layer : unit);
+    const theirs = current.get(unit);
+    conflicts.push({
+      unit,
+      reason: (by !== undefined && !isAgent(by.author)) || isLocked(value) ? 'creator_locked' : 'changed_since_base',
+      ...(theirs === undefined ? {} : { theirs }),
+      ...(added ? { mine: value } : {}),
+      ...(by === undefined ? {} : { by: by.author }),
+    });
   }
   if (conflicts.length > 0) return { ok: false, conflicts };
 

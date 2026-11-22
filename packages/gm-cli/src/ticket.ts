@@ -11,7 +11,7 @@ export async function ticketFor(ctx: GmContext): Promise<string> {
     try {
       ticket = (await readFile(join(workspaceRoot(ctx.cwd), '.gm/context/ticket'), 'utf8')).trim();
     } catch {
-      throw new CommandError('current ticket identifier is unavailable');
+      throw new CommandError('current ticket identifier is unavailable (run inside an Aiur ticket workspace)');
     }
   }
   if (!/^[1-9][0-9]{0,15}$/.test(ticket)) throw new CommandError('current ticket identifier is invalid');

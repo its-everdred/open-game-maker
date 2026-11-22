@@ -77,11 +77,14 @@ export const command: GmCommand = {
     });
 
     if (!result.ok) {
-      if (ctx.json) printJson(ctx, { ok: false, conflicts: result.conflicts });
-      else {
+      const hint = `pull again (gm scene pull ${ref.game} ${ref.scene}), leave what Kevin owns as it is and redo the rest`;
+      if (ctx.json) {
+        const conflicts = result.conflicts.map((conflict) => ({ ...conflict, message: describeConflict(conflict) }));
+        printJson(ctx, { ok: false, conflicts, hint });
+      } else {
         ctx.err(`push refused: ${result.conflicts.length} conflict(s); nothing was saved`);
         for (const conflict of result.conflicts) ctx.err(`  ${describeConflict(conflict)}`);
-        ctx.err(`pull again (gm scene pull ${ref.game} ${ref.scene}) and redo your edits around these`);
+        ctx.err(hint);
       }
       return EXIT.failed;
     }

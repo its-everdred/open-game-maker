@@ -7,6 +7,7 @@ import {
   SceneRevisionSchema,
   type SceneAuthor,
   type SceneDoc,
+  type SceneHd2dSection,
   type SceneHead,
   type SceneRevision,
 } from '@ogm/contracts';
@@ -32,7 +33,7 @@ const hd2dSchemas = {
   atmosphere: sceneAtmosphereSchema,
   occlusion: occlusionStyleSchema,
   particles: z.record(z.string(), particleEffectSchema),
-} as const;
+} satisfies Record<SceneHd2dSection, z.ZodType>;
 
 /** `games/<game>/` in a monorepo, or the root of a one-game repository. */
 export function sceneRef(cwd: string, game: string, scene: string): SceneRef {
@@ -64,7 +65,7 @@ export function workingCopyPath(ref: SceneRef): string {
 export function validateHd2d(doc: SceneDoc): void {
   const problems: string[] = [];
   for (const [section, entry] of Object.entries(doc.hd2d)) {
-    const result = hd2dSchemas[section as keyof typeof hd2dSchemas].safeParse(entry.settings);
+    const result = hd2dSchemas[section as SceneHd2dSection].safeParse(entry.settings);
     if (!result.success) {
       problems.push(...result.error.issues.map((issue) => `hd2d.${section}.${issue.path.join('.')}: ${issue.message}`));
     }
@@ -104,15 +105,29 @@ export async function readStore(ref: SceneRef, packAdapter?: string): Promise<Sc
     throw new CommandError(`${file.head} holds ${migrated.doc.game}/${migrated.doc.scene}`);
   }
   const log: SceneRevision[] = [];
-  if (existsSync(file.log)) {
-    const lines = (await readFile(file.log, 'utf8')).split('\n').filter((line) => line.trim());
-    for (const [index, line] of lines.entries()) {
-      const parsed = SceneRevisionSchema.safeParse(JSON.parse(line));
-      if (!parsed.success) throw new CommandError(`${file.log}:${index + 1} is not a scene revision`);
-      log.push(parsed.data);
+  const lines = existsSync(file.log)
+    ? (await readFile(file.log, 'utf8')).split('\n').filter((line) => line.trim())
+    : [];
+  for (const [index, line] of lines.entries()) {
+    let parsed;
+    try {
+      parsed = SceneRevisionSchema.safeParse(JSON.parse(line));
+    } catch {
+      parsed = undefined;
     }
+    if (!parsed?.success) throw new CommandError(`${file.log}:${index + 1} is not a scene revision`);
+    log.push(parsed.data);
   }
-  return { head: { rev: record.rev, doc: migrated.doc }, log, exists: true, from: migrated.from };
+  // The head is the commit point: a revision logged after it was never committed (a write stopped between the two).
+  const rev = record.rev;
+  const committed = log.filter((revision) => revision.rev <= rev);
+  if (committed.some((revision, index) => revision.rev !== index + 1) || committed.length !== rev) {
+    throw new CommandError(`${file.log} does not hold revisions 1..${rev} in order`);
+  }
+  if (committed.length < log.length) {
+    await writeFile(file.log, committed.map((revision) => `${JSON.stringify(revision)}\n`).join(''));
+  }
+  return { head: { rev, doc: migrated.doc }, log: committed, exists: true, from: migrated.from };
 }
 
 /** Hold the scene's lock file while `work` runs, so two writers cannot interleave. */

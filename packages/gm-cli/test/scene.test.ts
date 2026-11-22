@@ -61,6 +61,27 @@ async function startScene(cwd: string): Promise<void> {
 }
 
 describe('gm scene pull / push', () => {
+  // A write that stopped after logging a revision but before replacing the head never committed that revision; the
+  // next push must not reuse its number, or the history would hold two different rev 2s.
+  it('drops a logged revision whose head was never written before the next push', async () => {
+    const cwd = repo();
+    await startScene(cwd);
+    const logPath = join(cwd, 'games/dusk-helm/scenes/graveyard.revs.jsonl');
+    const [first] = readFileSync(logPath, 'utf8').trim().split('\n');
+    writeFileSync(logPath, `${first}\n${JSON.stringify({ ...JSON.parse(first!), rev: 2, parentRev: 1 })}\n`);
+
+    editCopy(cwd, (doc) => {
+      doc.objects['tree-1']!.pose = { x: 4, y: 4 };
+    });
+    expect((await gm(['scene', 'push', 'dusk-helm', 'graveyard'], { cwd, env: agent })).code).toBe(0);
+
+    const revs = readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => (JSON.parse(line) as { rev: number }).rev);
+    expect(revs).toEqual([1, 2]);
+  });
+
   it('starts a scene in the game folder and records the agent as author', async () => {
     const cwd = repo();
     await startScene(cwd);
