@@ -3,36 +3,36 @@ import { expect, it } from 'vitest';
 import { edgeRun } from '../src/assembly-edge.js';
 import { assemblyMap } from '../src/assembly-map.js';
 import { IsoMap } from '../src/map.js';
+import { fenceB1Edges, wallC1Edges, wallF1Edges } from '../src/structural-bounds.js';
 
 it('uses each measured kind’s facing at shared exterior edges and preserves corners', () => {
-  const cells = [
-    { x: 0, y: 0 },
-    { x: 1, y: 0 },
-  ];
-  const opening = { cell: cells[0]!, edge: 'yMin' as const };
-  for (const [kind, cornerFacings, assetSlug] of [
-    ['fence', ['E', 'N', 'W'], 'fence-b1'],
-    ['stone', ['E', 'N', 'S'], 'wall-f1'],
-    ['timber', ['E', 'N', 'S'], 'wall-c1'],
+  const cells = Array.from({ length: 6 }, (_, i) => ({ x: i % 3, y: Math.floor(i / 3) }));
+  const opening = { cell: { x: 1, y: 0 }, edge: 'yMin' as const };
+  for (const [kind, table, assetSlug] of [
+    ['fence', fenceB1Edges, 'fence-b1'],
+    ['stone', wallF1Edges, 'wall-f1'],
+    ['timber', wallC1Edges, 'wall-c1'],
   ] as const) {
+    const facingOf = (edge: string) => Object.entries(table.value).find(([, value]) => value === edge)![0];
     const closed = edgeRun(cells, kind);
     const gate = edgeRun(cells, kind, [opening]);
-    expect(closed.placements).toHaveLength(6);
-    expect(gate.placements).toHaveLength(5);
+    expect(closed.placements).toHaveLength(10);
+    expect(gate.placements).toHaveLength(9);
     expect(gate.postVertices).toEqual([
-      { x: 0, y: 0 },
       { x: 1, y: 0 },
+      { x: 2, y: 0 },
     ]);
     expect(gate.placements.every(({ asset }) => asset.includes(assetSlug))).toBe(true);
-    const map = new IsoMap(assemblyMap(2, 1, gate.placements));
-    expect(map.pieces('wall')).toHaveLength(5);
+    const map = new IsoMap(assemblyMap(3, 2, gate.placements));
+    expect(map.pieces('wall')).toHaveLength(9);
+    // The corner cell keeps both of its sides, so neighbouring runs meet without a gap.
     expect(
       map
         .pieces('wall')
-        .filter(({ x }) => x === 1)
+        .filter(({ x, y }) => x === 2 && y === 0)
         .map(({ facing }) => facing)
         .sort(),
-    ).toEqual(cornerFacings);
+    ).toEqual([facingOf('xMax'), facingOf('yMin')].sort());
   }
   expect(() => edgeRun(cells, 'fence', [{ cell: cells[0]!, edge: 'xMax' }])).toThrow('exterior');
 });
@@ -71,12 +71,11 @@ it('assembles an open polyline and leaves its selected opening', () => {
   ).toThrow('exterior');
 });
 
-it('keeps a gate walkable when its cell also carries a corner edge', () => {
+it('refuses a corner gate, whose cell would stay solid and seal the way in', () => {
   const cells = Array.from({ length: 9 }, (_, i) => ({ x: i % 3, y: Math.floor(i / 3) }));
-  // The south-west corner cell carries both the xMin and yMax fence edges; the gate opens its yMax edge.
-  const run = edgeRun(cells, 'fence', [{ cell: { x: 0, y: 2 }, edge: 'yMax' }]);
+  expect(() => edgeRun(cells, 'fence', [{ cell: { x: 0, y: 2 }, edge: 'yMax' }])).toThrow('corner');
+  // The mid-side gate leaves its cell with no other edge, so the way in stays open.
+  const run = edgeRun(cells, 'fence', [{ cell: { x: 1, y: 2 }, edge: 'yMax' }]);
   const grid = new IsoMap(assemblyMap(3, 3, run.placements)).collisionGrid();
-  expect(run.placements.some(({ cell }) => cell.x === 0 && cell.y === 2)).toBe(true);
-  expect(grid[2]![0]).toBe(false);
-  expect(grid[2]![1]).toBe(true);
+  expect([grid[2]![1], grid[1]![1]]).toEqual([false, false]);
 });
