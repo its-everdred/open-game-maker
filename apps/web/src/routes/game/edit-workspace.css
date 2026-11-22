@@ -1,7 +1,16 @@
+/* The game area is as big as its frame needs (capped at 60%); the chat takes the rest. */
 .edit-workspace {
+  --edit-bar: calc(var(--safe-t) + 70px);
+  --edit-frame-aspect: 16 / 9;
+  /* Space the fixed play and menu buttons take from the right edge. */
+  --edit-fixed-controls: calc(max(76px, var(--safe-r) + 60px) + 58px);
+  /* Orientation buttons and the editor toggle share the strip with them. */
+  --edit-controls-width: calc(var(--edit-fixed-controls) + 152px);
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns:
+    minmax(0, 1fr)
+    clamp(var(--edit-controls-width), (100cqh - var(--edit-bar)) * var(--edit-frame-aspect), 60cqw);
   grid-template-rows: minmax(0, 1fr);
   grid-template-areas: 'chat game';
   min-width: 0;
@@ -35,7 +44,8 @@
   z-index: 2;
   justify-self: end;
   align-self: start;
-  margin-top: calc(var(--safe-t) + 70px);
+  margin-top: calc(var(--safe-t) + 15px);
+  margin-right: var(--edit-fixed-controls);
   max-width: 100%;
   max-height: 100%;
 }
@@ -64,17 +74,29 @@
   color: var(--text);
 }
 
+.edit-workspace:has([data-frame-orientation='vertical']) {
+  --edit-frame-aspect: 9 / 16;
+}
+
 @media (orientation: portrait) {
   .edit-workspace {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: min(var(--edit-bar) + 100cqw / (var(--edit-frame-aspect)), 60cqh) minmax(0, 1fr);
     grid-template-areas: 'game' 'chat';
+  }
+}
+
+/* Side by side, the frame sits against the chat. */
+@media (orientation: landscape) {
+  .edit-workspace .game-stage-area {
+    align-items: flex-start;
   }
 }
 
 .game-screen.is-editing:has(.edit-workspace) {
   display: block;
   padding: 0;
+  container-type: size;
 }
 
 .edit-workspace .game-stage-area {

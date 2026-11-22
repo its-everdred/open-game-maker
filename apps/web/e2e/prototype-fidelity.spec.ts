@@ -412,10 +412,8 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
   expect(chat).not.toBeNull();
   if (app.viewportSize()!.width < app.viewportSize()!.height) {
     expect(chat!.y).toBeGreaterThanOrEqual(stage!.y + stage!.height);
-    expect(Math.abs(chat!.height - stage!.height)).toBeLessThan(5);
   } else {
     expect(chat!.x + chat!.width).toBeLessThanOrEqual(stage!.x);
-    expect(Math.abs(chat!.width - stage!.width)).toBeLessThan(5);
   }
   const frame = await app.locator('.game-stage').boundingBox();
   const portraitDevice = app.viewportSize()!.width < app.viewportSize()!.height;

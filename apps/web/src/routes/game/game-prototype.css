@@ -783,6 +783,11 @@
 .game-stage-area > [role='group'] {
   flex: none;
   display: flex;
+  align-self: flex-start;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--edit-bar);
+  padding: calc(var(--safe-t) + 12px) 0 8px;
   gap: 4px;
 }
 
@@ -803,12 +808,12 @@
 
 .game-stage-area[data-frame-orientation] .game-stage {
   flex: none;
-  width: min(100cqw, (100cqh - 44px) * 16 / 9);
+  width: min(100cqw, (100cqh - var(--edit-bar)) * 16 / 9);
   aspect-ratio: 16 / 9;
 }
 
 .game-stage-area[data-frame-orientation='vertical'] .game-stage {
-  width: min(100cqw, (100cqh - 44px) * 9 / 16);
+  width: min(100cqw, (100cqh - var(--edit-bar)) * 9 / 16);
   aspect-ratio: 9 / 16;
 }
 
