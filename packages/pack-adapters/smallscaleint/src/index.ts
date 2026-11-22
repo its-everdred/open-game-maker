@@ -21,3 +21,21 @@ export {
   type PalettePrefab,
   type PlacementKind,
 } from './palette.js';
+export {
+  CASES,
+  CORNER,
+  FULL_CASE,
+  QUARTERS,
+  TerrainMap,
+  VARIANTS,
+  renderTerrain,
+  terrainHash,
+  terrainSheet,
+  type CellRect,
+  type Quarter,
+  type RenderedTerrain,
+  type TerrainDecal,
+  type TerrainMapOptions,
+  type TerrainPiece,
+  type TerrainSpec,
+} from './terrain.js';
