@@ -70,8 +70,15 @@ describe('dual-grid corner cases', () => {
       .piecesAt(0, 0)
       .filter((piece) => piece.quarter === 'bottom')
       .map((piece) => piece.layer);
-    expect(layers).toEqual([0, 1, 2, 3, 4, 5].filter((layer) => map.cornerCase(1, 1, layer) !== 0));
-    expect(layers).toEqual([...layers].sort((a, b) => a - b));
+    expect(layers).toEqual([0, 2, 5]);
+  });
+
+  it('draws only terrains present at a corner, so absent middle terrains add no edge of their own', () => {
+    // A dirt cell beside dark grass: dry grass and grass rank between them but are not on the map. Drawing them would
+    // stack three noisy edges over the dirt and shrink a dirt path into separate blobs.
+    const map = new TerrainMap({ width: 2, height: 1, terrains: TERRAINS, cells: [0, 3], seed: 1 });
+    for (const piece of map.pieces()) expect([0, 3]).toContain(piece.layer);
+    expect(map.piecesAt(0, 0).some((piece) => piece.layer === 3)).toBe(true);
   });
 
   it('skips quarters a full higher piece already hides', () => {
@@ -94,24 +101,25 @@ describe.each(SEEDS)('seeded map %i', (seed) => {
   });
 
   it('covers every quarter of every cell with an opaque bottom piece and a sheet frame (no missing case)', () => {
+    const problems: string[] = [];
+    const frames = terrainSheet.columns * terrainSheet.rows;
     for (let y = 0; y < map.height; y++) {
       for (let x = 0; x < map.width; x++) {
         const cell = map.piecesAt(x, y);
         for (const quarter of QUARTERS) {
           const stack = cell.filter((piece) => piece.quarter === quarter);
-          expect(stack.length, `${x},${y} ${quarter}`).toBeGreaterThan(0);
-          expect(stack[0]!.case, `${x},${y} ${quarter} bottom piece`).toBe(FULL_CASE);
+          if (stack[0]?.case !== FULL_CASE) problems.push(`${x},${y} ${quarter}: bottom piece is not full`);
           // The cell's own terrain is always drawn there: the art never shows a terrain the cell is not near.
-          expect(stack.some((piece) => piece.layer === map.at(x, y))).toBe(true);
+          if (!stack.some((piece) => piece.layer === map.at(x, y))) problems.push(`${x},${y} ${quarter}: own terrain`);
         }
         for (const piece of cell) {
-          expect(piece.case).toBeGreaterThan(0);
-          expect(piece.case).toBeLessThan(CASES);
-          expect(piece.frame).toBeGreaterThanOrEqual(0);
-          expect(piece.frame).toBeLessThan(terrainSheet.columns * terrainSheet.rows);
+          if (piece.case <= 0 || piece.case >= CASES || piece.frame < 0 || piece.frame >= frames) {
+            problems.push(`${piece.key}: case ${piece.case} frame ${piece.frame}`);
+          }
         }
       }
     }
+    expect(problems).toEqual([]);
   });
 
   it('cuts the four quarters around a vertex from one corner tile, so they join without a seam', () => {

@@ -182,22 +182,19 @@ export class TerrainMap {
     return (vx + 2 * vy + (terrainHash(this.seed, vx >> 1, vy >> 1, layer) % VARIANTS)) % VARIANTS;
   }
 
-  /** Quarter pieces of one cell, bottom layer first; quarters a higher full piece covers are skipped. */
+  /** Quarter pieces of one cell, bottom layer first: per quarter, one piece per terrain present at its corner. */
   piecesAt(x: number, y: number): TerrainPiece[] {
     const pieces: TerrainPiece[] = [];
     QUARTERS.forEach((quarter, quarterIndex) => {
       const vx = x + QUARTER_VERTEX[quarter].x;
       const vy = y + QUARTER_VERTEX[quarter].y;
-      let lowest = 0;
-      for (let layer = this.terrains.length - 1; layer > 0; layer--) {
-        if (this.cornerCase(vx, vy, layer) === FULL_CASE) {
-          lowest = layer;
-          break;
-        }
-      }
-      for (let layer = lowest; layer < this.terrains.length; layer++) {
+      // Only terrains in the four cells around the corner are drawn: an absent middle terrain would add its own noisy
+      // edge on top of the next one and eat into the lower terrain. The lowest present one is always a full piece.
+      const present = [
+        ...new Set([this.at(vx - 1, vy - 1), this.at(vx, vy - 1), this.at(vx - 1, vy), this.at(vx, vy)]),
+      ].sort((a, b) => a - b);
+      for (const layer of present) {
         const kind = this.cornerCase(vx, vy, layer);
-        if (kind === 0) continue;
         const variant = this.variantOf(vx, vy, layer);
         pieces.push({
           key: `terrain:${layer}:${quarter}:${x},${y}`,
