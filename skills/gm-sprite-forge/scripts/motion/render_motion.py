@@ -137,9 +137,12 @@ def motion(rig, mo):
         f0, f1 = a.frame_range
         if mo.get('loop', True) and kind == 'bvh':
             f0, f1 = retarget.pick_cycle(src, m, f0, f1)
+        elif kind == 'bvh':
+            f0, f1 = retarget.pick_strike(src, m, f0, f1, mo.get('seconds', 1.1), mo.get('fps', 30.0))
     else:
         f0, f1 = fr
-    rep = retarget.retarget(src, rig, f0, f1, n=N, loop=mo.get('loop', True), foot_ik=mo.get('foot_ik', True), mapping=m)
+    rep = retarget.retarget(src, rig, f0, f1, n=N, loop=mo.get('loop', True), foot_ik=mo.get('foot_ik', True), mapping=m,
+                          stance=mo.get('stance'))
     bpy.data.objects.remove(src)
     return rep
 

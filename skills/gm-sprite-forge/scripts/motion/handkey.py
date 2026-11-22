@@ -47,7 +47,7 @@ def _chain(rest, local):
     return {n: get(n) @ rest[n][0] for n in rest if n in PARENT or n == 'spine'}
 
 
-def walk(rig, n=15, stride=0.8, lift=0.13, bob=0.035, sway=0.03, yaw=9, lean=8, arm=24, elbow=(18, 38)):
+def walk(rig, n=15, stride=0.8, lift=0.13, bob=0.035, sway=0.03, yaw=9, lean=0, arm=24, elbow=(18, 38), stance=None):
     """stride, lift, bob, sway: fractions of leg length; angles in degrees."""
     R = _rest(rig)
     leg = (R['shin.L'][1] - R['thigh.L'][1]).length + (R['foot.L'][1] - R['shin.L'][1]).length
@@ -84,8 +84,8 @@ def walk(rig, n=15, stride=0.8, lift=0.13, bob=0.035, sway=0.03, yaw=9, lean=8, 
         root.z += -bob * leg + bob * leg * math.cos(2 * math.pi * 2 * (t - 0.3))  # up at passing, down after contact
         root.x += -sway * leg * math.sin(2 * math.pi * (t - 0.05))  # over the planted foot
         samples.append({'root': root, 'rot': _chain(R, loc), 'ankle': ankles})
-    retarget.apply_samples(rig, samples, loop=True, foot_ik=True)
-    return {'kind': 'handkey', 'clip': 'walk', 'stride': stride, 'lift': lift, 'bob': bob, 'sway': sway, 'yaw': yaw,
+    retarget.apply_samples(rig, samples, loop=True, foot_ik=True, stance=stance)
+    return {'kind': 'handkey', 'clip': 'walk', 'stance': stance, 'stride': stride, 'lift': lift, 'bob': bob, 'sway': sway, 'yaw': yaw,
             'lean': lean, 'arm': arm, 'elbow': list(elbow)}
 
 
@@ -103,11 +103,11 @@ ATTACK_KEYS = [  # (time 0..1, root drop as a fraction of leg length, local delt
 ]
 
 
-def attack(rig, n=15, stance=0.16):
+def attack(rig, n=15, step=0.16, stance=None):
     R = _rest(rig)
     leg = (R['shin.L'][1] - R['thigh.L'][1]).length + (R['foot.L'][1] - R['shin.L'][1]).length
-    ankles = {'L': R['foot.L'][1] + Vector((0.03 * leg, -stance * leg, 0)),  # left foot forward, right back
-              'R': R['foot.R'][1] + Vector((-0.03 * leg, stance * leg * 0.6, 0))}
+    ankles = {'L': R['foot.L'][1] + Vector((0.03 * leg, -step * leg, 0)),  # left foot forward, right back
+              'R': R['foot.R'][1] + Vector((-0.03 * leg, step * leg * 0.6, 0))}
     samples = []
     for i in range(n):
         t = i / (n - 1)
@@ -122,10 +122,10 @@ def attack(rig, n=15, stance=0.16):
         root = R['spine'][1].copy()
         root.z -= (d0 + (d1 - d0) * u) * leg
         samples.append({'root': root, 'rot': _chain(R, loc), 'ankle': dict(ankles)})
-    retarget.apply_samples(rig, samples, loop=False, foot_ik=True)
-    return {'kind': 'handkey', 'clip': 'attack', 'keys': [k[0] for k in ATTACK_KEYS], 'stance': stance}
+    retarget.apply_samples(rig, samples, loop=False, foot_ik=True, stance=stance)
+    return {'kind': 'handkey', 'clip': 'attack', 'keys': [k[0] for k in ATTACK_KEYS], 'step': step, 'stance': stance}
 
 
 def build(rig, mo):
-    p = mo.get('params', {})
+    p = mo.get('params', {}) | ({'stance': mo['stance']} if mo.get('stance') else {})
     return walk(rig, **p) if mo.get('clip', 'walk') == 'walk' else attack(rig, **p)

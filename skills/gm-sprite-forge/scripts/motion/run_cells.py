@@ -14,6 +14,29 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 
+LICENCE = (('kaykit', 'CC0 (KayKit Character Animations, owned)'), ('/cmu/', 'CMU mocap (free for any use)'),
+           ('/bandai/', 'CC BY-NC 4.0 (Bandai Namco Research Motion)'),
+           ('/lafan1/', 'CC BY-NC-ND 4.0 (Ubisoft LaFAN1): private use, adapted output not shared'),
+           ('handkey', 'own work (hand-keyed script)'))
+
+
+def write_recipe(d, spec, c, scores):
+    """recipe.json beside the cell: what the review page prints under it (kind, model, cost, skill, arm, motion)."""
+    mo = c['motion']
+    key = mo.get('path', '') if mo['kind'] != 'handkey' else 'handkey'
+    lic = next((v for k, v in LICENCE if k in key or k == mo['kind']), 'unknown')
+    fit = json.loads((d / 'fit.json').read_text())
+    render = json.loads((d / 'render.json').read_text())
+    rec = {'name': c['name'], 'kind': '3D model -> 2D render (rigged, animated)', 'ai_generated': True,
+           'model': spec.get('model', 'TRELLIS multi-view mesh'), 'cost_usd': spec.get('cost_usd', 0.0),
+           'skill': 'gm-sprite-forge (motion/)', 'arm': c.get('arm', 'A: Rigify metarig fit + bone heat'),
+           'motion': {k: v for k, v in mo.items() if k != 'path'} | ({'source': Path(mo['path']).name} if 'path' in mo else {}),
+           'motion_licence': lic, 'mesh': Path(spec['mesh']).name, 'skin': fit['skin'], 'retarget': fit['motion'],
+           'blender': render['blender'], 'engine': render['engine'], 'render_minutes': render['render_minutes'],
+           'scores': {k: v for k, v in scores.items() if k != 'foot_slide'} | {'foot_slide_px': scores['foot_slide']['mean_px']}}
+    (d / 'recipe.json').write_text(json.dumps(rec, indent=1, default=str))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('cells', type=Path)
@@ -29,7 +52,8 @@ def main():
             continue
         d = a.out / c['name']
         d.mkdir(parents=True, exist_ok=True)
-        cell = {'mesh': spec['mesh'], 'rotz': spec.get('rotz', 0), 'motion': c['motion'] | {'clip': c['clip']},
+        cell = {'mesh': spec['mesh'], 'rotz': spec.get('rotz', 0),
+                'motion': {'stance': spec.get('stance')} | c['motion'] | {'clip': c['clip']},
                 'weapon': c.get('weapon', spec.get('weapon')), 'rig_cache': str(a.out / 'rig_cache.blend')}
         (d / 'spec.json').write_text(json.dumps(cell, indent=1))
         keys = [f'{k}={v}' for k, v in (spec.get('render', {}) | {'engine': a.engine}).items()]
@@ -50,6 +74,7 @@ def main():
             print(c['name'], 'score failed', s.stderr[-300:], flush=True)
             continue
         sj = json.loads((d / 'scores.json').read_text())
+        write_recipe(d, spec, c, sj)
         line = (f"{c['name']:28} corr {sj['motion_corr']:.2f} (rows {', '.join(f'{x:.2f}' for x in sj['motion_corr_rows'])};"
                 f" shift {sj['phase_shift']}) iou {sj['silhouette_iou']:.2f} slide {sj['foot_slide']['mean_px']} px"
                 f" render {sj['render_minutes']} min")

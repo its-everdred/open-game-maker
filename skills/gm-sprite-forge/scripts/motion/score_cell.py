@@ -5,7 +5,8 @@ Usage: score_cell.py <cell_dir> <pack_sheet.png> [--rows 1,2] [--loop] [--finish
 --finish runs gpu_bake_finish.py on <cell_dir>/raw_*.png first (colour pass against the pack sheet) -> <cell_dir>/out.
 A walk is a loop with an arbitrary first frame, so with --loop every cyclic shift of the frames is scored and the best
 motion correlation is kept (its shift is reported); an attack is scored as rendered.
-Foot slide: a foot is in contact on frames where its sole is within 1 px of its lowest height. For an in-place walk
+Foot slide: a foot is in contact on frames where its sole is within 1 px of its lowest height; each contact step
+follows the point that touches the ground (heel or ball, whichever is lower), so a heel-to-toe roll is not slide. For an in-place walk
 the ground moves under the body at one speed, so slide is how far a contact foot strays from that speed (the median
 contact velocity); for an attack the ground does not move, so slide is the contact foot's own movement. Both are
 screen px per contact frame at the pack's cell size, averaged over contact frames and rows.
@@ -62,15 +63,16 @@ def foot_slide(feet, rows, loop):
         fr = feet['feet'][str(r)]
         steps = []
         for side in 'LR':
-            pts = np.array([[(f[side]['heel'][0] + f[side]['ball'][0]) / 2, (f[side]['heel'][1] + f[side]['ball'][1]) / 2]
-                            for f in fr])
-            z = np.array([min(f[side]['heel'][2], f[side]['ball'][2]) for f in fr]) * cell * UNIT_PX_PER_CELL
+            pts = {k: np.array([f[side][k][:2] for f in fr]) for k in ('heel', 'ball')}
+            zs = {k: np.array([f[side][k][2] for f in fr]) * cell * UNIT_PX_PER_CELL for k in ('heel', 'ball')}
+            z = np.minimum(zs['heel'], zs['ball'])
             contact = z - z.min() < 1.0
             n = len(fr)
             for i in range(n if loop else n - 1):
                 j = (i + 1) % n
                 if contact[i] and contact[j]:
-                    steps.append(pts[j] - pts[i])
+                    k = 'heel' if zs['heel'][i] <= zs['ball'][i] else 'ball'  # the point touching the ground
+                    steps.append(pts[k][j] - pts[k][i])
         if not steps:
             per_row.append({'contact_steps': 0, 'mean_px': None, 'max_px': None})
             continue
