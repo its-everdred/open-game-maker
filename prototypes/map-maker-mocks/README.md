@@ -64,3 +64,20 @@ Every scene card shows who changed it last (Kevin or an agent).
 OGM_BLOB_ROOT=<blob store> ./stage-sprites.sh   # copies the sprites into ./sprites (gitignored)
 node capture.mjs <out-dir> [file-prefix]        # four states per direction at 390x844 and 1280x800, plus the decision stills
 ```
+
+## Prototype: the card strip (Kevin approved it as the scene list, 2026-11-22)
+
+`strip.html?v=A|B|C` is clickable. Tap a card to open that scene, tap + for a new one, and tap the map button to hide or
+show the strip. Each card shows who changed the scene last, Kevin (yellow) or an agent (aqua); a pulsing badge means an
+agent is editing it right now. The four scenes are built from the same SmallScaleInt sprites. On short landscape screens
+the tools move to a column on the right.
+
+| | A: Big cards | B: Chips | C: One per swipe |
+| --- | --- | --- | --- |
+| Cards on a phone | about 2 | 4 | 1 |
+| Picture | 150x96 | 76x64, badge on the picture | full width |
+| Switch | tap | tap | swipe; dots show the position |
+
+```sh
+node strip-capture.mjs <out-dir>   # A/B/C at 390x844, 844x390, 820x1180 and 1180x820, plus a phone clip of each
+```
