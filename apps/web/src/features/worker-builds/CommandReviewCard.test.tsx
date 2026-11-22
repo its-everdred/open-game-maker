@@ -47,7 +47,7 @@ it('sends a pick through the creator answer route and shows it was saved', async
     }),
   );
   expect(await screen.findByText(/Saved/)).toBeVisible();
-  expect(answered).toHaveBeenCalledOnce();
+  expect(answered).toHaveBeenCalledExactlyOnceWith({ likes: ['b'], dislikes: [] });
 });
 
 it('records the displayed option as disliked for a change request', async () => {

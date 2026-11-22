@@ -157,9 +157,10 @@ it('keeps a core Command answer when the deck closes and reopens in the same ses
       <ReviewInbox reviews={[]} commands={[]} onClose={() => {}} />
     </QueryClientProvider>,
   );
-  expect(await screen.findByRole('button', { name: /Answer saved in this session/ })).toBeVisible();
-  fireEvent.click(screen.getByRole('button', { name: /Answer saved in this session/ }));
-  expect(screen.getByText('Answer saved in this session.')).toBeVisible();
+  // Core Commands have no ledger, so the row keeps the answer the deck sent, as a game's ledger row would show it.
+  expect(await screen.findByRole('button', { name: /Liked Red/ })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: /Liked Red/ }));
+  expect(screen.getAllByText('Liked Red')).toHaveLength(2);
   expect(screen.getByText('The worker already has this answer.')).toBeVisible();
 });
 
