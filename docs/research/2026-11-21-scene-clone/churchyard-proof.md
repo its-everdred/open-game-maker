@@ -294,3 +294,19 @@ queries use one pack and facing, the blend weight was chosen after inspecting
 the grave, and the mock's exact source identities are not known. It supports
 further testing of combined signals but does not justify automatic selection,
 a gap claim or changing the production matcher yet.
+
+The rural zombie tileset used by the game was also audited at its east facing:
+all 457 eligible sprites are shown in six inspected pages under
+`assets-local/review/1154/churchyard-rural-lineup/`. The mock-versus-candidate
+sheet is `assets-local/review/1154/churchyard-rural-candidates.png`. Its
+`fence-b1` is the current game's fence, with `fence-b4` and `fence-b6` as
+corner or damaged pieces; their base and thin bars differ from the mock.
+`cliff-a1`/`cliff-a2` are rough capped stone pieces, and `object29` is a small
+post, but none exactly matches the pointed gate pillar. `ground-f2`/`f5`/`f4`
+are square slabs, not the irregular stepping stones. `flora-b1`/`b10` and
+`flora-e1` provide dark green or brown growth rather than the mock's purple,
+and `roof-e1`/`e2`/`e3` are grey slate components rather than the mock's purple
+roof. Their detail, fit, colour and facing in a fantasy scene remain to be
+verified; recolours or assemblies must preserve the pack's rights. The audit
+covers only this pack's eligible east-facing sprites, not other facings or its
+animation sequences.
