@@ -1,0 +1,150 @@
+import { z } from 'zod';
+
+import { assetFacts, roleFromName, shippedFacings, type LockEntry, type PackFacts } from './facts.js';
+import type { Actor, Facing, Piece, Role, Scene } from './model.js';
+
+const GID_MASK = 0x1fffffff;
+const ROTATIONS: Record<number, Facing> = { 0: 'E', 90: 'N', 180: 'W', 270: 'S' };
+const ROLES: ReadonlySet<string> = new Set<Role>([
+  'ground',
+  'path',
+  'fence',
+  'wall',
+  'post',
+  'door',
+  'opening',
+  'roof',
+  'seat',
+  'prop',
+]);
+const TAGS = ['ruin', 'formal', 'gate', 'exit'] as const;
+
+const property = z.object({ name: z.string(), value: z.unknown() });
+const tiledMap = z.object({
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  layers: z.array(
+    z.union([
+      z.object({
+        type: z.literal('tilelayer'),
+        name: z.string(),
+        width: z.number().int().positive(),
+        data: z.array(z.number().int().nonnegative()),
+      }),
+      z.object({
+        type: z.literal('objectgroup'),
+        name: z.string(),
+        objects: z.array(
+          z.object({
+            id: z.number(),
+            name: z.string().optional(),
+            x: z.number(),
+            y: z.number(),
+            properties: z.array(property).optional(),
+          }),
+        ),
+      }),
+    ]),
+  ),
+  tilesets: z.array(
+    z.object({
+      firstgid: z.number().int().positive(),
+      tiles: z.array(z.object({ id: z.number().int().nonnegative(), properties: z.array(property).optional() })),
+    }),
+  ),
+});
+
+type Properties = z.infer<typeof property>[] | undefined;
+const prop = (properties: Properties, name: string): unknown => properties?.find((p) => p.name === name)?.value;
+
+export interface MapSource {
+  json: unknown;
+  /** Where this map's cell (0, 0) sits in scene cells; a surround drawn beneath the scene is offset. */
+  offset?: { x: number; y: number };
+  /** Prefix for piece keys, so two maps' pieces stay distinct. */
+  prefix?: string;
+}
+
+function tagsOf(properties: Properties): Set<string> {
+  const tags = new Set<string>();
+  const listed = prop(properties, 'tags');
+  if (typeof listed === 'string') for (const tag of listed.split(',')) if (tag.trim()) tags.add(tag.trim());
+  for (const tag of TAGS) if (prop(properties, tag) === true) tags.add(tag);
+  return tags;
+}
+
+/** Read Tiled-style isometric maps (the SmallScaleInt adapter's subset, any layer names) into one scene. */
+export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, lock: Record<string, LockEntry>): Scene {
+  const pieces: Piece[] = [];
+  const actors: Actor[] = [];
+  const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  for (const source of sources) {
+    const map = tiledMap.parse(source.json);
+    const dx = source.offset?.x ?? 0;
+    const dy = source.offset?.y ?? 0;
+    const prefix = source.prefix ?? '';
+    bounds.minX = Math.min(bounds.minX, dx);
+    bounds.minY = Math.min(bounds.minY, dy);
+    bounds.maxX = Math.max(bounds.maxX, dx + map.width - 1);
+    bounds.maxY = Math.max(bounds.maxY, dy + map.height - 1);
+    const tiles = new Map<number, Properties>();
+    for (const set of map.tilesets) for (const tile of set.tiles) tiles.set(set.firstgid + tile.id, tile.properties);
+    for (const layer of map.layers) {
+      if (layer.type === 'objectgroup') {
+        for (const object of layer.objects) {
+          const prefab = prop(object.properties, 'prefab');
+          actors.push({
+            id: `${prefix}${layer.name}:${object.id}`,
+            name: object.name ?? String(object.id),
+            ...(typeof prefab === 'string' ? { prefab } : {}),
+            x: Math.floor(object.x) + dx,
+            y: Math.floor(object.y) + dy,
+          });
+        }
+        continue;
+      }
+      layer.data.forEach((stored, index) => {
+        if (stored === 0) return;
+        const gid = stored & GID_MASK;
+        const properties = tiles.get(gid);
+        const asset = prop(properties, 'asset');
+        if (typeof asset !== 'string') throw new Error(`tile gid ${gid} has no asset`);
+        const rotation = prop(properties, 'rotation') ?? 0;
+        const facing = ROTATIONS[(((Number(rotation) % 360) + 360) % 360) as 0];
+        if (!facing) throw new Error(`tile gid ${gid} rotation ${String(rotation)} is not 0, 90, 180 or 270`);
+        const declared = prop(properties, 'role');
+        const role =
+          typeof declared === 'string' && ROLES.has(declared) ? (declared as Role) : roleFromName(asset, layer.name);
+        const solid = prop(properties, 'solid');
+        const elevation = prop(properties, 'elevation');
+        const x = (index % layer.width) + dx;
+        const y = Math.floor(index / layer.width) + dy;
+        const facts = assetFacts(pack, lock, asset);
+        const facings = shippedFacings(lock, asset);
+        pieces.push({
+          key: `${prefix}${layer.name}:${x},${y}`,
+          layer: layer.name,
+          x,
+          y,
+          asset,
+          facing,
+          solid: typeof solid === 'boolean' ? solid : layer.name === 'wall',
+          role,
+          tags: tagsOf(properties),
+          elevation: typeof elevation === 'number' && layer.name !== 'roof' ? elevation : 0,
+          ...(facts?.edges?.[facing] ? { edge: facts.edges[facing], edges: facts.edges } : {}),
+          ...(facts?.alpha?.[facing] ? { alpha: facts.alpha[facing] } : {}),
+          ...(facts?.size ? { size: facts.size } : {}),
+          ...(facings ? { facings } : {}),
+        });
+      });
+    }
+  }
+  return {
+    bounds,
+    pieces,
+    actors,
+    anchorY: pack.anchorY,
+    tile: pack.tile,
+  };
+}
