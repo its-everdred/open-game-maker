@@ -168,8 +168,9 @@ Kevin's Stage 1 verdicts (2026-11-22) carry into this round: Wizard and Ranger m
 was close, and its weapon is to be rendered separately so the player can carry many. The round runs on the approved
 base bodies, not on those meshes:
 
-- One `cells.json` per class (Warrior, Wizard, Ranger) with the approved body as `mesh`, scored against that class's
-  pack sheets (6Barbarian, 3Wizard, 5BarbArcher): a walk and one attack.
+- One `cells.json` per approved body (Warrior, Wizard and Ranger, each male and female:
+  `hero-base/<class>-<m|f>/gen/model_mesh.glb`) as `mesh`, scored against that class's pack sheets (6Barbarian,
+  3Wizard, 5BarbArcher): a walk and one attack, with phone clips.
 - One stance layer per class in `retarget.STANCES`, matched to that class's pack Idle. Only `ssi-barbarian` exists;
   the Wizard and Ranger need their own. Fix stance here, not by asking for a new mesh.
 - The class weapon goes in `weapon` on the hand bone, never fused into the body. With nothing fused, the fit's
