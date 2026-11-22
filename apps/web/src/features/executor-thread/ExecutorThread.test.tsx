@@ -133,8 +133,10 @@ describe('executor thread', () => {
     await composer.send();
     await waitFor(() => expect(composer.value).toBe('Ship it'));
     await composer.send();
-    await waitFor(() => expect(calls.filter((call) => call.method === 'POST')).toHaveLength(2));
-    const [first, second] = calls.filter((call) => call.method === 'POST') as Array<{
+    /* The composer also reports the failed send to /voice/client-error; count only thread posts. */
+    const posts = () => calls.filter((call) => call.method === 'POST' && call.url.endsWith('/thread/messages'));
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    const [first, second] = posts() as Array<{
       body: { client_request_id: string };
     }>;
     expect(second!.body.client_request_id).toBe(first!.body.client_request_id);
