@@ -8,7 +8,8 @@ import type { WorkerReview } from './useWorkerReviews';
 const storageKey = 'ogm:answered-review-commands';
 const gameIdsStorageKey = 'ogm:answered-review-game-ids';
 export type AnsweredCommand = { id: string; gameId: string; review: CommandReviewEntry };
-export type SessionAnsweredCommand = { command: ReviewCommand };
+export type SentReview = { likes: string[]; dislikes: { option_id: string; reason?: string }[]; notes?: string };
+export type SessionAnsweredCommand = { command: ReviewCommand; review?: SentReview };
 
 export function useAnsweredReviews(_reviews: readonly WorkerReview[], commands: readonly ReviewCommand[]) {
   const [sessionAnsweredCommands, setSessionAnsweredCommands] = useState<SessionAnsweredCommand[]>(readSessionCommands);
@@ -62,14 +63,14 @@ export function useAnsweredReviews(_reviews: readonly WorkerReview[], commands: 
   const savedCommands = gameIds.flatMap((gameId): AnsweredCommand[] => {
     return (ledgerPages[gameId] ?? []).map((review) => ({ id: review.id, gameId, review }));
   });
-  const rememberCommand = (command: ReviewCommand) => {
+  const rememberCommand = (command: ReviewCommand, review?: SentReview) => {
     setSessionAnsweredCommands((previous) => {
       const next = [
         ...previous.filter(
           ({ command: prior }) =>
             commandSource(prior) !== commandSource(command) || prior.decision_id !== command.decision_id,
         ),
-        { command },
+        { command, ...(review ? { review } : {}) },
       ];
       try {
         sessionStorage.setItem(storageKey, JSON.stringify(next));

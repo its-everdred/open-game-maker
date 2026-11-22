@@ -13,7 +13,12 @@ import { MissingMediaStatus, useMissingMedia } from './MissingMedia';
 import { PreviewCard } from '../../routes/review/PreviewReviews';
 import { RoundCard } from '../../routes/review/RoundReviews';
 import type { WorkerReview } from './useWorkerReviews';
-import { useAnsweredReviews, type AnsweredCommand, type SessionAnsweredCommand } from './useAnsweredReviews';
+import {
+  useAnsweredReviews,
+  type AnsweredCommand,
+  type SentReview,
+  type SessionAnsweredCommand,
+} from './useAnsweredReviews';
 import type { WorkerBuild } from './BuildTracker';
 import '../build-chat/conversation-modal.css';
 import '../commands-inbox/review-deck.css';
@@ -159,7 +164,7 @@ export function ReviewInbox({
     show(queue[index < 0 ? 0 : (index + 1) % queue.length]);
   };
   useEffect(() => {
-    if (!activeKey && queue.length) show(queue[0]);
+    if (!activeKey && !savedCommand && !sessionSavedCommand && queue.length) show(queue[0]);
   });
   const queueControls = (
     <div className="worker-review-queue">
@@ -190,8 +195,15 @@ export function ReviewInbox({
             : entry.kind === 'review'
               ? 'Answered in this session'
               : entry.kind === 'session-command'
-                ? 'Answer saved in this session'
-                : 'Answer saved in this session';
+                ? sentSummary(entry.item.command, entry.item.review)
+                : sentSummary(
+                    entry.item,
+                    sessionAnsweredCommands.find(
+                      ({ command: sent }) =>
+                        commandSource(sent) === commandSource(entry.item) &&
+                        sent.decision_id === entry.item.decision_id,
+                    )?.review,
+                  );
         return (
           <button type="button" className="worker-review-answered" key={entry.key} onClick={() => show(entry)}>
             <strong>{title}</strong>
@@ -329,9 +341,9 @@ export function ReviewInbox({
             ticketState={
               workers.find((worker) => worker.ticket === `${commandSource(command)}:${command.ticket}`)?.state
             }
-            onAnswered={() => {
+            onAnswered={(review) => {
               setAnswered((seen) => new Set(seen).add(commandKey(command)));
-              rememberCommand(command);
+              rememberCommand(command, review);
             }}
           />
         </div>
@@ -390,7 +402,7 @@ export function ReviewInbox({
         {sessionSavedCommand ? (
           <section className="worker-review-saved">
             <p>{sessionSavedCommand.command.question}</p>
-            <p>Answer saved in this session.</p>
+            <p>{sentSummary(sessionSavedCommand.command, sessionSavedCommand.review)}</p>
             <p role="status">The worker already has this answer.</p>
           </section>
         ) : null}
@@ -440,6 +452,7 @@ export function ReviewInbox({
               onPendingChange={setSending}
             />
             {current.round.buildId &&
+              current.round.track !== 'prototype-publish' &&
               missingStatus(
                 `/games/${encodeURIComponent(current.gameId)}/review-rounds/${encodeURIComponent(current.round.id)}/missing-media?kind=build`,
               )}
@@ -472,4 +485,19 @@ function revisionKeyOf(review: WorkerReview): string {
 
 function commandKey(command: ReviewCommand): string {
   return `command:${commandSource(command)}:${command.decision_id}:${command.version}`;
+}
+
+// The answer the deck just sent, in the ledger's words: what a core Command keeps, since only games have a ledger.
+function sentSummary(command: ReviewCommand, review: SentReview | undefined): string {
+  if (!review) return 'Answer saved in this session';
+  const label = (id: string) => command.options.find((option) => option.id === id)?.label ?? id;
+  return [
+    review.likes.map((id) => `Liked ${label(id)}`).join(', '),
+    review.dislikes.length
+      ? `disliked ${review.dislikes.map(({ option_id: id, reason }) => `${label(id)}${reason ? `: ${reason}` : ''}`).join(', ')}`
+      : '',
+    review.notes ?? '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }

@@ -65,7 +65,7 @@ export function CommandReviewCard({
   onSendingChange,
 }: {
   command: ReviewCommand;
-  onAnswered(): void;
+  onAnswered(review: { likes: string[]; dislikes: { option_id: string; reason?: string }[]; notes?: string }): void;
   ticketState?: string;
   onSendingChange?(sending: boolean): void;
 }) {
@@ -128,7 +128,7 @@ export function CommandReviewCard({
       ]);
       setSaved(true);
       setPicking(undefined);
-      onAnswered();
+      onAnswered(review);
     } catch {
       setError(true);
     } finally {
