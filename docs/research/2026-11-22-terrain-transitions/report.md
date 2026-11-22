@@ -117,7 +117,15 @@ test map, A used 56 distinct (terrain, case) pieces and B used 58.
 - **C shader splat**: no transition tiles and the smoothest blends. It's WebGL-only, needs the most engine work, and its
   edges are harder to art-direct pixel by pixel.
 
-## Asked of Kevin
+## Kevin's pick (2026-11-22)
 
-Pick a layout for #1204: A (recommended), B, or C. Without an answer, #1204 stays held and no production sheets are
-made.
+**A, dual-grid 16.** His words: "A looks good. what is shader blend?" #1204 builds A.
+
+### What C (shader blend) is
+
+C has no transition tiles. The map is the same grid of terrain cells, but the GPU decides per pixel which terrain to
+draw: each terrain gets a weight that fades smoothly between cell centres, a noise texture wobbles that weight, and the
+pixel shows the terrain whose weight is over one half. `c-shader-explained.png` (local, next to the sheet) shows it on
+the stone patch in four steps: the cells, the stone weight, the cut at one half with noise, and the result, beside A.
+The edges look much like A's; what differs is the cost: a custom WebGL pipeline, no Canvas fallback, and edges shaped
+by a noise texture rather than drawn tiles. It's made by `spike/explain_shader.py` (same arguments as `render.py`).
