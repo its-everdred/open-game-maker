@@ -33,7 +33,7 @@ export function noOverlap(grid: Grid): Finding[] {
     });
   }
   const boxed = grid.scene.pieces
-    .filter((piece) => piece.layer !== 'floor' && !FLAT.has(piece.role))
+    .filter((piece) => !FLAT.has(piece.role))
     .map((piece) => ({ piece, box: screenBox(grid.scene, piece) }))
     .filter((entry): entry is { piece: Piece; box: [number, number, number, number] } => !!entry.box);
   for (let i = 0; i < boxed.length; i++) {
@@ -69,7 +69,7 @@ export function noOverlap(grid: Grid): Finding[] {
       severity: 'high',
       message: `${actor.name} stands inside a solid piece at (${actor.x},${actor.y}): ${grid
         .at(actor)
-        .filter((piece) => piece.solid && piece.layer !== 'floor')
+        .filter((piece) => piece.solid && !FLAT.has(piece.role))
         .map((piece) => piece.asset)
         .join(', ')}`,
       cells: [{ x: actor.x, y: actor.y }],

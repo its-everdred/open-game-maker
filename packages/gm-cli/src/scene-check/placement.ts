@@ -1,7 +1,6 @@
 import type { Grid } from './grid.js';
-import { DRESSING, cellKey, type Camera, type Cell, type Finding, type Piece } from './model.js';
-import { spawnOf } from './traverse.js';
-import { viewSamples } from './view.js';
+import { DRESSING, GROUND, cellKey, type Camera, type Cell, type Finding, type Piece } from './model.js';
+import { frameCenter, viewSamples } from './view.js';
 
 export interface PlacementOptions {
   /** Fewest dressing props per 10 floor cells before the scene reads as bare. */
@@ -31,38 +30,45 @@ function lattice(pieces: readonly Piece[]): boolean {
 export function naturalPlacement(grid: Grid, options: PlacementOptions): Finding[] {
   const findings: Finding[] = [];
   const pieces = grid.scene.pieces;
-  const dressing = pieces.filter((piece) => piece.layer !== 'floor' && DRESSING.has(piece.role));
-  const density = grid.floor.size ? (dressing.length * 10) / grid.floor.size : 0;
+  // Density is judged on the scene's own maps; a surround drawn beneath only closes the frame.
+  const own = pieces.filter((piece) => !piece.under);
+  const floor = new Set(own.filter((piece) => GROUND.has(piece.role)).map(cellKey));
+  const dressing = own.filter((piece) => DRESSING.has(piece.role));
+  const density = floor.size ? (dressing.length * 10) / floor.size : 0;
   if (density < options.minDensity) {
     findings.push({
       check: 'natural-placement',
       id: 'natural-placement/sparse',
       severity: 'medium',
-      message: `${dressing.length} props over ${grid.floor.size} floor cells is ${density.toFixed(2)} per 10 cells; dress it to at least ${options.minDensity}`,
+      message: `${dressing.length} props over ${floor.size} floor cells is ${density.toFixed(2)} per 10 cells; dress it to at least ${options.minDensity}`,
       cells: [],
       objects: [],
     });
   }
-  const b = grid.scene.bounds;
-  for (let y0 = b.minY; y0 <= b.maxY; y0 += BLOCK) {
-    for (let x0 = b.minX; x0 <= b.maxX; x0 += BLOCK) {
+  const xs = own.map((piece) => piece.x);
+  const ys = own.map((piece) => piece.y);
+  const bare: Cell[][] = [];
+  for (let y0 = Math.min(...ys); y0 <= Math.max(...ys); y0 += BLOCK) {
+    for (let x0 = Math.min(...xs); x0 <= Math.max(...xs); x0 += BLOCK) {
       const cells: Cell[] = [];
       for (let y = y0; y < y0 + BLOCK; y++) for (let x = x0; x < x0 + BLOCK; x++) cells.push({ x, y });
-      const floor = cells.filter((cell) => grid.floor.has(cellKey(cell)));
-      if (
-        floor.length < (BLOCK * BLOCK * 2) / 3 ||
-        cells.some((cell) => grid.at(cell).some((p) => p.layer !== 'floor'))
-      )
-        continue;
-      findings.push({
-        check: 'natural-placement',
-        id: 'natural-placement/bare-patch',
-        severity: 'low',
-        message: `${BLOCK}x${BLOCK} patch from (${x0},${y0}) holds ${floor.length} floor cells and nothing else`,
-        cells: floor,
-        objects: [],
-      });
+      const ground = cells.filter((cell) => floor.has(cellKey(cell)));
+      const dressed = cells.some((cell) => grid.at(cell).some((p) => !p.under && !GROUND.has(p.role)));
+      if (ground.length >= (BLOCK * BLOCK * 2) / 3 && !dressed) bare.push(ground);
     }
+  }
+  if (bare.length) {
+    findings.push({
+      check: 'natural-placement',
+      id: 'natural-placement/bare-patch',
+      severity: 'low',
+      message: `${bare.length} ${BLOCK}x${BLOCK} patch(es) hold ground and nothing else, from ${bare
+        .slice(0, 8)
+        .map((cells) => `(${cells[0]!.x},${cells[0]!.y})`)
+        .join(' ')}${bare.length > 8 ? ' …' : ''}`,
+      cells: bare.flat(),
+      objects: [],
+    });
   }
   const groups = new Map<string, Piece[]>([['all props', dressing]]);
   for (const piece of dressing) groups.set(piece.asset, [...(groups.get(piece.asset) ?? []), piece]);
@@ -82,7 +88,7 @@ export function naturalPlacement(grid: Grid, options: PlacementOptions): Finding
     });
   }
   const voids = pieces.filter(
-    (piece) => piece.layer !== 'floor' && piece.role !== 'roof' && !grid.floor.has(cellKey(piece)),
+    (piece) => !GROUND.has(piece.role) && piece.role !== 'roof' && !grid.floor.has(cellKey(piece)),
   );
   if (voids.length) {
     findings.push({
@@ -105,22 +111,20 @@ export function naturalPlacement(grid: Grid, options: PlacementOptions): Finding
       objects: floating.map((piece) => piece.key),
     });
   }
-  const center = options.camera.center ?? spawnOf(grid.scene.actors);
-  if (center) {
-    const edge = new Map<string, Cell>();
-    for (const cell of viewSamples(grid.scene, options.camera, center)) {
-      if (!grid.floor.has(cellKey(cell))) edge.set(cellKey(cell), cell);
-    }
-    if (edge.size) {
-      findings.push({
-        check: 'natural-placement',
-        id: 'natural-placement/edge-in-frame',
-        severity: 'high',
-        message: `the ${options.camera.width}x${options.camera.height} frame at zoom ${options.camera.zoom} around (${center.x},${center.y}) shows ${edge.size} cell(s) of void past the map edge`,
-        cells: [...edge.values()],
-        objects: [],
-      });
-    }
+  const center = frameCenter(grid.scene, options.camera);
+  const edge = new Map<string, Cell>();
+  for (const cell of viewSamples(grid.scene, options.camera, center)) {
+    if (!grid.floor.has(cellKey(cell))) edge.set(cellKey(cell), cell);
+  }
+  if (edge.size) {
+    findings.push({
+      check: 'natural-placement',
+      id: 'natural-placement/edge-in-frame',
+      severity: 'high',
+      message: `the ${options.camera.width}x${options.camera.height} frame at zoom ${options.camera.zoom} around (${center.x},${center.y}) shows ${edge.size} cell(s) of void past the map edge`,
+      cells: [...edge.values()],
+      objects: [],
+    });
   }
   return findings;
 }

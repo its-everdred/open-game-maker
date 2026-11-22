@@ -25,6 +25,8 @@ export interface Piece {
   /** Free-form tile tags: `ruin`, `formal`, `gate`, `exit`. */
   tags: ReadonlySet<string>;
   elevation: number;
+  /** Drawn by a map beneath the scene (a surround): it closes the frame but is not the scene's own dressing. */
+  under: boolean;
   /** The grid edge this piece draws, when its pack measured it. */
   edge?: CellEdge;
   /** The measured edge of every facing of the asset, for suggesting a facing that joins a run. */
@@ -56,6 +58,8 @@ export interface Scene {
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
   pieces: Piece[];
   actors: Actor[];
+  /** Findings the reader made while adapting the maps (a tile size the pack does not use). */
+  notes: Finding[];
   /** The pack's sprite anchor: image pixel (width / 2, anchorY) sits on the cell's projected point. */
   anchorY: number;
   tile: readonly [width: number, height: number];
@@ -143,5 +147,7 @@ export function corners({ x, y }: Cell): Cell[] {
   ];
 }
 
+/** Pieces that are the ground itself, on whatever layer a map put them. */
+export const GROUND: ReadonlySet<Role> = new Set(['ground', 'path']);
 export const STRUCTURE: ReadonlySet<Role> = new Set(['fence', 'wall', 'door', 'opening', 'roof', 'post']);
 export const DRESSING: ReadonlySet<Role> = new Set(['prop', 'seat', 'unknown']);

@@ -1,4 +1,4 @@
-import { NEIGHBORS, cellKey, corners, segment, type Cell, type Piece, type Role, type Scene } from './model.js';
+import { GROUND, NEIGHBORS, cellKey, corners, segment, type Cell, type Piece, type Role, type Scene } from './model.js';
 
 const OPEN: ReadonlySet<Role> = new Set(['ground', 'path', 'door', 'opening']);
 const TERMINATES: ReadonlySet<Role> = new Set(['post', 'roof', 'door', 'opening']);
@@ -23,7 +23,7 @@ export class Grid {
       const key = cellKey(piece);
       if (!this.byCell.has(key)) this.byCell.set(key, []);
       this.byCell.get(key)!.push(piece);
-      if (piece.layer === 'floor') this.floor.add(key);
+      if (GROUND.has(piece.role)) this.floor.add(key);
       else if (piece.solid && !OPEN.has(piece.role)) this.blocked.add(key);
     }
   }

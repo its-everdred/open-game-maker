@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { assetFacts, roleFromName, shippedFacings, type LockEntry, type PackFacts } from './facts.js';
-import type { Actor, Facing, Piece, Role, Scene } from './model.js';
+import type { Actor, Facing, Finding, Piece, Role, Scene } from './model.js';
 
 const GID_MASK = 0x1fffffff;
 const ROTATIONS: Record<number, Facing> = { 0: 'E', 90: 'N', 180: 'W', 270: 'S' };
@@ -23,6 +23,8 @@ const property = z.object({ name: z.string(), value: z.unknown() });
 const tiledMap = z.object({
   width: z.number().int().positive(),
   height: z.number().int().positive(),
+  tilewidth: z.number().optional(),
+  tileheight: z.number().optional(),
   layers: z.array(
     z.union([
       z.object({
@@ -63,6 +65,8 @@ export interface MapSource {
   offset?: { x: number; y: number };
   /** Prefix for piece keys, so two maps' pieces stay distinct. */
   prefix?: string;
+  /** A surround drawn beneath the scene: it fills the frame but its pieces are not the scene's dressing. */
+  under?: boolean;
 }
 
 function tagsOf(properties: Properties): Set<string> {
@@ -77,12 +81,24 @@ function tagsOf(properties: Properties): Set<string> {
 export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, lock: Record<string, LockEntry>): Scene {
   const pieces: Piece[] = [];
   const actors: Actor[] = [];
+  const notes: Finding[] = [];
   const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   for (const source of sources) {
     const map = tiledMap.parse(source.json);
     const dx = source.offset?.x ?? 0;
     const dy = source.offset?.y ?? 0;
     const prefix = source.prefix ?? '';
+    const [tw, th] = pack.tile;
+    if ((map.tilewidth ?? tw) !== tw || (map.tileheight ?? th) !== th) {
+      notes.push({
+        check: 'facts',
+        id: 'facts/tile-size',
+        severity: 'high',
+        message: `map tiles are ${map.tilewidth}x${map.tileheight}; the ${pack.set} pack's tiles are ${tw}x${th}, so its pieces will not join`,
+        cells: [],
+        objects: [`${prefix}map`],
+      });
+    }
     bounds.minX = Math.min(bounds.minX, dx);
     bounds.minY = Math.min(bounds.minY, dy);
     bounds.maxX = Math.max(bounds.maxX, dx + map.width - 1);
@@ -131,6 +147,7 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
           solid: typeof solid === 'boolean' ? solid : layer.name === 'wall',
           role,
           tags: tagsOf(properties),
+          under: source.under === true,
           elevation: typeof elevation === 'number' && layer.name !== 'roof' ? elevation : 0,
           ...(facts?.edges?.[facing] ? { edge: facts.edges[facing], edges: facts.edges } : {}),
           ...(facts?.alpha?.[facing] ? { alpha: facts.alpha[facing] } : {}),
@@ -144,6 +161,7 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
     bounds,
     pieces,
     actors,
+    notes,
     anchorY: pack.anchorY,
     tile: pack.tile,
   };

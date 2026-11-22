@@ -37,6 +37,7 @@ export function checkScene(name: string, scene: Scene, options: CheckOptions): S
     ...naturalPlacement(grid, options),
     ...(options.mock ? framing(grid, options.camera, options.mock) : []),
     ...unmeasured(grid),
+    ...scene.notes,
   ];
   all.sort(
     (a, b) =>

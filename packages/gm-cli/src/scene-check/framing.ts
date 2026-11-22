@@ -1,7 +1,6 @@
 import type { Grid } from './grid.js';
 import { cellKey, type Camera, type Finding } from './model.js';
-import { spawnOf } from './traverse.js';
-import { viewSamples } from './view.js';
+import { frameCenter, viewSamples } from './view.js';
 
 /** Relative difference allowed between the scene and the mock. */
 export const FRAMING_TOLERANCE = 0.25;
@@ -53,8 +52,7 @@ const off = (ours: number, theirs: number) => Math.abs(ours - theirs) / Math.max
 
 /** The scene fills the frame and sizes its character like the approved mock. */
 export function framing(grid: Grid, camera: Camera, mock: MockMeasure): Finding[] {
-  const center = camera.center ?? spawnOf(grid.scene.actors);
-  if (!center) return [];
+  const center = frameCenter(grid.scene, camera);
   const samples = viewSamples(grid.scene, camera, center);
   const occupied = samples.filter((cell) => grid.floor.has(cellKey(cell))).length / samples.length;
   const findings: Finding[] = [];

@@ -105,6 +105,7 @@ export const command: GmCommand = {
         json: readJson(locate(ctx.cwd, game, spec.slice(0, at)), 'map'),
         offset: { x, y },
         prefix: `under${i}/`,
+        under: true,
       });
     }
     let scene;

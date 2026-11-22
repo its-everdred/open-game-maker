@@ -91,10 +91,14 @@ const WORDS: readonly [RegExp, Role][] = [
   [/bench|chair|seat|stool/, 'seat'],
 ];
 
-/** Role from the asset's own name (last id segment), then its layer. Packs name their pieces this way. */
+/**
+ * Role from the asset's own name (last id segment), then its layer: packs name their pieces this way, and a
+ * ground tile on a wall layer is still ground. Unnamed pieces on the floor layer are ground; elsewhere props.
+ */
 export function roleFromName(asset: string, layer: string): Role {
   const name = asset.replace(/@.*$/, '').split('/').pop()!.toLowerCase();
-  if (layer === 'floor') return /paving|path|road|cobble|stepping/.test(name) ? 'path' : 'ground';
+  if (/paving|path|road|cobble|stepping/.test(name)) return 'path';
+  if (/ground|grass|dirt|soil|sand|floor/.test(name)) return 'ground';
   for (const [pattern, role] of WORDS) if (pattern.test(name)) return role;
-  return layer === 'roof' ? 'roof' : 'prop';
+  return layer === 'floor' ? 'ground' : 'prop';
 }
