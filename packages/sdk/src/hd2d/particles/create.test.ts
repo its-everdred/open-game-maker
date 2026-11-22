@@ -115,6 +115,18 @@ describe('createParticleDriver', () => {
     expect(particles.drawn).toBeGreaterThan(0);
   });
 
+  it('frees a stopped emitter once its particles are gone, so the emitter limit is not used up', () => {
+    const { backend } = recorder();
+    const particles = createParticleDriver(backend);
+    const handles = Array.from({ length: 8 }, () => particles.emit('campfire-embers', { at: [5, 5, 0] }));
+    expect(() => particles.emit('campfire-embers', { at: [5, 5, 0] })).toThrow(RangeError);
+    handles[0]!.stop();
+    particles.update(0);
+    // Embers live at most 1.8 s; step past that at 60 fps.
+    for (let ms = 0; ms <= 2500; ms += 1000 / 60) particles.update(ms);
+    expect(() => particles.emit('campfire-embers', { at: [5, 5, 0] })).not.toThrow();
+  });
+
   it('is deterministic for a seed and differs across seeds', () => {
     const run = (seed: number) => {
       const { backend, drawn } = recorder();

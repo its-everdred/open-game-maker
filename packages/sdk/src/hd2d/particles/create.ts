@@ -284,10 +284,16 @@ export function createParticleDriver(backend: ParticleBackend, options: Particle
       backend.begin();
       let pixel = 0;
       let soft = 0;
-      for (const emission of emissions) {
+      for (let at = 0; at < emissions.length; at += 1) {
+        const emission = emissions[at]!;
         const steps = emission.pool.step(dt);
         if (steps > 0) emission.identity.track(emission.pool.views, steps);
         const { x, y, z, rot, size, alpha, family, count } = emission.pool.views;
+        // A stopped emitter frees its slot once its last particle is gone.
+        if (emission.stopped && count === 0) {
+          emissions.splice(at--, 1);
+          continue;
+        }
         const colors = emission.identity.color;
         for (let index = 0; index < count; index += 1) {
           if (pixel + soft >= PARTICLE_LIMITS.visible) break;
