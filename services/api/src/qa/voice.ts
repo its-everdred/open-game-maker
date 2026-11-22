@@ -6,7 +6,7 @@ import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
 import { readQaState, updateQaState } from './state.js';
 
-// The voice E2E's build (#879): one job on the QA game whose build chat shows the mic and "Start voice chat", so the
+// The voice E2E's build (#879): one job on the QA game whose build chat shows the mic and "Start voice conversation", so the
 // prod run dictates into its message box and holds a voice session on it. Like an operator publish it is `filed` with
 // `releasedAt` set, so it takes no job slot and no daemon runs it; its aiur ticket lives in the `qa` repository, which no
 // real game uses.
