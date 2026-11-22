@@ -114,6 +114,7 @@ def run(ep, out, kvs, usd):
     sub = call(f'https://queue.fal.run/{ep}', body)
     entry = {'endpoint': ep, 'usd': usd, 'request_id': sub.get('request_id'),
              'when': time.strftime('%Y-%m-%dT%H:%M:%S'), 'params': kvs, 'out': out}
+    lg['stop_usd'] = STOP_USD  # the cap enforced here, which the Energy menu reads
     lg['calls'].append(entry)  # booked at submit: a failure after submit may still bill
     write(lg)
     while True:

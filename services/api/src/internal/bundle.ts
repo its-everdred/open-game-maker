@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm';
 
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { getAttachment, jobAttachments, readBlob, workspacePath } from '../build-chat/attachments.js';
-import { energySource } from '../energy/source.js';
+import { readEnergySnapshot } from '../energy/source.js';
 import { readPreference } from '../energy/store.js';
 import { playerView } from '../energy/view.js';
 import { paidApisDuringGameplay } from '../gameplay/policy.js';
@@ -106,10 +106,11 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
           .from(schema.jobs)
           .where(eq(schema.jobs.id, job.jobId))
           .get()?.creatorId;
-        const energyAt = new Date();
-        const readings = (await deps.registry.energyReadings?.read(energyAt)) ?? [];
         const energy = playerView(
-          energySource({ db: deps.db, zone: deps.config.resetZoneDefault, readings }).snapshot(energyAt),
+          await readEnergySnapshot(
+            { db: deps.db, zone: deps.config.resetZoneDefault, readings: deps.registry.energyReadings },
+            new Date(),
+          ),
           creatorId === undefined ? 'balanced' : readPreference(deps.db, creatorId),
         );
         const scopeSessionId = job.kind === 'scope' ? scopeSessions.getByJob(deps.db, job.jobId)?.id : undefined;

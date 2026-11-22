@@ -36,6 +36,14 @@ class Fal3dLedgerTests(unittest.TestCase):
         self.assertIn('would pass 9.0', str(stop.exception))
         self.assertEqual(self.sent, [])
 
+    def test_records_the_enforced_cap_so_the_energy_menu_shows_the_same_one(self):
+        json.dump({'stop_usd': 20.0, 'calls': []}, open(self.ledger, 'w'))
+        replies = iter([{'request_id': 'r', 'status_url': 's', 'response_url': 'u'}, {'status': 'COMPLETED'}, {}])
+        self.fal.call = lambda url, data=None: next(replies)
+        self.fal.save = lambda res, out: []
+        self.fal.run('fal-ai/trellis-2', os.path.join(self.tmp.name, 'out'), [], 0.25)
+        self.assertEqual(json.load(open(self.ledger))['stop_usd'], 9.0)
+
     def test_counts_spend_already_booked_by_other_arms(self):
         json.dump({'calls': [{'usd': 3.04}, {'usd': 0.5}]}, open(self.ledger, 'w'))
         self.assertEqual(self.fal.total(self.fal.ledger()), 3.54)

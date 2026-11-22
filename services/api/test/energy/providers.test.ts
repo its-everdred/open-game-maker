@@ -105,6 +105,17 @@ describe('aiur usage readings', () => {
     expect(primary!.observedAt).toBe('2026-11-22T05:07:24.131Z');
   });
 
+  it('names each window when a provider has several, and keeps a fresh window with no share unknown, not stale', () => {
+    const windows = {
+      five_hour: { kind: 'rate_limit', name: 'Five hours', used_percent: 140, observed_at: '2026-11-22T22:07:20Z' },
+      seven_day: { kind: 'rate_limit', name: 'Weekly', observed_at: '2026-11-22T22:07:20Z' },
+    };
+    const body = { ...claude, provider: { ...claude.provider, fields: { windows } } };
+    const [five, week] = aiurReadings('claude', 'Claude', body);
+    expect(five).toMatchObject({ label: 'Claude Five hours', usedPercent: 100, basis: 'reported' });
+    expect(week).toMatchObject({ label: 'Claude Weekly', usedPercent: null, basis: 'unknown', stale: false });
+  });
+
   it('is unknown, not 0, when the provider has no reading or the body is not aiur.usage', () => {
     for (const body of [openrouter, { error: 'nope' }, null]) {
       const [reading] = aiurReadings('openrouter', 'OpenRouter', body);
@@ -135,9 +146,15 @@ describe('fal ledger reading', () => {
     });
   });
 
-  it('is unknown when the ledger cannot be read as one', () => {
+  it('is unknown when the ledger cannot be read as one, or holds no price fal could charge', () => {
     const path = join(tmp(), 'fal-ledger.json');
-    for (const text of ['{not json', JSON.stringify({ calls: [{ usd: 'one' }] })]) {
+    for (const text of [
+      '{not json',
+      JSON.stringify({ calls: [{ usd: 'one' }] }),
+      JSON.stringify({ calls: [{ usd: -1 }] }),
+      JSON.stringify({ calls: [{ usd: 1e300 }] }),
+      JSON.stringify({ stop_usd: 1e-9, calls: [] }),
+    ]) {
       writeFileSync(path, text);
       const reading = falReading(path, 9, at);
       expect(reading.basis).toBe('unknown');

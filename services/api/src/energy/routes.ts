@@ -8,15 +8,13 @@ import { actorFromPrincipal, requireAuthorization } from '../accounts/families.j
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
-import { energySource } from './source.js';
+import { readEnergySnapshot } from './source.js';
 import { readPreference, writeLimits, writePreference } from './store.js';
 import { adminView, playerView } from './view.js';
 
-async function snapshot(c: Context<ApiBindings>) {
+function snapshot(c: Context<ApiBindings>) {
   const { db, config, registry } = c.get('deps');
-  const now = new Date();
-  const readings = (await registry.energyReadings?.read(now)) ?? [];
-  return energySource({ db, zone: config.resetZoneDefault, readings }).snapshot(now);
+  return readEnergySnapshot({ db, zone: config.resetZoneDefault, readings: registry.energyReadings }, new Date());
 }
 
 // Energy limits are instance-wide, so only a platform admin (no family scope) may read costs or set them.

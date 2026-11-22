@@ -128,7 +128,8 @@ export function aiurReadings(provider: string, label: string, body: unknown): Pr
     const freshness = str(window.freshness) ?? str(record.freshness);
     const used = percent(window.used_percent);
     const observedAt = iso(window.observed_at) ?? iso(record.observed_at);
-    const known = freshness === 'fresh' && used !== null;
+    const fresh = freshness === 'fresh';
+    const known = fresh && used !== null;
     return {
       id: `${provider}:${key}`,
       label: limits.length === 1 ? label : `${label} ${str(window.name) ?? key}`,
@@ -137,13 +138,16 @@ export function aiurReadings(provider: string, label: string, body: unknown): Pr
       usedPercent: known ? used : null,
       resetsAt: iso(window.resets_at),
       observedAt,
-      stale: !known && observedAt !== null,
+      stale: !fresh && observedAt !== null,
       basis: known ? 'reported' : 'unknown',
       spentMicroUsd: null,
       capMicroUsd: null,
     };
   });
 }
+
+// Anything this large is not a fal price; it reads as unknown rather than overflowing the micro-dollar range.
+const MAX_USD = 1_000_000;
 
 // fal3d.py books each call at its listed price before sending it, so the total is an estimate. No ledger file
 // means nothing has been booked yet: 0 of the cap, not unknown.
@@ -158,12 +162,15 @@ export function falReading(path: string, defaultCapUsd: number, now: Date): Prov
   }
   if (!isObject(ledger) || !Array.isArray(ledger.calls)) return unknownReading(base);
   const usd = ledger.calls.map((call) => (isObject(call) ? call.usd : undefined));
-  if (!usd.every((value): value is number => typeof value === 'number' && Number.isFinite(value))) {
-    return unknownReading(base);
-  }
-  const capUsd = typeof ledger.stop_usd === 'number' && ledger.stop_usd > 0 ? ledger.stop_usd : defaultCapUsd;
-  const spent = safeMicro(usdToMicro(usd.reduce((sum, value) => sum + value, 0).toFixed(6)));
+  const price = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < MAX_USD;
+  if (!usd.every(price)) return unknownReading(base);
+  const capUsd = price(ledger.stop_usd) && ledger.stop_usd > 0 ? ledger.stop_usd : defaultCapUsd;
+  const total = usd.reduce((sum, value) => sum + value, 0);
+  if (!price(total)) return unknownReading(base);
+  const spent = safeMicro(usdToMicro(total.toFixed(6)));
   const cap = safeMicro(usdToMicro(capUsd.toFixed(6)));
+  if (cap <= 0) return unknownReading(base);
   return {
     ...base,
     usedPercent: Math.min(100, Math.round((spent / cap) * 100)),

@@ -55,9 +55,9 @@ export const EnergyResource = z
     label: z.string().min(1),
     provider: z.string().min(1),
     kind: EnergyResourceKind,
-    // Spend this month as recorded by Game Maker; null when not recorded here.
+    // Spend as Game Maker records it (this month for builds, the ledger total for fal); null when not recorded.
     spentMicroUsd: MicroUsd.nullable(),
-    // Remaining capacity at the provider; null when unknown (the local source never knows it).
+    // What is left of a known dollar cap; null when there is none.
     remainingMicroUsd: MicroUsd.nullable(),
     // A subscription's next reset; prepaid credits and metered spend have none.
     resetsAt: IsoTime.nullable(),

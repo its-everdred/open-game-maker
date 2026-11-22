@@ -4,7 +4,7 @@ import { and, gte, lte } from 'drizzle-orm';
 
 import { netCharges } from '../budget/allowance.js';
 import { dayKey, nextReset } from '../budget/reset.js';
-import type { ProviderReading } from './providers.js';
+import type { ProviderReading, ProviderReadings } from './providers.js';
 import { readLimits } from './store.js';
 
 // What a resource-policy source knows at one instant. Usage is in micro-dollars; null means unknown, never zero.
@@ -115,6 +115,15 @@ function ledgerUsage(db: Db, now: Date, zone: string): Record<EnergyWindowName, 
 }
 
 export type EnergySourceDeps = { db: Db; zone: string; readings?: ProviderReading[] };
+
+// The snapshot the routes and job bundles show: provider readings (cached, time-boxed) fetched first.
+export async function readEnergySnapshot(
+  deps: { db: Db; zone: string; readings: ProviderReadings | null },
+  now: Date,
+): Promise<EnergySnapshot> {
+  const readings = (await deps.readings?.read(now)) ?? [];
+  return energySource({ db: deps.db, zone: deps.zone, readings }).snapshot(now);
+}
 
 // The single place the routes and admission get their source; swap it for Aiur's view here.
 export function energySource(deps: EnergySourceDeps): ResourcePolicySource {
