@@ -1,0 +1,418 @@
+{
+ "before": {
+  "extras": [
+   {
+    "asset": "pack:Wall B1",
+    "facing": "N",
+    "x": 1,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Wall B1",
+    "facing": "N",
+    "x": 2,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Wall B1",
+    "facing": "N",
+    "x": 3,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Wall E16",
+    "facing": "N",
+    "x": 6,
+    "y": 5,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Wall E16",
+    "facing": "N",
+    "x": 7,
+    "y": 5,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Stone A1",
+    "facing": "S",
+    "x": 2,
+    "y": 1,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Stone A1",
+    "facing": "S",
+    "x": 7,
+    "y": 7,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Stone A1",
+    "facing": "S",
+    "x": 8,
+    "y": 6,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Misc B2",
+    "facing": "S",
+    "x": 3,
+    "y": 2,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Misc E1",
+    "facing": "E",
+    "x": 6,
+    "y": 6,
+    "layer": "decor"
+   }
+  ]
+ },
+ "after": {
+  "extras": [
+   {
+    "asset": "variant:grime-worn-path",
+    "facing": "S",
+    "x": 4,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:grime-dirt-patch-a",
+    "facing": "E",
+    "x": 5,
+    "y": 1,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:grime-mud-patch",
+    "facing": "S",
+    "x": 3,
+    "y": 6,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:grime-dirt-patch-b",
+    "facing": "W",
+    "x": 2,
+    "y": 4,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:palisade-broken-b",
+    "facing": "N",
+    "x": 1,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Wall B1",
+    "facing": "N",
+    "x": 2,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:palisade-broken-a",
+    "facing": "N",
+    "x": 3,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Wall E16",
+    "facing": "N",
+    "x": 6,
+    "y": 5,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:fence-picket-gap",
+    "facing": "N",
+    "x": 7,
+    "y": 5,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:rock-mossy-a1",
+    "facing": "S",
+    "x": 2,
+    "y": 1,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:rock-cluster-a",
+    "facing": "S",
+    "x": 7,
+    "y": 7,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:rock-mossy-a2",
+    "facing": "W",
+    "x": 8,
+    "y": 6,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:rock-cluster-b",
+    "facing": "E",
+    "x": 5,
+    "y": 7,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:clutter-pots-crates",
+    "facing": "S",
+    "x": 3,
+    "y": 2,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:clutter-farmyard",
+    "facing": "E",
+    "x": 6,
+    "y": 6,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:clutter-woodpile",
+    "facing": "S",
+    "x": 1,
+    "y": 4,
+    "layer": "decor"
+   }
+  ]
+ },
+ "pairs-fences": {
+  "extras": [
+   {
+    "asset": "pack:Wall B1",
+    "facing": "S",
+    "x": 0,
+    "y": 2,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:palisade-broken-a",
+    "facing": "S",
+    "x": 2,
+    "y": 0,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Wall B1",
+    "facing": "S",
+    "x": 2,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:palisade-weathered",
+    "facing": "S",
+    "x": 4,
+    "y": 1,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Wall B3",
+    "facing": "S",
+    "x": 3,
+    "y": 5,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:palisade-low-weathered",
+    "facing": "S",
+    "x": 5,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Wall E16",
+    "facing": "S",
+    "x": 5,
+    "y": 6,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:fence-picket-gap",
+    "facing": "S",
+    "x": 7,
+    "y": 4,
+    "layer": "decor"
+   }
+  ]
+ },
+ "pairs-rocks": {
+  "extras": [
+   {
+    "asset": "pack:Stone A1",
+    "facing": "S",
+    "x": 0,
+    "y": 2,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:rock-mossy-a1",
+    "facing": "S",
+    "x": 2,
+    "y": 0,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Stone A2",
+    "facing": "S",
+    "x": 2,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:rock-mossy-a2",
+    "facing": "S",
+    "x": 4,
+    "y": 1,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Stone A12",
+    "facing": "S",
+    "x": 3,
+    "y": 5,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:rock-cluster-a",
+    "facing": "S",
+    "x": 5,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Stone A2",
+    "facing": "S",
+    "x": 5,
+    "y": 6,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:rock-cluster-b",
+    "facing": "S",
+    "x": 7,
+    "y": 4,
+    "layer": "decor"
+   }
+  ]
+ },
+ "pairs-grime": {
+  "extras": [
+   {
+    "asset": "pack:Ground A7",
+    "facing": "S",
+    "x": 0,
+    "y": 2,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:grime-dirt-patch-a",
+    "facing": "S",
+    "x": 2,
+    "y": 0,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Ground A10",
+    "facing": "S",
+    "x": 2,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:grime-dirt-patch-b",
+    "facing": "S",
+    "x": 4,
+    "y": 1,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Ground A6",
+    "facing": "S",
+    "x": 3,
+    "y": 5,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:grime-mud-patch",
+    "facing": "S",
+    "x": 5,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Ground J9",
+    "facing": "S",
+    "x": 5,
+    "y": 6,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:grime-worn-path",
+    "facing": "S",
+    "x": 7,
+    "y": 4,
+    "layer": "decor"
+   }
+  ]
+ },
+ "pairs-clutter": {
+  "extras": [
+   {
+    "asset": "pack:Misc B2",
+    "facing": "S",
+    "x": 0,
+    "y": 2,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:clutter-pots-crates",
+    "facing": "S",
+    "x": 2,
+    "y": 0,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Misc E1",
+    "facing": "S",
+    "x": 2,
+    "y": 3,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:clutter-farmyard",
+    "facing": "S",
+    "x": 4,
+    "y": 1,
+    "layer": "decor"
+   },
+   {
+    "asset": "pack:Misc B8",
+    "facing": "S",
+    "x": 3,
+    "y": 5,
+    "layer": "decor"
+   },
+   {
+    "asset": "variant:clutter-woodpile",
+    "facing": "S",
+    "x": 5,
+    "y": 3,
+    "layer": "decor"
+   }
+  ]
+ }
+}
