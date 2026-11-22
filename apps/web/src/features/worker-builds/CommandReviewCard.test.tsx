@@ -408,3 +408,56 @@ it('keeps the original beside an enlarged candidate after a vote', () => {
   fireEvent.click(enlarged.querySelector('button[aria-label="Like Knight model"]')!);
   expect([...enlarged.querySelectorAll('img')].map((image) => image.alt)).toEqual(['Knight pack', 'Knight model']);
 });
+
+it('keeps a row deck that carries audio on the paged card, which can play it', () => {
+  render(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard
+        command={{
+          ...layoutCommand,
+          options: layoutCommand.options.map((option, index) =>
+            index === 0 ? { ...option, audio: { url: 'https://cdn.test/k2.mp3', width: 0, height: 0 } } : option,
+          ),
+        }}
+        onAnswered={() => {}}
+      />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByRole('button', { name: 'View option A' })).toBeVisible();
+  expect(screen.getByLabelText('Knight sprite audio')).toBeInTheDocument();
+});
+
+it('shows an original on the paged card without asking for a verdict on it', () => {
+  // One option without media sends the row deck to the paged card.
+  const options = layoutCommand.options.map((option) =>
+    option.id === 'tree-a' ? { id: option.id, label: option.label, layout: option.layout } : option,
+  );
+  render(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard command={{ ...layoutCommand, options }} onAnswered={() => {}} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'View option B' }));
+  expect(screen.getByAltText('Knight pack')).toBeVisible();
+  expect(screen.queryByRole('button', { name: /^Pick B/ })).toBeNull();
+  expect(screen.queryByLabelText(/Rate B/)).toBeNull();
+});
+
+it('closes an enlarged candidate when a new round of the Command arrives', () => {
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard command={layoutCommand} onAnswered={() => {}} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Enlarge Knight sprite' }));
+  const note = screen.getByRole('textbox', { name: 'Note for Knight sprite' });
+  // The card rejects option notes over 1,000 characters, so the matrix cannot take more.
+  expect(note).toHaveAttribute('maxLength', '1000');
+  fireEvent.change(note, { target: { value: 'Too thin' } });
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard command={{ ...layoutCommand, version: 3 }} onAnswered={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.queryByRole('dialog', { name: 'Knight sprite' })).toBeNull();
+});

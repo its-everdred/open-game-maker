@@ -21,7 +21,16 @@ const isOriginal = (option: Option) => option.layout?.stage === 'original';
 // which can play or sound them.
 function matrixRows(options: readonly Option[]) {
   if (!options.some((option) => option.layout?.row)) return undefined;
-  if (options.some((option) => !option.media || option.playable || mediaKindOf(option.media) === 'audio'))
+  if (
+    options.some(
+      (option) =>
+        !option.media ||
+        option.playable ||
+        option.audio ||
+        option.audioClips?.length ||
+        mediaKindOf(option.media) === 'audio',
+    )
+  )
     return undefined;
   const rows = new Map<string, Option[]>();
   for (const option of options) {
@@ -211,6 +220,7 @@ export function CommandReviewCard({
       </label>
       {rows ? (
         <ReviewMatrix
+          key={command.version}
           rows={rows}
           disabled={sending || saved}
           votes={Object.fromEntries(
@@ -308,66 +318,72 @@ export function CommandReviewCard({
                       aria-label={`${option.label} audio ${index + 2}`}
                     />
                   ))}
-                  <div
-                    className="worker-review-votes"
-                    aria-label={`Rate ${letterOf(command.options, option.id)}: ${withoutLinks(option.label)}`}
-                  >
-                    <button
-                      type="button"
-                      aria-pressed={votes[option.id] === 'like'}
-                      disabled={sending || saved}
-                      onClick={() =>
-                        setVotes((current) => {
-                          const next = { ...current };
-                          if (next[option.id] === 'like') delete next[option.id];
-                          else next[option.id] = 'like';
-                          return next;
-                        })
-                      }
-                    >
-                      👍
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={votes[option.id] === 'dislike'}
-                      disabled={sending || saved}
-                      onClick={() =>
-                        setVotes((current) => {
-                          const next = { ...current };
-                          if (next[option.id] === 'dislike') delete next[option.id];
-                          else next[option.id] = 'dislike';
-                          return next;
-                        })
-                      }
-                    >
-                      👎
-                    </button>
-                  </div>
-                  {votes[option.id] || reasons[option.id] ? (
-                    <label className="worker-review-option-note">
-                      Note for {letterOf(command.options, option.id)} (optional)
-                      <textarea
-                        value={reasons[option.id] ?? ''}
+                  {isOriginal(option) ? null : (
+                    <>
+                      <div
+                        className="worker-review-votes"
+                        aria-label={`Rate ${letterOf(command.options, option.id)}: ${withoutLinks(option.label)}`}
+                      >
+                        <button
+                          type="button"
+                          aria-pressed={votes[option.id] === 'like'}
+                          disabled={sending || saved}
+                          onClick={() =>
+                            setVotes((current) => {
+                              const next = { ...current };
+                              if (next[option.id] === 'like') delete next[option.id];
+                              else next[option.id] = 'like';
+                              return next;
+                            })
+                          }
+                        >
+                          👍
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={votes[option.id] === 'dislike'}
+                          disabled={sending || saved}
+                          onClick={() =>
+                            setVotes((current) => {
+                              const next = { ...current };
+                              if (next[option.id] === 'dislike') delete next[option.id];
+                              else next[option.id] = 'dislike';
+                              return next;
+                            })
+                          }
+                        >
+                          👎
+                        </button>
+                      </div>
+                      {votes[option.id] || reasons[option.id] ? (
+                        <label className="worker-review-option-note">
+                          Note for {letterOf(command.options, option.id)} (optional)
+                          <textarea
+                            value={reasons[option.id] ?? ''}
+                            disabled={sending || saved}
+                            maxLength={1000}
+                            onChange={(event) =>
+                              setReasons((current) => ({ ...current, [option.id]: event.target.value }))
+                            }
+                          />
+                        </label>
+                      ) : null}
+                      <button
+                        type="button"
                         disabled={sending || saved}
-                        maxLength={1000}
-                        onChange={(event) => setReasons((current) => ({ ...current, [option.id]: event.target.value }))}
-                      />
-                    </label>
-                  ) : null}
-                  <button
-                    type="button"
-                    disabled={sending || saved}
-                    onClick={() => {
-                      setError(false);
-                      setPicking({
-                        id: option.id,
-                        label: `Pick ${letterOf(command.options, option.id)}: ${withoutLinks(option.label)}`,
-                        version: command.version,
-                      });
-                    }}
-                  >
-                    Pick {letterOf(command.options, option.id)}: {withoutLinks(option.label)}
-                  </button>
+                        onClick={() => {
+                          setError(false);
+                          setPicking({
+                            id: option.id,
+                            label: `Pick ${letterOf(command.options, option.id)}: ${withoutLinks(option.label)}`,
+                            version: command.version,
+                          });
+                        }}
+                      >
+                        Pick {letterOf(command.options, option.id)}: {withoutLinks(option.label)}
+                      </button>
+                    </>
+                  )}
                 </div>
               ))}
           </div>

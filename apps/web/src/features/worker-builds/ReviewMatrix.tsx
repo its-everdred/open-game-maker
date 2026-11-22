@@ -135,6 +135,7 @@ export function ReviewMatrix({ rows, votes, onVote, disabled = false }: ReviewMa
               <textarea
                 value={note}
                 disabled={disabled}
+                maxLength={1000}
                 onChange={(event) => {
                   const next = event.target.value;
                   setNote(next);

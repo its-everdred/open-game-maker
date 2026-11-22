@@ -87,3 +87,31 @@ it('reads durable game answers and retains core answers for the browser session'
   restoredLedger.unmount();
   client.clear();
 });
+
+it('never fetches a game ledger for an answered PC-daemon Command', async () => {
+  api.mockResolvedValue({ reviews: [] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const { result } = renderHook(() => useAnsweredReviews([], []), { wrapper });
+  act(() =>
+    result.current.rememberCommand({
+      source: 'core',
+      daemon: 'pc',
+      job_id: null,
+      ticket: '46',
+      title: 'Core',
+      command_id: 'pc-c',
+      decision_id: 'pc-d',
+      version: 1,
+      question: 'Which?',
+      blocking: true,
+      opened_at: '2026-01-01T00:00:00Z',
+      options: [{ id: 'a', label: 'A' }],
+    }),
+  );
+  await waitFor(() => expect(result.current.sessionAnsweredCommands).toHaveLength(1));
+  // `core:pc` is a daemon, not a game: asking for its ledger would 404 on every refresh.
+  expect(api).not.toHaveBeenCalledWith('/games/core%3Apc/reviews');
+});
