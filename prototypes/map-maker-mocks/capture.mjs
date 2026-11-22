@@ -17,9 +17,14 @@ const shots = [
   ),
   ...['snap', 'free', 'drag', 'tap', 'lock', 'agent'].map((q) => [`mockD.html?q=${q}`, `D-${q}.png`, 640, 480, 1]),
 ];
+const picked = shots.filter(([, f]) => !only || f.startsWith(only));
+if (!picked.length) {
+  console.error(`no shot matches ${only}`);
+  process.exit(1);
+}
 const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });
 const missing = [];
-for (const [page, file, width, height, scale] of shots.filter(([, f]) => !only || f.startsWith(only))) {
+for (const [page, file, width, height, scale] of picked) {
   const tab = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: scale });
   // Local files are the sprites and mock code: a failed one means a broken picture. Web fonts may fall back.
   tab.on('requestfailed', (request) => {

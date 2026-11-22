@@ -20,7 +20,7 @@ window.sceneCard = ([name, who, on], w, h, i) => {
   setTimeout(() => {
     const el = document.getElementById(id); if (!el) return;
     const s = w / 1150; buildScene(el, w / 2 + (i - 1) * 8, h * 0.18, s, { fam: i === 1 ? 'a1' : 'b1' });
-    if (i === 2) el.style.filter = 'hue-rotate(200deg) brightness(.7)';
+    if (i === 2) for (const c of el.children) c.style.filter = 'hue-rotate(200deg) brightness(.7)';
   });
   return `<div class="scard ${on ? 'on' : ''}" style="width:${w}px"><div id="${id}" class="sthumb" style="height:${h}px"></div>
    <div class="sname"><span>${name}</span><span class="who ${who}">${ic(who)}</span></div></div>`;

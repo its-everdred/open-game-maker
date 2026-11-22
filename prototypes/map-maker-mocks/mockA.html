@@ -30,7 +30,7 @@ if(st==='edit'||st==='scenes'){
   H(topBar+editTray);
   if(st==='edit'){const [fx,fy]=at(7.4,5.3,ox,oy,s),[sx,sy]=at(2.5,2,ox,oy,s);
     H(`<div class="float glass" style="left:${sx}px;top:${sy-60*s}px">${btn('rotate')}${btn('flip')}${btn('dup','','duplicate')}${btn('trash','','delete')}</div><div class="finger" style="left:${fx}px;top:${fy}px"></div>`);}
-  else H(`<div class="strip glass">${SCENES.map((c,i)=>sceneCard(c,P?150:220,P?96:130,i)).join('')}<button class="btn" aria-label="new scene" style="flex:none;align-self:center">${ic('plus')}</button></div>`);
+  else H(`<div class="strip glass"><button class="btn" aria-label="new scene" style="flex:none;align-self:center">${ic('plus')}</button>${SCENES.map((c,i)=>sceneCard(c,P?150:220,P?96:130,i)).join('')}</div>`);
 }
 if(st==='browse'){
   mark(L,2,4,ox,oy,s,'background:rgba(148,215,66,.45);outline:2px solid #94d742');
@@ -39,7 +39,7 @@ if(st==='browse'){
    <div class="search">${ic('search')}<span style="flex:1"></span><span class="count">${LIB.total}</span></div>
    <div class="row">${LIB.kinds.map((k,i)=>kindChip(k,i===4)).join('')}</div>
    <div class="row">${LIB.subs.map((t,i)=>`<span class="chip ${i===0?'on':''}">${t}</span>`).join('')}${LIB.tags.map((t,i)=>`<span class="chip" style="background:none;outline:1px solid var(--rule)">${t}</span>`).join('')}</div>
-   <div class="grid" style="grid-template-columns:repeat(${P?4:8},1fr)">${LIB.items.slice(0,P?12:16).map((k,i)=>labelled(k,i===1,P?78:90)).join('')}</div></div>`+dragGhost(gx,gy,{prop:'tree_a3_e'}));
+   <div class="grid" style="grid-template-columns:repeat(${P?4:6},1fr)">${LIB.items.slice(0,12).map((k,i)=>labelled(k,i===1,P?78:90)).join('')}</div></div>`+dragGhost(gx,gy,{prop:'tree_a3_e'}));
 }
 if(st==='look'){
   applyLook(L,ox,oy,s,VW,VH);

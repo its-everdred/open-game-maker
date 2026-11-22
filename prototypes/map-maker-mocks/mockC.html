@@ -47,11 +47,11 @@ if(P){
  ${top3}
  <div class="bar glass" style="right:10px;top:84px;flex-direction:column;border-radius:30px">${btn('select')}${btn('erase')}${btn('eye','', 'see through roofs')}${btn('sun','','light and mood')}</div>
  <div class="vars glass" style="left:50%;bottom:118px;transform:translateX(-50%)">${vars.map(V).join('')}</div>
- <div class="brushes glass" style="left:8px;right:8px;bottom:14px;overflow:hidden">${brushes.map(B).join('')}</div>`);
+ <div class="brushes glass" style="left:8px;right:8px;bottom:14px;overflow:hidden">${brushes.map((k,i)=>B(k,i)).join('')}</div>`);
 } else {
  document.body.insertAdjacentHTML('beforeend',`
  ${top3}
- <div class="brushes glass" style="left:12px;top:84px;flex-direction:column;border-radius:46px">${brushes.map(B).join('')}</div>
+ <div class="brushes glass" style="left:12px;top:84px;flex-direction:column;border-radius:46px">${brushes.map((k,i)=>B(k,i)).join('')}</div>
  <div class="vars glass" style="left:110px;top:${84+2*78}px">${vars.map(V).join('')}</div>
  <div class="bar glass" style="right:12px;bottom:12px">${btn('select')}${btn('erase')}${btn('eye','', 'see through roofs')}${btn('sun','','light and mood')}</div>`);
 }
