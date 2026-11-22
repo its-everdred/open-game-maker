@@ -329,3 +329,8 @@ capture. Framing, facade, path, dressing, and perimeter differences are ranked;
 o connectivity or registered similarity score is asserted for off-screen or
 unregistered content. The manual comparison does not complete the automatic
 scene-reading and comparison work.
+
+Before review, the internal helpers that no command called (placement plan,
+scatter, Tiled decor export and merge, structure intent, routes, observation
+projection and match coverage) were removed from the branch. They remain in its
+history for #1207 and #1215 to reuse when a scene document and assemblers exist.

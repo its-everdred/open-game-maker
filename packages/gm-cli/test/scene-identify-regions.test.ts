@@ -25,17 +25,22 @@ it('ranks each reviewed crop and preserves incomplete search and pending review'
     truncated: true,
     regions: [{ crop: [1, 2, 3, 4], query: vector(1, 0) }],
   };
-  const result = identifySceneRegions({ brief, match, mockSha256 });
+  const mockSize = { width: 10, height: 10 };
+  const result = identifySceneRegions({ brief, match, mockSha256, mockSize });
   expect(result).toMatchObject({
     complete: false,
     regions: [{ id: 'grave', review: 'pending', candidates: [{ id: 'a' }, { id: 'b' }] }],
   });
-  expect(() => identifySceneRegions({ brief, match, mockSha256: 'b'.repeat(64) })).toThrow('different mock');
+  expect(() => identifySceneRegions({ brief, match, mockSha256: 'b'.repeat(64), mockSize })).toThrow('different mock');
   expect(() =>
     identifySceneRegions({
       brief,
       match: { ...match, regions: [{ ...match.regions[0], crop: [0, 2, 3, 4] }] },
       mockSha256,
+      mockSize,
     }),
   ).toThrow('crop');
+  expect(() => identifySceneRegions({ brief, match, mockSha256, mockSize: { width: 20, height: 20 } })).toThrow(
+    'brief image is 10x10 but the mock is 20x20',
+  );
 });

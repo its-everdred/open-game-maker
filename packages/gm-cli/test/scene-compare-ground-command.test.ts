@@ -38,7 +38,7 @@ it('ranks registered ground regions and rejects out-of-image anchors', async () 
     expect([...sheet.data.subarray(3, 6)]).toEqual([255, 255, 255]);
     expect([...sheet.data.subarray(9, 12)]).toEqual([0, 0, 0]);
     expect([...sheet.data.subarray(15, 18)]).toEqual([128, 128, 128]);
-    await expect(command.run(ctx, args, { out: 'reference.png' })).rejects.toMatchObject({ code: 'EEXIST' });
+    await expect(command.run(ctx, args, { out: 'reference.png' })).rejects.toThrow('already exists');
     await writeFile(
       join(dir, 'registration.json'),
       JSON.stringify({

@@ -1,10 +1,16 @@
-import { parseSceneBrief } from './brief.js';
+import { assertBriefImageSize, parseSceneBrief } from './brief.js';
 import { rankVisualMatches } from './match.js';
 import { parseSceneBatchMatch } from './parse-worker-result.js';
 
 /** Identify candidates for each reviewed region, without treating a low score as a kit gap. */
-export function identifySceneRegions(input: { brief: unknown; match: unknown; mockSha256: string }) {
+export function identifySceneRegions(input: {
+  brief: unknown;
+  match: unknown;
+  mockSha256: string;
+  mockSize: { width?: number; height?: number };
+}) {
   const brief = parseSceneBrief(input.brief);
+  assertBriefImageSize(brief, input.mockSize);
   const match = parseSceneBatchMatch(input.match);
   if (!/^[a-f0-9]{64}$/.test(input.mockSha256) || input.mockSha256 !== match.mock_sha256)
     throw new Error('scene match belongs to a different mock');

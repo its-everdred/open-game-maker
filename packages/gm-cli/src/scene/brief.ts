@@ -46,3 +46,14 @@ const Brief = z
 export function parseSceneBrief(input: unknown) {
   return Brief.parse(input);
 }
+
+/** Refuse a brief written against a different-size image: its crops would select other pixels. */
+export function assertBriefImageSize(
+  brief: ReturnType<typeof parseSceneBrief>,
+  size: { width?: number; height?: number },
+) {
+  if (size.width !== brief.image.width || size.height !== brief.image.height)
+    throw new Error(
+      `brief image is ${brief.image.width}x${brief.image.height} but the mock is ${size.width ?? '?'}x${size.height ?? '?'}`,
+    );
+}
