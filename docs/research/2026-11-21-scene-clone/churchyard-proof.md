@@ -279,3 +279,18 @@ alpha-trimmed SigLIP score ranked `stone-a4` first, `wall-a7` second and
 chosen for this probe, the query mask was drawn by hand, and this is one
 object in one pack/facing. It suggests a comparison to test on more objects,
 not a validated matcher or an automatic gap decision.
+
+A second manually masked crop tested the door against the same 467 candidates.
+The alpha-trimmed SigLIP ranking put `door-a2` second and `door-a1` 124th;
+silhouette alone put them 31st and 38th. The equal-weight blend selected
+a plausible `door-a2` first, followed by two window-wall pieces. On the grave,
+that same blend placed `stone-a4` first, followed by two structural pieces. The
+inspected two-row sheet is `assets-local/review/1154/churchyard-two-mask-blend.png`;
+rankings, query hashes and current preview hashes are in
+`assets-local/review/1154/churchyard-two-mask-results.json`.
+
+This is still a small local diagnostic: both masks were drawn by hand, both
+queries use one pack and facing, the blend weight was chosen after inspecting
+the grave, and the mock's exact source identities are not known. It supports
+further testing of combined signals but does not justify automatic selection,
+a gap claim or changing the production matcher yet.
