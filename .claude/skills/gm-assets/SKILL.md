@@ -80,7 +80,8 @@ When a game needs a pack asset at angles or rotations the pack doesn't ship (fre
 Fences, walls, buildings, paths and dressing in a SmallScaleInt scene come from the adapter's assemblers
 (`edgeRun`, `building`, `path`, `scatter`, written out with `assemblyMap`; `@gm/pack-smallscaleint` README). Never place
 structural pieces one sprite at a time or hard-code a facing-to-edge table in a game: a missing kind or style goes into
-the adapter as a measured fact with a test, so every game gets it.
+the adapter as a measured fact with a test, so every game gets it. Gate posts, steps and non-stone buildings are not
+bound yet: leave that gap visible in the round and file the adapter work rather than hand-placing sprites.
 
 ## Sound
 
