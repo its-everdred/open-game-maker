@@ -202,6 +202,15 @@ stylesheets, at 390x844, 844x390, 820x1180 and 1180x820 with touch on (`--viewpo
 default `~/.config/ogm/qa/storage.json`, minted on the host by `ops/bin/ogm-qa-signin`) and answers the app's requests
 for the game build from `./dist`. `--frame bare` captures the game page alone, as before.
 
+`gm scene pull <game> <scene> [--pack <adapter>]` copies a scene's latest revision, Kevin's edits included, to
+`.gm/scenes/<game>/<scene>.json` (`doc` plus the `baseRev` it came from). The scene lives in the game at
+`scenes/<scene>.scene.json` with its revision log `scenes/<scene>.revs.jsonl`; `--pack` names the pack adapter for a
+scene that doesn't exist yet. A scene on an older schema version is upgraded on pull and the upgrade recorded as a
+`migration` revision. `gm scene push <game> <scene> [--label <what changed>]` saves the edited `doc` as a revision by
+`agent:<ticket>`. A push from an older `baseRev` is rebased onto the latest one. If it would change anything Kevin
+edited, the whole push is refused with one line per conflict and nothing is saved: pull again and redo the rest.
+`--json` prints `{ ok, rev, rebased, saved }`, or `{ ok: false, conflicts, hint }` on a refusal (exit 1).
+
 `gm scene match <mock.png> <brief.json> --pack <id> --facing <direction> --out <new.json>` searches the
 specified pack locally using the reviewed regions in the brief. It checks pack rights and source hashes; the
 caller must establish that local vision processing of the mock is allowed. The output includes embeddings and
