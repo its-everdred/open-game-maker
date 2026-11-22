@@ -138,6 +138,21 @@ describe('bridge contract', () => {
     expect(bridgeJson(doc)).toBe(false);
   });
 
+  /* A published bundle's inlined manifest names its media by shared address (#1250); a rejected ready never boots. */
+  it('accepts a ready whose logo and loading images point at shared blobs', () => {
+    const ready = loadJson<{ payload: { manifest: Record<string, unknown> } }>('fixtures/bridge-ready.v1.json');
+    const shared = (n: number) => `/a/${String(n).repeat(64)}.png`;
+    ready.payload.manifest.logo = shared(1);
+    ready.payload.manifest.loading = { portrait: shared(2), landscape: shared(3) };
+    expect(gameToHostSchema.safeParse(ready).success).toBe(true);
+    expect(bridgeJson(ready)).toBe(true);
+    for (const logo of ['/a/not-a-hash.png', `/a/${'1'.repeat(64)}.js`, '/g/x/media/logo.png']) {
+      ready.payload.manifest.logo = logo;
+      expect(issuePaths(gameToHostSchema, ready)).toEqual(['payload.manifest.logo']);
+      expect(bridgeJson(ready)).toBe(false);
+    }
+  });
+
   it('keeps direction: a game cannot send design.apply and a host cannot send ready', () => {
     expect(gameToHostSchema.safeParse(loadJson('fixtures/bridge-design-apply.v1.json')).success).toBe(false);
     expect(hostToGameSchema.safeParse(loadJson('fixtures/bridge-ready.v1.json')).success).toBe(false);
