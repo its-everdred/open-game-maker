@@ -30,27 +30,30 @@ export interface PalettePrefab {
   placement: PlacementKind;
 }
 
-function categoryFrom(text: string): PaletteCategory | undefined {
+export function categoryFrom(text: string): PaletteCategory | undefined {
   const words = text.toLowerCase();
   if (/(?:^|[^a-z])wall[-_ ]?flora(?:[^a-z]|$)/.test(words)) return 'WallFlora';
   return CATEGORY_ORDER.find((category) => new RegExp(`(?:^|[^a-z])${category.toLowerCase()}(?:[^a-z]|$)`).test(words));
 }
 
-function categoryOf(card: AssetCard): PaletteCategory | undefined {
+export function categoryOf(card: AssetCard): PaletteCategory | undefined {
   return categoryFrom(`${card.title} ${card.id}`);
 }
 
-function placementOf(category: PaletteCategory): PlacementKind {
+export function placementOf(category: PaletteCategory): PlacementKind {
   return category === 'Wall' || category === 'Door' ? 'edge' : 'cell';
 }
 
-/** Placeable four-facing cards grouped by the category measured from the SmallScaleInt file names. */
-export function paletteFrom(cards: readonly AssetCard[]): Partial<Record<PaletteCategory, PalettePrefab[]>> {
-  const groups: Partial<Record<PaletteCategory, PalettePrefab[]>> = {};
+/** Four-facing iso tile cards grouped by measured category, in category order and sorted by id. */
+export function cardsByCategory(
+  cards: readonly AssetCard[],
+  hidden: ReadonlySet<string> = HIDDEN_CATEGORIES,
+): [PaletteCategory, AssetCard[]][] {
+  const groups: [PaletteCategory, AssetCard[]][] = [];
   const seen = new Set<string>();
   for (const category of CATEGORY_ORDER) {
-    if (HIDDEN_CATEGORIES.has(category)) continue;
-    const items: PalettePrefab[] = [];
+    if (hidden.has(category)) continue;
+    const items: AssetCard[] = [];
     for (const card of cards) {
       if (
         seen.has(card.id) ||
@@ -63,17 +66,26 @@ export function paletteFrom(cards: readonly AssetCard[]): Partial<Record<Palette
       if (!(['E', 'N', 'S', 'W'] as const).every((facing) => card.sprite?.facings?.[facing])) continue;
       if (categoryOf(card) !== category) continue;
       seen.add(card.id);
-      items.push({
-        prefab: card.id,
-        label: card.title,
-        category,
-        layer: layerForCategory(category),
-        footprint: [1, 1],
-        placement: placementOf(category),
-      });
+      items.push(card);
     }
-    items.sort((a, b) => a.prefab.localeCompare(b.prefab));
-    if (items.length > 0) groups[category] = items;
+    items.sort((a, b) => a.id.localeCompare(b.id));
+    if (items.length > 0) groups.push([category, items]);
+  }
+  return groups;
+}
+
+/** Placeable four-facing cards grouped by the category measured from the SmallScaleInt file names. */
+export function paletteFrom(cards: readonly AssetCard[]): Partial<Record<PaletteCategory, PalettePrefab[]>> {
+  const groups: Partial<Record<PaletteCategory, PalettePrefab[]>> = {};
+  for (const [category, items] of cardsByCategory(cards)) {
+    groups[category] = items.map((card) => ({
+      prefab: card.id,
+      label: card.title,
+      category,
+      layer: layerForCategory(category),
+      footprint: [1, 1],
+      placement: placementOf(category),
+    }));
   }
   return groups;
 }

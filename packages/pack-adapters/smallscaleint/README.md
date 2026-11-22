@@ -31,6 +31,20 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
 - `paletteFrom(cards)`: four-facing placeable cards grouped by measured environment category, with one-cell
   footprints and cell/edge placement metadata. `validatePlacement(prefab, pose, map)` checks floor cells and wall
   edges with the `GameInstance.validatePlacement` result shape.
+- `smallScaleIntSceneAdapter(cards)`: the `ScenePackAdapter` for scene documents (`@ogm/contracts` scene.v1).
+  Points are grid cells. `facings(asset)` lists the facings its card was drawn in (E, N, W, S without a card),
+  `placement` is `edge` for walls and doors, `cell` for other pieces and `free` for spawns, and `snap` moves a point to a
+  cell or the nearest edge midpoint. `layerFor(asset)`, `brushes()` (one per measured category, ground and roof
+  included) and `emptyScene(game, scene, bounds)` give the layer defaults. `autotile` rewrites nothing yet: pieces keep
+  the facings they were placed with until the autotile join rules land.
+- `isoMapToScene(json, { game, scene })` / `sceneToIsoMap(doc)`: the Tiled subset ⇄ a scene document. Pieces become
+  cell-keyed tiles with an explicit facing, `props.solid` only where it differs from the layer default (`wall` blocks);
+  `wall#1` layers become `wall-1`; spawns become `spawn-<id>` objects on the `spawns` layer posed in 64 px units. Both
+  directions are lossless for map data: the map loads the same pieces and spawns after a round trip (gids are
+  renumbered), and a converted document comes back unchanged. `sceneToIsoMap` refuses what a map can't draw (flips,
+  hidden layers, other object layers, unknown tile props, more than 512×512 cells) instead of dropping it. HD-2D
+  settings and creator locks are not map data: they stay in the document, so `isoMapToScene` is only for moving a TS
+  map into a new scene, never for rewriting an existing one.
 - `conventions`: the pack facts, each with how it was verified (sheet row order E, SE, S, SW, W, NW, N, NE, measured
   pixel by pixel against the angle-named frame files), and `layerForCategory` for tileset pieces.
 - Assemblers (cells are `{ x, y }` grid cells; an opening or door is `{ cell, edge: 'xMin' | 'xMax' | 'yMin' | 'yMax' }`):

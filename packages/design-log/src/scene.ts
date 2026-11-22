@@ -39,7 +39,9 @@ export function emptyScene(game: string, scene: string, packAdapter: string): Sc
 
 /** Split a scene into the units that merge and lock on their own. */
 export function sceneUnits(doc: SceneDoc): Units {
-  const units: Units = new Map([['meta', { packAdapter: doc.packAdapter }]]);
+  const meta =
+    doc.bounds === undefined ? { packAdapter: doc.packAdapter } : { packAdapter: doc.packAdapter, bounds: doc.bounds };
+  const units: Units = new Map([['meta', meta]]);
   for (const [id, layer] of Object.entries(doc.layers)) {
     const { tiles, ...settings } = layer;
     units.set(`layer:${id}`, settings);

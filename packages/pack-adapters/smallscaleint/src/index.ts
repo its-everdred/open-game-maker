@@ -64,3 +64,11 @@ export {
   type TerrainPiece,
   type TerrainSpec,
 } from './terrain.js';
+export {
+  isoMapToScene,
+  sceneToIsoMap,
+  SMALLSCALEINT_SCENE_ADAPTER,
+  SPAWN_ASSET,
+  SPAWNS_LAYER,
+} from './scene-convert.js';
+export { SCENE_LAYERS, smallScaleIntSceneAdapter, type SmallScaleIntSceneAdapter } from './scene-adapter.js';
