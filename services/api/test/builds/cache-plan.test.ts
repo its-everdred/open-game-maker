@@ -129,6 +129,28 @@ describe('published cache plans', () => {
     expect(html.match(new RegExp(`"/a/${mainHash}\\.js"`, 'gu'))).toHaveLength(3);
   });
 
+  it('rewrites root-relative names inside bundles and never part of a longer path (#1197)', async () => {
+    const { deps } = world();
+    completeRun(deps);
+    const dir = cachedBuild([]);
+    const data = '{"sprites":[]}\n';
+    writeFileSync(join(dir, 'assets', 'data.json'), data);
+    // What Vite emits for `new URL('assets/data.json', document.baseURI)` in a chunk under assets/: every Dusk Helm
+    // bundle became `assets//a/<hash>.json` and the game stuck on its loading layer.
+    writeFileSync(
+      join(dir, 'assets', 'main.js'),
+      'fetch(new URL("assets/data.json",document.baseURI).href);fetch("data.json");' +
+        'fetch("https://cdn.example/assets/data.json");\n',
+    );
+    const buildId = await publishFixture(deps, ids.job, dir, SHA);
+    const address = `/a/${digest(Buffer.from(data))}.json`;
+    const main = readFileSync(join(deps.config.gamesRoot, ids.game, buildId, 'assets', 'main.js'), 'utf8');
+    expect(main).toBe(
+      `fetch(new URL("${address}",document.baseURI).href);fetch("${address}");` +
+        'fetch("https://cdn.example/assets/data.json");\n',
+    );
+  });
+
   it('deduplicates shared blobs, records branch lineage, and keeps hashes referenced by live builds', async () => {
     const { deps } = world();
     completeRun(deps);
