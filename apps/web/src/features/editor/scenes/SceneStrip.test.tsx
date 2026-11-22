@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, useLocation } from 'react-router';
 
-import { loadScenes, newScene } from './scene-source';
+import { canCreateScene, loadScenes, newScene } from './scene-source';
 import { SceneStrip } from './SceneStrip';
 
 afterEach(cleanup);
@@ -34,6 +34,11 @@ describe('scene source', () => {
       ['Goblin cave', 'goblin-cave'],
       ['Miniboss arena', 'miniboss-arena'],
     ]);
+  });
+
+  it('lets + make scenes only where a scene can be written', () => {
+    expect(canCreateScene('fixture')).toBe(false);
+    expect(canCreateScene(null)).toBe(true);
   });
 
   it('makes a new scene the creator owns, without reusing an id', () => {
@@ -79,13 +84,14 @@ describe('SceneStrip', () => {
     );
   });
 
-  it('adds a new scene of yours and opens it', async () => {
+  it('keeps + off while the scenes are samples, since the game cannot show a blank scene yet', async () => {
     await renderStrip('/g/dusk-helm?mode=edit&scenes=fixture&scenario=lush-fields');
-    fireEvent.click(screen.getByRole('button', { name: 'New scene' }));
-    expect(screen.getByRole('button', { name: 'Scene 5, changed by you' })).toHaveAttribute('aria-pressed', 'true');
-    const params = new URLSearchParams(search);
-    expect(params.get('scene')).toBe('scene-5');
-    expect(params.has('scenario')).toBe(false);
+    expect(screen.getByRole('button', { name: 'New scene' })).toBeDisabled();
+  });
+
+  it('keeps the chips out of the edit bar group styling', async () => {
+    await renderStrip('/g/dusk-helm?mode=edit&scenes=fixture');
+    expect(screen.getByRole('group', { name: 'Scenes' }).parentElement).toHaveClass('scene-strip-layer');
   });
 
   it('hides and shows the chips', async () => {

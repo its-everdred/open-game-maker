@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { Icon } from '../../../components/Icon';
-import { isAgent, loadScenes, newScene, type SceneCard } from './scene-source';
+import { canCreateScene, isAgent, loadScenes, newScene, type SceneCard } from './scene-source';
 import './scene-strip.css';
 
 /** The edit page's scene chips (Kevin's pick B on #1191): every scene of the game, who changed it last, and a +. */
@@ -22,6 +22,7 @@ export function SceneStrip({ gameId }: { gameId: string }) {
   };
   const [scenes, setScenes] = useState<SceneCard[]>([]);
   const [shown, setShown] = useState(true);
+  const strip = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let current = true;
     void loadScenes(gameId, source).then((loaded) => current && setScenes(loaded));
@@ -29,12 +30,18 @@ export function SceneStrip({ gameId }: { gameId: string }) {
       current = false;
     };
   }, [gameId, source]);
-  if (scenes.length === 0) return null;
   const open = scenes.find((card) =>
     scene !== null ? card.id === scene : scenario !== null && card.scenario === scenario,
   );
+  useEffect(() => {
+    strip.current
+      ?.querySelector('[aria-pressed="true"]')
+      ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }, [open?.id]);
+  if (scenes.length === 0) return null;
   return (
-    <>
+    /* A wrapper, so the frame orientation group's `.game-stage-area > [role='group']` rules never reach the chips. */
+    <div className="scene-strip-layer">
       <button
         className="scene-strip-toggle"
         type="button"
@@ -44,11 +51,18 @@ export function SceneStrip({ gameId }: { gameId: string }) {
       >
         <Icon name="map" />
       </button>
-      <div className={shown ? 'scene-strip' : 'scene-strip is-hidden'} inert={!shown} aria-label="Scenes" role="group">
+      <div
+        ref={strip}
+        className={shown ? 'scene-strip' : 'scene-strip is-hidden'}
+        inert={!shown}
+        aria-label="Scenes"
+        role="group"
+      >
         <button
           className="scene-strip-add"
           type="button"
           aria-label="New scene"
+          disabled={!canCreateScene(source)}
           onClick={() => {
             const card = newScene(scenes);
             setScenes([...scenes, card]);
@@ -66,9 +80,6 @@ export function SceneStrip({ gameId }: { gameId: string }) {
               type="button"
               aria-pressed={card === open}
               aria-label={`${card.title}, ${card.live ? 'an agent is changing it' : agent ? 'changed by an agent' : 'changed by you'}`}
-              ref={(node) => {
-                if (node && card === open) node.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-              }}
               onClick={() => onOpen(card)}
             >
               <span className="scene-chip-picture">
@@ -86,6 +97,6 @@ export function SceneStrip({ gameId }: { gameId: string }) {
           );
         })}
       </div>
-    </>
+    </div>
   );
 }

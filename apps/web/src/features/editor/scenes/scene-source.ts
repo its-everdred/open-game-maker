@@ -35,6 +35,14 @@ export async function loadScenes(gameId: string, source: string | null): Promise
   return (FIXTURES[gameId] ?? []).map((scene) => ({ ...scene, title: sceneTitle(scene.id) }));
 }
 
+/**
+ * Whether + can make a scene. Sample scenes can't: a blank scene needs a scene document the game can load (#1207), so
+ * the game would keep showing the last scenario under a chip that says otherwise.
+ */
+export function canCreateScene(source: string | null): boolean {
+  return source !== 'fixture';
+}
+
 /** A new, empty scene owned by the creator. */
 export function newScene(existing: readonly SceneCard[]): SceneCard {
   const ids = new Set(existing.map((scene) => scene.id));
