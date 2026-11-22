@@ -210,3 +210,24 @@ untrimmed historical set ranked these game-used candidates 64th and 184th for
 the same mask, but that old set lacks per-preview hashes. This supports further
 controlled testing of alpha bounds, not a proven improvement across objects,
 facings or packs, and not a safe automatic top-three selection.
+
+## Isolated camera study
+
+A test-mode build was made in workspace scratch from game source at
+`2c0461dce3cdbe653d828df800b59bdc4ba9e50f`, with staged public files copied
+from the game workspace. The source lock hash was
+`e16b76ac3697b6a69d9b1bccb902464e5ab798b272f1d51c9abfdc0e3a188e64` and the
+staged public manifest hash was
+`7fc3cb0edd87ea0def1e7f4e3cf440a9cbcb167331feed847669e026f1e7a936`; these
+hashes do not by themselves establish every asset's build provenance. An
+initial build failed because the isolated copy lacked the root TypeScript
+configuration; copying it from the same commit allowed the test build to pass.
+
+A scratch-only camera hook was added and the test build rebuilt. The baseline
+camera zoom was about 0.643; an exploratory 1.8× zoom centred the player near
+the mock's approximate screen position. Both real-engine stills were inspected:
+`assets-local/review/1154/churchyard-camera-baseline.png` and
+`assets-local/review/1154/churchyard-camera-zoom-study.png`. The enlarged frame
+cuts the chapel out entirely. This verifies the framing tradeoff for this
+experiment, not an exact character-height match, production change, registered
+comparison or gameplay test. The game workspace itself was not modified.
