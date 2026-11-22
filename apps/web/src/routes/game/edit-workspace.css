@@ -90,10 +90,20 @@
   min-height: 0;
   background: var(--surface-card);
   color: var(--text);
-  --aiur-composer-bg: var(--surface-card);
+  --aiur-composer-bg: var(--surface-page);
   --aiur-composer-fg: var(--text);
+  --aiur-composer-muted: var(--text-muted);
+  --aiur-composer-line: var(--border);
+  --aiur-composer-button-bg: var(--border);
   --aiur-composer-accent: var(--action-primary);
   --aiur-composer-on-accent: var(--action-primary-text);
+  --aiur-composer-focus: var(--focus-ring);
+}
+
+.edit-workspace-chat aiur-composer::part(send):disabled {
+  opacity: 1;
+  background: var(--border);
+  color: var(--text-muted);
 }
 
 .edit-workspace-chat .build-chat-messages {
