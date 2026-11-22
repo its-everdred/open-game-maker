@@ -252,6 +252,22 @@ export const hostToGameSchema = z
   .meta({ id: 'HostToGame' });
 export type HostToGame = z.infer<typeof hostToGameSchema>;
 
+/**
+ * A published bundle inlines its manifest, and the cache plan rewrites the build-relative media paths in it to the
+ * shared `/a/<sha256>.<ext>` address (#1250), so the handshake accepts either form for the logo and loading images.
+ */
+const sharedMedia = (extensions: string) => z.string().regex(new RegExp(`^/a/[0-9a-f]{64}\\.(${extensions})$`, 'u'));
+const buildLoading = gameManifestSchema.shape.loading.unwrap().shape;
+const readyManifestSchema = gameManifestSchema.extend({
+  logo: gameManifestSchema.shape.logo.unwrap().or(sharedMedia('png|webp|svg')).optional(),
+  loading: z
+    .looseObject({
+      portrait: buildLoading.portrait.or(sharedMedia('png')),
+      landscape: buildLoading.landscape.or(sharedMedia('png')),
+    })
+    .optional(),
+});
+
 export const gameToHostSchema = z
   .discriminatedUnion('t', [
     envelope(
@@ -267,7 +283,7 @@ export const gameToHostSchema = z
       'ready',
       z.looseObject({
         protocol: z.number().int().min(1),
-        manifest: gameManifestSchema,
+        manifest: readyManifestSchema,
         marks: z.array(z.tuple([z.string(), z.number()])),
         firstFrameSignal: z.boolean().optional(),
         startupHold: z.boolean().optional(),

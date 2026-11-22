@@ -19,9 +19,13 @@ function list(value: string): string[] {
     .filter((item) => item && !/^none\.?$/iu.test(item));
 }
 
+/** Workers often give a reason: `Prototype review: none (mock images only; no playable change)` (#880). */
+export function waivesPrototypeReview(body: string): boolean {
+  return /^\s*Prototype review:\s*none\b.*$/imu.test(body);
+}
+
 export function parsePrototypeReview(body: string): ParsedReview {
-  if (/^\s*Prototype review:\s*none\s*$/imu.test(body))
-    return { disposition: 'none', works: [], limitations: [], decisionIds: [] };
+  if (waivesPrototypeReview(body)) return { disposition: 'none', works: [], limitations: [], decisionIds: [] };
   const heading = /^##\s+Prototype review\s*\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/imu.exec(body);
   if (!heading) return { disposition: 'missing', works: [], limitations: [], decisionIds: [] };
   const section = heading[1]!;
