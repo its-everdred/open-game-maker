@@ -107,6 +107,23 @@ describe('quality tiers', () => {
   });
 });
 
+describe('Phaser light field', () => {
+  // Phaser re-uploads a refreshed canvas with the game's filter, NEAREST under pixelArt; the stretched 160x90 field
+  // then shows as stair-stepped blocks across the screen instead of soft shafts.
+  it('stays smoothly filtered after every refresh', () => {
+    const { scene, state } = fakePhaserScene();
+    const lighting = createPhaserLighting({ scene }, DEFAULT_FOREST_LIGHTING);
+    const filters = new Map<object, number>();
+    for (const texture of state.textures as Record<string, unknown>[]) {
+      texture.setFilter = (mode: number) => (filters.set(texture, mode), texture);
+      texture.refresh = () => (filters.set(texture, 1), texture);
+    }
+    lighting.update(0);
+    expect(state.textures).toHaveLength(2);
+    for (const texture of state.textures) expect(filters.get(texture)).toBe(0);
+  });
+});
+
 function fakePhaserScene() {
   const state = {
     enabled: false,

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>HD-2D forest</title>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #1d2a1c;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
+
+      canvas {
+        display: block;
+      }
+
+      .bar {
+        position: fixed;
+        left: 50%;
+        bottom: max(12px, env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        display: flex;
+        gap: 8px;
+        padding: 6px;
+        border-radius: 14px;
+        background: rgb(16 20 14 / 0.6);
+      }
+
+      .bar button {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        padding: 0;
+        border: 2px solid transparent;
+        border-radius: 10px;
+        background: rgb(255 255 255 / 0.08);
+        color: #f3ead2;
+        cursor: pointer;
+      }
+
+      .bar button[aria-pressed='true'] {
+        border-color: #f3ead2;
+        background: rgb(255 255 255 / 0.2);
+      }
+
+      .bar button:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+
+      .bar svg {
+        width: 24px;
+        height: 24px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+      }
+
+      .swatch {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "@ogm/sampler-hd2d-forest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --mode draft --host 127.0.0.1",
+    "build": "vite build --mode published",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src tests vite.config.ts",
+    "prepare:assets": "node scripts/prepare-assets.mjs",
+    "capture": "node scripts/capture.mjs"
+  },
+  "dependencies": {
+    "@gm/sdk": "workspace:*",
+    "@ogm/contracts": "workspace:*",
+    "phaser": "4.2.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}

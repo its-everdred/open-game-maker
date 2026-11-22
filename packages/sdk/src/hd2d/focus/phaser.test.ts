@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { describe, expect, it } from 'vitest';
 
+import { screenOverlays } from '../overlays.js';
 import { createFocus } from './create.js';
 import { DEFAULT_FOCUS } from './schema.js';
 
@@ -73,5 +74,21 @@ describe('Phaser focus backend', () => {
     focus.update(0);
     expect(container.object.filters).toBeNull();
     expect(far.list.length).toBeGreaterThan(0);
+  });
+
+  // Lighting draws its light field as images at depth 1e9; counted as layers they flattened every real band to 0 blur.
+  it('ignores full-screen overlays when ranking layer depths', () => {
+    const far = layer(0);
+    const hero = layer(50);
+    const near = layer(60);
+    const overlay = layer(1e9);
+    screenOverlays.add(overlay.object);
+    const focus = createFocus(
+      { phaser: { scene: scene(far.object, hero.object, near.object, overlay.object), hero: hero.object as never } },
+      DEFAULT_FOCUS,
+    );
+    focus.update(0);
+    expect(overlay.object.filters).toBeNull();
+    expect(far.list.find((filter) => filter.x !== undefined)?.x).toBeGreaterThan(0);
   });
 });
