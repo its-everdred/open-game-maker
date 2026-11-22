@@ -18,6 +18,26 @@ export const structuralImageBounds: Fact<Readonly<Record<string, StructuralImage
       size: [128, 256],
       facings: { E: [0, 92, 81, 240], N: [47, 92, 127, 239], S: [0, 67, 79, 216], W: [46, 67, 127, 215] },
     },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-a6@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [56, 70, 105, 218], N: [103, 93, 152, 242], S: [103, 46, 152, 195], W: [150, 69, 199, 219] },
+    },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-a12@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [63, 112, 193, 240], N: [63, 135, 193, 216], S: [62, 112, 193, 240], W: [63, 135, 193, 216] },
+    },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-a14@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [63, 112, 193, 240], N: [63, 135, 193, 239], S: [62, 112, 193, 240], W: [63, 135, 193, 240] },
+    },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/roof-d5@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [51, 139, 203, 239], N: [52, 139, 204, 239], S: [52, 140, 204, 239], W: [51, 140, 203, 239] },
+    },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/door-c1@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [71, 110, 127, 229], N: [128, 111, 184, 229], S: [81, 87, 139, 206], W: [116, 87, 174, 205] },
+    },
     't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-b8@2026-11-01': {
       size: [256, 256],
       facings: { E: [102, 151, 193, 245], N: [102, 128, 197, 220], S: [52, 151, 143, 243], W: [56, 129, 143, 220] },
