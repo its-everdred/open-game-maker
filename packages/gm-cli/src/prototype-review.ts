@@ -20,7 +20,8 @@ function list(value: string): string[] {
 }
 
 export function parsePrototypeReview(body: string): ParsedReview {
-  if (/^\s*Prototype review:\s*none\s*$/imu.test(body))
+  // Workers often give a reason: `Prototype review: none (mock images only; no playable change)` (#880).
+  if (/^\s*Prototype review:\s*none\b.*$/imu.test(body))
     return { disposition: 'none', works: [], limitations: [], decisionIds: [] };
   const heading = /^##\s+Prototype review\s*\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/imu.exec(body);
   if (!heading) return { disposition: 'missing', works: [], limitations: [], decisionIds: [] };

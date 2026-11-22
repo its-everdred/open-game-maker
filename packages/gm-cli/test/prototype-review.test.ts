@@ -36,6 +36,15 @@ describe('prototype review summaries', () => {
     );
   });
 
+  /* A reason after `none` still means no review, or every such ticket posted the fallback review (#1250). */
+  it('treats none with a reason as none, but not a longer word', () => {
+    expect(parsePrototypeReview('Prototype review: none (mock images only; no playable change)').disposition).toBe(
+      'none',
+    );
+    expect(parsePrototypeReview('Prototype review: none. Docs only.').disposition).toBe('none');
+    expect(parsePrototypeReview('Prototype review: nonexistent').disposition).toBe('missing');
+  });
+
   it('keeps an explicit no-limitations answer empty', () => {
     expect(mergePrototypeReviews(['## Prototype review\n**Known limitations:** none']).limitations).toEqual([]);
   });
