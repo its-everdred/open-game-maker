@@ -94,6 +94,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-trailer | Making or refreshing a game's gameplay trailer: inventory, shot list on the music, capture, self-check. |
 | gm-video | Rendering a short deterministic title card, trailer beat, or motion graphic locally. |
 | gm-voiceover | Making a short consented local voice draft and caption timing. |
+| gm-hd2d | Turning on HD-2D lighting, focus or particles, or editing an HD-2D scene document. |
 | gm-3d | Authoring or checking offline 3D assets with Blender before Three.js runtime work. |
 | gm-dream-loop | Matching a game render to approved concept art. |
 | gm-reference-qa | Reviewing a 3D asset against its reference. |
