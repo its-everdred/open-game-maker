@@ -1,7 +1,7 @@
 # Energy follow-on ticket bodies (#1218)
 
 Refined from [report.md](report.md), assuming the recommended picks in [decisions.md](decisions.md). The
-"Refined by #1218" sections below were appended to #1219 and #1220. The conservation ticket is new.
+"Refined by #1218" sections below were appended to #1219 and #1220. The conservation ticket is new: #1253.
 
 ## #1219 Energy admin dashboard: refined by #1218
 
@@ -41,7 +41,7 @@ Refined from [report.md](report.md), assuming the recommended picks in [decision
 
 **Keep OGM-side:** instance caps and build ledger, fal ledger (and balance if keyed), ElevenLabs, Netlify estimate.
 
-## New: Energy conservation by preference (Save / Balanced / Best)
+## #1253 Energy conservation by preference (Save / Balanced / Best)
 
 **Problem.** The preference is stored per player and printed by `gm energy`, but nothing acts on it beyond the
 prose in `skills/gm-core/SKILL.md`. As Energy runs low, agents and the Executor have no shared rule.

@@ -1,7 +1,7 @@
 # Energy: picks for Kevin (#1218)
 
 Five picks. Each lists options with their consequence; the first is the recommendation. Without an answer, the
-follow-ons (#1219, #1220, conservation) proceed with the recommendation. Background: [report.md](report.md).
+follow-ons (#1219, #1220, #1253) proceed with the recommendation. Background: [report.md](report.md).
 
 ## D1. What the top-right Energy ring shows
 
