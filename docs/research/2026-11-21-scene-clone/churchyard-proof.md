@@ -90,3 +90,16 @@ needs tighter individual-object crops or masks, appropriate asset families and
 facings, and explicit review of proposed matches. These results do not establish
 that the target objects are absent from the kit, and no automatic orientation,
 scale, occlusion or registered comparison is claimed.
+
+A second pass used tighter crops around a gravestone, stepping stone, fence
+pillar, lantern and tree. Its fresh run encoded only one of 467 candidates;
+the broader rankings again reuse the historical embeddings above. The crop and
+candidate sheet is `assets-local/review/1154/churchyard-tight-historical-top3.png`.
+The top three were `wall-d1`/`wall-a16`/`wall-a7` for the grave,
+`ground-a20`/`ground-a5`/`ground-c5` for the stepping stone,
+`wall-a16`/`wall-d1`/`wall-a15` for the pillar,
+`wall-a2`/`wall-d7`/`wall-f7` for the lantern, and
+`wall-d7`/`wall-d16`/`wall-a4` for the tree. Inspection shows none is a clean
+match for the pictured object. The tighter crops still include background and,
+for the pillar and tree, nearby fence details. Narrowing the boxes alone has not
+made these rankings reliable; missing assets remain unproven.
