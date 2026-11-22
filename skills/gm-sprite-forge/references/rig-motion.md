@@ -86,8 +86,9 @@ loop, none for an attack, in pixels at the pack cell.
 - `pack` needs only the clips used. `model`, `cost_usd` and a cell's `arm` go into `recipe.json`.
 - `finish`: `"base"` for a base body (white undergarments). The pack colour match paints the pack character's dark
   trousers onto bare legs, so `finish_base.py` matches only the skin, to `pack.idle` (the class's Idle sheet: attack
-  sheets carry light, warm effect pixels), and keeps the undergarments off-white. The sheet before that pass is kept
-  as `out/sheet_finish.png`. Without `finish`, the whole sheet is matched to the clip's pack sheet.
+  sheets carry light, warm effect pixels): each pixel's hue moves toward the pack skin in proportion to its own chroma,
+  with one lightness scale, so white undergarments stay white. Never split skin from cloth per pixel: that greyed pale
+  skin and erased underwear (Kevin, 2026-11-22). The sheet before that pass is kept as `out/sheet_finish.png`. Without `finish`, the whole sheet is matched to the clip's pack sheet.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,
   `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`. Use the pack class's Stage 1 values
   for `height_px` and `origin_row` (Warrior 43 and 88).

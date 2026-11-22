@@ -1,5 +1,6 @@
 """The base-body colour pass must give bare skin the pack's skin tones and keep white undergarments white: the pack's
-full-palette match turned bare legs into the pack character's dark trousers (#1202)."""
+full-palette match turned bare legs into the pack character's dark trousers, and a per-pixel skin/cloth split turned
+pale skin grey and some underwear into skin (#1202)."""
 from pathlib import Path
 import sys
 import unittest
@@ -52,6 +53,15 @@ class BasePassTest(unittest.TestCase):
         before = np.median(lab_of(self.ours, 38), 0)
         self.assertLess(np.linalg.norm(got - want), np.linalg.norm(before - want) / 2)
         self.assertGreater(got[0], 45)  # not the trousers' darkness
+
+    def test_mostly_skin_body_keeps_every_skin_pixel_warm(self):
+        # a base body is mostly skin: no share of it may be treated as cloth and greyed out
+        ours = blob([SKIN, (226, 196, 178), SKIN, GARMENT], shade=0.25)  # incl. pale, low-chroma skin
+        out, _ = base_pass(ours, self.ref)
+        for x in (38, 58, 78):
+            chroma = np.hypot(*lab_of(out, x)[:, 1:].T)
+            self.assertGreater(chroma.min(), 8, x)
+        self.assertLess(np.median(np.hypot(*lab_of(out, 98)[:, 1:].T)), 8)
 
     def test_transparent_pixels_are_untouched(self):
         np.testing.assert_array_equal(self.out[self.ours[..., 3] == 0], self.ours[self.ours[..., 3] == 0])
