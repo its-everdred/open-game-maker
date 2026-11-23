@@ -236,6 +236,11 @@ shoulder):
   keyed quaternion now takes the previous key's side (`sampling.compatible`), so no interpolation can spin the long way.
 - **A strike drawn in one frame.** Even sampling of a 30 fps clip on 15 frames put the arm's 150-200 degree strike
   between two sheet frames: the axe pops from overhead to the ground with nothing between.
+- **Twist from rest (round 2's own first keys).** Aiming an arm by the shortest rotation from its rest direction
+  (hanging down) has no stable axis when the arm is raised overhead, nearly opposite: the swing curves showed the
+  forearm turning 162 degrees in one frame. `handpose.py` aims each bone from its previous frame instead, and the
+  hand turns at most 128 degrees in the strike frame. A haft keyed nearly along the forearm is unstable the same way
+  (it is squared to the forearm): turn the axe through the side between wind-up and strike, not end over end.
 - **Replayed poses.** Key-pose stepping replayed the wind-up for the pack's second swing, so the axe snapped strike,
   wind-up, strike; the Quaternius clip's own recovery also lifts the hand back up through the front.
 
@@ -260,6 +265,8 @@ the axe passes through every frame, one way. Write the full pose at key 0; later
 - `bones` maps every role (`handpose.ROLES`) to the rig's bones. A cell's `rotz` turns the keyed body afterwards:
   the pack's Attack1 faces 45 degrees right of its row (`-45`).
 - Two opposite directions in neighbouring keys fail: add a key between them to say which way round the swing goes.
+- Check the keys with `swing_curves.py` before rendering (seconds, no render): a swing that reverses, or a bone that
+  turns more than about 130 degrees in a frame, needs a key between.
 - Block the arc in `workbench` and look at a 3x strip beside the pack before Cycles. The S camera looks down the
   forward axis: a strike or follow-through pointed forward is foreshortened and hides in front of the body. Swing it
   out to the side (as the pack's wide sweeps), with straight elbows through the strike.

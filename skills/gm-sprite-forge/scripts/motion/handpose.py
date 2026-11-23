@@ -98,13 +98,26 @@ def build(rig, spec, n, weapon_axis, height):
     rig.animation_data.action = act
     for pb in rig.pose.bones:
         pb.rotation_mode = 'QUATERNION'
-    last = {}
+    last, carry, T_prev = {}, {}, None
+
+    def aimed(name, R_rest, d_rest, d, turn):
+        """Aim a bone at d from its previous frame (turned by the torso's change), not from rest: an arm raised
+        overhead points nearly opposite its rest direction, where the shortest rotation from rest has no stable axis
+        and the bone would twist round between frames."""
+        R0, d0 = carry.get(name, (R_rest, d_rest))
+        if name in carry:
+            R0, d0 = turn @ R0, turn @ d0
+        R = aim(R0, d0, d)
+        carry[name] = (R, d.normalized())
+        return R
     for i in range(n):
         p = posekey.pose_at(mo['keys'], i)
         P = turn_matrix(p.get('pelvis', 0))
         tt = p.get('torso', [0, 0, 0])
         T = P @ turn_matrix(*tt)
         hh = p.get('head', [0, 0])
+        dT = T @ T_prev.inverted() if T_prev is not None else Matrix.Identity(3)
+        T_prev = T
         world, pos = {}, {}
         world[bones['hips']] = P @ rest[bones['hips']]
         pos[bones['hips']] = head0[bones['hips']] + body(p.get('hips', [0, 0, 0])) * k
@@ -117,24 +130,25 @@ def build(rig, spec, n, weapon_axis, height):
         for s in 'rl':
             world[bones['shoulder_' + s]] = T @ rest[bones['shoulder_' + s]]
             for role, child in (('arm_' + s, 'fore_' + s), ('fore_' + s, 'hand_' + s)):
-                R0 = T @ rest[bones[role]]
                 d = (T @ body(p[role])) if role in p else T @ dirs[role]
-                world[bones[role]] = aim(R0, T @ dirs[role], d)
+                world[bones[role]] = aimed(bones[role], T @ rest[bones[role]], T @ dirs[role], d, dT)
             fore = T @ body(p['fore_' + s]) if 'fore_' + s in p else T @ dirs['fore_' + s]
             if s == 'r' and 'axe' in p:
                 world[bones['hand_r']] = frame(fore, T @ body(p['axe']), Vector((0, 1, 0)), weapon_axis)
             else:
-                R0 = T @ rest[bones['hand_' + s]]
-                world[bones['hand_' + s]] = aim(R0, T @ (head0[bones['hand_' + s]] - head0[bones['fore_' + s]])
-                                                .normalized(), fore)
+                hd = (head0[bones['hand_' + s]] - head0[bones['fore_' + s]]).normalized()
+                world[bones['hand_' + s]] = aimed(bones['hand_' + s], T @ rest[bones['hand_' + s]], T @ hd, fore, dT)
         # legs: hip joint from the posed pelvis, ankle from the stance, knee toward the front
         hip_c = pos[bones['hips']]
         for s in 'lr':
             hj = hip_c + P @ (head0[bones['thigh_' + s]] - head0[bones['hips']])
             ank = head0[bones['foot_' + s]] + body(p.get('foot_' + s, [0, 0, 0])) * k
             knee = two_bone(hj, ank, *legs[s], P @ body([0, 1, 0]))
-            world[bones['thigh_' + s]] = aim(rest[bones['thigh_' + s]], dirs['thigh_' + s], knee - hj)
-            world[bones['shin_' + s]] = aim(rest[bones['shin_' + s]], dirs['shin_' + s], ank - knee)
+            one = Matrix.Identity(3)
+            world[bones['thigh_' + s]] = aimed(bones['thigh_' + s], rest[bones['thigh_' + s]], dirs['thigh_' + s],
+                                               knee - hj, one)
+            world[bones['shin_' + s]] = aimed(bones['shin_' + s], rest[bones['shin_' + s]], dirs['shin_' + s],
+                                              ank - knee, one)
             world[bones['foot_' + s]] = rest[bones['foot_' + s]]
         Mi = M.inverted()
         for name in order:  # parents first: a bone's head follows its posed parent

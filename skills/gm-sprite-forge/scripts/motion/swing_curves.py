@@ -43,8 +43,9 @@ if src_path and name:
     for ac in list(bpy.data.actions):
         bpy.data.actions.remove(ac)
 ob, rig, ts, off, rep = rigged.setup(spec, 15)
-pb_names = [n for n in ('mixamorig:RightArm', 'mixamorig:RightForeArm', 'mixamorig:RightHand') if n in rig.pose.bones] \
-    or ['upperarm_r', 'lowerarm_r', 'hand_r']
+pb_names = next(ns for ns in (['mixamorig:RightArm', 'mixamorig:RightForeArm', 'mixamorig:RightHand'],
+                               ['RightArm', 'RightForeArm', 'RightHand'], ['upperarm_r', 'lowerarm_r', 'hand_r'])
+                if all(n in rig.pose.bones for n in ns))
 M = rig.matrix_world
 out, prev = [], {}
 for t in ts:
