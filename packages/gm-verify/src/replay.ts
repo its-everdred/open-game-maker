@@ -197,7 +197,7 @@ async function replayIn(input: ReplayBundle, options: ReplayOptions, directory: 
       scriptPath,
     });
 
-  const server = await serveStatic(resolve(options.serveDir));
+  const server = await serveStatic(resolve(options.serveDir), { game: true });
   let browser: Awaited<ReturnType<typeof launch>> | undefined;
   let game: OpenedGame | undefined;
   try {

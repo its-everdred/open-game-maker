@@ -6,13 +6,20 @@ import { gm, tempDir } from './helpers.js';
 function fixture(body: string, ready = true, after = ''): string {
   const root = tempDir();
   mkdirSync(join(root, 'dist'));
+  /* The games host CSP refuses inline scripts, so the fixture loads its scripts from files. */
   writeFileSync(
     join(root, 'dist/index.html'),
-    `<!doctype html><style>html,body { margin:0; height:100%; } ${body}</style><script>
-if (location.search.includes('build=test')) throw Error('published build rejected test mode');
+    `<!doctype html><style>html,body { margin:0; height:100%; } ${body}</style><script src="./first.js"></script><div></div><script src="./last.js"></script>`,
+  );
+  writeFileSync(
+    join(root, 'dist/first.js'),
+    `if (location.search.includes('build=test')) throw Error('published build rejected test mode');
 const channel = new MessageChannel();
-channel.port1.postMessage(JSON.stringify({v: 1, t: 'ready', payload: {protocol: 1}}));
-</script><div></div><script>${after}; if (${ready}) window.dispatchEvent(new Event('gm-frame-ready'));</script>`,
+channel.port1.postMessage(JSON.stringify({v: 1, t: 'ready', payload: {protocol: 1}}));`,
+  );
+  writeFileSync(
+    join(root, 'dist/last.js'),
+    `${after}; if (${ready}) window.dispatchEvent(new Event('gm-frame-ready'));`,
   );
   return root;
 }

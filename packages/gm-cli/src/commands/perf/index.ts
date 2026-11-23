@@ -39,7 +39,7 @@ export const command: GmCommand = {
     let url = supplied;
     if (!url) {
       try {
-        server = await verify.serveStatic(resolve(ctx.cwd, 'dist'));
+        server = await verify.serveStatic(resolve(ctx.cwd, 'dist'), { game: true });
         url = server.url;
       } catch {
         throw new UsageError('no built game in ./dist', 'build the game or pass --url http://127.0.0.1:PORT/');

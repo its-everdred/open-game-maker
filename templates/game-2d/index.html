@@ -20,11 +20,6 @@
     </style>
   </head>
   <body>
-    <script>
-      try {
-        navigator.serviceWorker?.register('/game-cache.js', { scope: '/g/' }).catch(() => undefined);
-      } catch {}
-    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

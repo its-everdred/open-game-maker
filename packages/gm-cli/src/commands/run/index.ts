@@ -355,7 +355,7 @@ export const command: GmCommand = {
       let target = url;
       if (!target) {
         try {
-          server = await verify.serveStatic(buildDir ?? resolve(ctx.cwd, 'dist'));
+          server = await verify.serveStatic(buildDir ?? resolve(ctx.cwd, 'dist'), { game: true });
           target = server.url;
         } catch {
           throw new UsageError('no built game in ./dist', 'build the game or pass --url http://127.0.0.1:PORT/');

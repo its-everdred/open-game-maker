@@ -74,8 +74,8 @@ export async function runConformance(options: RunOptions): Promise<ConformanceRe
       await writeFile(join(outDir, '.host/index.html'), HOST_HTML);
       const servers = await Promise.all([
         serveStatic(join(outDir, '.host')),
-        serveStatic(builds.test),
-        serveStatic(builds.published),
+        serveStatic(builds.test, { game: true }),
+        serveStatic(builds.published, { game: true }),
       ]);
       for (const server of servers) closers.push(() => server.close());
       const origins: Origins = { host: servers[0].url, games: { test: servers[1].url, published: servers[2].url } };

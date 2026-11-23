@@ -17,13 +17,6 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
   const root = mkdtempSync(join(tmpdir(), 'gm-app-capture-test-'));
   const game = join(root, 'game');
   const out = join(root, 'shots');
-  let externalRequests = 0;
-  const external = createServer((_request, response) => {
-    externalRequests += 1;
-    response.writeHead(200, { 'access-control-allow-origin': '*' }).end('unexpected');
-  });
-  await new Promise<void>((resolve) => external.listen(0, '127.0.0.1', resolve));
-  const port = (external.address() as AddressInfo).port;
   try {
     cpSync(fixture, game, { recursive: true });
     const html = join(game, 'index.html');
@@ -46,7 +39,7 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
     });
     writeFileSync(
       join(game, 'fixture.js'),
-      `${sdk.outputFiles[0]!.text}\nlet __lateAdded = false; const __decode = Image.prototype.decode; Image.prototype.decode = function() { if (__lateAdded) return __decode.call(this); __lateAdded = true; setTimeout(() => { const image = document.createElement('img'); image.id = 'late'; image.src = 'café scene.png'; image.style.cssText = 'width:90px;height:30px'; document.querySelector('#canvas').append(image); }, 25); return new Promise((resolve) => setTimeout(resolve, 100)).then(() => __decode.call(this)); };\nfetch('http://127.0.0.1:${port}/').then(() => { document.querySelector('button').textContent = 'LEAKED'; }, () => { document.querySelector('button').textContent = 'Start'; });\n${script}`,
+      `${sdk.outputFiles[0]!.text}\nlet __lateAdded = false; const __decode = Image.prototype.decode; Image.prototype.decode = function() { if (__lateAdded) return __decode.call(this); __lateAdded = true; setTimeout(() => { const image = document.createElement('img'); image.id = 'late'; image.src = 'café scene.png'; image.style.cssText = 'width:90px;height:30px'; document.querySelector('#canvas').append(image); }, 25); return new Promise((resolve) => setTimeout(resolve, 100)).then(() => __decode.call(this)); };\ndocument.querySelector('button').textContent = 'Start';\n${script}`,
     );
     writeFileSync(
       html,
@@ -83,7 +76,6 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
         expect(existsSync(join(out, `${screen}-${size}.png`))).toBe(true);
       }
     }
-    expect(externalRequests).toBe(0);
     const distortions = JSON.parse(readFileSync(join(out, 'image-distortion.json'), 'utf8')) as {
       element: string;
       viewport: string;
@@ -101,10 +93,55 @@ it('captures play, game, menu and edit in the packaged app with a touch viewport
       ),
     );
   } finally {
-    await new Promise<void>((resolve) => external.close(() => resolve()));
     rmSync(root, { recursive: true, force: true });
   }
 }, 250_000);
+
+// The games host's CSP refuses a game's request to another origin; the capture fails on it rather than passing a game
+// that works only without prod's headers.
+it('fails on a CSP violation in the game, and the blocked request never leaves', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'gm-app-capture-csp-'));
+  const game = join(root, 'game');
+  let externalRequests = 0;
+  const external = createServer((_request, response) => {
+    externalRequests += 1;
+    response.writeHead(200, { 'access-control-allow-origin': '*' }).end('unexpected');
+  });
+  await new Promise<void>((resolve) => external.listen(0, '127.0.0.1', resolve));
+  const port = (external.address() as AddressInfo).port;
+  try {
+    cpSync(fixture, game, { recursive: true });
+    const html = join(game, 'index.html');
+    const source = readFileSync(html, 'utf8');
+    const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+    if (!script) throw new Error('bridge fixture script missing');
+    writeFileSync(join(game, 'fixture.js'), `fetch('http://127.0.0.1:${port}/').catch(() => {});\n${script}`);
+    writeFileSync(
+      html,
+      source.replace(/<script type="module">[\s\S]*?<\/script>/, '<script type="module" src="fixture.js"></script>'),
+    );
+    await expect(
+      exec(
+        process.execPath,
+        [
+          runner,
+          game,
+          join(root, 'shots'),
+          '[]',
+          '0',
+          '0',
+          process.env.GM_VERIFY_SOFTWARE_GL === '1' ? '1' : '0',
+          '--test-fast',
+        ],
+        { timeout: 120_000 },
+      ),
+    ).rejects.toThrow(/CSP violation: connect-src blocked http:\/\/127\.0\.0\.1:\d+\//);
+    expect(externalRequests).toBe(0);
+  } finally {
+    await new Promise<void>((resolve) => external.close(() => resolve()));
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 130_000);
 
 it('fails instead of publishing stills when the game never connects', async () => {
   expect(existsSync(runner)).toBe(true);

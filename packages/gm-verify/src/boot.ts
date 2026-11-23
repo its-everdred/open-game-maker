@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from 'playwright';
 import { launch, VIEWPORTS } from './browser.js';
+import { watchCspViolations } from './csp.js';
 import { acquireSlot } from './semaphore.js';
 import type { GateResult } from './gates/index.js';
 
@@ -87,6 +88,8 @@ export async function runBoot(options: {
       if (signal?.aborted) throw new Error('boot check deadline exceeded');
       const context = await browser.newContext({ ...VIEWPORTS[viewport], deviceScaleFactor: 1 });
       try {
+        const violations: string[] = [];
+        await watchCspViolations(context, (text) => violations.push(text));
         const page = await context.newPage();
         await page.addInitScript(() => {
           window.addEventListener('gm-frame-ready', () => {
@@ -115,6 +118,7 @@ export async function runBoot(options: {
         mkdirSync(dir, { recursive: true });
         const png = await page.screenshot();
         writeFileSync(join(dir, `${viewport}.png`), png);
+        if (violations.length) throw new Error(violations[0]);
         if (readyError) throw readyError;
         // Decode outside the game's realm so its scripts cannot forge pixel data.
         const analysisPage = await context.newPage();

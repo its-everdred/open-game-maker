@@ -2,10 +2,11 @@
 import { resolve } from 'node:path';
 import type { Browser, BrowserContext, Frame, Page } from 'playwright';
 import type { DesignDoc } from '@ogm/contracts/browser';
+import { gameHeaders } from '@ogm/contracts';
 import { installAuthRoutes } from '../../../apps/web/e2e/fixtures/auth-routes';
 import { buildId, installGameApi } from '../../../apps/web/e2e/support/mock-game-api';
 import { captureUrlFile } from '../../../apps/web/e2e/support/shell-capture-files';
-import { gameHeaders } from '../../../services/games-host/src/headers';
+import { watchCspViolations } from '../src/csp';
 
 export { buildId };
 
@@ -62,8 +63,9 @@ export async function openShell(browser: Browser, options: ShellOptions): Promis
   });
   try {
     if (options.initScript) await context.addInitScript(options.initScript);
-    const page = await context.newPage();
     const errors: string[] = [];
+    await watchCspViolations(context, (text) => errors.push(text), new URL(options.server.url).origin);
+    const page = await context.newPage();
     page.on('pageerror', (error) => errors.push(error.message));
     if (options.gameConsole)
       page.on('console', (message) => {
