@@ -80,3 +80,4 @@ export {
   type MapFeature,
   type MapIndex,
 } from './maps.js';
+export { editorLibrary, packLabel, tagOf, type LibrarySource } from './library.js';
