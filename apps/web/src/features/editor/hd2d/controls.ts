@@ -1,4 +1,4 @@
-import type { Hd2dSceneConfig } from '@gm/sdk/hd2d';
+import { HD2D_FOREST_DEFAULTS, type Hd2dSceneConfig } from '@gm/sdk/hd2d';
 
 /**
  * Kevin's HD-2D lighting tool (#1211): the controls over one scene's HD-2D document. Each slider reads and writes one
@@ -33,7 +33,7 @@ export type TabId = (typeof TABS)[number]['id'];
 /** Turned on from nothing: a few short beams that come and go, like the forest sampler's. */
 export const NEW_SHAFTS: Shafts = {
   direction: 1.1,
-  color: '#ffe7a1',
+  color: HD2D_FOREST_DEFAULTS.lighting.shafts!.color,
   intensity: 0.4,
   count: 4,
   reach: 0.45,

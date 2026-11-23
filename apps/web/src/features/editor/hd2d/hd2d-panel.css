@@ -1,4 +1,4 @@
-/* Kevin's lighting tool (#1211): a sun button under the scenes button, and a dark glass sheet like the scene chips. */
+/* Kevin's lighting tool (ticket 1211): a sun button under the scenes button, and a dark glass sheet like the scene chips. */
 .game-stage-area:has(> .hd2d-layer) {
   position: relative;
 }
