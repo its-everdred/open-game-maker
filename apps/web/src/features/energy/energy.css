@@ -52,6 +52,12 @@
   background: color-mix(in srgb, var(--cream) 16%, transparent);
 }
 
+.energy-meter-note {
+  grid-column: 1 / -1;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
 .energy-meter-bar > span {
   display: block;
   height: 100%;

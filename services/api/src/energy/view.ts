@@ -13,7 +13,8 @@ function usedPercent(used: number | null, limit: number | null): number | null {
   return Math.min(100, Math.round((used / limit) * 100));
 }
 
-// The tightest known limit decides the status; with no known limit it is unknown, not healthy.
+// The tightest known limit decides the status, provider readings included (an unknown or stale reading has no
+// share and decides nothing); with no known limit it is unknown, not healthy.
 export function energyLevel(snapshot: EnergySnapshot): EnergyLevel {
   const left = [...WINDOWS, ...SERVICES].flatMap((name) => {
     const used = snapshot.usage[name];
@@ -21,6 +22,7 @@ export function energyLevel(snapshot: EnergySnapshot): EnergyLevel {
     if (used === null || limit === null) return [];
     return [limit === 0 ? 0 : 1 - used / limit];
   });
+  for (const { usedPercent } of snapshot.readings) if (usedPercent !== null) left.push(1 - usedPercent / 100);
   if (left.length === 0) return 'unknown';
   const tightest = Math.min(...left);
   if (tightest <= 0) return 'critical';
@@ -36,9 +38,22 @@ export function playerView(snapshot: EnergySnapshot, preference: EnergyPreferenc
       usedPercent: usedPercent(snapshot.usage[window], snapshot.limits[window]),
       resetsAt: snapshot.resetsAt[window],
     })),
+    // An admin's dollar limit wins; otherwise the provider's own reading for that service (ElevenLabs for voice).
     services: SERVICES.map((service) => ({
       service,
-      usedPercent: usedPercent(snapshot.usage[service], snapshot.limits[service]),
+      usedPercent:
+        usedPercent(snapshot.usage[service], snapshot.limits[service]) ??
+        snapshot.readings.find((reading) => reading.service === service)?.usedPercent ??
+        null,
+    })),
+    sources: snapshot.readings.map(({ id, label, usedPercent, resetsAt, basis, observedAt, stale }) => ({
+      id,
+      label,
+      usedPercent,
+      resetsAt,
+      basis,
+      observedAt,
+      stale,
     })),
   };
 }

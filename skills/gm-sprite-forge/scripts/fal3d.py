@@ -1,9 +1,10 @@
 """Ledgered fal.ai client for the fal image-to-3D bake-off arms (host only; workers never hold the key).
 
 The key is read in-process from ~/.config/ogm/env/fal.env (FAL_KEY=...); it is never printed, logged or passed on a
-command line. Every call is booked in the ledger at OGM_FAL_LEDGER before its result is fetched, and a call that would
-take the ledger total past OGM_FAL_STOP_USD (default 9.00, the creator's cap) is refused before anything is sent.
-Use one ledger for every fal call on the host, so the cap covers all of them.
+command line. Every call is booked in the ledger at OGM_FAL_LEDGER (default ~/.local/share/ogm/fal-ledger.json, the
+path the API's Energy reads) before its result is fetched, and a call that would take the ledger total past
+OGM_FAL_STOP_USD (default 9.00, the creator's cap) is refused before anything is sent. Use one ledger for every fal call
+on the host, so the cap covers all of them.
 
   fal3d.py price <endpoint>...                      listed unit price per endpoint
   fal3d.py run <endpoint> <out_dir> <usd> key=value...   value @path.png uploads that file; JSON values are parsed
@@ -21,11 +22,11 @@ KEY_FILE = os.path.expanduser('~/.config/ogm/env/fal.env')
 STOP_USD = float(os.environ.get('OGM_FAL_STOP_USD', '9.0'))
 
 
+DEFAULT_LEDGER = os.path.expanduser('~/.local/share/ogm/fal-ledger.json')
+
+
 def ledger_path():
-    path = os.environ.get('OGM_FAL_LEDGER')
-    if not path:
-        raise SystemExit('set OGM_FAL_LEDGER to the host-wide fal ledger (one ledger, one cap)')
-    return path
+    return os.environ.get('OGM_FAL_LEDGER') or DEFAULT_LEDGER
 
 
 def key():
@@ -56,6 +57,7 @@ def total(lg):
 
 
 def write(lg):
+    os.makedirs(os.path.dirname(ledger_path()) or '.', exist_ok=True)
     json.dump(lg, open(ledger_path(), 'w'), indent=2)
 
 
@@ -112,6 +114,7 @@ def run(ep, out, kvs, usd):
     sub = call(f'https://queue.fal.run/{ep}', body)
     entry = {'endpoint': ep, 'usd': usd, 'request_id': sub.get('request_id'),
              'when': time.strftime('%Y-%m-%dT%H:%M:%S'), 'params': kvs, 'out': out}
+    lg['stop_usd'] = STOP_USD  # the cap enforced here, which the Energy menu reads
     lg['calls'].append(entry)  # booked at submit: a failure after submit may still bill
     write(lg)
     while True:

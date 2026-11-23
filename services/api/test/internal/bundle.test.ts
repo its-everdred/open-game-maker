@@ -129,6 +129,37 @@ describe('GET /internal/jobs/by-ticket/:identifier/bundle', () => {
     expect(JSON.stringify(energy)).not.toMatch(/MicroUsd|provider/);
   });
 
+  it('hands the build agent the provider readings, keeping a stale one unknown', async () => {
+    const { deps, get } = await setup();
+    const stale = {
+      id: 'codex:codex:primary',
+      label: 'Codex',
+      provider: 'codex',
+      kind: 'subscription' as const,
+      usedPercent: null,
+      resetsAt: null,
+      observedAt: '2026-11-22T05:07:24.000Z',
+      stale: true,
+      basis: 'unknown' as const,
+      spentMicroUsd: null,
+      capMicroUsd: null,
+    };
+    deps.registry.energyReadings = { read: async () => [stale] };
+    const { energy } = JobBundle.parse(await (await get('/internal/jobs/by-ticket/12/bundle', SECRET_A)).json());
+    expect(energy?.sources).toEqual([
+      {
+        id: 'codex:codex:primary',
+        label: 'Codex',
+        usedPercent: null,
+        resetsAt: null,
+        basis: 'unknown',
+        observedAt: '2026-11-22T05:07:24.000Z',
+        stale: true,
+      },
+    ]);
+    expect(energy?.level).toBe('unknown');
+  });
+
   it("carries the game's AI-generated asset setting for gm searches", async () => {
     const { deps, get } = await setup();
     const at = new Date().toISOString();

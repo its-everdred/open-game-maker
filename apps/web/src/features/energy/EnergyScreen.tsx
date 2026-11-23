@@ -112,8 +112,9 @@ function AdminEnergy({ view }: { view: EnergyAdminView }) {
             <th>Resource</th>
             <th>Provider</th>
             <th>Kind</th>
-            <th>Spent this month</th>
+            <th>Spent</th>
             <th>Remaining</th>
+            <th>Basis</th>
           </tr>
         </thead>
         <tbody>
@@ -124,6 +125,7 @@ function AdminEnergy({ view }: { view: EnergyAdminView }) {
               <td>{resource.kind}</td>
               <td>{usd(resource.spentMicroUsd)}</td>
               <td>{usd(resource.remainingMicroUsd)}</td>
+              <td>{resource.basis}</td>
             </tr>
           ))}
         </tbody>

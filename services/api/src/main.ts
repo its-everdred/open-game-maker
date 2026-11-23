@@ -22,6 +22,7 @@ import { readGitVersion } from './app/version.js';
 import { startAnalyticsRetention } from './analytics/retention.js';
 import { startEstimateRefinement } from './budget/estimate.js';
 import { createApplyUsage, startUsageReconciler } from './budget/aiur-usage.js';
+import { envFileValue, FAL_CAP_USD, providerReadings } from './energy/providers.js';
 import { createChatJobDirectory } from './build-chat/job-directory.js';
 import { createDraftScopeTicket } from './new-game/draft-assistant.js';
 import { startDraftCleanup } from './game-drafts/cleanup.js';
@@ -130,6 +131,12 @@ const deps: AppDeps = {
   log,
 };
 deps.registry.chatJobs = createChatJobDirectory(db);
+deps.registry.energyReadings = providerReadings({
+  aiur: env.AIUR_API_URL && env.AIUR_API_TOKEN ? { baseUrl: env.AIUR_API_URL, token: env.AIUR_API_TOKEN } : null,
+  elevenLabsKey: () => envFileValue(env.OGM_VOICE_ENV_FILE, 'ELEVENLABS_API_KEY'),
+  falLedger: env.OGM_FAL_LEDGER,
+  falCapUsd: FAL_CAP_USD,
+});
 deps.registry.aiurClientFor = async (slug) =>
   slug === 'core' ? deps.registry.coreAiurClient : daemonDirectory.clientForSlug(slug);
 if (env.AIUR_API_URL && env.AIUR_API_TOKEN) {

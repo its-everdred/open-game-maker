@@ -122,6 +122,8 @@ export interface Registry {
       ) => Promise<{ text: string }[]>)
     | null;
   issueStateWriter: IssueStateWriter | null;
+  // Provider readings for Energy (#1217); null leaves them out (tests, or no host to read).
+  energyReadings: import('../energy/providers.js').ProviderReadings | null;
 }
 
 export function createRegistry(): Registry {
@@ -145,6 +147,7 @@ export function createRegistry(): Registry {
     reviewEpisode: null,
     ticketConversation: null,
     issueStateWriter: null,
+    energyReadings: null,
   };
 }
 

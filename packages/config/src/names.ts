@@ -125,6 +125,18 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
     kind: 'path',
     doc: '~/.config/ogm/env/ogm-api.vapid.json (generated Web Push keys)',
   },
+  {
+    name: 'OGM_FAL_LEDGER',
+    unit: 'api',
+    kind: 'path',
+    doc: '~/.local/share/ogm/fal-ledger.json (host-wide fal ledger, also read by fal3d.py)',
+  },
+  {
+    name: 'OGM_VOICE_ENV_FILE',
+    unit: 'api',
+    kind: 'path',
+    doc: '~/.config/ogm/env/voice-host.env (Energy reads its ElevenLabs quota)',
+  },
   { name: 'OGM_VAPID_SUBJECT', unit: 'api', kind: 'string', doc: 'contact email for Web Push (without mailto:)' },
   { name: 'OGM_SESSION_SECRET', unit: 'api', kind: 'secret', doc: 'Better Auth secret' },
   { name: 'OGM_WS_TOKEN_SECRET', unit: 'shared', kind: 'secret', doc: 'HS256 key for room/chat grants (api, rooms)' },

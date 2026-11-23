@@ -67,8 +67,10 @@ export function energyRefusalText(window: EnergyWindowName | undefined): string 
   return window ? `This build needs more Energy than is left ${WINDOW_PHRASES[window]}.` : undefined;
 }
 
-// The ring shows what is left in the tightest window that has a limit; null when no window is known.
+// The ring shows what is left in the tightest known window or provider reading; null when none is known.
 export function energyLeftPercent(view: EnergyView | undefined): number | null {
-  const used = view?.windows.flatMap(({ usedPercent }) => (usedPercent === null ? [] : [usedPercent])) ?? [];
+  const used = [...(view?.windows ?? []), ...(view?.sources ?? [])].flatMap(({ usedPercent }) =>
+    usedPercent === null ? [] : [usedPercent],
+  );
   return used.length === 0 ? null : 100 - Math.max(...used);
 }

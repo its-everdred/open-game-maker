@@ -1,4 +1,4 @@
-import type { EnergyLevel, EnergyView } from '@ogm/contracts/browser';
+import type { EnergyLevel, EnergySource, EnergyView } from '@ogm/contracts/browser';
 
 import { WINDOW_LABELS } from './api';
 
@@ -11,7 +11,7 @@ export const LEVEL_LABELS: Record<EnergyLevel, string> = {
 
 const SERVICE_LABELS = { voice: 'Voice', images: 'Images' } as const;
 
-function Meter({ label, usedPercent }: { label: string; usedPercent: number | null }) {
+function Meter({ label, usedPercent, note }: { label: string; usedPercent: number | null; note?: string }) {
   return (
     <li className="energy-meter" data-known={usedPercent !== null}>
       <span>{label}</span>
@@ -19,11 +19,32 @@ function Meter({ label, usedPercent }: { label: string; usedPercent: number | nu
       <span className="energy-meter-bar" aria-hidden="true">
         <span style={{ width: `${usedPercent === null ? 0 : 100 - usedPercent}%` }} />
       </span>
+      {note ? <small className="energy-meter-note">{note}</small> : null}
     </li>
   );
 }
 
-// Daily, weekly and monthly windows; per-service lines only where `services` is asked for (the settings breakdown).
+const HOUR_MS = 3_600_000;
+
+function age(observedAt: string, now: number): string {
+  const hours = Math.max(0, Math.floor((now - Date.parse(observedAt)) / HOUR_MS));
+  return hours < 48 ? `${hours} h old` : `${Math.floor(hours / 24)} d old`;
+}
+
+// The reset, how the reading is known, and its age when it is too old to count.
+export function sourceNote(source: EnergySource, now = Date.now()): string {
+  const parts: string[] = [];
+  if (source.resetsAt) {
+    const day = new Date(source.resetsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    parts.push(`resets ${day}`);
+  }
+  parts.push(source.basis);
+  if (source.stale && source.observedAt) parts.push(age(source.observedAt, now));
+  return parts.join(' · ');
+}
+
+// Daily, weekly and monthly windows, then one line per provider reading; per-service lines only where `services` is
+// asked for (the settings breakdown).
 export function EnergyWindows({ view, services = false }: { view: EnergyView; services?: boolean }) {
   return (
     <ul className="energy-windows" data-level={view.level}>
@@ -35,6 +56,10 @@ export function EnergyWindows({ view, services = false }: { view: EnergyView; se
             <Meter key={service} label={SERVICE_LABELS[service]} usedPercent={usedPercent} />
           ))
         : null}
+      {/* An API from before #1217 sends no sources. */}
+      {(view.sources ?? []).map((source) => (
+        <Meter key={source.id} label={source.label} usedPercent={source.usedPercent} note={sourceNote(source)} />
+      ))}
     </ul>
   );
 }

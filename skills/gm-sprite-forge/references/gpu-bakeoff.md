@@ -114,7 +114,8 @@ No arm passed the gates. Single-view image-to-3D invents the unseen sides, so ch
 
 The creator added a fal key on the NUC (2026-11-21) with a 9 USD cap across every fal call. Workers have no key: a
 ticket writes the exact calls, and the NUC Executor runs them with `scripts/fal3d.py` against the one host ledger
-(`OGM_FAL_LEDGER`; it refuses a call that would pass the cap). fal receives only images generated through the free Codex
+(`OGM_FAL_LEDGER`, default `~/.local/share/ogm/fal-ledger.json`, which the Energy menu also reads; it refuses a call
+that would pass the cap). fal receives only images generated through the free Codex
 route with the originals attached, never a pack file. Mark every fal mesh `"ai_generated": true` in its `recipe.json`.
 Each mesh then goes through the same rig, finish pass and `score.py` as arms Aâ€“D (`b_model.py` for props and trees,
 `c_goblin.py` for characters), so the only difference between columns is the mesh source.
@@ -122,7 +123,7 @@ Each mesh then goes through the same rig, finish pass and `score.py` as arms Aâ€
 ```sh
 S=skills/gm-sprite-forge/scripts
 python3 -I $S/fal3d.py price fal-ai/trellis-2 meshy/v7.1/multi-image-to-3d
-OGM_FAL_LEDGER=<ledger.json> python3 -I $S/fal3d.py run fal-ai/trellis-2 out/trellis2 0.25 image_url=@turn_front.png
+python3 -I $S/fal3d.py run fal-ai/trellis-2 out/trellis2 0.25 image_url=@turn_front.png
 ```
 
 Candidate arms, cheapest first (listed prices from fal's model pages, 2026-11-21; check `price` before a first call):

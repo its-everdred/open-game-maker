@@ -34,6 +34,10 @@ describe('local resource-policy source', () => {
         spentMicroUsd: 3_000_000,
         remainingMicroUsd: null,
         resetsAt: null,
+        basis: 'estimate',
+        usedPercent: null,
+        observedAt: null,
+        stale: false,
       },
     ]);
   });
@@ -116,6 +120,7 @@ describe('energy routes', () => {
         { service: 'voice', usedPercent: null },
         { service: 'images', usedPercent: null },
       ],
+      sources: [],
     });
   });
 
