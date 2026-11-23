@@ -178,18 +178,6 @@
   text-overflow: ellipsis;
 }
 
-/* Stay inside the game frame: the width game-prototype.css gives `.game-stage` in the editor. */
-.game-stage-area[data-edit-frame] .scene-strip {
-  max-width: calc(min(100cqw, (100cqh - var(--edit-bar)) * var(--edit-frame-aspect)) - 24px);
-}
-
-/* Side by side, the frame sits at the start of its column (edit-workspace.css), so the strip does too. */
-@media (orientation: landscape) {
-  .edit-workspace .scene-strip {
-    margin-left: 0;
-  }
-}
-
 @media (max-height: 500px) {
   .scene-strip {
     --chip-w: 64px;

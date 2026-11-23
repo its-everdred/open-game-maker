@@ -23,6 +23,7 @@ for (const viewport of viewports) {
     test.skip(testInfo.project.name !== 'desktop', 'One browser covers both phone viewports');
     await page.setViewportSize(viewport);
     await openEditPage(page);
+    await page.getByRole('button', { name: 'Chat' }).click();
     const composer = page.locator('.edit-workspace-chat aiur-composer');
     await expect(composer).toBeVisible();
     await revealAllButtons(composer);

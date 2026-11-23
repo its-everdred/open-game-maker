@@ -244,6 +244,9 @@ export const ICONS: Record<string, string> = {
   decisions: line(
     '<path d="M44 56h168v112H120l-48 40v-40H44Z"/><path d="M108 96a20 20 0 1 1 28 18c-6 3-8 7-8 14M128 148v2"/>',
   ),
+  chat: line(
+    '<path d="M44 56h168v112H120l-48 40v-40H44Z"/><path d="M92 112h.01M128 112h.01M164 112h.01" stroke-width="24"/>',
+  ),
   build: line('<g transform="rotate(35 128 136)"><path d="M68 52h104v48H68ZM120 100v128M172 64h20v24h-20"/></g>'),
   caretLeft: line('<path d="M160 208 80 128l80-80"/>'),
   caretRight: line('<path d="m96 48 80 80-80 80"/>'),
