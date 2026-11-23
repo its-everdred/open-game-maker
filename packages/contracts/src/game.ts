@@ -106,6 +106,10 @@ export const gameMenusSchema = z.strictObject({
   routes: z.array(z.string().min(1).max(256)).max(32).optional(),
 });
 
+/** A scenario's name: `wave-3`, or grouped as `town/lantern-dusk`. It travels in a URL as `?scenario=`. */
+export const SCENARIO_NAME = /^[a-z0-9][a-z0-9_-]{0,63}(?:\/[a-z0-9][a-z0-9_-]{0,63})?$/u;
+export const scenarioNameSchema = z.string().regex(SCENARIO_NAME);
+
 /** A4 §6 `core.manifest` fields plus the B7 §3 minimum additions. */
 export const gameManifestSchema = z.looseObject({
   id: z.string().min(1).max(64),
@@ -246,6 +250,8 @@ export const gameManifestSchema = z.looseObject({
     .max(12)
     .refine((modes) => new Set(modes.map((mode) => mode.id)).size === modes.length, 'Mode IDs must be unique')
     .optional(),
+  /** The scenarios the build declares (`GameModule.scenarios`); the SDK fills them in its `ready` handshake. */
+  scenarios: z.array(scenarioNameSchema).max(64).optional(),
   /** Appearance of the shell menu button while playing this game. */
   playMenuButton: z
     .looseObject({ colour: z.string().regex(/^#[0-9a-fA-F]{6}$/u), icon: z.enum(['pause', 'menu']) })
@@ -271,6 +277,8 @@ export const gameManifestSchema = z.looseObject({
 export type GameManifest = z.infer<typeof gameManifestSchema>;
 
 export type SaveData<S> = { saveSchemaVersion: number; data: S; thumbnail?: string };
+/** What a scenario starts from: its name and the run's seed (`?seed=`, else one derived from the name). */
+export type ScenarioStart = { name: string; seed: number };
 export type PlacementResult = { ok: true } | { ok: false; reason: string };
 
 export interface GameModule<D, S> {
@@ -278,6 +286,12 @@ export interface GameModule<D, S> {
   designSchema: z.ZodType<D>;
   controls: ControlDecl[];
   mount(host: HostApi, design: D, save?: SaveData<S>): Promise<GameInstance<D, S>>;
+  /**
+   * Named start states. `?scenario=<name>` mounts the game with the state its function returns, straight into that
+   * moment (map, position, inventory, time of day, mode), past the title and menus. The same name and seed always
+   * return the same state, and a scenario run never writes the player's real save.
+   */
+  scenarios?: Record<string, (start: ScenarioStart) => SaveData<S>>;
   /** Maps a stored override after a control changed; `'drop'` discards it. */
   migrateOverride?(controlId: string, value: unknown): unknown | 'drop';
 }

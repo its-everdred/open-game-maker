@@ -2,11 +2,23 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { Icon } from '../../../components/Icon';
-import { canCreateScene, isAgent, loadScenes, newScene, type SceneCard } from './scene-source';
+import { canCreateScene, isAgent, loadScenes, newScene, scenarioCards, type SceneCard } from './scene-source';
 import './scene-strip.css';
 
-/** The edit page's scene chips (Kevin's pick B on #1191): every scene of the game, who changed it last, and a +. */
-export function SceneStrip({ gameId }: { gameId: string }) {
+/**
+ * The edit page's scene chips (Kevin's pick B on #1191): every scene of the game, who changed it last, and a +. The
+ * running build's declared scenarios follow, so the editor can start any of them (#1281).
+ */
+export function SceneStrip({
+  gameId,
+  build,
+  scenarios,
+}: {
+  gameId: string;
+  /** The running build; its scenarios are only offered while it runs. */
+  build?: string;
+  scenarios?: readonly string[];
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   /** `fixture` shows the sample scenes. */
   const source = searchParams.get('scenes');
@@ -20,7 +32,14 @@ export function SceneStrip({ gameId }: { gameId: string }) {
     else next.set('scenario', card.scenario);
     setSearchParams(next, { replace: true });
   };
-  const [scenes, setScenes] = useState<SceneCard[]>([]);
+  const [loaded, setScenes] = useState<SceneCard[]>([]);
+  /* The list outlives the frame: picking a scenario remounts the game, which reports its scenarios again once ready.
+     It belongs to one build, so another build's chips never start a scenario this one lacks. */
+  const [declared, setDeclared] = useState<{ build?: string; names: readonly string[] }>({ names: [] });
+  useEffect(() => {
+    if (scenarios?.length) setDeclared({ build, names: scenarios });
+  }, [build, scenarios]);
+  const scenes = [...loaded, ...scenarioCards(declared.build === build ? declared.names : [], loaded)];
   const [shown, setShown] = useState(true);
   const strip = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -64,7 +83,7 @@ export function SceneStrip({ gameId }: { gameId: string }) {
           disabled={!canCreateScene()}
           onClick={() => {
             const card = newScene(scenes);
-            setScenes([...scenes, card]);
+            setScenes([...loaded, card]);
             onOpen(card);
           }}
         >

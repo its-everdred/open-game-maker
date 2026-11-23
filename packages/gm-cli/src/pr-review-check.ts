@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 import { inventoryPath, markdownSection, readInventory, ticketDecisionIds } from './decision-inventory.js';
-import { waivesPrototypeReview } from './prototype-review.js';
+import { playScenario, waivesPrototypeReview } from './prototype-review.js';
 
 export function checkPrReview(cwd: string, bodyFile: string, base: string): string[] {
   let body: string;
@@ -65,6 +65,10 @@ export function checkPrReview(cwd: string, bodyFile: string, base: string): stri
     else if (playLink && !namesBuild(playLink))
       problems.push(
         `Prototype review Play (${playLink}) opens the game without the reviewed build; link <app>/g/<gameId>?mode=edit&build=<buildId>`,
+      );
+    else if (playLink && !playScenario(reviewSection))
+      problems.push(
+        `Prototype review Play (${playLink}) starts no scenario, so the creator plays through the title to reach it; add &scenario=<name> from the game's scenarios`,
       );
     const reviewedIds = field('Weigh in on').match(/[A-Za-z][A-Za-z0-9_-]*/g) ?? [];
     if (reviewedIds.length < 3 || reviewedIds.length > 6)

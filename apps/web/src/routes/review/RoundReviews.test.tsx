@@ -106,7 +106,8 @@ it('shows published prototype details and lets the creator submit a verdict', as
               ticket: 'publish',
               track: 'prototype-publish',
               buildId: 'build_1',
-              playUrl: 'https://app.example/g/game?mode=edit&build=build_1',
+              playUrl: 'https://app.example/g/game?mode=edit&build=build_1&scenario=wave-3',
+              sliceUrl: 'https://app.example/g/game/play?build=build_1&scenario=wave-3',
               question: 'Review the published build',
               works: ['Walk around'],
               limitations: ['No attack yet'],
@@ -121,8 +122,13 @@ it('shows published prototype details and lets the creator submit a verdict', as
   );
   /* Same-tab, in-app: a target=_blank link throws a home-screen app out to the browser. */
   const play = screen.getByRole('link', { name: 'Play this build' });
-  expect(play).toHaveAttribute('href', '/g/game?mode=edit&build=build_1');
+  expect(play).toHaveAttribute('href', '/g/game?mode=edit&build=build_1&scenario=wave-3');
   expect(play).not.toHaveAttribute('target');
+  /* Kevin, #1281: the card plays the reviewed slice in place, on the app's origin, past the title. */
+  expect(screen.getByTitle('Play the build for ticket publish')).toHaveAttribute(
+    'src',
+    '/g/game/play?build=build_1&scenario=wave-3',
+  );
   expect(screen.getByText('Walk around')).toBeVisible();
   expect(screen.getByText('No attack yet')).toBeVisible();
   expect(screen.getByText('enemy-lineup')).toBeVisible();

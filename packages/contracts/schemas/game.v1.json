@@ -513,6 +513,14 @@
         "additionalProperties": {}
       }
     },
+    "scenarios": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9_-]{0,63}(?:\\/[a-z0-9][a-z0-9_-]{0,63})?$"
+      }
+    },
     "playMenuButton": {
       "type": "object",
       "properties": {

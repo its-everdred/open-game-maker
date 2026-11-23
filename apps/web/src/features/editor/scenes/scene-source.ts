@@ -43,6 +43,17 @@ export async function loadScenes(gameId: string, source: string | null): Promise
 }
 
 /**
+ * The scenarios the running build declares (#1281) that no scene shows yet, as cards that start the game there. Agents
+ * add a scenario for each slice they build.
+ */
+export function scenarioCards(scenarios: readonly string[], scenes: readonly SceneCard[]): SceneCard[] {
+  const shown = new Set(scenes.flatMap((scene) => [scene.id, scene.scenario]));
+  return scenarios
+    .filter((name) => !shown.has(name))
+    .map((name) => ({ id: name, title: sceneTitle(name.replace('/', ' ')), rev: 0, author: 'agent:', scenario: name }));
+}
+
+/**
  * Whether + can make a scene. Not yet: the editor can't write a scene document, and the game can't load one, so a new
  * chip would vanish on reload while the game kept showing the last scenario.
  */

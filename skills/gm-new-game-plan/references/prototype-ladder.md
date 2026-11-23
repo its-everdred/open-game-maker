@@ -74,10 +74,13 @@ One feature ticket carries the union of roles needed across its activities, plus
 
 - Implement each approved clip as a playable slice in the game's one codebase (a later slice adds to the earlier ones,
   never replaces them).
-- **Scenarios.** The creator reaches the slice's moment in seconds from `?scenario=<id>`, read from
-  `games/<name>/scenarios/<id>.json` (board contents, upcoming pieces, seed, opponent, which UI is on). The skeleton
-  ticket adds the loader; each slice adds its scenarios. A sandbox scenario lets the creator set the state up
-  themselves. Player view only: a debug view, if any, is a separate scenario never sent as evidence.
+- **Scenarios.** The creator reaches the slice's moment in seconds from `?scenario=<id>`. Each slice declares its
+  scenarios on the game module, `scenarios: { 'wave-3': ({ seed }) => save }`, where each function returns the game's
+  save data for that moment (board contents, upcoming pieces, seed, opponent, which UI is on; a game may keep it in
+  `games/<name>/scenarios/<id>.json` and return it from there). The SDK boots straight into it with a fixed seed and
+  never writes the real save; review cards embed it, and `gm look shell --scenario <id>` verifies through it. A
+  sandbox scenario lets the creator set the state up themselves. Player view only: a debug view, if any, is a
+  separate scenario never sent as evidence.
 - **Side-by-side.** Film the slice with the same moment as its clip and run the video-to-game study and compare
   scripts, so the slice is checked frame against clip, sound included.
 - The Command is a play-then-vote card per slice beside its approved clip (`gm decide --playable <id>=<scenario

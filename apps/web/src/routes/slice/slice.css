@@ -1,0 +1,9 @@
+.slice-screen {
+  position: fixed;
+  inset: 0;
+}
+
+.slice-screen-state {
+  position: absolute;
+  inset: 0;
+}

@@ -333,7 +333,7 @@ describe('gm decisions', () => {
     expect(JSON.parse(waived.out[0]!).prototypeReview.problems).toEqual([]);
     writeFileSync(
       body,
-      'Closes #71\n\n## Creator decisions\n- enemy-style\n\n## Prototype review\nPlay: https://example.test\nClip: clip.mp4\nWorks now: move.\nKnown limitations: none.\nWeigh in on: enemy-style, map-style, loot-style, inventory-ui.\n',
+      'Closes #71\n\n## Creator decisions\n- enemy-style\n\n## Prototype review\nPlay: https://example.test/g/g_1?mode=edit&build=build_1&scenario=wave-3\nClip: clip.mp4\nWorks now: move.\nKnown limitations: none.\nWeigh in on: enemy-style, map-style, loot-style, inventory-ui.\n',
     );
     const open = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
     expect(open.code).toBe(1);
@@ -341,7 +341,7 @@ describe('gm decisions', () => {
     expect(JSON.parse(open.out[0]!).prototypeReview.problems.join('\n')).toContain('enemy-style is still open');
     writeFileSync(
       body,
-      'Closes #71\n\n## Prototype review\nPlay: https://example.test\nClip: clip.mp4\nWorks now: move.\nKnown limitations: none.\nWeigh in on: enemy-style, map-style, loot-style, inventory-ui.\n',
+      'Closes #71\n\n## Prototype review\nPlay: https://example.test/g/g_1?mode=edit&build=build_1&scenario=wave-3\nClip: clip.mp4\nWorks now: move.\nKnown limitations: none.\nWeigh in on: enemy-style, map-style, loot-style, inventory-ui.\n',
     );
     const reviewed = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
     expect(JSON.parse(reviewed.out[0]!).prototypeReview.problems).toEqual([]);
@@ -360,7 +360,11 @@ describe('gm decisions', () => {
     writeFileSync(body, review('https://app.example.test/g/g_1?mode=edit'));
     const headOnly = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
     expect(JSON.parse(headOnly.out[0]!).prototypeReview.problems.join('\n')).toContain('without the reviewed build');
+    /* Kevin, #1281: a review plays the slice it reviews, never from the title; the Play link names its scenario. */
     writeFileSync(body, review('https://app.example.test/g/g_1?mode=edit&build=build_1'));
+    const fromTitle = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
+    expect(JSON.parse(fromTitle.out[0]!).prototypeReview.problems.join('\n')).toContain('starts no scenario');
+    writeFileSync(body, review('https://app.example.test/g/g_1?mode=edit&build=build_1&scenario=town%2Flantern-dusk'));
     const inApp = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
     expect(JSON.parse(inApp.out[0]!).prototypeReview.problems).toEqual([]);
   });

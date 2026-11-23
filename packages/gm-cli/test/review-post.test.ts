@@ -26,6 +26,30 @@ it('refuses a sound review containing only an audio file', async () => {
   expect(result.err.join(' ')).toContain('sound requires a capture clip with audio');
 });
 
+/* Kevin, #1281: a playable review plays its slice in place, so a build item without its scenario is refused. */
+it('refuses a playable build that names no scenario', async () => {
+  const root = tempDir('gm-review-post-slice-');
+  const file = join(root, 'round.json');
+  const round = (build: Record<string, string>) =>
+    JSON.stringify({
+      id: 'd9428888-122b-4b0e-b1c8-9f7900000002',
+      track: 'gameplay',
+      phase: 'prototype',
+      category: 'gameplay',
+      ticket: '42',
+      sha: 'a'.repeat(40),
+      question: 'Does wave 3 feel fair?',
+      media: [{ kind: 'build', ref: 'build_1', ...build }],
+    });
+  writeFileSync(file, round({}));
+  const unnamed = await gm(['review', 'post', file], { cwd: root });
+  expect(unnamed.code).not.toBe(0);
+  expect(unnamed.err.join(' ')).toContain('names no scenario');
+  writeFileSync(file, round({ scenario: 'wave-3' }));
+  const named = await gm(['review', 'post', file], { cwd: root });
+  expect(named.err.join(' ')).not.toContain('names no scenario');
+});
+
 it.each([
   { category: 'art', phase: 'concept', kind: 'still', filename: 'still.png', mime: 'image/png' },
   { category: 'sound', phase: 'mock', kind: 'audio', filename: 'cue.wav', mime: 'audio/wav' },

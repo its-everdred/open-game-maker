@@ -113,6 +113,29 @@ describe('gm look shell', () => {
     }
   });
 
+  /* #1281: agents verify through the slice a review plays, which starts past the title and its configured taps. */
+  it('starts the capture in a scenario without the title journey', async () => {
+    const root = tempDir();
+    mkdirSync(join(root, 'dist/design'), { recursive: true });
+    writeFileSync(join(root, 'dist/index.html'), 'game');
+    writeFileSync(join(root, 'dist/design/design.json'), '{}');
+    writeFileSync(join(root, 'gm.manifest.json'), JSON.stringify({ playArea: { tap: 'Play>Start' } }));
+    try {
+      const options = { cwd: root, env: { XDG_RUNTIME_DIR: root } };
+      const result = await gm(
+        ['look', 'shell', '--dist', 'dist', '--out', 'shots', '--scenario', 'town/lantern-dusk'],
+        options,
+      );
+      expect(result.code).toBe(0);
+      expect(capture.calls.at(-1)?.[3]).toBe('[]');
+      expect(capture.calls.at(-1)?.[9]).toBe('town/lantern-dusk');
+      const invalid = await gm(['look', 'shell', '--dist', 'dist', '--out', 'shots', '--scenario', '../x'], options);
+      expect(invalid.err.join('\n')).toContain('invalid scenario name');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('keeps the tap journey when board measurement is disabled', async () => {
     const root = tempDir();
     mkdirSync(join(root, 'dist/design'), { recursive: true });
