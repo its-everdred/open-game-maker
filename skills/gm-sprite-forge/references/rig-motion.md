@@ -101,10 +101,10 @@ loop, none for an attack, in pixels at the pack cell.
   palette over the whole sheet, `colours` for everything but the cloth and `cloth` for the cloth (14 in all) (the same colours in every frame), a 3x3 median first with `smooth`. This is Kevin's
   pick "B" (hero-finish1-warrior, 2026-11-22: fewer shades, less detail, as the pack). `cloth` renders a cloth mask
   per frame (`mask_<row>_<col>.png`: white where the base-colour texture is pale and unsaturated) and gives the
-  undergarments their own colours: on one palette they merge into pale skin. `"weapon": 4` gives the weapon 4 colours of its own from
-  the same mask frames (the weapon renders red there), and the skin pass leaves it as rendered: on the body's palette
-  the Warrior's lit axe blade and wooden haft turned skin and read as a flesh stick (#1282 round 2). Masks rendered
-  before this change have no red: delete a cell's `mask_*.png` and `--rescore` to render them again. The sheet before it is kept as
+  undergarments their own colours: on one palette they merge into pale skin. `"weapon": 4` gives the weapon 4
+  colours of its own from the same mask frames (the weapon renders red there), and the skin pass leaves it as
+  rendered: on the body's palette the Warrior's lit axe blade and wooden haft turned skin and read as a flesh stick
+  (#1282 round 2). Masks rendered before this change have no red: delete a cell's `mask_*.png` and `--rescore`. The sheet before it is kept as
   `out/sheet_colour.png`. `render` keys `mask_s` and `mask_v` (0.16, 0.5) set the cloth thresholds; stricter ones
   lose the briefs.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,

@@ -150,8 +150,8 @@ def main():
         if a.skin_ref:
             import finish_base
             (out / 'sheet.png').replace(out / 'sheet_finish.png')
-            sheet, _ = finish_base.base_pass(finish_base.sm.load(out / 'sheet_finish.png'), finish_base.sm.load(a.skin_ref),
-                                             keep=weapon)
+            sheet, _ = finish_base.base_pass(finish_base.sm.load(out / 'sheet_finish.png'),
+                                             finish_base.sm.load(a.skin_ref), keep=weapon)
             Image.fromarray(sheet).save(out / 'sheet.png')
         if a.pixel:
             from pixel_finish import pixel_finish

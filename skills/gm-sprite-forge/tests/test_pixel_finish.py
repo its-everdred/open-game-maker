@@ -77,7 +77,8 @@ class PixelFinishTest(unittest.TestCase):
         cx, cy = x % 64 - 32, y % 64 - 32
         blade = (np.abs(cx + 4) < 2) & (cy < 0) & body  # a thin blade over the body: few pixels, like the axe
         a[body & ~blade, :3] = np.clip(a[body & ~blade, :3] * 1.35, 0, 255)  # pale skin
-        a[blade, :3] = np.clip(np.array([205, 210, 220]) * (0.8 + 0.4 * (cy[blade] + 26) / 26)[:, None], 0, 255)  # steel
+        steel = np.array([205, 210, 220]) * (0.8 + 0.4 * (cy[blade] + 26) / 26)[:, None]  # lit, shaded
+        a[blade, :3] = np.clip(steel, 0, 255)
 
         def shared(out):
             return set(map(tuple, out[blade][:, :3])) & set(map(tuple, out[body & ~blade][:, :3]))

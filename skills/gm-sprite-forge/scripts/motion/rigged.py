@@ -8,7 +8,8 @@ T-pose source drives an A-pose target), and the hips take the source hips' trave
 
 spec["rigged"]: {"path": glb|fbx, "action": name part, "feet": {"L": [foot, toe], "R": [foot, toe]}, "hips": bone,
                  "colour": [r, g, b] (optional flat base colour, linear, for an untextured library mannequin)}
-spec["motion"]: {"kind": "own"|"copy"|"pose" (hand-keyed key poses, handpose.py), "frames": [f0, f1] (default: the action's range), "loop": bool,
+spec["motion"]: {"kind": "own"|"copy"|"pose" (hand-keyed key poses, handpose.py), "frames": [f0, f1] (default: the
+                 action's range), "loop": bool,
                  "in_place": bool (hold a travelling clip in place), "sample": "even"|"keys"|"times", ...
                  copy: "path", "action", "map": {target bone: source bone}, "src_hips": bone, "rotz": deg (turn the
                  source to face -Y)}

@@ -145,8 +145,8 @@ def weapon(rig, w):
         if i != ax:
             grip[i] = (v[:, i].min() + v[:, i].max()) / 2
     to_x = {0: Matrix(), 1: Matrix.Rotation(-math.pi / 2, 4, 'Z'), 2: Matrix.Rotation(math.pi / 2, 4, 'Y')}[ax]
-    # spin turns the weapon about its own long axis; pitch tips its head toward the fingers (bone Z), e.g. to hang an axe
-    # lower; roll turns it about the hand bone (Y), e.g. to stand a bow upright
+    # spin turns the weapon about its own long axis; pitch tips its head toward the fingers (bone Z), e.g. to hang an
+    # axe lower; roll turns it about the hand bone (Y), e.g. to stand a bow upright
     ob.data.transform(Matrix.Rotation(math.radians(w.get('roll', 0)), 4, 'Y') @
                       Matrix.Rotation(math.radians(w.get('pitch', 0)), 4, 'Z') @
                       Matrix.Rotation(math.radians(w.get('spin', 0)), 4, 'X') @ to_x @ Matrix.Scale(s, 4) @
