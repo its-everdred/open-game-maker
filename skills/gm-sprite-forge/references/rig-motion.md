@@ -23,9 +23,11 @@ worn gear that bends with the body is not built yet.
 | `scripts/motion/fit_rig.py`, `retarget.py`, `handkey.py` | Blender (modules) | Reached through `render_motion.py`; not commands |
 | `scripts/motion/score_cell.py` | `gm py --` | Finish frames, `score.py` metrics, loop phase, foot slide -> `scores.json` |
 | `scripts/pixel_finish.py` | `gm py --` | Pack-style pixel finish (few colours, cloth on its own ramp); `score_cell.py` runs it for `pixel` |
-| `scripts/motion/matrix_media.py` | `gm py --` (needs ffmpeg with libx264) | Review matrix: pack column plus at most 6 cells, GIF + MP4, 1x and 4x |
+| `scripts/motion/matrix_media.py` | `gm py --` (needs ffmpeg with libx264) | Review matrix: pack column plus at most 10 cells, GIF + MP4, 1x and 4x |
 | `scripts/motion/strip.py` | `gm py --` | Quick zoomed strip for looking: `strip.py <cell_dir> <out.png> [rows=1,2] [zoom=3] [ref=<pack sheet>]` |
 | `scripts/motion/fit_accuracy.py` | Blender | Landmark error against rigged characters; exits 1 if any case fails |
+| `scripts/motion/rigged.py`, `sampling.py` | Blender module / plain | A body that arrives rigged (#1282): its own clip or a plain copy retarget, sampled evenly or on key poses |
+| `scripts/motion/pose_overlay.py` | `gm py --` | Frame-by-frame silhouettes over the pack clip (pack red, ours cyan) with per-frame IoU |
 
 Blender 4.3 needs the `gm py setup` environment's NumPy and SciPy (the glTF importer needs NumPy too). Use a wrapper
 such as `PYTHONPATH=<gm py env>/lib/python3.13/site-packages nice -n 10 blender -b --factory-startup
@@ -132,6 +134,40 @@ the renders and runs the finish and scoring again (after a new `finish` or `pixe
 when `pixel.cloth` needs them and the cell lacks them. It refuses a cell whose mesh, motion, stance or weapon in
 `cells.json` changed since its render: render that cell again.
 `matrix_media.py` reads `out/sheet.png`, `scores.json` and `recipe.json` from each cell directory.
+
+## Rigged bodies (#1282 bake-off)
+
+A cell with `rigged` skips steps 1-5: the body arrives rigged (a vendor rig such as Meshy or Hyper3D, or a library
+character such as the Quaternius mannequin) and nothing of ours touches the motion but the sampling.
+
+```json
+{"name": "A-meshy-combo-keys", "clip": "attack", "model": "...", "cost_usd": 0.8, "licence": "...",
+ "rigged": {"path": "<rigged>.glb", "action": "Double_Combo", "hips": "mixamorig:Hips",
+            "feet": {"L": ["mixamorig:LeftFoot", "mixamorig:LeftToeBase"], "R": ["mixamorig:RightFoot", "mixamorig:RightToeBase"]}},
+ "motion": {"kind": "own", "in_place": true, "sample": "keys", "keys": [0, 2.4, 4.9], "holds": [5, 5, 5]},
+ "weapon": {"path": "<axe>.gltf", "bone": "mixamorig:RightHand", "length": 0.75}}
+```
+
+- `kind: own` plays the file's action as delivered. `kind: copy` (with `path`, `action` or `frames`, `map`: target
+  bone -> source bone, `src_hips`) is the plain retarget: each mapped bone takes its source bone's world rotation away
+  from the source rest pose, applied to the target's rest bone first turned to point where the source rest bone
+  points (a T-pose clip drives an A-pose body), and the hips take the source travel scaled by hip height. No stance,
+  no foot lock, no IK. `in_place` removes a clip's straight-line travel and keeps its sway.
+- The body is turned to face -Y from its feet (heel to toe), the source of a copy from its first posed frame. The
+  weapon's roll is set so it points forward out of the fist at rest, and its `length` (sized for a 1.8 m body) is
+  scaled to the rig's height (Hyper3D's rig comes back about 1 m tall).
+- `sample`: `even` spreads the sheet's 15 frames over the clip (a loop leaves out its closing frame); `keys` holds
+  key poses (`keys` source frames, `holds` sheet frames each, summing to 15) on the pack clip's beats, and may replay
+  poses (a one-swing clip swung twice for the pack's two-swing Attack1); `times` gives every frame outright.
+- The pack 6Barbarian Walk and Attack1 face about 45 degrees off the travel direction in every row (the Idle does
+  not): the rows are right (all 8 Idle rows match the render's), the pack's walk and attack carry a turned stance.
+
+**Vendors (fal, 2026-11-23).** `fal3d.py price` lists `fal-ai/meshy/rigging` at $0.80 and `fal-ai/hyper3d/rigging`
+at $0.40 a call, not the model pages' $0.32 and $0.20; book the higher. Meshy (`skeleton_template: mixamo`,
+`height_meters`, `enable_animation` with one `animation_action_id`) returns the rig, a walk, a run and the one library
+clip as GLB and FBX in about a minute; one clip per call. Hyper3D's `animation_urls` must already be on its own rig
+(it does not retarget them): our Quaternius and Bandai FBX clips were rejected with a 422, and its stock presets need
+ids from a catalog only a billed call reaches, so the rig alone was taken and played through `kind: copy`.
 
 ## Files stay local
 
