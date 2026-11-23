@@ -1,13 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import type { EditorLibrary } from '@ogm/contracts/browser';
 
 const api = vi.hoisted(() => vi.fn());
 vi.mock('../../../lib/api/client', () => ({ api }));
 
-import { AssetLibrary } from './AssetLibrary';
+import { AssetLibrary, type PlacePoint } from './AssetLibrary';
 
 const fences = Array.from({ length: 400 }, (_, n) => ({
   id: `t1:rural/tiles/fence-${n}@1`,
@@ -44,7 +44,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 /** `null`: the page has no editor to place into yet (no `onPlace`). */
-async function renderLibrary(onPlace: ReturnType<typeof vi.fn> | null = vi.fn(), sheet = true) {
+async function renderLibrary(onPlace: Mock<(asset: string, point: PlacePoint) => void> | null = vi.fn(), sheet = true) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <div className="game-stage">
@@ -151,6 +151,10 @@ describe('asset library', () => {
     const shown = [...document.querySelectorAll('.asset-library-item')].map((node) => node.getAttribute('aria-label'));
     expect(shown.length).toBeLessThan(60);
     expect(shown.some((label) => Number(label!.split(' ')[1]) > 100)).toBe(true);
+    /* Mid-fling, rows not seen before ask for no pictures; they load once the grid stops. */
+    const late = document.querySelector('.asset-library-item:last-child img')!;
+    expect(late.getAttribute('src')).toBeNull();
+    await waitFor(() => expect(late.getAttribute('src')).toMatch(/\/thumb\?card=/));
   });
 
   it('with a mouse, dragging a piece onto the game places it where it is let go, but not when let go on the sheet', async () => {

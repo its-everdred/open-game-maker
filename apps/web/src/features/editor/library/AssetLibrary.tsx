@@ -27,6 +27,10 @@ const DRAG_PX = 6;
 const GAP = 8;
 const LABEL_H = 22;
 const OVERSCAN_ROWS = 2;
+/** Pictures wait until the grid stops for this long, so a fling past thousands of pieces requests none of them. */
+const SETTLE_MS = 120;
+/** Pictures already shown once appear at once when scrolled back to. */
+const shownPictures = new Set<string>();
 
 const EMPTY: EditorLibrary = { groups: [], packs: [], items: [] };
 
@@ -214,6 +218,9 @@ function LibraryGrid({
   const scroller = useRef<HTMLDivElement>(null);
   const press = useRef<Press | undefined>(undefined);
   const [view, setView] = useState({ width: 0, height: 0, top: 0 });
+  const [settled, setSettled] = useState(true);
+  const settle = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(settle.current), []);
   useEffect(() => {
     const element = scroller.current;
     if (!element) return;
@@ -280,6 +287,9 @@ function LibraryGrid({
       ref={scroller}
       className="asset-library-grid"
       onScroll={(event) => {
+        setSettled(false);
+        clearTimeout(settle.current);
+        settle.current = setTimeout(() => setSettled(true), SETTLE_MS);
         /* Re-render only when another row comes into view, not on every scrolled pixel. */
         const top = rowHeight > 0 ? Math.floor(event.currentTarget.scrollTop / rowHeight) * rowHeight : 0;
         setView((current) => (current.top === top ? current : { ...current, top }));
@@ -288,6 +298,7 @@ function LibraryGrid({
       <div style={{ height: rows * rowHeight, position: 'relative' }}>
         {visible.map((item, offset) => {
           const index = first * columns + offset;
+          const pictureUrl = libraryThumbUrl(gameId, item.id);
           return (
             <button
               key={item.id}
@@ -312,13 +323,14 @@ function LibraryGrid({
             >
               <span className="asset-library-picture" style={{ height: picture }}>
                 <img
-                  src={libraryThumbUrl(gameId, item.id)}
+                  src={settled || shownPictures.has(pictureUrl) ? pictureUrl : undefined}
                   alt=""
                   loading="lazy"
                   decoding="async"
                   draggable={false}
                   /* A piece whose picture is missing keeps its label on an empty tile, not a broken image. */
                   onError={(event) => (event.currentTarget.hidden = true)}
+                  onLoad={() => shownPictures.add(pictureUrl)}
                 />
               </span>
               <span className="asset-library-label">{item.label}</span>
