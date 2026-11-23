@@ -25,6 +25,7 @@ import {
 } from '../../features/editor/api';
 import { EditorChrome } from '../../features/editor/EditorChrome';
 import { SceneStrip } from '../../features/editor/scenes/SceneStrip';
+import { Hd2dPanel } from '../../features/editor/hd2d/Hd2dPanel';
 import { fallbackEditRequest, previewEditRequest } from '../../features/editor/fallback-request';
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
 import { changeInstanceCount } from '../../features/editor/instanceCount';
@@ -733,6 +734,7 @@ export function GameScreen() {
       {mode === 'edit' && (
         <SceneStrip gameId={gameId} build={runningBuildId} scenarios={frameState.manifest?.scenarios} />
       )}
+      {mode === 'edit' && !editorPlaying && <Hd2dPanel report={frameState.hd2d} apply={frameController?.applyHd2d} />}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
         {mode === 'play' && frameController !== undefined ? (

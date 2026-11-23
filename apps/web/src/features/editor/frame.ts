@@ -25,6 +25,9 @@ type FrameLike = Pick<GameFrame, 'dispose' | 'on' | 'send' | 'setMode' | 'setSet
 export type GameLoadProgress = Extract<GameLoadEvent, { t: 'load.progress' }>['payload'];
 export type GameLoadDone = Extract<GameLoadEvent, { t: 'load.done' }>['payload'];
 
+/** The running scene's HD-2D as the game last reported it (`hd2d.scene`); `doc` is `null` when it has none. */
+export type Hd2dReport = Extract<GameToHost, { t: 'hd2d.scene' }>['payload'];
+
 export type GameLoadMeasurement = Pick<GameLoadDone, 'ms' | 'fetchedBytes' | 'cachedBytes'>;
 export type GameFrameState = {
   bridgeState: 'connecting' | 'ready' | 'error';
@@ -40,6 +43,8 @@ export type GameFrameState = {
   load?: Pick<GameLoadProgress, 'phase' | 'loaded' | 'total'> & { done: boolean };
   /** The game's latest `host.pause.visible`; unset means visible, and a remount starts unset. */
   hostPauseVisible?: boolean;
+  /** Unset until the game reports; a game without the SDK's HD-2D never does. */
+  hd2d?: Hd2dReport;
 };
 
 /** The game hides the host Pause control only in play, while its bridge is up; any failure shows it again. */
@@ -57,6 +62,8 @@ export type GameFrameController = {
   project(x: number, y: number, prefab?: string): Promise<[number, number, number] | null>;
   select(ids: readonly string[]): void;
   camera(mode: 'follow' | 'free', target?: string): void;
+  /** Re-renders the running scene from an edited HD-2D document; absent where no game runs (previews). */
+  applyHd2d?(doc: unknown, weather?: string): void;
   validatePlacement(prefab: string, pose: Pose, timeoutMs?: number): Promise<PlacementResult>;
   onPicked(callback: (targets: TargetRef[]) => void): () => void;
   onScreen(
@@ -383,6 +390,11 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     current = { ...current, hostPauseVisible: visible };
     publish();
   });
+  const stopHd2d = frame.on('hd2d.scene', (report) => {
+    if (disposed) return;
+    current = { ...current, hd2d: report };
+    publish();
+  });
   const stopRoomMessages = (
     [
       'net.input',
@@ -426,6 +438,9 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     },
     camera: (mode, target) => {
       frame.send('editor.camera', target === undefined ? { mode } : { mode, target });
+    },
+    applyHd2d: (doc, weather) => {
+      frame.send('hd2d.apply', weather === undefined ? { doc } : { doc, weather });
     },
     validatePlacement: (prefab, pose, timeoutMs = 3_000) =>
       new Promise((resolve) => {
@@ -516,6 +531,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       stopStartupWrites();
       stopPlacement();
       stopHostPause();
+      stopHd2d();
       for (const stop of stopRoomMessages) stop();
       if (activePlacement !== undefined) {
         clearTimeout(activePlacement.timer);

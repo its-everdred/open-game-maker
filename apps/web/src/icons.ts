@@ -264,4 +264,15 @@ export const ICONS: Record<string, string> = {
   agent: line('<rect x="40" y="88" width="176" height="120" rx="28"/><path d="M128 88V40M96 148h.01M160 148h.01" />'),
   plus: line('<path d="M128 48v160M48 128h160"/>'),
   map: line('<path d="M96 48 32 72v136l64-24 64 24 64-24V48l-64 24Z"/><path d="M96 48v136M160 72v136"/>'),
+  /* The map maker's lighting tool (#1211): sun, clouds, rain, light, focus and particles. */
+  sun: line(
+    '<circle cx="128" cy="128" r="44"/><path d="M128 24v20M128 212v20M24 128h20M212 128h20M54 54l14 14M188 188l14 14M54 202l14-14M188 68l14-14"/>',
+  ),
+  cloud: line('<path d="M80 192a48 48 0 1 1 12-94 64 64 0 0 1 124 22 36 36 0 0 1-8 72Z"/>'),
+  rain: line(
+    '<path d="M80 152a44 44 0 1 1 12-86 60 60 0 0 1 116 20 34 34 0 0 1-8 66Z"/><path d="M96 184l-12 32M136 184l-12 32M176 184l-12 32"/>',
+  ),
+  bulb: line('<path d="M96 184v-12a72 72 0 1 1 64 0v12Z"/><path d="M100 216h56M128 184v-48M108 140l20-20 20 20"/>'),
+  focus: line('<circle cx="128" cy="128" r="32"/><path d="M40 88V40h48M168 40h48v48M216 168v48h-48M88 216H40v-48"/>'),
+  leaf: line('<path d="M56 200C56 104 104 48 216 40c-8 112-64 160-160 160Z"/><path d="M56 200l96-96"/>'),
 };
