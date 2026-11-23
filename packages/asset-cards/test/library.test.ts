@@ -93,6 +93,19 @@ describe('editorLibrary', () => {
     ]);
   });
 
+  it("lists the game's own set before other packs within a kind, so its pieces are the first a creator sees", () => {
+    const { library } = build(
+      [
+        card('t1:farm/fences/apple-fence@1', 'Apple Fence', { resolved: { set: undefined } }),
+        rural('fence-b1', 'Fence B1'),
+        rural('fence-a1', 'Fence A1'),
+      ],
+      ['farm'],
+    );
+
+    expect(library.items.map((item) => item.label)).toEqual(['Fence A1', 'Fence B1', 'Apple Fence']);
+  });
+
   it('leaves out what cannot be placed or shown: audio, sheets with no thumbnail, rejected, not for in-game use', () => {
     const { library, thumbs } = build([
       rural('fence-a1', 'Fence A1'),

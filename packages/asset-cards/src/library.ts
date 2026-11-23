@@ -92,6 +92,7 @@ export function editorLibrary(
   const items: EditorLibraryItem[] = [];
   const thumbs = new Map<string, string>();
   const packLabels = new Map<string, string>();
+  const inSet = new Set<string>();
   for (const card of index.cards) {
     const pack = packOf(card.id);
     if (!pack || card.card_type !== 'asset') continue;
@@ -102,6 +103,7 @@ export function editorLibrary(
     const thumb = thumbOf(card, pack);
     if (!thumb) continue;
     thumbs.set(card.id, thumb);
+    if (source.set !== undefined && card.resolved.set === source.set) inSet.add(card.id);
     const size = sizeOf(card);
     items.push({
       id: card.id,
@@ -117,7 +119,11 @@ export function editorLibrary(
     }
   }
   const order = new Map<string, number>(GROUPS.map((group, position) => [group.id, position]));
-  items.sort((a, b) => order.get(a.group)! - order.get(b.group)! || a.label.localeCompare(b.label, 'en'));
+  /* The game's own set first within each kind: its look is the one the scene is drawn in. */
+  const own = (item: EditorLibraryItem) => (inSet.has(item.id) ? 0 : 1);
+  items.sort(
+    (a, b) => order.get(a.group)! - order.get(b.group)! || own(a) - own(b) || a.label.localeCompare(b.label, 'en'),
+  );
   const used = new Set(items.map((item) => item.group));
   return {
     library: {
