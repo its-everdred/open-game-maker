@@ -363,7 +363,8 @@ export function createFleet(deps: FleetDeps) {
       for (const { slug } of await store.list()) {
         await locked(async () => {
           const row = await store.bySlug(slug);
-          if (!row) return;
+          // A registered daemon is the operator's: its sharing games' jobs are not counted here, and its unit is not ours.
+          if (!row || isRegistered(row)) return;
           if (isStale(row)) {
             await systemctl.stop(row.slug).catch(() => undefined);
             await setStatus(row, 'stopped', { lastError: 'start interrupted by an API restart' });
@@ -397,6 +398,7 @@ export function createFleet(deps: FleetDeps) {
     async checkHealth(): Promise<void> {
       for (const row of await store.list()) {
         if (row.status !== 'running' && row.status !== 'idle') continue;
+        if (isRegistered(row)) continue;
         const token = (await readIfPresent(daemonPaths(env.home, row.slug).clientToken))?.trim() ?? '';
         const healthy = await passes(() => clientFor(row, token).healthz());
         const verdict = misses.record(row.slug, healthy);

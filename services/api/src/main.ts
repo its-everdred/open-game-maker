@@ -27,8 +27,7 @@ import { createChatJobDirectory } from './build-chat/job-directory.js';
 import { createDraftScopeTicket } from './new-game/draft-assistant.js';
 import { startDraftCleanup } from './game-drafts/cleanup.js';
 import { finishRun, startBuildSweep } from './builds/publish.js';
-import { gameSlugFor } from './games/games.js';
-import { createDaemonDirectory } from './jobs/daemons.js';
+import { createDaemonDirectory, daemonRowForGame } from './jobs/daemons.js';
 import { recordDaemonReadTokenStatus } from './job-commands/health.js';
 import { activeJobs, activeJobsForSlug, byTicket } from './jobs/repo.js';
 import { applyAiurEvent, applyIssueSnapshot, applyProgress } from './jobs/projection.js';
@@ -276,8 +275,8 @@ const stopBriefingPush =
 const usageReconciler = startUsageReconciler({
   ...lifecycleDeps,
   daemonFor: async (gameId) => {
-    const slug = gameSlugFor(db, gameId);
-    return slug === null ? null : ((await fleet.daemonFor(slug))?.client ?? null);
+    const row = daemonRowForGame(db, gameId);
+    return row ? ((await fleet.daemonFor(row.slug))?.client ?? null) : null;
   },
   applyUsage: createApplyUsage(lifecycleDeps),
   log,
