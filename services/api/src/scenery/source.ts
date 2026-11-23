@@ -12,6 +12,8 @@ import {
   SceneIdSchema,
   SceneRevisionSchema,
   type AssetsLock,
+  type SceneHead,
+  type SceneRevision,
   type Scenery,
 } from '@ogm/contracts';
 import { migrateScene } from '@ogm/design-log';
@@ -142,6 +144,47 @@ export async function readScenerySource(
 }
 
 export type SceneSummary = { id: string; rev: number; author: string; updatedAt: string };
+export type SceneFiles = { head: SceneHead; log: SceneRevision[] };
+
+/** One scene's committed head and log, read the way `gm scene pull` reads them; undefined when pull would refuse it. */
+async function readSceneIn(dir: string, id: string): Promise<SceneFiles | undefined> {
+  if (!SceneIdSchema.safeParse(id).success) return undefined;
+  try {
+    const head = JSON.parse(await readFile(await contained(dir, `${id}.scene.json`), 'utf8')) as {
+      rev?: unknown;
+      doc?: unknown;
+    };
+    const rev = head.rev;
+    if (typeof rev !== 'number' || !Number.isInteger(rev) || rev < 1) return undefined;
+    const doc = migrateScene(head.doc).doc;
+    if (doc.scene !== id) return undefined;
+    const lines = (await readFile(await contained(dir, `${id}.revs.jsonl`), 'utf8'))
+      .split('\n')
+      .filter((line) => line.trim())
+      .slice(0, rev);
+    const log = lines.map((line) => SceneRevisionSchema.parse(JSON.parse(line)));
+    if (log.length !== rev || log.some((revision, index) => revision.rev !== index + 1)) return undefined;
+    return { head: { rev, doc }, log };
+  } catch {
+    return undefined;
+  }
+}
+
+async function scenesDir(checkout: string, gamePath: string): Promise<string | undefined> {
+  const root = await contained(checkout, gamePath);
+  try {
+    return await contained(root, 'scenes');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+/** A scene document committed in the game's checkout (`scenes/<scene>.scene.json` and its log), if `gm scene pull` would accept it. */
+export async function readSceneFiles(checkout: string, gamePath: string, id: string): Promise<SceneFiles | undefined> {
+  const dir = await scenesDir(checkout, gamePath);
+  return dir ? readSceneIn(dir, id) : undefined;
+}
 
 /**
  * The game's scene documents (`scenes/<scene>.scene.json` heads, #1207), each with who wrote its head revision. Each is
@@ -149,36 +192,16 @@ export type SceneSummary = { id: string; rev: number; author: string; updatedAt:
  * 1..rev in order (lines after `rev` never committed). A scene that `gm scene pull` would refuse is left out.
  */
 export async function listSceneDocs(checkout: string, gamePath: string): Promise<SceneSummary[]> {
-  const root = await contained(checkout, gamePath);
-  let dir: string;
-  let names: string[];
-  try {
-    dir = await contained(root, 'scenes');
-    names = await readdir(dir);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw error;
-  }
+  const dir = await scenesDir(checkout, gamePath);
+  if (!dir) return [];
   const scenes: SceneSummary[] = [];
-  for (const name of names.sort()) {
-    const id = name.endsWith('.scene.json') ? name.slice(0, -'.scene.json'.length) : '';
-    if (!SceneIdSchema.safeParse(id).success) continue;
-    try {
-      const head = JSON.parse(await readFile(await contained(dir, name), 'utf8')) as { rev?: unknown; doc?: unknown };
-      const rev = head.rev;
-      if (typeof rev !== 'number' || !Number.isInteger(rev) || rev < 1) continue;
-      if (migrateScene(head.doc).doc.scene !== id) continue;
-      const lines = (await readFile(await contained(dir, `${id}.revs.jsonl`), 'utf8'))
-        .split('\n')
-        .filter((line) => line.trim())
-        .slice(0, rev);
-      const log = lines.map((line) => SceneRevisionSchema.parse(JSON.parse(line)));
-      if (log.length !== rev || log.some((revision, index) => revision.rev !== index + 1)) continue;
-      const last = log[rev - 1]!;
-      scenes.push({ id, rev, author: last.author, updatedAt: last.createdAt });
-    } catch {
-      continue;
-    }
+  for (const name of (await readdir(dir)).sort()) {
+    if (!name.endsWith('.scene.json')) continue;
+    const id = name.slice(0, -'.scene.json'.length);
+    const files = await readSceneIn(dir, id);
+    if (!files) continue;
+    const last = files.log[files.head.rev - 1]!;
+    scenes.push({ id, rev: files.head.rev, author: last.author, updatedAt: last.createdAt });
   }
   return scenes;
 }
