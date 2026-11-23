@@ -158,13 +158,21 @@ rm -f "$attention"
 # publish, and the play check's own line (trace, stills) is the only wake.
 OGM_TEST_RC=0 "$hook" --game-publish blobs build_1 --repo "$stack" --attention "$attention" > "$scratch/out"
 assert_grep 'exit=0 qa-game-play' "$scratch/out"
-assert_grep "game-play --game blobs --repo $stack --attention $attention" "$scratch/calls"
+assert_grep "game-play --game blobs --build build_1 --repo $stack --attention $attention" "$scratch/calls"
 set +e
 OGM_TEST_RC=0 OGM_TEST_RC_PLAY=1 "$hook" --game-publish blobs build_1 --repo "$stack" --attention "$attention" > "$scratch/out"
 rc=$?
 set -e
 assert_eq 1 "$rc" 'a published game that does not play fails the publish hook'
 assert_eq 'qa-game-play failed: blobs build_1: bridge error; trace hello' "$(cat "$attention")" 'one line, from the play check'
+rm -f "$attention"
+# A play check that crashed (or was misused) wrote no line of its own: the hook writes one.
+set +e
+OGM_TEST_RC=0 OGM_TEST_RC_PLAY=70 "$hook" --game-publish blobs build_1 --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a crashed play check fails the publish hook'
+assert_grep 'qa-game-play failed after publishing blobs (exit 70)' "$attention"
 rm -f "$attention"
 : > "$scratch/calls"
 

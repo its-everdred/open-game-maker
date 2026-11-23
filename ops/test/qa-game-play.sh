@@ -21,10 +21,12 @@ import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
 c.execute('create table games (id text, slug text, delisted_at text)')
 c.execute('create table builds (id text, game_id text, status text, created_at text)')
-c.executemany('insert into games values (?, ?, null)', [('g_ok', 'ok'), ('g_bad', 'bad'), ('g_qa', 'qa-review')])
+c.executemany('insert into games values (?, ?, null)',
+              [('g_ok', 'ok'), ('g_bad', 'bad'), ('g_qa', 'qa-review'), ('g_new', 'new')])
 c.executemany('insert into builds values (?, ?, ?, ?)', [
   ('build_old', 'g_ok', 'tested', '2026-11-20'), ('build_new', 'g_ok', 'tested', '2026-11-21'),
-  ('build_bad', 'g_bad', 'tested', '2026-11-21'), ('build_qa', 'g_qa', 'tested', '2026-11-21')])
+  ('build_bad', 'g_bad', 'tested', '2026-11-21'), ('build_qa', 'g_qa', 'tested', '2026-11-21'),
+  ('build_queued', 'g_new', 'queued', '2026-11-21')])
 c.commit()
 PY
 
@@ -38,7 +40,8 @@ if [[ $game == g_bad ]]; then
   cat > "$out/play-check.json" << 'JSON'
 {"failures": ["bridge error", "the shell shows Try again"], "unchecked": [], "observation": {"trace": [
   {"ms": 900, "dir": "window", "t": "hello", "n": 1}, {"ms": 950, "dir": "out", "t": "hello", "n": 1},
-  {"ms": 1000, "dir": "in", "t": "load.progress", "n": 65}]}}
+  {"ms": 1000, "dir": "in", "t": "load.progress", "n": 65},
+  {"ms": 1100, "dir": "in", "t": "x\n2026-01-01T00:00:00Z forged line", "n": 1}]}}
 JSON
   exit 1
 fi
@@ -57,7 +60,9 @@ assert_eq "qa play-check g_bad build_bad --out $stack/assets-local/review/app/pl
 qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/build_new" "$(cat "$scratch/calls")" \
   'each published game is played once, at its latest tested build; QA games are skipped'
 assert_grep 'ok build_new: ok' "$scratch/out"
-line="bad build_bad: bridge error; the shell shows Try again; trace hello>load.progress x65; stills $stack/assets-local/review/app/play-check/build_bad"
+assert_grep 'new: no tested build, not played' "$scratch/out"
+# A type the game sent with a newline in it is shown as ?, so it cannot forge an attention line.
+line="bad build_bad: bridge error; the shell shows Try again; trace hello>load.progress x65>?; stills $stack/assets-local/review/app/play-check/build_bad"
 assert_grep "$line" "$scratch/out"
 assert_grep 'exit=1 qa-game-play' "$scratch/out"
 assert_eq 1 "$(wc -l < "$attention")" 'one attention line for the one failing game'
@@ -69,6 +74,17 @@ assert_grep "qa-game-play failed: $line" "$attention"
 assert_eq "qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/build_new" "$(cat "$scratch/calls")" \
   '--game plays one game'
 assert_grep 'exit=0 qa-game-play' "$scratch/out"
+
+# The publish hook plays the build it just published, even when it is not the latest tested one.
+: > "$scratch/calls"
+"$check" --db "$db" --repo "$stack" --game ok --build build_old > "$scratch/out"
+assert_eq "qa play-check g_ok build_old --out $stack/assets-local/review/app/play-check/build_old" "$(cat "$scratch/calls")" \
+  '--build plays that build'
+set +e
+"$check" --db "$db" --repo "$stack" --game ok --build build_bad > /dev/null 2>&1
+rc=$?
+set -e
+assert_eq 64 "$rc" "another game's build is refused"
 
 # A play that dies before writing its report fails; it never passes for lack of evidence.
 set +e
@@ -84,5 +100,19 @@ set +e
 rc=$?
 set -e
 assert_eq 64 "$rc" 'a flag without its value is bad usage'
+
+# The check itself crashing is not "a game failed": exit 70, and no attention line pretends otherwise.
+: > "$attention"
+set +e
+"$check" --db "$scratch/not-a-db" --repo "$stack" --attention "$attention" > /dev/null 2>&1
+rc=$?
+printf 'not sqlite' > "$scratch/broken.sqlite3"
+"$check" --db "$scratch/broken.sqlite3" --repo "$stack" --attention "$attention" > "$scratch/out" 2>&1
+crash=$?
+set -e
+assert_eq 64 "$rc" 'a missing database is bad usage'
+assert_eq 70 "$crash" 'a crash exits 70'
+assert_grep 'exit=70 qa-game-play' "$scratch/out"
+[[ ! -s $attention ]] || fail 'a crash wrote an attention line'
 
 echo 'qa-game-play: ok'

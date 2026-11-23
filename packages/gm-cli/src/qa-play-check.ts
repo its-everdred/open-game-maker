@@ -116,10 +116,12 @@ export function judgePlay(observation: PlayObservation): PlayVerdict {
   if (observation.frameStddev !== null && observation.frameStddev < BLANK_STDDEV)
     failures.push(`the game frame is blank (luminance spread ${observation.frameStddev.toFixed(1)})`);
   if (observation.inputChange !== null && observation.idleChange !== null) {
-    if (observation.inputChange - observation.idleChange < MIN_INPUT_CHANGE)
-      failures.push(
-        `one ${observation.input ?? 'input'} did not change the frame (idle ${share(observation.idleChange)}, input ${share(observation.inputChange)})`,
-      );
+    const measured = `idle ${share(observation.idleChange)}, input ${share(observation.inputChange)}`;
+    const moved = observation.inputChange - observation.idleChange >= MIN_INPUT_CHANGE;
+    // No stick and no move key: the swipe is a guess at the game's controls, so a still frame is not proof it broke.
+    if (!moved && observation.input === 'swipe')
+      unchecked.push(`the game declares no move input and a swipe changed nothing (${measured})`);
+    else if (!moved) failures.push(`one ${observation.input ?? 'input'} did not change the frame (${measured})`);
   } else if (!failures.length) failures.push('no input was tried');
   return { failures, unchecked };
 }

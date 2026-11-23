@@ -152,11 +152,15 @@ if ((${#game_publish[@]})); then
   # Serving files is not playing (#1272: three stacked causes kept every game on "Try again" for a day): play the
   # published game in the production shell to a first frame and one input. Its own lines carry the trace and stills.
   play_log=$log_dir/$build_id.play.log
-  play=(${OGM_QA_GAME_PLAY:-$repo/ops/bin/ogm-qa-game-play} --game "$slug" --repo "$repo")
+  play=(${OGM_QA_GAME_PLAY:-$repo/ops/bin/ogm-qa-game-play} --game "$slug" --build "$build_id" --repo "$repo")
   [[ -z $attention ]] || play+=(--attention "$attention")
   "${play[@]}" > "$play_log" 2>&1
   play_rc=$?
   ((play_rc == 0)) || worst=1
+  # Exit 1 is a game that failed and wrote its own line; anything else (bad usage, a crash) wrote none.
+  if ((play_rc != 0 && play_rc != 1)) && [[ -n $attention ]]; then
+    printf '%s qa-game-play failed after publishing %s (exit %s): %s\n' "$(date -u +%FT%TZ)" "$slug" "$play_rc" "$play_log" >> "$attention"
+  fi
   printf 'exit=%s qa-game-play\n' "$play_rc"
   exit "$worst"
 fi

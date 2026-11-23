@@ -533,18 +533,21 @@ the QA creator (`qa.env`), waits for the bridge handshake and the game's `load.f
 from its hosted `manifest.json` (the first mode's `tap`, else `playArea.tap`), and makes one input: a drag on the
 host's move stick, else a key bound to `move.right`, else a swipe. It fails when the bridge is not ready, the shell
 shows Try again, no first frame arrives, a tap never appears, the frame is blank, or the input changes the frame no
-more than waiting does. One game plays at a time, in the capture slot, and each play is capped at 170 s.
+more than waiting does; a swipe on a game that declares no move input is reported as unchecked instead. One game
+plays at a time, in the capture slot, and each play is capped at 170 s.
 
 The QA account cannot read another family's private game, so the check answers that game's own API routes from its
 published build (`design/design.json`) and absorbs its writes; the shell, auth, the rest of the API and the games host
 are production's. Stills (`play.png`, `ingame.png`, `input.png`, `end.png`) and `play-check.json` (verdict, bridge
 trace, page errors) land in `assets-local/review/app/play-check/<build>/`.
 
-`ogm-qa-review-hook` plays the published game after every publish, and every game after a deploy that touches the boot
-path (`apps/web/src/{routes/game,features/editor,features/room}/`, `apps/web` build files,
+`ogm-qa-review-hook` plays the build just published after every publish (`--game <slug> --build <id>`; `gm publish`
+allows the hook 20 minutes), and every game after a deploy that touches the boot path
+(`apps/web/src/{routes/game,features/editor,features/room}/`, `apps/web` build files,
 `packages/{contracts,host,iframe-bridge,sdk}/`, `services/games-host/`, `services/api/src/{games,builds}/`). A game that
-fails appends one `qa-game-play failed` line to the attention file with its failures, the bridge messages it got and
-its stills folder, and fails the hook. Replay a build against an older shell with `--web-dist <web build>`.
+fails appends one `qa-game-play failed` line to the attention file with its failures, the bridge messages it got and its
+stills folder, and fails the hook; a crash of the check itself exits 70 and the hook writes the line instead. Replay a
+build against an older shell with `--web-dist <web build>`.
 
 ## Prove the instance monorepo flow
 

@@ -98,6 +98,17 @@ describe('qa play-check verdict', () => {
     ]);
   });
 
+  /* A new requirement degrades gracefully: a game with no stick and no move key gets a reported line, not a failure. */
+  it('reports a swipe that moved nothing as unchecked, while a stick or key that moves nothing fails', () => {
+    expect(judgePlay(played({ input: 'swipe', idleChange: 0, inputChange: 0 }))).toEqual({
+      failures: [],
+      unchecked: ['the game declares no move input and a swipe changed nothing (idle 0%, input 0%)'],
+    });
+    expect(judgePlay(played({ input: 'stick', idleChange: 0, inputChange: 0.011 })).failures).toEqual([
+      'one stick did not change the frame (idle 0%, input 1%)',
+    ]);
+  });
+
   it('fails a booted game when no input could be tried or the check stopped', () => {
     expect(judgePlay(played({ idleChange: null, inputChange: null, input: null })).failures).toEqual([
       'no input was tried',

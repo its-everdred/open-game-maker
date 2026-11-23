@@ -6,15 +6,18 @@ ogm-qa-game-boot only proves a game's files return 200; on 2026-11-22 every game
 production shell at 390x844 with the QA session, the bridge handshake and first frame, the game's first tap path, and
 one input that must change the frame. One game at a time; each play is capped at 170 s (`--timeout`).
 
-usage: ogm-qa-game-play [--db <ogm.sqlite3>] [--game <slug>] [--repo <checkout>] [--attention <file>]
+usage: ogm-qa-game-play [--db <ogm.sqlite3>] [--game <slug> [--build <id>]] [--repo <checkout>] [--attention <file>]
   --game       play only this game (the publish hook passes the game it published)
+  --build      play this build of that game instead of its latest tested one (the build just published)
   --attention  append one line per failing game: its failures, bridge trace, play-check.json and stills
 Stills and play-check.json land in <repo>/assets-local/review/app/play-check/<build>/. Prints one line per game and
-`exit=<n> qa-game-play`. exit 0 every game played; 1 a game failed; 64 bad usage.
+`exit=<n> qa-game-play`. exit 0 every game played; 1 a game failed (its attention line is written); 64 bad usage;
+70 the check itself crashed (no per-game line).
 """
 
 import json
 import os
+import re
 import shlex
 import sqlite3
 import subprocess
@@ -37,10 +40,19 @@ def env_file(path):
     return values
 
 
+def clean(text, limit=300):
+    """Game-sent text is untrusted: one line, no control characters, bounded, so it cannot forge attention lines."""
+    return re.sub(r'[\x00-\x1f\x7f]+', ' ', str(text))[:limit]
+
+
 def trace_line(report):
     """The bridge messages the shell received, in order, repeats folded: hello>ready>load.progress x65>load.frame."""
     seen = [entry for entry in report.get('observation', {}).get('trace', []) if entry.get('dir') in ('in', 'window')]
-    parts = [entry['t'] + (f" x{entry['n']}" if entry.get('n', 1) > 1 else '') for entry in seen[-12:]]
+    parts = [
+        (entry['t'] if re.fullmatch(r'[A-Za-z0-9._:-]{1,40}', str(entry.get('t'))) else '?')
+        + (f" x{entry['n']}" if entry.get('n', 1) > 1 else '')
+        for entry in seen[-12:]
+    ]
     return '>'.join(parts) or 'no bridge messages'
 
 
@@ -68,8 +80,11 @@ def play(gm, repo, game_id, build_id, out):
 
 def main(argv):
     args = dict(zip(argv[::2], argv[1::2]))
-    if len(argv) % 2 or set(args) - {'--db', '--game', '--repo', '--attention'}:
+    if len(argv) % 2 or set(args) - {'--db', '--game', '--build', '--repo', '--attention'}:
         print(__doc__.split('\n\n')[1], file=sys.stderr)
+        return 64
+    if '--build' in args and '--game' not in args:
+        print('ogm-qa-game-play: --build needs --game', file=sys.stderr)
         return 64
     repo = args.get('--repo') or os.path.dirname(os.path.dirname(HERE))
     api = env_file(os.path.join(os.environ.get('OGM_ENV_DIR', os.path.expanduser('~/.config/ogm/env')), 'api.env'))
@@ -90,18 +105,29 @@ def main(argv):
         if not rows:
             print(f"ogm-qa-game-play: no published game {args['--game']}", file=sys.stderr)
             return 64
+        if args.get('--build'):
+            with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as conn:
+                found = conn.execute(
+                    'select 1 from builds where id = ? and game_id = ?', (args['--build'], rows[0][0])
+                ).fetchone()
+            if not found:
+                print(f"ogm-qa-game-play: {args['--game']} has no build {args['--build']}", file=sys.stderr)
+                return 64
+            rows = [(rows[0][0], rows[0][1], args['--build'])]
     failed = 0
     for game_id, slug, build_id in rows:
         if not build_id:
+            print(f'{slug}: no tested build, not played')
             continue
         out = os.path.join(repo, 'assets-local', 'review', 'app', 'play-check', build_id)
         report = play(gm, repo, game_id, build_id, out)
         failures = report.get('failures') or []
         if not failures:
-            print(f'{slug} {build_id}: ok')
+            unchecked = report.get('unchecked') or []
+            print(f'{slug} {build_id}: ok' + (f" (unchecked: {'; '.join(clean(item) for item in unchecked)})" if unchecked else ''))
             continue
         failed = 1
-        line = f"{slug} {build_id}: {'; '.join(failures)}; trace {trace_line(report)}; stills {out}"
+        line = f"{slug} {build_id}: {'; '.join(clean(item) for item in failures)}; trace {trace_line(report)}; stills {out}"
         print(line)
         if attention:
             stamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -112,4 +138,9 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    sys.exit(main(sys.argv[1:]))
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except Exception as error:  # noqa: BLE001 - a crash must not read as "a game failed and said so"
+        print(f'ogm-qa-game-play: crashed: {error!r}', file=sys.stderr)
+        print('exit=70 qa-game-play')
+        sys.exit(70)
