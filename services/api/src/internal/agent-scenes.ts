@@ -9,7 +9,7 @@ import { InvalidSceneError, SceneBaseUnavailableError } from '@ogm/design-log';
 import type { ApiBindings } from '../app/types.js';
 import { findGameForFamily } from '../games/games.js';
 import { sharedScene } from '../scenes/routes.js';
-import { seedScene, writeScene } from '../scenes/store.js';
+import { seedRefusal, seedScene, writeScene } from '../scenes/store.js';
 import type { HookIdentityResolver } from './bundle.js';
 
 const PushSchema = z.strictObject({
@@ -63,9 +63,10 @@ export function agentSceneRoutes(opts: { identityForSecret: HookIdentityResolver
       const found = await target(c);
       if ('error' in found) return found.error;
       const body = SeedSchema.safeParse(await c.req.json().catch(() => undefined));
-      if (!body.success || body.data.head.doc.scene !== found.scene || body.data.log.length !== body.data.head.rev) {
-        return c.json({ error: { code: 'invalid_request' } }, 400);
-      }
+      if (!body.success) return c.json({ error: { code: 'invalid_request' } }, 400);
+      const refused = seedRefusal(body.data, { game: found.game.slug ?? '', scene: found.scene }, { agentOnly: true });
+      if (refused)
+        return c.json({ error: { code: 'invalid_request', message: `cannot start the scene: ${refused}` } }, 400);
       c.header('cache-control', 'no-store');
       return c.json(seedScene(c.get('deps').db, found.game.id, body.data, new Date()));
     })

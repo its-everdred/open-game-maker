@@ -147,7 +147,7 @@ export type SceneSummary = { id: string; rev: number; author: string; updatedAt:
 export type SceneFiles = { head: SceneHead; log: SceneRevision[] };
 
 /** One scene's committed head and log, read the way `gm scene pull` reads them; undefined when pull would refuse it. */
-async function readSceneIn(dir: string, id: string): Promise<SceneFiles | undefined> {
+async function readSceneIn(dir: string, id: string, game?: string): Promise<SceneFiles | undefined> {
   if (!SceneIdSchema.safeParse(id).success) return undefined;
   try {
     const head = JSON.parse(await readFile(await contained(dir, `${id}.scene.json`), 'utf8')) as {
@@ -157,7 +157,7 @@ async function readSceneIn(dir: string, id: string): Promise<SceneFiles | undefi
     const rev = head.rev;
     if (typeof rev !== 'number' || !Number.isInteger(rev) || rev < 1) return undefined;
     const doc = migrateScene(head.doc).doc;
-    if (doc.scene !== id) return undefined;
+    if (doc.scene !== id || (game !== undefined && doc.game !== game)) return undefined;
     const lines = (await readFile(await contained(dir, `${id}.revs.jsonl`), 'utf8'))
       .split('\n')
       .filter((line) => line.trim())
@@ -191,14 +191,14 @@ export async function readSceneFiles(checkout: string, gamePath: string, id: str
  * read the way `gm scene pull` reads it: the head holds a valid document for that scene, and its log holds revisions
  * 1..rev in order (lines after `rev` never committed). A scene that `gm scene pull` would refuse is left out.
  */
-export async function listSceneDocs(checkout: string, gamePath: string): Promise<SceneSummary[]> {
+export async function listSceneDocs(checkout: string, gamePath: string, game?: string): Promise<SceneSummary[]> {
   const dir = await scenesDir(checkout, gamePath);
   if (!dir) return [];
   const scenes: SceneSummary[] = [];
   for (const name of (await readdir(dir)).sort()) {
     if (!name.endsWith('.scene.json')) continue;
     const id = name.slice(0, -'.scene.json'.length);
-    const files = await readSceneIn(dir, id);
+    const files = await readSceneIn(dir, id, game);
     if (!files) continue;
     const last = files.log[files.head.rev - 1]!;
     scenes.push({ id, rev: files.head.rev, author: last.author, updatedAt: last.createdAt });

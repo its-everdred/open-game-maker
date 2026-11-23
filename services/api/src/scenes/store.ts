@@ -10,7 +10,7 @@ import {
   type SceneSource,
 } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
-import { commitScene, type CommitSceneResult } from '@ogm/design-log';
+import { commitScene, isAgent, type CommitSceneResult } from '@ogm/design-log';
 
 /**
  * The shared scene store (#1209): #1207's head and revision log in the API's database, so the creator's map maker and
@@ -62,6 +62,26 @@ export function listScenes(db: Db, gameId: string): SceneListing[] {
     const last = SceneRevisionSchema.parse(JSON.parse(row.revision));
     return [{ id: scene, rev, author: last.author, updatedAt: last.createdAt }];
   });
+}
+
+/**
+ * Why a head and log may not start a game's shared scene, or undefined when they may: it must be this game's scene, and
+ * its log revisions 1..rev in order. `agentOnly` is for history an agent sends: only the API records a creator's
+ * revision, so a sent log naming one is refused rather than trusted to lock units against every other agent.
+ */
+export function seedRefusal(
+  store: SceneStore,
+  ids: { game: string; scene: string },
+  options: { agentOnly?: boolean } = {},
+): string | undefined {
+  if (store.head.doc.game !== ids.game || store.head.doc.scene !== ids.scene) return 'it is another game or scene';
+  if (store.log.length !== store.head.rev || store.log.some((revision, index) => revision.rev !== index + 1)) {
+    return `its log is not revisions 1..${store.head.rev} in order`;
+  }
+  if (options.agentOnly && store.log.some((revision) => !isAgent(revision.author))) {
+    return "it holds a creator's revision";
+  }
+  return undefined;
 }
 
 /**

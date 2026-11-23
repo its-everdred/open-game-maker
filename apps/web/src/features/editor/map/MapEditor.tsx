@@ -216,8 +216,20 @@ function MapEditorReady({
     setSaving(true);
     try {
       const result = await saveEditorScene(gameId, scene, { baseRev: draft.rev, doc, label: 'Map maker' });
-      /* The head comes back with Kevin's units locked (and any agent work merged around them). */
-      setDraft({ ...draft, rev: result.rev, saved: result.doc, history: { ...draft.history, present: result.doc } });
+      /* Edits made while the save was out are newer than this render's draft: start from the kept one. */
+      const latest = drafts.get(`${gameId}/${scene}`) ?? draft;
+      if (latest.history.present === doc) {
+        /* The head comes back with Kevin's units locked (and any agent work merged around them). */
+        setDraft({
+          ...latest,
+          rev: result.rev,
+          saved: result.doc,
+          history: { ...latest.history, present: result.doc },
+        });
+      } else {
+        /* Keep the newer edits on screen and unsaved; the next save sends them on top of this revision. */
+        setDraft({ ...latest, rev: result.rev, saved: result.doc });
+      }
     } catch {
       pushToast('Not saved');
     } finally {
@@ -251,6 +263,12 @@ function MapEditorReady({
         onPress={onPress}
         onDrag={applyStroke}
         onRelease={onRelease}
+        onCancel={() => {
+          /* Two fingers mean looking around: the stroke or drag they interrupted leaves the map as it was. */
+          stroke.current = undefined;
+          setStrokeDoc(undefined);
+          setDragTo(undefined);
+        }}
         onHover={(at) => setHover(at?.cell)}
       >
         {tool === 'select' && selected && selectedTile && !dragTo ? (

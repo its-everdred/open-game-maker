@@ -6,7 +6,8 @@ import { isoToWorld, worldToIso, type IsoPoint } from './map.js';
 const TILE_WIDTH = 128;
 const TILE_HEIGHT = 64;
 /** Pixel row of a facing image that `IsoMap` puts on the tile centre (the middle of the ground diamond). */
-const IMAGE_ANCHOR_Y = 208;
+export const SCENE_IMAGE_ANCHOR_Y = 208;
+const IMAGE_ANCHOR_Y = SCENE_IMAGE_ANCHOR_Y;
 const LAYER_DEPTH: Record<Layer, number> = { floor: 0, wall: 0.1, decor: 0.2, roof: 0.3 };
 
 /** One tile as `IsoMap.render` draws it: the facing image's top centre sits `anchorY` above `center`. */

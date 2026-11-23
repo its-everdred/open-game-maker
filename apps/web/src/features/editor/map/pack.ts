@@ -3,6 +3,7 @@ import {
   cellCenter,
   sceneDrawList,
   sceneExtent,
+  SCENE_IMAGE_ANCHOR_Y,
   smallScaleIntSceneAdapter,
   SMALLSCALEINT_SCENE_ADAPTER,
   type SceneDrawPiece,
@@ -25,6 +26,8 @@ export type MapPack = {
   extent(doc: SceneDoc): { left: number; top: number; width: number; height: number };
   cellAt(doc: SceneDoc, point: Point): Cell | undefined;
   cellCenter(doc: SceneDoc, cell: Cell): Point;
+  /** How far above its cell centre a piece's image starts, for drawing a piece that is not in the scene yet. */
+  anchorY: number;
   /** The tile layer a piece goes on (one of `groups`). */
   layerFor(asset: string): string;
   /** The tray's groups, in order. */
@@ -49,6 +52,7 @@ function smallScaleInt(sprites: Sprites): MapPack {
     extent: sceneExtent,
     cellAt,
     cellCenter: (doc, cell) => cellCenter(doc, cell.x, cell.y),
+    anchorY: SCENE_IMAGE_ANCHOR_Y,
     layerFor: (asset) => rules.layerFor(asset),
     groups: ['floor', 'wall', 'decor', 'roof'],
   };

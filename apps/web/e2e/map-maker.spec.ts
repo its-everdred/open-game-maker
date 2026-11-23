@@ -162,6 +162,22 @@ async function installScene(page: Page, store: Store) {
   return saves;
 }
 
+/** The scene as an agent left it: revision 1, before Kevin opens it. */
+function agentScene(): Store {
+  const first = commitScene({
+    head: { rev: 0, doc: emptyScene('dusk-helm', 'goblin-cave', 'smallscaleint') },
+    log: [],
+    doc: fixture.doc,
+    baseRev: 0,
+    author: 'agent:1208',
+    source: 'cli',
+    label: 'convert the goblin cave',
+    now: new Date('2026-11-22T00:00:00Z'),
+  });
+  if (!first.ok || !first.revision) throw new Error('fixture scene');
+  return { head: first.head, log: [first.revision] };
+}
+
 async function openEditor(page: Page) {
   await installAuthRoutes(page, { signedIn: true });
   await installGameApi(page, undefined, 'Dusk Helm');
@@ -247,18 +263,7 @@ for (const viewport of [
     }
     const page = recording ? await recording.newPage() : shared;
     await page.setViewportSize(size);
-    const first = commitScene({
-      head: { rev: 0, doc: emptyScene('dusk-helm', 'goblin-cave', 'smallscaleint') },
-      log: [],
-      doc: fixture.doc,
-      baseRev: 0,
-      author: 'agent:1208',
-      source: 'cli',
-      label: 'convert the goblin cave',
-      now: new Date('2026-11-22T00:00:00Z'),
-    });
-    if (!first.ok || !first.revision) throw new Error('fixture scene');
-    const store: Store = { head: first.head, log: [first.revision] };
+    const store = agentScene();
     await openEditor(page);
     const saves = await installScene(page, store);
     await page.goto('/g/game?mode=edit&scene=goblin-cave&test', { waitUntil: 'domcontentloaded' });
@@ -353,3 +358,41 @@ for (const viewport of [
     await recording?.close();
   });
 }
+
+test('edits made while a save is on its way are kept for the next save', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop' || real, 'one synthetic run covers the race');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const store = agentScene();
+  await openEditor(page);
+  const saves = await installScene(page, store);
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let first = true;
+  await page.route('**/api/v1/games/game/editor/scenes/goblin-cave/revisions', async (route) => {
+    // Kevin's first save is slow; he keeps painting before it lands.
+    if (first) {
+      first = false;
+      await held;
+    }
+    await route.fallback();
+  });
+  await page.goto('/g/game?mode=edit&scene=goblin-cave&test', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('button', { name: 'Saved' })).toBeDisabled({ timeout: 30_000 });
+  await page.getByRole('tab', { name: 'Decor' }).click();
+  await page.getByRole('option', { name: /^Chest a1$/i }).click();
+  await tap(page, ...(at.place as [number, number]));
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('tab', { name: 'Floor' }).click();
+  await page.getByRole('option', { name: /^Ground b1$/i }).click();
+  await tap(page, 6, 6);
+  release();
+  await expect.poll(() => saves.length).toBe(1);
+  // The answer to the first save must not wipe the cell painted after it was sent.
+  await expect(page.getByRole('button', { name: 'Save' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('button', { name: 'Saved' })).toBeDisabled();
+  expect(saves).toHaveLength(2);
+  expect(saves[1]!.baseRev).toBe(2);
+  expect(store.head.doc.layers.floor!.tiles!['6,6']).toMatchObject({ asset: pieces.ground });
+  expect(store.head.doc.layers.decor!.tiles![`${at.place[0]},${at.place[1]}`]).toMatchObject({ asset: pieces.chest });
+});

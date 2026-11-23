@@ -74,17 +74,22 @@ describe('map edits', () => {
     expect(copy.doc.layers.decor!.tiles!['0,0']).toEqual({ asset: 'chest', facing: 'E' });
   });
 
-  it('lets the pack re-pick joined pieces around every changed cell', () => {
+  it('lets the pack re-pick joined pieces around every changed cell, and keeps its picks', () => {
     const calls: string[][] = [];
+    // A fence pack turns the piece beside a changed cell to join it, as the autotile rules will.
     const joining: ScenePackAdapter = {
       ...adapter,
-      autotile: (doc, _layer, cells) => {
+      autotile: (doc, layer, cells) => {
         calls.push([...cells]);
-        return { layers: doc.layers, objects: doc.objects };
+        const tiles = { ...doc.layers[layer]!.tiles };
+        if (tiles['1,1']) tiles['1,1'] = { ...tiles['1,1'], facing: 'S' };
+        return { layers: { ...doc.layers, [layer]: { ...doc.layers[layer]!, tiles } }, objects: doc.objects };
       },
     };
-    const doc = paint(scene(), joining, 'decor', { x: 2, y: 2 }, 'fence');
-    move(doc, joining, { layer: 'decor', cell: '2,2' }, { x: 0, y: 1 });
+    const painted = paint(scene(), joining, 'decor', { x: 2, y: 2 }, 'fence');
+    expect(painted.layers.decor!.tiles!['1,1']!.facing).toBe('S');
+    const moved = move(painted, joining, { layer: 'decor', cell: '2,2' }, { x: 0, y: 1 });
+    expect(moved.layers.decor!.tiles!['0,1']).toEqual({ asset: 'fence', facing: 'E' });
     expect(calls).toEqual([['2,2'], ['2,2', '0,1']]);
   });
 

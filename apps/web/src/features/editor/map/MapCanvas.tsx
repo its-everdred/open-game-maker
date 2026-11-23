@@ -69,12 +69,18 @@ function urlOf(sprites: Sprites, piece: Pick<SceneDrawPiece, 'asset' | 'facing'>
   return facings?.[piece.facing] ?? (facings ? Object.values(facings)[0] : undefined);
 }
 
-function diamond(context: CanvasRenderingContext2D, center: Point) {
+/** A cell's outline, from the pack's own cell centres at its corners (a diamond on an iso grid). */
+function cellShape(context: CanvasRenderingContext2D, pack: MapPack, doc: SceneDoc, cell: Cell) {
   context.beginPath();
-  context.moveTo(center.x, center.y - 32);
-  context.lineTo(center.x + 64, center.y);
-  context.lineTo(center.x, center.y + 32);
-  context.lineTo(center.x - 64, center.y);
+  for (const [dx, dy] of [
+    [-0.5, -0.5],
+    [0.5, -0.5],
+    [0.5, 0.5],
+    [-0.5, 0.5],
+  ] as const) {
+    const point = pack.cellCenter(doc, { x: cell.x + dx, y: cell.y + dy });
+    context.lineTo(point.x, point.y);
+  }
   context.closePath();
 }
 
@@ -89,6 +95,7 @@ export function MapCanvas({
   onPress,
   onDrag,
   onRelease,
+  onCancel,
   onHover,
   children,
 }: {
@@ -105,6 +112,8 @@ export function MapCanvas({
   onPress(pointer: MapPointer): PressResult;
   onDrag(pointer: MapPointer): void;
   onRelease(pointer: MapPointer): void;
+  /** A stroke or drag that ended without landing: a second finger turned it into a pinch, or the browser took it. */
+  onCancel(): void;
   onHover(pointer: MapPointer | undefined): void;
   /** Shown above the selected piece (its actions). */
   children?: ReactNode;
@@ -158,13 +167,13 @@ export function MapCanvas({
     const reload = () => setLoaded((count) => count + 1);
     const style = getComputedStyle(element);
     const color = (name: string) => style.getPropertyValue(name).trim();
-    const drawPiece = (piece: Pick<SceneDrawPiece, 'asset' | 'facing' | 'center' | 'anchorY'>) => {
+    const drawPiece = (piece: Pick<SceneDrawPiece, 'asset' | 'facing' | 'center' | 'anchorY' | 'x' | 'y'>) => {
       const url = urlOf(sprites, piece);
       const img = url ? image(url, reload) : undefined;
       if (img) {
         context.drawImage(img, piece.center.x - img.naturalWidth / 2, piece.center.y - piece.anchorY);
       } else {
-        diamond(context, piece.center);
+        cellShape(context, pack, doc, piece);
         context.fillStyle = color('--map-empty');
         context.fill();
       }
@@ -193,13 +202,13 @@ export function MapCanvas({
     for (const piece of pieces) {
       drawPiece(piece);
       if (piece.floor && selected && piece.unit === `tile:${selected.layer}:${selected.cell}`) {
-        diamond(context, piece.center);
+        cellShape(context, pack, doc, piece);
         context.fillStyle = color('--map-select-fill');
         context.fill();
       }
     }
     const outline = (cell: Cell, color: string) => {
-      diamond(context, pack.cellCenter(doc, cell));
+      cellShape(context, pack, doc, cell);
       context.lineWidth = 3 / view.scale;
       context.strokeStyle = color;
       context.stroke();
@@ -208,7 +217,7 @@ export function MapCanvas({
     if (selected) outline(parseCell(selected.cell), color('--map-select'));
     if (ghost) {
       context.globalAlpha = 0.6;
-      drawPiece({ ...ghost, center: pack.cellCenter(doc, ghost.cell), anchorY: 208 });
+      drawPiece({ ...ghost, ...ghost.cell, center: pack.cellCenter(doc, ghost.cell), anchorY: pack.anchorY });
       context.globalAlpha = 1;
     }
   });
@@ -282,6 +291,7 @@ export function MapCanvas({
           event.currentTarget.setPointerCapture?.(event.pointerId);
           pointers.current.set(event.pointerId, local(event));
           if (pointers.current.size === 2) {
+            if (gesture.current?.kind === 'drag') onCancel();
             const [a, b] = [...pointers.current.values()] as [Point, Point];
             gesture.current = {
               kind: 'pinch',
@@ -339,6 +349,7 @@ export function MapCanvas({
         }}
         onPointerCancel={(event) => {
           pointers.current.delete(event.pointerId);
+          if (gesture.current?.kind === 'drag') onCancel();
           gesture.current = undefined;
         }}
         onPointerLeave={() => onHover(undefined)}

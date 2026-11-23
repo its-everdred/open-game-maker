@@ -12,7 +12,7 @@ import type { ApiBindings } from '../app/types.js';
 import { authorizedGame } from '../games/authorize.js';
 import type { GameRow } from '../games/games.js';
 import { readGameLock, readSceneFiles } from '../scenery/source.js';
-import { creatorAuthor, readScene, seedScene, writeScene, type SceneStore } from './store.js';
+import { creatorAuthor, readScene, seedRefusal, seedScene, writeScene, type SceneStore } from './store.js';
 
 export const prefix = '/api/v1';
 
@@ -34,7 +34,9 @@ export async function sharedScene(
   if (stored) return stored;
   const target = checkoutOf(c, game);
   const files = target ? await readSceneFiles(target.checkout, target.path, scene).catch(() => undefined) : undefined;
-  return files ? seedScene(db, game.id, files, new Date()) : undefined;
+  /* A scene file copied from another game must not become this game's shared scene. */
+  if (!files || !game.slug || seedRefusal(files, { game: game.slug, scene })) return undefined;
+  return seedScene(db, game.id, files, new Date());
 }
 
 /**
