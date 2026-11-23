@@ -7,6 +7,7 @@ import { EventRing } from './events.js';
 import { SdkHostApi, type SendEnvelope } from './host-api.js';
 import { RuntimeImpl, type BuildKind, type Runtime } from './runtime.js';
 import { GM_PAUSED_FLAG, GM_PAUSE_EVENT } from '../audio/unlock.js';
+import { deliverMenuFrame, setMenuActionKinds } from '../menu/host-frames.js';
 import { createNetController } from '../net/index.js';
 import { createSaveMachine, type SaveMachine } from '../saves/machine.js';
 import { createSaveThumbnailCache } from '../saves/thumbnail.js';
@@ -62,6 +63,7 @@ function readyManifest<D, S>(manifest: GameManifest, instance: GameInstance<D, S
 
 export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions = {}): Promise<Runtime<D, S>> {
   const configuredHostOrigin = options.hostOrigin ?? module.manifest.hostOrigin;
+  setMenuActionKinds(module.manifest.inputs.actions);
   const hostOrigin = configuredHostOrigin ? canonicalOrigin(configuredHostOrigin) : originFromDocument();
   const marks: [string, number][] = [['start', markNow()]];
   const queued: HostToGame[] = [];
@@ -374,6 +376,8 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
           );
           return;
         case 'input.frame':
+          // Paused means the host's own dialog has the controls; the game's menus must not react under it.
+          if (!active.clock.paused) deliverMenuFrame(envelope.payload as ActionFrame);
           active.acceptHostFrame(envelope.payload as ActionFrame);
           return;
         case 'viewport':
