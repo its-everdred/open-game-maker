@@ -345,6 +345,29 @@ test('names a blocked microphone and a refused voice token at 390x844', async ({
   await expect.poll(() => reports).toContainEqual(expect.objectContaining({ action: 'voice', code: 'api_403' }));
 });
 
+test('names a message the build chat could not send at 390x844', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installAuthRoutes(page, { signedIn: true });
+  await installBuildRoutes(page);
+  const reports: unknown[] = [];
+  await page.route('**/api/v1/jobs/*/chat*', (route) =>
+    route.request().method() === 'POST' ? json(route, { error: 'internal' }, 500) : route.fallback(),
+  );
+  await page.route('**/api/v1/voice/client-error', async (route) => {
+    reports.push(route.request().postDataJSON());
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto('/all?test');
+  await openBuildChat(page);
+
+  const textarea = page.locator('#chat-dock-slot aiur-composer textarea');
+  await textarea.fill('Make the door glow');
+  await textarea.press('Enter');
+  await expect(page.locator('.build-chat-panel [role="alert"]')).toHaveText('Message not sent. (send: api_500)');
+  await page.screenshot({ path: testInfo.outputPath('send-500.png') });
+  await expect.poll(() => reports).toContainEqual(expect.objectContaining({ action: 'send', code: 'api_500' }));
+});
+
 async function installBuildRoutes(page: Page, options: { brokenPicker?: boolean; posts?: unknown[] } = {}) {
   await page.route('**/api/v1/games', (route) =>
     json(route, {
