@@ -11,10 +11,10 @@ import { TicketDetail } from './TicketDetail';
 import type { PastTicket } from './usePastTickets';
 import type { WorkerReview } from './useWorkerReviews';
 import type { FinishedWorker } from './useWorkerFinishes';
-import { readUpdates, useNotify } from '../../lib/notify/slice';
+import { readUpdates, useNotify, type Update } from '../../lib/notify/slice';
 import './build-tracker.css';
 
-const EMPTY_UPDATES: readonly { id: number; text: string }[] = [];
+const EMPTY_UPDATES: readonly Update[] = [];
 
 export type WorkerBuild = {
   ticket: string;
@@ -170,9 +170,11 @@ export function BuildPanel({
   jobs = [],
   finished = [],
   id,
+  gameId,
   onClose,
-}: PanelProps & { id: string; onClose?(): void }) {
-  const updates = useNotify((state) => (state.updateOwner === creatorId ? state.updates : EMPTY_UPDATES));
+}: PanelProps & { id: string; gameId?: string; onClose?(): void }) {
+  const allUpdates = useNotify((state) => (state.updateOwner === creatorId ? state.updates : EMPTY_UPDATES));
+  const updates = gameId === undefined ? allUpdates : allUpdates.filter((update) => update.gameId === gameId);
   const [modal, setModal] = useState<'review' | 'completed' | undefined>();
   const [filtered, setFiltered] = useState(false);
   const [selectedReview, setSelectedReview] = useState<WorkerReview>();
@@ -208,7 +210,6 @@ export function BuildPanel({
           ))}
         </ul>
       )}
-      {workerError && <p role="alert">Could not load all build updates.</p>}
       {reviewError && <p role="alert">Could not load all reviews.</p>}
       {reviewCount > 0 && (
         <button

@@ -926,7 +926,7 @@ describe('StudioMenu', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     setUpdateOwner('user-1');
     const view = renderMenu(path);
-    act(() => pushUpdate('Private build update'));
+    act(() => pushUpdate('Private build update', 'game-blobs'));
     expect(screen.queryByText('Private build update')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Menu' }).querySelector('.studio-menu-badge')).toHaveTextContent('1');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
