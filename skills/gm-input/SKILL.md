@@ -49,6 +49,16 @@ The host owns gamepad discovery, standard mapping, connection changes, and rebin
 including safe areas and 64 px primary targets. Games declare actions and normally leave touch buttons to the host; existing games with their own controls
 set `inputs.touch` to `self`. Games do not remember device bindings. Keyboard fallback and per-player device assignment are host settings.
 
+## Menus
+
+Menus are not gameplay. Build each menu (title, class select, dialogs, won and lost) as DOM buttons, open it with
+`createMenu({ root, onBack })` from `@gm/sdk/menu`, and dispose the menu on close. The on-screen stick, a keyboard
+(arrows, Enter or Space, Escape), any gamepad (D-pad or left stick, A, B) and touch then move focus and press;
+on-screen A is the first declared button and B the third, so declare confirm and back in those slots. Mark the main
+action `data-gm-primary` so A on the title starts the game, and style `[data-gm-focus]` in the game's UI kit (the
+SDK's plain outline shows until you do). Newer menus take input until disposed; none react while the host's pause
+dialog is open. Never hand-roll menu key or pad handling; a gm-qa journey step pressing on-screen A checks it.
+
 ## Verify
 
 Write one input script per important action path, including a second `playerIndex`, an edge held across ticks, and

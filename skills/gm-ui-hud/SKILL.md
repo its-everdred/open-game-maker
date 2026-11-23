@@ -55,7 +55,7 @@ player sees what a phone player sees.
 
 List the game's screens before building them: title, play, paused, won, and lost. Paused is the host's dialog over a
 frozen game; the others are the game's, and each needs a clear way forward (start, retry, next) reachable by every
-declared input.
+declared input. Build menus with `createMenu` (gm-input's Menus).
 
 - Title: `gm run --viewport both --frames 0,2,5`. Its stills come from a fresh run; inputs do not reach them.
 - Play, won, and lost: write one input script that reaches each, then `gm test --inputs won.json --ticks 900`

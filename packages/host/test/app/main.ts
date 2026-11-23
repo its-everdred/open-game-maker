@@ -30,7 +30,7 @@ const game =
     : {
         build: 'draft' as const,
         buildId: 'draft-1',
-        gameId: 'fixture',
+        gameId: template === 'menu' ? 'menu-game' : 'fixture',
         mode: 'play' as const,
       };
 const frame = createGameFrame({
@@ -42,7 +42,9 @@ const frame = createGameFrame({
   mode: game.mode,
   playerIndex: 0,
   capabilities: [],
-  inputMapping: { touch: 'stick', gamepad: { move: 'leftStick', jump: 'a', use: 'x' } },
+  // The menu game keeps the host's default pad layout, the one its menus read.
+  inputMapping:
+    template === 'menu' ? undefined : { touch: 'stick', gamepad: { move: 'leftStick', jump: 'a', use: 'x' } },
   role: () => 'owner',
   onReady: (manifest) => ready.push(manifest),
   onAudioRelay: (payload) => relays.push(payload),

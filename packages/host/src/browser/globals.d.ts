@@ -8,4 +8,6 @@ interface Window {
   __frames: { source?: string }[];
   __taps: number;
   __cacheReady: Promise<unknown>;
+  __started: boolean;
+  __pad: { buttons: { pressed: boolean; touched: boolean; value: number }[] };
 }

@@ -18,7 +18,7 @@
   "scripts": {
     "build": "tsc -b && pnpm run build:sw",
     "build:sw": "esbuild src/sw/game-cache.ts --bundle --format=iife --platform=browser --outfile=dist/game-cache.js",
-    "build:fixtures": "esbuild test/app/main.ts test/stub-game/main.ts --bundle --format=esm --platform=browser --outdir=dist/test --outbase=test --entry-names=[dir]/[name]",
+    "build:fixtures": "esbuild test/app/main.ts test/stub-game/main.ts test/menu-game/main.ts --bundle --format=esm --platform=browser --outdir=dist/test --outbase=test --entry-names=[dir]/[name]",
     "pretypecheck": "pnpm --filter @ogm/contracts build && pnpm --filter @ogm/iframe-bridge build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "pnpm --filter @ogm/contracts build && pnpm --filter @ogm/iframe-bridge build",
@@ -32,6 +32,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@gm/sdk": "workspace:*",
     "@playwright/test": "1.64.1",
     "esbuild": "0.28.2",
     "jsdom": "27.4.0",

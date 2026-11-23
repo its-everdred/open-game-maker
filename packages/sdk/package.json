@@ -52,6 +52,10 @@
       "types": "./dist/input/index.d.ts",
       "import": "./dist/input/index.js"
     },
+    "./menu": {
+      "types": "./dist/menu/index.d.ts",
+      "import": "./dist/menu/index.js"
+    },
     "./nav": {
       "types": "./dist/nav/index.d.ts",
       "import": "./dist/nav/index.js"

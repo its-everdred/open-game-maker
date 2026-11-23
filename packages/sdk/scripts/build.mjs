@@ -19,6 +19,7 @@ await build({
     'hd2d/index': 'src/hd2d/index.ts',
     'hd2d/schemas': 'src/hd2d/schemas.ts',
     'input/index': 'src/input/index.ts',
+    'menu/index': 'src/menu/index.ts',
     'nav/index': 'src/nav/index.ts',
     'phaser/index': 'src/phaser/index.ts',
     'proc/index': 'src/proc/index.ts',

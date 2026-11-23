@@ -57,6 +57,13 @@ const game = createServer(async (request, response) => {
     requestCounts.set(path, (requestCounts.get(path) ?? 0) + 1);
   }
   if (path === '/game.js') return file(response, `${root}/dist/test/stub-game/main.js`);
+  if (path === '/g/menu-game/draft-1/game.js') return file(response, `${root}/dist/test/menu-game/main.js`);
+  if (path === '/g/menu-game/draft-1/index.html') {
+    return html(
+      response,
+      '<!doctype html><meta charset="utf-8"><div id="title"><button id="settings">Settings</button><button id="play" data-gm-primary>Play</button></div><script type="module" src="./game.js"></script>',
+    );
+  }
   if (/^\/g\/[^/]+\/[^/]+\/game\.js$/.test(path)) {
     return file(response, `${root}/dist/test/stub-game/main.js`, { 'cache-control': 'no-store' });
   }
