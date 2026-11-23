@@ -313,14 +313,15 @@ describe('GamesScreen', () => {
     await waitFor(() => expect(pause).toHaveBeenCalled());
   });
 
-  it('does not open a game via Enter while its new build is running', async () => {
+  // Kevin: a game is always playable or editable at once; the game screen shows its loading screen until ready.
+  it('opens a game via Enter even while its new build is running', async () => {
     jobsResponse = [{ ...jobs[0]!, gameId: 'g_2' }];
     renderGames('/all?test');
     const tile = await screen.findByRole('button', { name: /^Goblin Cellar:/ });
     fireEvent.click(tile);
-    expect(await screen.findByRole('button', { name: 'Play Goblin Cellar' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Play Goblin Cellar' })).toBeEnabled();
     fireEvent.keyDown(screen.getByRole('grid', { name: 'Your games' }), { key: 'Enter' });
-    expect(screen.getByTestId('location')).toHaveTextContent('/all');
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/g/g_2'));
   });
 
   it('stops a gesture-started trailer if the screen unmounts before the detail mounts', async () => {
@@ -411,8 +412,9 @@ describe('GamesScreen', () => {
     expect(screen.queryByText(/Your library|My games|Selected game|Choose what happens next|Versions/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Close game' })).toContainHTML('<svg');
     expect(screen.queryByRole('listitem', { name: 'main' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Play Midnight Crumbs' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Edit Midnight Crumbs' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Edit Midnight Crumbs' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Play Midnight Crumbs' }));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/g/g_1?mode=play'));
   });
 
   it('uses the prototype creation affordance without adding helper copy', async () => {

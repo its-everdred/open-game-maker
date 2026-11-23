@@ -492,6 +492,21 @@ describe('GameScreen', () => {
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
   });
 
+  // Kevin: the loading screen must show the game's own art and logo, never a grey placeholder.
+  it("shows the games list's art and logo while game metadata is pending", async () => {
+    editorApi.getGame.mockImplementation(() => new Promise(() => undefined));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(
+      ['games', 'u_1'],
+      [{ id: 'game', familyId: 'f', title: 'Goblin Cellar', coverUrl: '/cover.png', logoUrl: '/logo.png' }],
+    );
+    const { container } = renderGame('/g/game', client);
+    await waitFor(() => expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument());
+    expect(container.querySelector('.game-loading-cover img')).toHaveAttribute('src', '/cover.png');
+    expect(container.querySelector('.game-loading-logo')).toHaveAttribute('src', '/logo.png');
+    expect(container.querySelector('.game-cover-placeholder')).toBeNull();
+  });
+
   it('shows the loading layer while the build is being discovered', async () => {
     editorApi.getDesignSnapshot.mockImplementation(() => new Promise(() => undefined));
 

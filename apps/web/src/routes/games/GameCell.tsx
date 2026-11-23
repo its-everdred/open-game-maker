@@ -19,7 +19,7 @@ export function GameCell({
 }) {
   if (selected) {
     preloadDisplayImage(game.coverImage, game.coverUrl, '(max-width: 600px) 85vw, (max-width: 1000px) 50vw, 640px');
-    preloadDisplayImage(game.logoImage, game.logoUrl, '(max-width: 600px) 55vw, 320px');
+    preloadDisplayImage(game.logoImage, game.logoUrl, '(max-width: 600px) 80vw, 560px');
   }
   const cell = useRef<HTMLDivElement>(null);
   const lastSpotlight = useRef<ReactNode>(null);

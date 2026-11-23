@@ -795,8 +795,8 @@
   z-index: 4;
   left: 50%;
   top: 50%;
-  width: min(65%, 360px);
-  max-height: 40%;
+  width: min(78%, 560px);
+  max-height: 80%;
   object-fit: contain;
   transform: translate(-50%, -50%);
   pointer-events: none;
