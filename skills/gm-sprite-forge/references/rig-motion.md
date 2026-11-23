@@ -206,7 +206,8 @@ base bodies, not on those meshes:
 - Base bodies set `"finish": "base"` with `pack.idle`. The attack is scored against the class's own clip: Warrior
   Attack1 (`chop`), Wizard CastSpell (`cast`), Ranger QuickShot (`bow`).
 - The class weapon goes in `weapon` on the hand bone, never fused into the body. With nothing fused, the fit's
-  weapon cut-off does nothing.
+  weapon cut-off does nothing. Size it to the pack clip, not the default: the Warrior's KayKit `axe_1handed` needs
+  `"length": 0.75` (at 0.35 it vanished into the fist at 1x), the Ranger's `bow_withString` `0.9` with `"roll": 90`.
 
 Dry run (2026-11-22, unapproved base bodies, workbench, debug only): the fit lands knees, elbows, wrists and ankles on
 the joints of all six bodies (`landmarks.png`), with no tearing at sprite scale. Hand-keyed walks score 0.32-0.58 with
