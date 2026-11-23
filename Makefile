@@ -20,6 +20,7 @@ test-py:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_fal3d.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_sampling.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_posekey.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_guard_walk.py
 	$(MAKE) py-compile
 
 test-py-models:

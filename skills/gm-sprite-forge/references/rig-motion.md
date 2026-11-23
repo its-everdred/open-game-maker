@@ -224,6 +224,26 @@ OGM_FAL_LEDGER=<costs.json> OGM_FAL_STOP_USD=<cap> gm py -- skills/gm-sprite-for
   <out>/gen 0.80 model_url=@<base body>.glb skeleton_template=mixamo height_meters=1.8 enable_animation=true animation_action_id=92
 ```
 
+**Many library clips in one call (#1282 round 3).** `fal-ai/meshy/rigging/multi-animation` rigs once and returns up to
+10 library clips (`animation_action_ids`, request order, files `animations_<i>_animation_glb.glb`, action
+`Armature|<Name>|baselayer_Armature`): $0.20 plus $0.12 a clip on the model page, $0.80 in `fal3d.py price`; book the
+higher ($1.40 for 10). Ten clips took 90 s. Names and ids come from the library table
+(https://docs.meshy.ai/en/api/animation-library); guarded walks: 21 Walk_Fight_Forward, 119 Slow_Orc_Walk,
+559 Sneaky_Walk, 560 Spear_Walk, 112 Monster_Walk, 524 Cautious_Crouch_Walk_Forward; weapon attacks: 4 Attack,
+92 Double_Combo_Attack, 105 Triple_Combo_Attack, 128 Heavy_Hammer_Swing, 237 Charged_Axe_Chop, 238 Axe_Spin_Attack,
+242 Charged_Slash.
+
+```sh
+... fal3d.py run fal-ai/meshy/rigging/multi-animation <out>/gen 1.40 model_url=@<base body>.glb skeleton_template=mixamo \
+  height_meters=1.8 'animation_action_ids=[21,119,559,560,112,4,128,237,242,105]'
+```
+
+Guarded stepping in long mocap takes: `motion/bvh_track.py` (Blender) dumps the joints of BVH takes and
+`motion/guard_walk.py <tracks.json> <out.json>` ranks one-cycle windows by forward lean, a low head and both hands up
+in front, keeping steady forward travel with the toes along it; the three LaFAN1 fight takes give 69 such cycles. Play
+one as `kind: copy` with `frames: [f0, f1]` and `in_place`. The Synty Goblin Locomotion walk (owned, local only) maps
+onto the Meshy rig by name (Shoulder/Elbow are the upper arm and forearm, Ankle the foot, Ball the toe).
+
 Check every cell frame by frame against the pack clip: `gm py -- skills/gm-sprite-forge/scripts/motion/pose_overlay.py
 <out.png> <pack sheet> <cell_dir> ... [--rows 1,2] [--zoom 3]` lays each frame's silhouette over the pack's (pack red,
 ours cyan, both white) and writes the per-frame IoU to `<out>.json`.
