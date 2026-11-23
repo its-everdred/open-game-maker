@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { setPaidApisDuringGameplay } from '../../src/gameplay/policy.js';
 import { buildRoutes } from '../../src/builds/routes.js';
 import { createApp } from '../../src/app/app.js';
+import { listEditorPreviews } from '../../src/previews/store.js';
 import { seededApp, X } from '../admin-fixture.js';
 import { ids, REPO, SECRET, SHA, world } from '../builds/fixtures.js';
 import { asUser } from '../helpers.js';
@@ -65,7 +66,7 @@ describe('the post-deploy paid-API check', () => {
     for (const [path, body] of requests) expect([400, 503]).toContain((await send(app, path, body, APP)).status);
   });
 
-  it('uploads a preview that only the paid-host scan refuses, and refuses it', async () => {
+  it('uploads a preview that the paid-host scan refuses and that nothing after it would install', async () => {
     const { deps } = world();
     const app = createApp(deps);
     app.route(
@@ -92,8 +93,12 @@ describe('the post-deploy paid-API check', () => {
     expect(refused.status).toBe(422);
     expect(await refused.json()).toEqual({ error: { code: 'paid_integration' } });
 
-    // The same archive is otherwise a valid preview: the scan, not an earlier check, refused it.
+    // With the scan out of the way the archive passes every earlier check and fails the first one after it: a broken
+    // scan refuses it too, under another code the check reports, and installs nothing on the game.
     setPaidApisDuringGameplay(deps.db, true);
-    expect((await upload()).status).toBe(201);
+    const passed = await upload();
+    expect(passed.status).toBe(422);
+    expect(await passed.json()).toEqual({ error: { code: 'cache_plan_invalid' } });
+    expect(await listEditorPreviews(deps, ids.game)).toEqual([]);
   });
 });

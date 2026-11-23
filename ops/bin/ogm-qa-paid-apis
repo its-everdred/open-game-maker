@@ -5,9 +5,10 @@ Three requests carrying the games origin, as the QA creator, must get 403 `paid_
 /api/v1/voice/token, /api/v1/voice/dictation-token and /api/v1/games/<QA game>/narration/render. A preview whose script
 names a paid provider host, uploaded with a game daemon's hook secret, must get 422 `paid_integration`.
 
-The check never makes a paid call. Every request body is one the route would reject after its paid-API gate (an empty
-target, no narration lines), so a broken gate answers 400 or 503 and still dispatches nothing. With the setting on it
-checks nothing: each request would then be allowed.
+The check never makes a paid call and never installs anything. Every request is one the route rejects right after its
+paid-API gate (an empty target, no narration lines, an invalid cache plan in the preview), so a broken gate answers 400,
+503 or 422 `cache_plan_invalid` and still dispatches and installs nothing. With the setting on it checks nothing: each
+request would then pass the gate.
 
 usage: ogm-qa-paid-apis [--api <url>] [--db <ogm.sqlite3>]
   defaults: http://127.0.0.1:$OGM_API_PORT and $OGM_DATA_DIR/ogm.sqlite3 from $OGM_ENV_DIR/api.env (~/.config/ogm/env);
@@ -64,7 +65,8 @@ def code_of(body):
 
 
 def preview_archive():
-    """A preview that passes every check before the paid-host scan, with a script that names a paid provider."""
+    """A preview that passes every check before the paid-host scan, with a script that names a paid provider. Its cache
+    plan is invalid, the first check after the scan, so a broken scan still installs nothing."""
     files = {
         'index.html': b'<!doctype html><script src="./assets/main.js"></script><title>QA paid APIs</title>\n',
         'assets/main.js': CALLS_PAID,
@@ -76,6 +78,7 @@ def preview_archive():
         }).encode(),
         'design/design.json': json.dumps({'schemaVersion': 1, 'globals': {}, 'entities': {}}).encode(),
         'credits.json': json.dumps({'version': 1, 'packs': []}).encode(),
+        'assets/cache-plan.json': b'{}',
     }
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode='w:gz', format=tarfile.USTAR_FORMAT) as archive:
@@ -88,9 +91,11 @@ def preview_archive():
 
 
 def daemon_secret(conn, qa_game):
-    """The QA game's daemon first, else any game daemon whose hook secret this user can read."""
+    """The QA game's daemon first, else any game daemon whose hook secret this user can read. Only daemons whose game is
+    linked to the daemon's repository, as the upload route requires."""
     rows = conn.execute(
-        'select d.slug, g.id from game_daemons d left join games g on g.slug = d.slug order by d.slug'
+        """select d.slug, g.id from game_daemons d join games g on g.slug = d.slug
+           where lower(g.github_owner || '/' || g.github_repo) = lower(d.repo) order by d.slug"""
     ).fetchall()
     rows.sort(key=lambda row: (row[1] != qa_game, not row[0].startswith('qa'), row[0]))
     for slug, _ in rows:

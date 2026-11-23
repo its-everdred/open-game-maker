@@ -512,9 +512,10 @@ fails. Run `ops/bin/ogm-voice-host build` and `restart` before it when the voice
 "Allow paid APIs during gameplay" is off. As the QA creator (`qa.env`, from `ops/bin/ogm-qa-session`) and with the games
 origin as `Origin`, it posts to `/api/v1/voice/token`, `/api/v1/voice/dictation-token` and the QA game's
 `/narration/render`, and each must answer 403 `paid_apis_off_during_gameplay`. It then uploads a preview whose script
-calls `api.openai.com`, with the QA game's daemon hook secret (another game's when the QA game has none), and it must
-answer 422 `paid_integration`. It makes no paid call: each body is one the route rejects after its gate, so a broken gate
-answers 400 or 503 and still dispatches nothing. With the setting on it sends nothing and passes.
+calls `api.openai.com`, with the QA game's daemon hook secret (another linked game's when the QA game has none), and it must
+answer 422 `paid_integration`. It makes no paid call and installs nothing: each request is one the route rejects right after its gate (an empty body,
+no narration lines, an invalid cache plan in the preview), so a broken gate answers 400, 503 or 422 `cache_plan_invalid`
+and the check fails. With the setting on it sends nothing and passes.
 
 `ogm-qa-review-hook` runs it after every deploy, logs to `~/.local/state/ogm/qa/paid-apis/<sha>.log`, and appends a
 `qa-paid-apis failed` line to the attention file when a request is not refused. It ends with `exit=<n> qa-paid-apis`
