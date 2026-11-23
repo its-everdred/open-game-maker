@@ -11,6 +11,8 @@ Declare the game's vocabulary in `manifest.inputs.actions` before wiring control
 `axis` for one dimension, and `stick` for two dimensions. Name intent (`jump`, `move`, `interact`), never a key or
 device (`space`, `leftStick`). Import `ActionFrame` from `@ogm/contracts`; gameplay reads only its declared values
 and never polls DOM keyboard, pointer, touch, or gamepad APIs. `input.rawKey` is for host hotkeys, not mechanics.
+Menus are not gameplay: open them with `createMenu` from `@gm/sdk/menu` (see gm-ui-hud), and declare the button a
+menu should confirm with first and the one that goes back third, matching the host's A and B.
 
 Read `ActionFrame.playerIndex` and update that player's state only. Treat `ActionFrame.source` as provenance for
 hints or telemetry, never as a reason to change the mechanic. Network and local frames follow the same action map.

@@ -1,7 +1,8 @@
 import type { ActionFrame } from '@ogm/contracts/input';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createMenu, deliverMenuFrame, setMenuActionKinds, type Menu } from './index.js';
+import { deliverMenuFrame, setMenuActionKinds } from './host-frames.js';
+import { createMenu, type Menu } from './index.js';
 
 // Dusk Helm's shape: one stick, then buttons in the order the host draws them (first = A) and binds pads (a, x, b).
 const kinds = { move: 'stick', attack: 'button', block: 'button', charge: 'button' } as const;
@@ -19,8 +20,8 @@ function title() {
   return { root: document.querySelector<HTMLElement>('#menu')!, clicks };
 }
 
-const frame = (source: ActionFrame['source'], actions: ActionFrame['actions']): ActionFrame => ({
-  playerIndex: 0,
+const frame = (source: ActionFrame['source'], actions: ActionFrame['actions'], playerIndex = 0): ActionFrame => ({
+  playerIndex,
   tick: 0,
   source,
   actions,
@@ -164,6 +165,75 @@ describe('createMenu', () => {
     document.querySelector<HTMLElement>('#quit')!.hidden = true;
     key('ArrowUp');
     expect(menu.focused?.id).toBe('settings');
+  });
+
+  it('needs a fresh A press for the next menu after A closed the last one', () => {
+    const { root, clicks } = title();
+    const first = open({ root });
+    root.querySelector('#play')!.addEventListener('click', () => first.dispose());
+    deliverMenuFrame(frame('touch', { attack: true }));
+    deliverMenuFrame(frame('touch', { attack: false }));
+    open({ root });
+    deliverMenuFrame(frame('touch', { attack: true }));
+    expect(clicks).toEqual(['play', 'play']);
+  });
+
+  it('ignores an A still held from play when a menu opens, until it is pressed again', () => {
+    // Player 3's controller, untouched by the other tests.
+    deliverMenuFrame(frame('touch', { attack: true }, 3));
+    const { root, clicks } = title();
+    open({ root });
+    deliverMenuFrame(frame('touch', { attack: true }, 3));
+    expect(clicks).toEqual([]);
+    deliverMenuFrame(frame('touch', { attack: false }, 3));
+    deliverMenuFrame(frame('touch', { attack: true }, 3));
+    expect(clicks).toEqual(['play']);
+  });
+
+  it('acts once per controller sample, so a press that opens a submenu does not also take it back', () => {
+    const { root, clicks } = title();
+    const onBack = vi.fn();
+    root.querySelector('#play')!.addEventListener('click', () => {
+      const dialog = document.createElement('div');
+      dialog.innerHTML = '<button>OK</button>';
+      document.body.append(dialog);
+      open({ root: dialog, onBack });
+    });
+    const titleBack = vi.fn();
+    open({ root, onBack: titleBack });
+    deliverMenuFrame(frame('gamepad', { attack: true, charge: true }, 2));
+    expect(clicks).toEqual(['play']);
+    expect(onBack).not.toHaveBeenCalled();
+    expect(titleBack).not.toHaveBeenCalled();
+  });
+
+  it('stops reading pads when a pad press closes the last menu', () => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    vi.mocked(document.hasFocus).mockReturnValue(true);
+    const buttons = Array.from({ length: 16 }, () => ({ pressed: false, touched: false, value: 0 }));
+    const pad = { index: 1, connected: true, buttons, axes: [0, 0, 0, 0] } as unknown as Gamepad;
+    const { root, clicks } = title();
+    const menu = open({ root, getGamepads: () => [pad] });
+    root.querySelector('#play')!.addEventListener('click', () => menu.dispose());
+    buttons[0]!.pressed = true;
+    vi.advanceTimersByTime(20);
+    expect(clicks).toEqual(['play']);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('leaves keys in a text field to the field, and ignores a held Enter', () => {
+    document.body.innerHTML = '<div id="menu"><input id="name"><button id="ok">OK</button></div>';
+    const root = document.querySelector<HTMLElement>('#menu')!;
+    const clicks: string[] = [];
+    root.querySelector('#ok')!.addEventListener('click', () => clicks.push('ok'));
+    const menu = open({ root, initial: root.querySelector<HTMLElement>('#ok') });
+    const input = root.querySelector<HTMLInputElement>('#name')!;
+    const arrow = new KeyboardEvent('keydown', { code: 'ArrowRight', bubbles: true, cancelable: true });
+    input.dispatchEvent(arrow);
+    expect(arrow.defaultPrevented).toBe(false);
+    expect(menu.focused?.id).toBe('ok');
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter', repeat: true, bubbles: true }));
+    expect(clicks).toEqual([]);
   });
 
   it('stops listening once every menu is closed', () => {

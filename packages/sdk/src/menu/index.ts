@@ -2,8 +2,6 @@ import type { ActionFrame, ActionValue } from '@ogm/contracts/input';
 
 import { onMenuFrame, type ActionKinds } from './host-frames.js';
 
-export { deliverMenuFrame, setMenuActionKinds } from './host-frames.js';
-
 export type MenuDirection = 'up' | 'down' | 'left' | 'right';
 
 export interface MenuOptions {
@@ -145,15 +143,20 @@ const edges = new Map<string, Edge>();
 let cleanup: (() => void) | undefined;
 let defaultStyle: HTMLStyleElement | undefined;
 
-/** Apply one sampled state from a controller, acting only on what changed since its last sample. */
-function apply(key: string, next: Edge): void {
+/**
+ * Record one sampled state from a controller and act on what changed since its last sample. Held state is recorded
+ * with no menu open too, so a button still held from gameplay or from the press that closed the last menu does not
+ * press the next one.
+ */
+function apply(key: string, next: Edge, act = true): void {
   const previous = edges.get(key) ?? { confirm: false, back: false, direction: null };
   edges.set(key, next);
   const menu = stack.at(-1);
-  if (!menu) return;
-  if (next.direction && next.direction !== previous.direction) menu.move(next.direction);
+  if (!menu || !act) return;
+  // One action per sample: a press may close this menu or open another, which must not take the rest.
   if (next.confirm && !previous.confirm) menu.confirm();
-  if (next.back && !previous.back) menu.back();
+  else if (next.back && !previous.back) menu.back();
+  else if (next.direction && next.direction !== previous.direction) menu.move(next.direction);
 }
 
 function pressed(value: ActionValue | undefined): boolean {
@@ -174,7 +177,9 @@ function onHostFrame(frame: ActionFrame, kinds: ActionKinds): void {
   });
 }
 
-function pollPads(): void {
+onMenuFrame(onHostFrame);
+
+function pollPads(act: boolean): void {
   const getGamepads = stack.at(-1)?.options.getGamepads ?? (() => navigator.getGamepads?.() ?? []);
   if (!document.hasFocus()) return;
   for (const pad of getGamepads()) {
@@ -182,11 +187,15 @@ function pollPads(): void {
     const button = (index: number) => pad.buttons[index]?.pressed ?? false;
     const dpadX = Number(button(PAD.right)) - Number(button(PAD.left));
     const dpadY = Number(button(PAD.down)) - Number(button(PAD.up));
-    apply(`pad:${pad.index}`, {
-      confirm: button(PAD.a),
-      back: button(PAD.b),
-      direction: directionOf(dpadX || (pad.axes[0] ?? 0), dpadY || (pad.axes[1] ?? 0)),
-    });
+    apply(
+      `pad:${pad.index}`,
+      {
+        confirm: button(PAD.a),
+        back: button(PAD.b),
+        direction: directionOf(dpadX || (pad.axes[0] ?? 0), dpadY || (pad.axes[1] ?? 0)),
+      },
+      act,
+    );
   }
 }
 
@@ -238,15 +247,20 @@ function install(): void {
   }
   window.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('keyup', onKeyUp, true);
-  const stopFrames = onMenuFrame(onHostFrame);
-  let handle = requestAnimationFrame(function loop() {
-    pollPads();
+  // Pads are only read while a menu is open: take their held state first, so a held A does not press this menu.
+  pollPads(false);
+  let running = true;
+  const loop = () => {
+    if (!running) return;
+    // Scheduled before polling: a press can close the last menu, and this loop, from inside pollPads.
     handle = requestAnimationFrame(loop);
-  });
+    pollPads(true);
+  };
+  let handle = requestAnimationFrame(loop);
   cleanup = () => {
+    running = false;
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp, true);
-    stopFrames();
     cancelAnimationFrame(handle);
   };
 }

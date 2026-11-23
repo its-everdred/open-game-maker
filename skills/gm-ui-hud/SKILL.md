@@ -51,18 +51,22 @@ player sees what a phone player sees.
   callback move the caption. A rendered line plays nothing and fires no callbacks while audio is muted or locked, so
   keep its caption up and advance on a tap or a timer. Spoken lines play through `SpokenText` from `@gm/sdk/audio`.
 
+## Menus
+
+Build every game menu (title, class select, dialogs, won and lost) as DOM buttons and open it with
+`createMenu({ root, onBack })` from `@gm/sdk/menu`; call `dispose()` when it closes. The on-screen controller (stick
+moves, the first declared button is A, the third is B; declare them in that order), a keyboard (arrows, Enter or
+Space, Escape) and any gamepad (D-pad or left stick, A, B) then move focus and press, as well as touch. Mark the main
+action `data-gm-primary` so A on the title starts the game, and style `[data-gm-focus]` in the game's UI kit; the
+SDK's plain outline shows until you do.
+Newer menus take input until disposed, and none react while the host's pause dialog is open. Never hand-roll menu key
+or pad handling. Check it on the hosted build: a gm-qa journey step presses the on-screen A on the title.
+
 ## State inventory
 
 List the game's screens before building them: title, play, paused, won, and lost. Paused is the host's dialog over a
 frozen game; the others are the game's, and each needs a clear way forward (start, retry, next) reachable by every
 declared input.
-
-Build every game menu (title, class select, dialogs, won and lost) as DOM buttons and open it with
-`createMenu({ root, onBack })` from `@gm/sdk/menu`; call `dispose()` when it closes. The on-screen controller (stick
-moves, the first declared button is A, the third is B), a keyboard (arrows, Enter or Space, Escape) and any gamepad
-(D-pad or left stick, A, B) then move focus and press, as well as touch. Mark the main action `data-gm-primary` so A on
-the title starts the game, and style `[data-gm-focus]` in the game's UI kit; the SDK's plain outline shows until you do.
-Newer menus take input until disposed. Never hand-roll menu key or pad handling.
 
 - Title: `gm run --viewport both --frames 0,2,5`. Its stills come from a fresh run; inputs do not reach them.
 - Play, won, and lost: write one input script that reaches each, then `gm test --inputs won.json --ticks 900`
