@@ -219,6 +219,9 @@ A saved push also prints the link that opens the scene in the map maker at that 
 (`/<game>/edit?scene=<scene>&rev=<n>`, on `OGM_APP_ORIGIN` when set; the app resolves the game's slug to its editor page) for the agent's update to Kevin. The
 scene's chip on the ticket's review card and ticket detail opens the same link.
 `--json` prints `{ ok, rev, rebased, saved, link }`, or `{ ok: false, conflicts, hint }` on a refusal (exit 1).
+Inside a game daemon (`OGM_INTERNAL_URL` and `OGM_HOOK_SECRET_FILE` set), both go through the API's shared scene
+store, where the map maker saves Kevin's edits: pull reads it (starting it from the game folder's copy the first time),
+push commits there, and both then rewrite `scenes/<scene>.scene.json` and its log to match, ready to commit.
 
 `gm scene match <mock.png> <brief.json> --pack <id> --facing <direction> --out <new.json>` searches the
 specified pack locally using the reviewed regions in the brief. It checks pack rights and source hashes; the

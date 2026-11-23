@@ -225,7 +225,7 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
       c.header('Cache-Control', 'private, no-store');
       let files;
       try {
-        files = await listSceneDocs(target.checkout, target.path);
+        files = await listSceneDocs(target.checkout, target.path, target.game.slug ?? undefined);
       } catch {
         throw new HttpError(404, 'scenery_source_unavailable');
       }
