@@ -52,7 +52,12 @@ for (const viewport of [
     const sheet = await box(page, '.edit-workspace-chat');
     await expect(page.locator('.edit-workspace-chat aiur-composer')).toBeVisible();
     expect(sheet.y + sheet.height, 'sheet sits on the bottom').toBeGreaterThanOrEqual(viewport.height - 1);
-    expect(intersects(sheet, await box(page, '.edit-workspace-chat-bubble')), 'bubble clear of the sheet').toBe(false);
+    await expect(page.locator('.edit-workspace-chat-bubble')).toHaveAttribute('aria-expanded', 'true');
+    const openBubble = await box(page, '.edit-workspace-chat-bubble');
+    expect(intersects(sheet, openBubble), 'bubble clear of the sheet').toBe(false);
+    for (const name of ['play', 'menu', 'editor'] as const) {
+      expect(intersects(openBubble, parts[name]), `open bubble overlaps ${name}`).toBe(false);
+    }
     await testInfo.attach(`edit-open-${viewport.width}x${viewport.height}`, {
       body: await page.screenshot(),
       contentType: 'image/png',

@@ -3,8 +3,10 @@
   --edit-bar: calc(var(--safe-t) + 70px);
   /* Space the fixed play and menu buttons take from the right edge. */
   --edit-fixed-controls: calc(max(76px, var(--safe-r) + 60px) + 58px);
-  --edit-chat-sheet: min(70cqh, 560px);
   --edit-bubble-gap: 16px;
+  /* The highest the bubble may sit: its bottom edge, from the page bottom, with the bubble still under the top bar. */
+  --edit-bubble-ceiling: calc(100cqh - var(--edit-bar) - 58px);
+  --edit-chat-sheet: min(70cqh, var(--edit-bubble-ceiling) - 12px, 560px);
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -68,7 +70,7 @@
   position: absolute;
   z-index: 5;
   right: calc(var(--safe-r) + var(--edit-bubble-gap));
-  bottom: calc(var(--safe-b) + var(--edit-bubble-gap) + var(--edit-chat-rise, 0px));
+  bottom: min(var(--safe-b) + var(--edit-bubble-gap) + var(--edit-chat-rise, 0px), var(--edit-bubble-ceiling));
   display: grid;
   width: 50px;
   height: 50px;
