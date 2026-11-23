@@ -138,6 +138,12 @@ when `pixel.cloth` needs them and the cell lacks them. It refuses a cell whose m
 
 ## Rigged bodies (#1282 bake-off)
 
+**Round scope (Kevin, 2026-11-23; holds for every later rung until he widens it):** a motion round carries exactly
+one walk and one basic attack per arm, on the one body under test. No roll, push, block or extra attacks, no second
+attack clip in any arm, and no other classes or bodies. The attack recreates the pack's own clip (Warrior: 6Barbarian
+Attack1): the same beats, frame count and directions. Post the round as soon as every arm has rendered; the next
+motions wait for his pick.
+
 A cell with `rigged` skips steps 1-5 (the top-level `mesh` and `pack` are still required; `recipe.json` names the
 rigged file as the cell's mesh): the body arrives rigged (a vendor rig such as Meshy or Hyper3D, or a library
 character such as the Quaternius mannequin) and nothing of ours touches the motion but the sampling.
