@@ -9,7 +9,9 @@ description: Install and build a Game Maker repo inside the network-off sandbox.
    commit the change; later installs add `--frozen-lockfile`.
 2. Run `gm build`; when asset targets are needed, run `gm build assets --tier mobile,desktop`. `gm build` fails naming
    `dist/manifest.json` or `dist/design/design.json` when either is missing or invalid: fix `src/manifest.ts` or
-   `design/*.json` (a key defined in two design files fails the build).
+   `design/*.json` (a key defined in two design files fails the build). It also fails a page the games host's CSP
+   would block: move inline `<script>` code and `on*=` handlers into bundled modules, and load fonts, styles and
+   images from the game's own files. Captures run under the same CSP and fail on any violation.
 3. Read the build output from `dist/` and the resolved asset inventory from `assets/manifest.json`.
    Lazy groups have separate mobile and desktop byte budgets, configurable in `.gm/game.json` under `budgets.lazy`.
    Each per-match bundle is its own lazy group with its own budget; set and report it (up to 1.5 MB compressed on
