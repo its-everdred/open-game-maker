@@ -98,7 +98,7 @@ export function SceneStrip({
               className="scene-chip"
               type="button"
               aria-pressed={card === open}
-              aria-label={`${card.title}, ${card.live ? 'an agent is changing it' : agent ? 'changed by an agent' : 'changed by you'}`}
+              aria-label={chipLabel(card, agent)}
               onClick={() => onOpen(card)}
             >
               <span className="scene-chip-picture">
@@ -118,4 +118,12 @@ export function SceneStrip({
       </div>
     </div>
   );
+}
+
+/** Who changed the scene, its revision and the ticket that started it. */
+function chipLabel(card: SceneCard, agent: boolean): string {
+  const who = card.live ? 'an agent is changing it' : agent ? 'changed by an agent' : 'changed by you';
+  return [card.title, who, card.rev > 0 && `revision ${card.rev}`, card.ticket && `from ticket ${card.ticket}`]
+    .filter(Boolean)
+    .join(', ');
 }

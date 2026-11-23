@@ -14,6 +14,8 @@ export type SceneCard = {
   rev: number;
   /** Who wrote the head revision (`SceneRevision.author`): a creator slug such as `kevin`, or `agent:<ticket>`. */
   author: string;
+  /** The ticket whose agent started the scene (`SceneRevision.author` of rev 1). */
+  ticket?: string;
   thumbnail?: string;
   /** An agent is changing this scene right now. */
   live?: boolean;
@@ -35,7 +37,7 @@ export async function loadScenes(gameId: string, source: string | null): Promise
   if (source === 'fixture') return (FIXTURES[gameId] ?? []).map((scene) => ({ ...scene, title: sceneTitle(scene.id) }));
   try {
     const { scenes } = await getEditorScenes(gameId);
-    return scenes.map(({ id, rev, author }) => ({ id, title: sceneTitle(id), rev, author }));
+    return scenes.map(({ id, rev, author, ticket }) => ({ id, title: sceneTitle(id), rev, author, ticket }));
   } catch {
     /* A game with no checkout to read has no scenes to list; the strip stays out of the way. */
     return [];
@@ -77,4 +79,11 @@ export function isAgent(author: string): boolean {
 export function sceneTitle(id: string): string {
   const words = id.replace(/[-_]+/g, ' ').trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** The editor opened on one scene (#1212): what a review card and `gm scene push` link to. */
+export function sceneEditorPath(gameId: string, scene: string, rev?: number): string {
+  const query = new URLSearchParams({ mode: 'edit', scene });
+  if (rev !== undefined) query.set('rev', String(rev));
+  return `/g/${encodeURIComponent(gameId)}?${query}`;
 }

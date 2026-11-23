@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Dialog } from '../../components/Dialog';
 import { Icon } from '../../components/Icon';
 import { api } from '../../lib/api/client';
+import { TicketScenes } from './TicketScenes';
 import '../build-chat/conversation-modal.css';
 
 // One ticket of a game, running or closed, as the API's ticket detail describes it (#873, aiur-team/aiur#8043).
@@ -113,6 +114,7 @@ export function TicketDetail({
                 </button>
               )}
             </p>
+            <TicketScenes gameId={gameId} ticket={ticket} />
             {data.summary && <p className="ticket-detail-summary">{data.summary}</p>}
             {data.running && data.activity && <p className="ticket-detail-activity">{data.activity}</p>}
             {data.media.length > 0 && (

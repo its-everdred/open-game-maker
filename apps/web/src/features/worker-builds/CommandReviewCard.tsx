@@ -10,6 +10,7 @@ import { PlayableCard } from '../commands-inbox/playable';
 import { Dialog } from '../../components/Dialog';
 import { MediaMeta } from './MediaMeta';
 import { ReviewMatrix } from './ReviewMatrix';
+import { TicketScenes } from './TicketScenes';
 import './command-review-card.css';
 
 type Option = CommandOption;
@@ -203,6 +204,7 @@ export function CommandReviewCard({
   return (
     <section className="review-deck" aria-label={command.summary ?? command.title}>
       <p>{withoutLinks(command.question)}</p>
+      {!('source' in command) && command.ticket && <TicketScenes gameId={command.game_id} ticket={command.ticket} />}
       {command.recommend ? (
         <p className="worker-review-recommendation">
           Recommended: {letterOf(command.options, command.recommend)}:{' '}

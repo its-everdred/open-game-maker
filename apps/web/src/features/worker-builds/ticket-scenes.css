@@ -1,0 +1,27 @@
+/* Scene links on a review card and a ticket's detail (#1212): one tap opens the scene in the map maker. */
+.ticket-scenes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.ticket-scenes a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.ticket-scenes .icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+}
