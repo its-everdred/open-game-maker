@@ -594,8 +594,8 @@ describe('StudioMenu', () => {
           { service: 'voice', usedPercent: null },
           { service: 'images', usedPercent: null },
         ],
-        sources: [],
-      },
+        // No sources: the API before #1217 sent none.
+      } as EnergyView,
     };
 
     renderMenu('/games');

@@ -56,7 +56,8 @@ export function EnergyWindows({ view, services = false }: { view: EnergyView; se
             <Meter key={service} label={SERVICE_LABELS[service]} usedPercent={usedPercent} />
           ))
         : null}
-      {view.sources.map((source) => (
+      {/* An API from before #1217 sends no sources. */}
+      {(view.sources ?? []).map((source) => (
         <Meter key={source.id} label={source.label} usedPercent={source.usedPercent} note={sourceNote(source)} />
       ))}
     </ul>
