@@ -1,18 +1,17 @@
 import { readFile, stat } from 'node:fs/promises';
 import { extname } from 'node:path';
 
-import { eq } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
 import sharp from 'sharp';
 
 import { editorLibrary, loadIndex, packOf } from '@ogm/asset-cards';
 import { loadEnv } from '@ogm/config';
 import type { EditorLibrary } from '@ogm/contracts';
-import { schema } from '@ogm/db';
 
 import { HttpError } from '../app/errors.js';
 import type { ApiBindings } from '../app/types.js';
 import { authorizedGame } from '../games/authorize.js';
+import { daemonRowForGame } from '../jobs/daemons.js';
 import { contained, readGameLock } from '../scenery/source.js';
 
 export const prefix = '/api/v1';
@@ -23,6 +22,8 @@ const THUMB_SOURCES = new Set(['.png', '.webp']);
 /** Thumbnails are cut to the piece and fit in this square; the sheet scales them up pixelated. */
 const THUMB_PX = 192;
 const THUMB_CACHE = 4000;
+/** Pieces are at most a few hundred pixels a side; anything far bigger is not a thumbnail. */
+const MAX_THUMB_PIXELS = 4096 * 4096;
 
 type Built = { library: EditorLibrary; thumbs: Map<string, string> };
 
@@ -36,18 +37,19 @@ export function editorLibraryRoutes(assetsRoot?: string): Hono<ApiBindings> {
 
   async function libraryFor(c: Context<ApiBindings>): Promise<Built> {
     const game = authorizedGame(c, 'game.edit');
-    const daemon = game.slug
-      ? c.get('deps').db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, game.slug)).get()
-      : undefined;
+    /* A game in a shared repository (Dusk Helm in open-games) has no daemon of its own slug. */
+    const daemon = daemonRowForGame(c.get('deps').db, game.id);
     if (!assetsRoot || !daemon || !game.githubPath) throw new HttpError(404, 'editor_library_unavailable');
     /* One build per game per cache period: every thumbnail request reads it, so it must not reread the locks. */
-    const key = game.id;
+    const key = `${game.id}:${game.allowAiGeneratedAssets}`;
+    const now = Date.now();
     const current = cache.get(key);
-    if (current && Date.now() - current.at <= CACHE_MS) return current.entry;
+    if (current && now - current.at <= CACHE_MS) return current.entry;
+    for (const [old, entry] of cache) if (now - entry.at > CACHE_MS) cache.delete(old);
     const checkout = daemon.checkoutPath;
     const gamePath = game.githubPath;
     const next = {
-      at: Date.now(),
+      at: now,
       entry: (async () => {
         let source: { set?: string; packs: string[] };
         try {
@@ -97,6 +99,7 @@ export function editorLibraryRoutes(assetsRoot?: string): Hono<ApiBindings> {
       return c.body(new Uint8Array(bytes), 200, {
         'Content-Type': 'image/webp',
         'Cache-Control': 'private, max-age=86400',
+        'X-Content-Type-Options': 'nosniff',
       });
     });
 }
@@ -115,10 +118,10 @@ async function readThumb(assetsRoot: string, path: string): Promise<Buffer> {
       .webp({ lossless: true })
       .toBuffer();
   try {
-    return await fit(sharp(bytes).trim({ threshold: 1 }));
+    return await fit(sharp(bytes, { limitInputPixels: MAX_THUMB_PIXELS }).trim({ threshold: 1 }));
   } catch {
-    /* A fully transparent or unreadable picture has nothing to trim: send it fitted, or as it is. */
-    return fit(sharp(bytes)).catch(() => bytes);
+    /* A fully transparent picture has nothing to trim: send it fitted. An unreadable one fails, and the route 404s. */
+    return fit(sharp(bytes, { limitInputPixels: MAX_THUMB_PIXELS }));
   }
 }
 

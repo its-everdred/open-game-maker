@@ -21,7 +21,20 @@ const ids = {
   other: 'u_01K8Z6Y7X8P9Q0R1S2T3V4W5X8',
   game: 'g_01K8Z6Y7X8P9Q0R1S2T3V4W5X9',
 };
-const THUMB = new Uint8Array([82, 73, 70, 70]);
+/* A 1x1 opaque PNG: the smallest picture sharp reads. */
+const THUMB = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+  'base64',
+);
+const lockEntry = (id: string) => ({
+  id,
+  path: 'sprites/crate.png',
+  source: 'library',
+  sha256: 'a'.repeat(64),
+  license: 'fixture',
+  rights: { uses: ['in-game'], audience: 'private', redistribution: 'in-build', attribution: null },
+  added: '2026-11-01',
+});
 
 function card(id: string, title: string, extra: Record<string, unknown> = {}) {
   return {
@@ -55,7 +68,7 @@ function fixture() {
   writeFileSync(join(game, 'gm.lock.json'), JSON.stringify({ v: 1, set: 'iso-set' }));
   writeFileSync(
     join(game, 'assets.lock.json'),
-    JSON.stringify({ version: 1, family: 'pixel-art', pov: 'iso', assets: [] }),
+    JSON.stringify({ version: 1, family: 'pixel-art', pov: 'iso', assets: [lockEntry('t1:farm/props/crate@1')] }),
   );
   const assets = join(root, 'assets');
   mkdirSync(join(assets, 'index'), { recursive: true });
@@ -74,6 +87,18 @@ function fixture() {
       cards: [
         card('t1:rural/tiles/fence-a1@1', 'Fence A1', { previews: { thumb: 'private/previews/fence.webp' } }),
         card('t1:rural/tiles/escape@1', 'Wall Z1', { previews: { thumb: 'private/previews/escape.webp' } }),
+        card('t1:rural/tiles/tree-z1@1', 'Tree Z1', {
+          previews: { thumb: 'private/previews/fence.webp' },
+          generation: { method: 'ai' },
+        }),
+        card('t1:farm/props/crate@1', 'Crate', {
+          previews: { thumb: 'private/previews/fence.webp' },
+          resolved: {
+            license: 'x',
+            rights: { uses: ['in-game'], audience: 'private', redistribution: 'in-build' },
+            provenance: {},
+          },
+        }),
         card('t1:other/tiles/tree@1', 'Tree A1', {
           previews: { thumb: 'private/previews/fence.webp' },
           resolved: {
@@ -89,7 +114,8 @@ function fixture() {
   return { checkout, assets };
 }
 
-function appWith(checkout: string, assets: string | undefined) {
+/** `shared`: the game lives in a shared repository whose one daemon has another slug (Dusk Helm in open-games). */
+function appWith(checkout: string, assets: string | undefined, shared = false) {
   const user = (userId: string): TestUser => ({
     kind: 'user',
     userId,
@@ -119,7 +145,9 @@ function appWith(checkout: string, assets: string | undefined) {
       id: ids.game,
       familyId: ids.family,
       ownerId: ids.creator,
-      slug: 'fixture',
+      slug: shared ? 'dusk-helm' : 'fixture',
+      githubOwner: 'example',
+      githubRepo: 'repo',
       githubPath: 'games/fixture',
       title: 'Fixture',
       visibility: 'private',
@@ -142,7 +170,7 @@ function appWith(checkout: string, assets: string | undefined) {
     .run();
   const app = createApp(deps);
   app.route(prefix, editorLibraryRoutes(assets));
-  return app;
+  return Object.assign(app, { deps });
 }
 
 const libraryUrl = `/api/v1/games/${ids.game}/editor/library`;
@@ -164,13 +192,17 @@ describe('map maker asset library', () => {
       groups: [
         { id: 'fences', label: 'Fences' },
         { id: 'walls', label: 'Walls' },
-      ],
-      items: [
-        { id: 't1:rural/tiles/fence-a1@1', group: 'fences', tag: 'Fence', pack: 'rural' },
-        { id: 't1:rural/tiles/escape@1', group: 'walls' },
+        { id: 'nature', label: 'Nature' },
+        { id: 'props', label: 'Props' },
       ],
     });
-    expect(body.items).toHaveLength(2);
+    /* The whole set, plus the packs the game's assets.lock already uses; never another set's pieces. */
+    expect(body.items.map((item: { id: string }) => item.id)).toEqual([
+      't1:rural/tiles/fence-a1@1',
+      't1:rural/tiles/escape@1',
+      't1:rural/tiles/tree-z1@1',
+      't1:farm/props/crate@1',
+    ]);
     expect(JSON.stringify(body)).not.toContain('previews');
   });
 
@@ -184,7 +216,8 @@ describe('map maker asset library', () => {
     expect(thumb.status).toBe(200);
     expect(thumb.headers.get('content-type')).toBe('image/webp');
     expect(thumb.headers.get('cache-control')).toBe('private, max-age=86400');
-    expect(new Uint8Array(await thumb.arrayBuffer())).toEqual(THUMB);
+    expect(thumb.headers.get('x-content-type-options')).toBe('nosniff');
+    expect((await sharp(Buffer.from(await thumb.arrayBuffer())).metadata()).format).toBe('webp');
 
     /* Not in this game's library (another set), a symlink out of the asset root, and a raw path all 404. */
     expect((await app.request(thumbUrl('t1:other/tiles/tree@1'), { headers })).status).toBe(404);
@@ -211,6 +244,28 @@ describe('map maker asset library', () => {
     expect(thumb.status).toBe(200);
     const meta = await sharp(Buffer.from(await thumb.arrayBuffer())).metadata();
     expect([meta.format, meta.width, meta.height]).toEqual(['webp', 20, 30]);
+  });
+
+  it('finds the checkout of a game that shares its repository with other games', async () => {
+    const { checkout, assets } = fixture();
+    const app = appWith(checkout, assets, true);
+
+    expect((await app.request(libraryUrl, { headers: asUser(ids.creator) })).status).toBe(200);
+  });
+
+  it('drops AI-made pieces as soon as the creator turns them off, not after the cache expires', async () => {
+    const { checkout, assets } = fixture();
+    const app = appWith(checkout, assets);
+    const headers = asUser(ids.creator);
+    const listed = async () =>
+      ((await (await app.request(libraryUrl, { headers })).json()) as { items: { id: string }[] }).items.map(
+        (item) => item.id,
+      );
+    expect(await listed()).toContain('t1:rural/tiles/tree-z1@1');
+
+    app.deps.db.update(schema.games).set({ allowAiGeneratedAssets: false }).run();
+
+    expect(await listed()).not.toContain('t1:rural/tiles/tree-z1@1');
   });
 
   it('reports the library unavailable when the host has no asset library', async () => {
