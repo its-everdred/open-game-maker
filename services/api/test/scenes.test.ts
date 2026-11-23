@@ -238,6 +238,18 @@ describe('shared scene store', () => {
     expect(pushed).toMatchObject({ ok: true, head: { rev: 3 }, revision: { author: 'agent:1300' } });
     expect(pushed.head.doc.layers.decor!.tiles!['2,2']).toEqual({ asset: CHEST, facing: 'N', lockedBy: 'creator' });
 
+    // The push lists at once (#1212): the scene chips credit #1208, which started it, and #1300's review card finds rev 3.
+    const listed = await app.request(`/api/v1/games/${ids.game}/editor/scenes`, { headers: asUser(ids.creator) });
+    expect(((await listed.json()) as { scenes: unknown[] }).scenes).toEqual([
+      expect.objectContaining({
+        id: 'goblin-cave',
+        rev: 3,
+        author: 'agent:1300',
+        ticket: '1208',
+        agents: { '1208': 1, '1300': 3 },
+      }),
+    ]);
+
     // A seed never overwrites a store that exists.
     const seed = await internal.request(
       `${agentUrl}/seed`,

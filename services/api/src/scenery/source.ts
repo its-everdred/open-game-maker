@@ -143,7 +143,35 @@ export async function readScenerySource(
   return { root, lock, scene: parseScenery(data, lock.assets), ...(updatedAt ? { updatedAt } : {}) };
 }
 
-export type SceneSummary = { id: string; rev: number; author: string; updatedAt: string };
+export type SceneSummary = {
+  id: string;
+  rev: number;
+  /** Who wrote the head revision. */
+  author: string;
+  updatedAt: string;
+  /** The ticket whose agent wrote revision 1; absent when a creator started the scene. */
+  ticket?: string;
+  /** Each agent ticket that wrote a revision, with the latest revision it wrote: what its review card opens. */
+  agents: Record<string, number>;
+};
+
+/** A scene's list entry from its committed log (revisions 1..rev in order). */
+export function sceneSummary(id: string, log: readonly SceneRevision[]): SceneSummary {
+  const last = log.at(-1)!;
+  const agents: Record<string, number> = {};
+  for (const revision of log) {
+    if (revision.author.startsWith('agent:')) agents[revision.author.slice('agent:'.length)] = revision.rev;
+  }
+  const first = log[0]!.author;
+  return {
+    id,
+    rev: last.rev,
+    author: last.author,
+    updatedAt: last.createdAt,
+    ...(first.startsWith('agent:') ? { ticket: first.slice('agent:'.length) } : {}),
+    agents,
+  };
+}
 export type SceneFiles = { head: SceneHead; log: SceneRevision[] };
 
 /** One scene's committed head and log, read the way `gm scene pull` reads them; undefined when pull would refuse it. */
@@ -200,8 +228,7 @@ export async function listSceneDocs(checkout: string, gamePath: string): Promise
     const id = name.slice(0, -'.scene.json'.length);
     const files = await readSceneIn(dir, id);
     if (!files) continue;
-    const last = files.log[files.head.rev - 1]!;
-    scenes.push({ id, rev: files.head.rev, author: last.author, updatedAt: last.createdAt });
+    scenes.push(sceneSummary(id, files.log));
   }
   return scenes;
 }
