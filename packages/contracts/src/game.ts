@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { Patch } from './bridge.js';
-import type { ActionFrame, ActionValue, Insets, Vec3 } from './input.js';
+import type { ActionFrame, ActionValue, ControlsLayout, Insets, Vec3 } from './input.js';
 import { vec3Schema, viewIdSchema } from './input.js';
 import { netManifestSchema } from './net.js';
 
@@ -417,6 +417,8 @@ export interface HostApi {
   test: { register(hooks: GmTestHooks): void };
   /** Hide the host Pause control on the game's own menu screens; it shows by default and again after a reload. */
   setHostPauseVisible?(visible: boolean): void;
+  /** Choose the host touch controls for the current screen; `gameplay` until set, and again after a reload. */
+  controls?: { set(options: { layout: ControlsLayout }): void };
 }
 
 export const gameSchemas = {

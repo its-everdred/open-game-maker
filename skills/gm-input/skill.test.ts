@@ -30,6 +30,9 @@ describe('gm-input skill', () => {
     expect(text).toContain('`phone-touch.json`');
     expect(text).toContain('`laptop-keys.json`');
     expect(text).toContain('injected standard gamepad');
+    /* Controls drawn over a title cover its Play button (#1298): games pick each screen's layout. */
+    expect(text).toContain('host.controls?.set({ layout })');
+    expect(text).toMatch(/`'none'` on title art, cutscenes and\s+dialogue/);
     expect(checkSkill(SKILL, { commands, sdkExports })).toEqual({ commands: [], sdk: [] });
   }, 30_000);
 });

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { loadPhaseSchema, tierSchema } from './assets.js';
 import { gameManifestSchema, poseSchema, targetRefSchema } from './game.js';
-import { actionFrameSchema, insetsSchema, MAX_PLAYERS } from './input.js';
+import { actionFrameSchema, controlsLayoutSchema, insetsSchema, MAX_PLAYERS } from './input.js';
 import {
   authorityModeSchema,
   netEventPayloadSchema,
@@ -328,6 +328,8 @@ export const gameToHostSchema = z
     ),
     /** Hides the host Pause control while false (the game shows its own menu); a reload or exit shows it again. */
     envelope('host.pause.visible', z.looseObject({ visible: z.boolean() })),
+    /** Which host touch controls the current screen shows; `gameplay` until the game says otherwise. */
+    envelope('host.controls', z.looseObject({ layout: controlsLayoutSchema })),
     /** Host hotkeys while the iframe has focus. */
     envelope('input.rawKey', z.looseObject({ code: z.string().max(32), down: z.boolean() })),
     /** The host fills identity and slot. */

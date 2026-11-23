@@ -43,6 +43,7 @@ const sdkExports = {
     haptics: { pulse: 1 } satisfies Record<keyof HostApi['haptics'], 1>,
     test: 1,
     setHostPauseVisible: 1,
+    controls: { set: 1 } satisfies Record<keyof NonNullable<HostApi['controls']>, 1>,
   } satisfies Record<keyof HostApi, unknown>,
   GameInstance: {
     pause: 1,

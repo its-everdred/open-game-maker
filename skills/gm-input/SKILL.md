@@ -58,6 +58,8 @@ on-screen A is the first declared button and B the third, so declare confirm and
 action `data-gm-primary` so A on the title starts the game, and style `[data-gm-focus]` in the game's UI kit (the
 SDK's plain outline shows until you do). Newer menus take input until disposed; none react while the host's pause
 dialog is open. Never hand-roll menu key or pad handling; a gm-qa journey step pressing on-screen A checks it.
+Pick each screen's on-screen controls with `host.controls?.set({ layout })`: `'none'` on title art, cutscenes and
+dialogue, `'menu'` (stick, A, B) on menus, `'gameplay'` (the default) in play; set the title's while mounting.
 
 ## Verify
 

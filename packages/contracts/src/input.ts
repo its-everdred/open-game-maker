@@ -47,6 +47,13 @@ export const rigInputMappingSchema = z.looseObject({
 });
 export type RigInputMapping = z.infer<typeof rigInputMappingSchema>;
 
+/**
+ * Which host touch controls a screen needs: `gameplay` (all, the default), `menu` (the first stick, A and B, what
+ * `@gm/sdk/menu` reads) or `none` (title art, cutscenes, dialogue the game drives itself).
+ */
+export const controlsLayoutSchema = z.enum(['none', 'menu', 'gameplay']);
+export type ControlsLayout = z.infer<typeof controlsLayoutSchema>;
+
 /** One instance per local player; implemented by OGM-025. */
 export interface CameraRig {
   id: ViewId;

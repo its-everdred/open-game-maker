@@ -1,11 +1,13 @@
 import type { GameManifest } from '@ogm/contracts/game';
-import type { ActionFrame, ActionValue, RigInputMapping } from '@ogm/contracts/input';
+import type { ActionFrame, ActionValue, ControlsLayout, RigInputMapping } from '@ogm/contracts/input';
 
 type TouchMode = RigInputMapping['touch'];
 
 const EDGE = 24;
 const STICK_SIZE = 100;
 const BUTTON_PITCH = 76;
+/* What `@gm/sdk/menu` reads: the first stick moves focus, the first button confirms and the third goes back. */
+const MENU_BUTTONS = [0, 2];
 
 /** `rotateCCW` → `Rotate CCW`, `soft_drop` → `Soft drop`: what a player hears, never the raw id. */
 export function actionLabel(action: string): string {
@@ -61,6 +63,9 @@ export class TouchOverlay {
   private inputs: GameManifest['inputs'];
   private touch: TouchMode;
   private enabled = true;
+  private layout: ControlsLayout = 'gameplay';
+  private loading = false;
+  private outsideMenu: HTMLElement[] = [];
   private suppressedUntil = -Infinity;
   private showTimer: ReturnType<typeof setTimeout> | undefined;
   private keepaliveTimer: ReturnType<typeof setInterval> | undefined;
@@ -93,6 +98,22 @@ export class TouchOverlay {
     this.refreshVisibility();
   }
 
+  /** The game's choice for its current screen; `menu` keeps only what a menu reads, in the same places. */
+  setLayout(layout: ControlsLayout): void {
+    if (layout === this.layout) return;
+    this.deactivate(true);
+    this.layout = layout;
+    this.applyLayout();
+    this.refreshVisibility();
+  }
+
+  /** Hidden while the game has not drawn its first frame. */
+  setLoading(loading: boolean): void {
+    if (loading) this.deactivate(true);
+    this.loading = loading;
+    this.refreshVisibility();
+  }
+
   noteGamepadInput(at = this.now()): void {
     this.suppress(at);
   }
@@ -113,10 +134,15 @@ export class TouchOverlay {
   private render(): void {
     const layer = this.options.layer;
     layer.replaceChildren();
+    this.outsideMenu = [];
     const entries = Object.entries(this.inputs.actions);
     if (this.touch === 'tap') return this.refreshVisibility();
     const sticks = entries.filter(([, kind]) => kind === 'stick').slice(0, this.touch === 'two-stick' ? 2 : 1);
-    sticks.forEach(([action], index) => layer.append(this.createStick(action, index)));
+    sticks.forEach(([action], index) => {
+      const stick = this.createStick(action, index);
+      if (index > 0) this.outsideMenu.push(stick);
+      layer.append(stick);
+    });
     const buttons = entries.filter(([, kind]) => kind === 'button').slice(0, 5);
     if (entries.filter(([, kind]) => kind === 'button').length > 5) {
       console.warn('TouchOverlay supports at most five button actions');
@@ -125,7 +151,12 @@ export class TouchOverlay {
     const aboveStick = this.touch === 'two-stick' && sticks.length > 1;
     const base = EDGE + (aboveStick ? STICK_SIZE + 12 : 0);
     const columns = aboveStick ? 3 : 2;
-    buttons.forEach(([action], index) => layer.append(this.createButton(action, index, base, columns)));
+    buttons.forEach(([action], index) => {
+      const button = this.createButton(action, index, base, columns);
+      if (!MENU_BUTTONS.includes(index)) this.outsideMenu.push(button);
+      layer.append(button);
+    });
+    this.applyLayout();
     this.refreshVisibility();
   }
 
@@ -269,8 +300,17 @@ export class TouchOverlay {
     this.refreshVisibility();
   }
 
+  private applyLayout(): void {
+    for (const control of this.outsideMenu) control.style.visibility = this.layout === 'menu' ? 'hidden' : '';
+  }
+
   private refreshVisibility(): void {
-    const hidden = !this.enabled || !this.coarsePointer() || this.now() < this.suppressedUntil;
+    const hidden =
+      !this.enabled ||
+      this.loading ||
+      this.layout === 'none' ||
+      !this.coarsePointer() ||
+      this.now() < this.suppressedUntil;
     this.options.layer.hidden = hidden;
     this.options.layer.setAttribute('aria-hidden', String(hidden));
   }
