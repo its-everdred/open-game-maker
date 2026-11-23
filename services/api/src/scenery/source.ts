@@ -70,7 +70,7 @@ function inside(root: string, path: string): boolean {
   return part === '' || (!part.startsWith('..') && !isAbsolute(part));
 }
 
-async function contained(root: string, path: string): Promise<string> {
+export async function contained(root: string, path: string): Promise<string> {
   const base = await realpath(root);
   const target = await realpath(resolve(base, path));
   if (!inside(base, target)) throw new Error('file outside allowed directory');
