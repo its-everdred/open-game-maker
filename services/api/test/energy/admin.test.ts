@@ -127,6 +127,17 @@ describe('Energy admin resources', () => {
     expect(byId(view(deps, join(log, 'missing')), 'netlify/credits')).toMatchObject({ used: null, basis: 'unknown' });
   });
 
+  // East of UTC the month starts the evening before in UTC: Kiritimati (UTC+14) is in November from Oct 31 10:00Z.
+  it('starts the Netlify month at local midnight on the 1st, east of UTC too', () => {
+    const deps = worked();
+    const log = join(mkdtempSync(join(tmpdir(), 'ogm-netlify-')), 'deploys.log');
+    writeFileSync(log, '2026-10-31T09:00:00Z\n2026-10-31T12:00:00Z\n');
+    const snapshot = energySource({ db: deps.db, zone: 'Pacific/Kiritimati', readings: [], netlifyLog: log }).snapshot(
+      NOW,
+    );
+    expect(snapshot.resources.find(({ id }) => id === 'netlify/credits')?.used).toBe(15);
+  });
+
   // D5: $200 a month is $46.15 a week (12/52 of a month), not $50; the used share is a range, never one figure.
   it('turns a plan fee into a weekly estimate with a used range from the fresh weekly window', () => {
     const deps = worked();
@@ -156,6 +167,22 @@ describe('Energy admin resources', () => {
       },
     ]);
   });
+
+  // A fresh 5-hour window is not the week: with the weekly window stale, the week's used share is unknown.
+  it('leaves the used share unknown when the weekly window is stale, even if a shorter one is fresh', () => {
+    const deps = worked();
+    deps.db.insert(schema.energyCaps).values({ id: 'claude/plan', limit: 200, updatedAt: NOW.toISOString() }).run();
+    const claude = aiurReadings(
+      'claude',
+      'Claude',
+      usage('claude', 'fresh', {
+        five_hour: window('fresh', 10, '2026-10-31T23:00Z'),
+        seven_day: window('stale', 80, '2026-11-05T09:00Z'),
+      }),
+    );
+    const snapshot = energySource({ db: deps.db, zone: ZONE, readings: claude }).snapshot(NOW);
+    expect(adminView(snapshot, 'balanced').subscriptions[0]).toMatchObject({ weeklyUsd: 46.15, usedUsd: null });
+  });
 });
 
 describe('Energy admin history', () => {
@@ -179,6 +206,20 @@ describe('Energy admin history', () => {
 });
 
 describe('Energy admin routes', () => {
+  it('records one sample per resource per minute from the snapshot and serves it as history', async () => {
+    const deps = worked();
+    deps.registry.energyReadings = { read: async () => readings() };
+    const { app } = await makeApp(deps);
+    const get = async () =>
+      EnergyAdminView.parse(await (await app.request('/api/v1/energy/admin', { headers: asUser(ids.admin) })).json());
+    await get();
+    const admin = await get();
+    expect(deps.db.select().from(schema.energySamples).all()).toHaveLength(admin.resources.length);
+    expect(admin.history.find(({ id }) => id === 'claude/seven_day')?.points).toEqual([
+      { at: NOW.toISOString(), left: 47, low: null, high: null, basis: 'reported' },
+    ]);
+  });
+
   it('refuses a non-admin the dashboard and its caps', async () => {
     const { app } = await makeApp(worked());
     const put = (as: string, body: unknown) =>

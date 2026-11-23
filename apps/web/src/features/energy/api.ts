@@ -25,11 +25,10 @@ export function useEnergy(enabled = true) {
   });
 }
 
-export function useEnergyAdmin(enabled: boolean) {
+export function useEnergyAdmin() {
   return useQuery({
     queryKey: energyKeys.admin(),
     queryFn: () => api<EnergyAdminView>('/energy/admin'),
-    enabled,
     retry: false,
   });
 }

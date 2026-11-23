@@ -32,7 +32,6 @@ export type ResourceInputs = {
   resetsAt: Record<EnergyWindowName, string>;
   readings: ProviderReading[];
   caps: EnergyCaps;
-  falCapMicroUsd: number | null;
   netlifyDeploys: number | null;
   now: Date;
 };
@@ -280,7 +279,10 @@ export function bindingConstraint(resources: EnergyResource[]): EnergyAdminView[
 }
 
 // D5: a weekly share of each set plan fee, and the used share of it from the provider's weekly window (the
-// window that resets last), as a range. Estimates only; a stale or unknown window leaves the used share unknown.
+// window that resets last), as a range. Estimates only; a stale or unknown weekly window leaves the used share
+// unknown rather than falling back to a shorter window.
+const resetTime = ({ resetsAt }: EnergyResource) => (resetsAt === null ? -Infinity : Date.parse(resetsAt));
+
 export function subscriptionEstimates(resources: EnergyResource[], caps: EnergyCaps): EnergyAdminView['subscriptions'] {
   const plans = [
     { id: 'claude/plan', provider: 'claude', label: 'Claude' },
@@ -291,8 +293,8 @@ export function subscriptionEstimates(resources: EnergyResource[], caps: EnergyC
     if (plan === null) return [];
     const weekly = round(plan / WEEKS_PER_MONTH);
     const weekWindow = resources
-      .filter((r) => r.provider === provider && r.kind === 'subscription_window' && r.used !== null)
-      .sort((a, b) => Date.parse(b.resetsAt ?? '') - Date.parse(a.resetsAt ?? ''))[0];
+      .filter((r) => r.provider === provider && r.kind === 'subscription_window')
+      .sort((a, b) => resetTime(b) - resetTime(a))[0];
     const used = weekWindow?.used ?? null;
     return [
       {

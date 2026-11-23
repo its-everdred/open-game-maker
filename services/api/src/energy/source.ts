@@ -55,8 +55,9 @@ export function localSource(deps: EnergySourceDeps): ResourcePolicySource {
           resetsAt,
           readings,
           caps: capValues,
-          falCapMicroUsd,
-          netlifyDeploys: deps.netlifyLog ? netlifyDeploysSince(deps.netlifyLog, monthBefore(resetsAt.month)) : null,
+          netlifyDeploys: deps.netlifyLog
+            ? netlifyDeploysSince(deps.netlifyLog, new Date(monthStart(today, deps.zone)))
+            : null,
           now,
         }),
         caps: energyCaps(capValues, falCapMicroUsd),
@@ -112,7 +113,9 @@ export type EnergySourceDeps = { db: Db; zone: string; readings?: ProviderReadin
 
 // The snapshot the routes and job bundles show: provider readings (cached, time-boxed) fetched first.
 export async function readEnergySnapshot(
-  deps: { db: Db; zone: string; readings: ProviderReadings | null; netlifyLog?: string | null },
+  // Every caller passes the same sources, so each recorded sample is the whole picture (a missing log would record
+  // Netlify as unknown).
+  deps: { db: Db; zone: string; readings: ProviderReadings | null; netlifyLog: string | null },
   now: Date,
 ): Promise<EnergySnapshot> {
   const readings = (await deps.readings?.read(now)) ?? [];
@@ -133,11 +136,10 @@ function addDays(key: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-// This month's start: a calendar month before its reset (within an hour across a DST change; Netlify is an estimate).
-function monthBefore(reset: string): Date {
-  const date = new Date(reset);
-  date.setUTCMonth(date.getUTCMonth() - 1);
-  return date;
+// The instant this month began in `zone`, stepping from a day and a half before the 1st in UTC (one or two steps).
+function monthStart(today: string, zone: string): string {
+  const first = `${today.slice(0, 7)}-01`;
+  return startOfDay(first, new Date(Date.parse(`${first}T00:00:00Z`) - 36 * 3_600_000), zone);
 }
 
 function weekStart(key: string): string {

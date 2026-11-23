@@ -60,7 +60,7 @@ const day = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
 
 export function EnergyAdmin() {
-  const admin = useEnergyAdmin(true);
+  const admin = useEnergyAdmin();
   if (admin.isPending) return <p className="admin-state">Loading…</p>;
   if (admin.isError) return <p className="admin-state">Not allowed</p>;
   return <EnergyDashboard view={admin.data} />;
@@ -215,13 +215,17 @@ function Caps({ caps }: { caps: EnergyCap[] }) {
     }),
   );
   const valid = Object.values(parsed).every((value) => value !== undefined);
+  // Only the caps this admin changed are sent, so a save never overwrites another admin's edit to a different cap.
+  const changed = Object.fromEntries(
+    editable.flatMap((cap) => (parsed[cap.id] === cap.limit ? [] : [[cap.id, parsed[cap.id]]])),
+  ) as EnergyCapsUpdate;
   return (
     <form
       className="admin-card"
       aria-label="Energy caps"
       onSubmit={(event) => {
         event.preventDefault();
-        if (valid) saveCaps.mutate(parsed as EnergyCapsUpdate);
+        if (valid) saveCaps.mutate(changed);
       }}
     >
       <div className="admin-settings-grid">

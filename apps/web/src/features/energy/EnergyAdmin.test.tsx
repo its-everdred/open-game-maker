@@ -7,7 +7,7 @@ import type { EnergyAdminView, EnergyResource } from '@ogm/contracts/browser';
 
 import { queryClient } from '../../app/query';
 import { basisText, EnergyAdmin } from './EnergyAdmin';
-import { historyRuns } from './EnergyHistory';
+import { EnergyHistory, historyRuns } from './EnergyHistory';
 
 const NOW = '2026-11-22T22:10:00.000Z';
 
@@ -147,6 +147,15 @@ const view: EnergyAdminView = {
       origin: 'admin',
       layer: null,
     },
+    {
+      id: 'claude/plan',
+      label: 'Claude plan a month',
+      unit: 'usd',
+      limit: 200,
+      editable: true,
+      origin: 'admin',
+      layer: null,
+    },
   ],
   history: [
     {
@@ -248,6 +257,7 @@ describe('EnergyAdmin', () => {
     expect(within(form).getByLabelText(/fal stop/)).toHaveAttribute('readonly');
     fireEvent.change(within(form).getByLabelText(/Netlify credits/), { target: { value: '1000' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+    // Only the changed cap is sent, so another admin's Claude plan edit is not overwritten with this page's copy.
     await waitFor(() =>
       expect(calls).toContainEqual({ method: 'PUT', path: '/energy/admin/caps', body: { 'netlify/credits': 1000 } }),
     );
@@ -271,6 +281,42 @@ describe('EnergyAdmin', () => {
   it('says Not allowed when the API refuses a non-admin', async () => {
     serve(403);
     expect(await screen.findByText('Not allowed')).toBeVisible();
+  });
+});
+
+describe('EnergyHistory', () => {
+  const points = (left: (number | null)[], basis: 'reported' | 'estimate' = 'reported', band = false) =>
+    left.map((value, hour) => ({
+      at: new Date(Date.parse(NOW) - (left.length - hour) * 3_600_000).toISOString(),
+      left: value,
+      low: band && value !== null ? value - 5 : null,
+      high: band && value !== null ? value + 5 : null,
+      basis: value === null ? ('unknown' as const) : basis,
+    }));
+
+  function draw(history: EnergyAdminView['history']) {
+    const { container } = render(<EnergyHistory resources={view.resources} history={history} now={Date.parse(NOW)} />);
+    return container;
+  }
+
+  it('draws reported as a line, a ranged estimate as a band, and leaves a never-known resource out', () => {
+    const container = draw([
+      { id: 'claude/seven_day', points: points([50, 48, null, 40, 38]) },
+      { id: 'fal/ledger', points: points([80, 79], 'estimate', true) },
+      { id: 'codex/primary', points: points([null, null]) },
+    ]);
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Claude', 'fal']);
+    // The unknown hour splits Claude's line in two; fal's estimate is one band.
+    expect(container.querySelectorAll('.energy-spark-reported')).toHaveLength(2);
+    expect(container.querySelectorAll('.energy-spark-band')).toHaveLength(1);
+  });
+
+  it('shows 7 days, then 30 on request', () => {
+    const old = { at: new Date(Date.parse(NOW) - 20 * 86_400_000).toISOString(), left: 90, low: null, high: null };
+    draw([{ id: 'claude/seven_day', points: [{ ...old, basis: 'reported' }] }]);
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: '30 d' }));
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Claude']);
   });
 });
 
