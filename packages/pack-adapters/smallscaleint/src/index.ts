@@ -72,3 +72,4 @@ export {
   SPAWNS_LAYER,
 } from './scene-convert.js';
 export { SCENE_LAYERS, smallScaleIntSceneAdapter, type SmallScaleIntSceneAdapter } from './scene-adapter.js';
+export { cellAt, cellCenter, gridAt, sceneDrawList, sceneExtent, type SceneDrawPiece } from './scene-draw.js';
