@@ -4,6 +4,7 @@ import type { ActionFrame } from '@ogm/contracts/input';
 import { openGameBridge } from '@ogm/iframe-bridge';
 
 import { EventRing } from './events.js';
+import { linkedHd2d, watchHd2d } from './hd2d-link.js';
 import { SdkHostApi, type SendEnvelope } from './host-api.js';
 import { RuntimeImpl, type BuildKind, type Runtime } from './runtime.js';
 import { GM_PAUSED_FLAG, GM_PAUSE_EVENT } from '../audio/unlock.js';
@@ -261,6 +262,18 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       });
       runtime.addCleanup(() => cancelAnimationFrame(paintFrame));
     }
+    /* The editor's HD-2D tool reads what the scene renders. A slider drag changes it many times a frame: one report each. */
+    let hd2dReport = false;
+    const reportHd2d = () => {
+      if (hd2dReport) return;
+      hd2dReport = true;
+      queueMicrotask(() => {
+        hd2dReport = false;
+        if (runtimeState.current === runtime) send('hd2d.scene', linkedHd2d()?.state() ?? { doc: null });
+      });
+    };
+    runtime.addCleanup(watchHd2d(reportHd2d));
+    if (linkedHd2d()) reportHd2d();
     for (const envelope of queued.splice(0)) dispatchRuntime(envelope);
     const trailerCapture =
       build === 'test' &&
@@ -360,6 +373,19 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
           if (active.instance.setCamera) active.instance.setCamera(envelope.payload.mode, envelope.payload.target);
           else send('error', { code: 'unsupported', message: 'camera modes are not supported' }, envelope.id);
           return;
+        case 'hd2d.apply': {
+          const link = linkedHd2d();
+          if (!link) {
+            send('error', { code: 'unsupported', message: 'this scene has no HD-2D' }, envelope.id);
+            return;
+          }
+          try {
+            link.apply(envelope.payload.doc, envelope.payload.weather);
+          } catch (error) {
+            send('error', { code: 'apply_failed', message: String(error) }, envelope.id);
+          }
+          return;
+        }
         case 'editor.pick':
           send(
             'editor.picked',
