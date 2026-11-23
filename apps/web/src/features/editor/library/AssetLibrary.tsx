@@ -28,6 +28,16 @@ const GAP = 8;
 const LABEL_H = 22;
 const OVERSCAN_ROWS = 2;
 
+const EMPTY: EditorLibrary = { groups: [], packs: [], items: [] };
+
+/** The sheet sits on the edit page: an answer it cannot read hides the sheet instead of breaking the page. */
+function libraryOrEmpty(value: unknown): EditorLibrary {
+  const library = value as Partial<EditorLibrary> | null;
+  return library && [library.groups, library.packs, library.items].every(Array.isArray)
+    ? (library as EditorLibrary)
+    : EMPTY;
+}
+
 export function libraryThumbUrl(gameId: string, card: string): string {
   return `/api/v1/games/${encodeURIComponent(gameId)}/editor/library/thumb?card=${encodeURIComponent(card)}`;
 }
@@ -46,7 +56,7 @@ export function AssetLibrary({
 }) {
   const library = useQuery({
     queryKey: ['editor', 'library', gameId],
-    queryFn: () => api<EditorLibrary>(`/games/${encodeURIComponent(gameId)}/editor/library`),
+    queryFn: () => api<unknown>(`/games/${encodeURIComponent(gameId)}/editor/library`).then(libraryOrEmpty),
     staleTime: 5 * 60_000,
     retry: false,
   });

@@ -69,6 +69,13 @@ describe('asset library', () => {
     expect(screen.queryByRole('region', { name: 'Library' })).toBeNull();
   });
 
+  it('hides itself, rather than breaking the edit page, when the answer is not a library', async () => {
+    api.mockResolvedValue({ items: [{ id: 'x' }] });
+    await renderLibrary(vi.fn(), false);
+    expect(screen.queryByRole('region', { name: 'Library' })).toBeNull();
+    expect(document.querySelector('.game-frame')).toBeTruthy();
+  });
+
   it('narrows to fences with one tap on the closed sheet, and shows only the rows in view', async () => {
     await renderLibrary();
     expect(screen.getByText('401')).toBeTruthy();
