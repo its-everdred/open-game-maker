@@ -53,9 +53,8 @@ function kitFolder(item: BuildItem): string {
 
 export async function planBuild(
   lock: AssetsLock,
-  cwd: string,
   tiers: Tier[],
-  useCache: boolean,
+  cacheDir: string | null,
   locations: Locations,
 ): Promise<{ jobs: BuildJob[]; failures: BuildFailure[] }> {
   const jobs: BuildJob[] = [];
@@ -74,7 +73,7 @@ export async function planBuild(
     const item: BuildItem = { entry, source, ...(meta === undefined ? {} : { meta }) };
     if (MODEL.has(extension)) {
       try {
-        const inspected = await inspectGltf(source, cwd, useCache);
+        const inspected = await inspectGltf(source, cacheDir);
         modelItems.push({ ...item, facts: inspected.facts, sourceHash: inspected.sourceHash });
       } catch (error) {
         failures.push({ id: entry.id, message: error instanceof Error ? error.message : String(error) });

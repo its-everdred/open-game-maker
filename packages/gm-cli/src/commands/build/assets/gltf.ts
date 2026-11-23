@@ -68,16 +68,16 @@ function validFacts(value: unknown): value is GltfFacts {
 
 export async function inspectGltf(
   path: string,
-  cwd: string,
-  useCache: boolean,
+  cacheDir: string | null,
 ): Promise<{ facts: GltfFacts; sourceHash: string }> {
   const bytes = await readFile(path);
   const sourceHash = sha256(bytes);
   const recipeHash = sha256('gltf-facts-v2|gltf-transform-4.5.1|meshoptimizer-1.3.0|sharp-0.35.5');
-  const cachePath = join(cwd, '.gm/cache/assets/facts', `${sourceHash}-${recipeHash}.json`);
-  if (useCache) {
+  const cacheName = `${sourceHash}-${recipeHash}.json`;
+  if (cacheDir !== null) {
     try {
-      await assertNoSymlinks(cwd, cachePath);
+      const cachePath = join(cacheDir, 'facts', cacheName);
+      await assertNoSymlinks(cacheDir, cachePath);
       const cached = JSON.parse(await readFile(cachePath, 'utf8')) as unknown;
       if (validFacts(cached)) return { facts: cached, sourceHash };
     } catch (error) {
@@ -95,7 +95,8 @@ export async function inspectGltf(
       .some((animation) => animation.listChannels().some((channel) => channel.getTargetNode() !== null)),
     textureKeys: (await textureMeasurements(document)).textureKeys,
   };
-  if (useCache) await writeIfChanged(cachePath, `${JSON.stringify(facts, null, 2)}\n`, cwd);
+  if (cacheDir !== null)
+    await writeIfChanged(join(cacheDir, 'facts', cacheName), `${JSON.stringify(facts, null, 2)}\n`, cacheDir);
   return { facts, sourceHash };
 }
 

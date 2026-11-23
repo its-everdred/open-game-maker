@@ -146,9 +146,9 @@ describe('gm build assets safety boundaries', () => {
       }),
     );
 
-    await expect(loadCached({ sourceHash: 'source', key: 'safe' }, cwd, join(cwd, 'public/assets'))).rejects.toThrow(
-      'invalid generated file name',
-    );
+    await expect(
+      loadCached({ sourceHash: 'source', key: 'safe' }, join(cwd, '.gm/cache/assets'), cwd, join(cwd, 'public/assets')),
+    ).rejects.toThrow('invalid generated file name');
     expect(existsSync(join(cwd, 'escape.bin'))).toBe(false);
   });
 
@@ -173,7 +173,9 @@ describe('gm build assets safety boundaries', () => {
     );
 
     const outDir = join(cwd, 'public/a');
-    await expect(loadCached({ sourceHash: 'source', key: 'safe' }, cwd, outDir)).resolves.toBeNull();
+    await expect(
+      loadCached({ sourceHash: 'source', key: 'safe' }, join(cwd, '.gm/cache/assets'), cwd, outDir),
+    ).resolves.toBeNull();
     expect(existsSync(join(outDir, name))).toBe(false);
   });
 
