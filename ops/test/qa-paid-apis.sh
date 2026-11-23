@@ -142,6 +142,15 @@ rc=$?
 set -e
 rm "$scratch/broken"
 assert_eq 1 "$rc" 'a let-through request still fails with no daemon secret'
+# A secret the check cannot read may still be one the API reads: it fails rather than call the route unreachable.
+rm "$HOME/.config/ogm/daemons/attic/hook-secret"
+mkdir "$HOME/.config/ogm/daemons/attic/hook-secret"
+set +e
+run
+rc=$?
+set -e
+assert_eq 1 "$rc" 'an unreadable daemon secret fails the check'
+assert_not_grep 'preview: unreachable' "$scratch/out"
 
 # An API that does not answer fails every request.
 set +e
