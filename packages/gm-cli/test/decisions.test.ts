@@ -345,6 +345,21 @@ describe('gm decisions', () => {
     );
     const reviewed = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
     expect(JSON.parse(reviewed.out[0]!).prototypeReview.problems).toEqual([]);
+    /* Kevin, #1278: a games-host play link throws the home-screen app out to the browser; reviews open the editor. */
+    const review = (play: string) =>
+      `Closes #71\n\n## Prototype review\nPlay: ${play}\nClip: clip.mp4\nWorks now: move.\nKnown limitations: none.\nWeigh in on: enemy-style, map-style, loot-style, inventory-ui.\n`;
+    for (const hosted of [
+      'https://host.example.ts.net:10000/g/g_1/build_1/',
+      'https://games.example.test/g/g_1/build_1/',
+    ]) {
+      writeFileSync(body, review(hosted));
+      const result = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
+      expect(result.code).toBe(1);
+      expect(JSON.parse(result.out[0]!).prototypeReview.problems.join('\n')).toContain('Play links the games host');
+    }
+    writeFileSync(body, review('https://app.example.test/g/g_1?mode=edit&build=build_1'));
+    const inApp = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
+    expect(JSON.parse(inApp.out[0]!).prototypeReview.problems).toEqual([]);
   });
 
   it('reports unreadable review inputs as failed PR gate results', async () => {

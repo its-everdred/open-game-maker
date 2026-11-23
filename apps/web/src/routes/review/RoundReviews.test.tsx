@@ -1,4 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { queryClient } from '../../app/query';
@@ -95,31 +96,33 @@ it('shows the capture and sends the creator notes without trimming', async () =>
 
 it('shows published prototype details and lets the creator submit a verdict', async () => {
   render(
-    <QueryClientProvider client={queryClient}>
-      <RoundReviews
-        gameId="game"
-        rounds={[
-          {
-            id: 'published-round',
-            ticket: 'publish',
-            track: 'prototype-publish',
-            buildId: 'build_1',
-            playUrl: 'https://app.example/play/game',
-            question: 'Review the published build',
-            works: ['Walk around'],
-            limitations: ['No attack yet'],
-            decisionIds: ['enemy-lineup'],
-            clipStatus: 'unchecked',
-            media: [],
-          },
-        ]}
-      />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <RoundReviews
+          gameId="game"
+          rounds={[
+            {
+              id: 'published-round',
+              ticket: 'publish',
+              track: 'prototype-publish',
+              buildId: 'build_1',
+              playUrl: 'https://app.example/g/game?mode=edit&build=build_1',
+              question: 'Review the published build',
+              works: ['Walk around'],
+              limitations: ['No attack yet'],
+              decisionIds: ['enemy-lineup'],
+              clipStatus: 'unchecked',
+              media: [],
+            },
+          ]}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
-  expect(screen.getByRole('link', { name: 'Play this build' })).toHaveAttribute(
-    'href',
-    'https://app.example/play/game',
-  );
+  /* Same-tab, in-app: a target=_blank link throws a home-screen app out to the browser. */
+  const play = screen.getByRole('link', { name: 'Play this build' });
+  expect(play).toHaveAttribute('href', '/g/game?mode=edit&build=build_1');
+  expect(play).not.toHaveAttribute('target');
   expect(screen.getByText('Walk around')).toBeVisible();
   expect(screen.getByText('No attack yet')).toBeVisible();
   expect(screen.getByText('enemy-lineup')).toBeVisible();

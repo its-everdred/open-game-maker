@@ -352,6 +352,18 @@ const routes = new Hono<ApiBindings>()
       ),
     );
   })
+  /* One build's own design, so a link to a reviewed build plays that build rather than the branch head. */
+  .get('/games/:gameId/builds/:buildId/design', async (c) => {
+    const game = readableGame(c);
+    const buildId = stableRouteParam(c, 'buildId');
+    let doc;
+    try {
+      doc = await getDesignRuntime(c.get('deps')).source.load(game.id, buildId);
+    } catch {
+      throw new HttpError(404, 'build_not_found');
+    }
+    return c.json({ rev: 0, buildId, doc });
+  })
   .get('/games/:gameId/branches/:branch/reapply/:buildId', async (c) => {
     const game = readableGame(c);
     const branch = branchFor(c, game.id);

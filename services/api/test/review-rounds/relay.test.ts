@@ -34,11 +34,12 @@ it('shows a published prototype round in the default review list', async () => {
   });
 
   expect(response.status).toBe(200);
+  /* The link opens the game's editor in the app; a games-origin link throws a home-screen app out to the browser. */
   expect(await response.json()).toMatchObject({
     rounds: [
       expect.objectContaining({
         track: 'prototype-publish',
-        playUrl: expect.stringContaining('/g/'),
+        playUrl: `https://app.example.test/g/${ids.game}?mode=edit&build=build_published`,
       }),
     ],
   });

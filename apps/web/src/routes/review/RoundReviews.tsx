@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router';
 
 import { queryClient } from '../../app/query';
 import { api } from '../../lib/api/client';
@@ -59,6 +60,7 @@ export function RoundCard({
   onAnswered,
   swipe = false,
   onPendingChange,
+  onPlay,
   isNew = false,
 }: {
   gameId: string;
@@ -66,6 +68,7 @@ export function RoundCard({
   onAnswered?(): void;
   swipe?: boolean;
   onPendingChange?(pending: boolean): void;
+  onPlay?(): void;
   isNew?: boolean;
 }) {
   const [note, setNote] = useState('');
@@ -96,9 +99,10 @@ export function RoundCard({
       {round.question ? <p>{round.question}</p> : null}
       {round.playUrl ? (
         <p>
-          <a href={round.playUrl} target="_blank" rel="noreferrer">
+          {/* The build opens in the game's editor inside the app; a new tab would take a home-screen app to the browser. */}
+          <Link to={inAppPath(round.playUrl)} onClick={onPlay}>
             Play this build
-          </a>
+          </Link>
         </p>
       ) : null}
       {round.buildId && !round.playUrl && <p role="alert">The playable review is unavailable. Try again later.</p>}
@@ -185,4 +189,9 @@ export function RoundCard({
       {answer.isError ? <p role="alert">The review may not have sent. Tap the same verdict to retry.</p> : null}
     </section>
   );
+}
+
+function inAppPath(url: string): string {
+  const parsed = new URL(url, window.location.origin);
+  return `${parsed.pathname}${parsed.search}`;
 }

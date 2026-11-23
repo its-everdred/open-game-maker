@@ -10,6 +10,7 @@ import { useDock } from '../../features/build-chat/dock';
 import { editJobRequest } from '../../features/build-chat/edit';
 import { gameJobsQueryKey, myJobsQueryKey } from '../../features/build-chat/jobs';
 import {
+  getBuildDesign,
   getDesignSnapshot,
   getGame,
   getFallbackPalette,
@@ -99,6 +100,8 @@ export function GameScreen() {
   const branch = searchParams.get('v')?.trim() || 'main';
   const roomId = searchParams.get('room')?.trim() || undefined;
   const scenario = searchParams.get('scenario');
+  /* A link to one build (a review's "Play this build") names it here; the frame plays it instead of the branch head. */
+  const linkedBuild = searchParams.get('build')?.trim() || undefined;
   const isGameRoute = useMatch('/g/:gameId') !== null;
   const mode: 'play' | 'edit' = searchParams.get('mode') === 'edit' ? 'edit' : 'play';
   const gamesOrigin = import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000';
@@ -155,6 +158,15 @@ export function GameScreen() {
   const activeSnapshot = adopted?.gameId === gameId && adopted.branch === branch ? adopted.snapshot : design.data;
   const noBuild = activeSnapshot?.buildId === NO_BUILD_ID;
   const designLoadFailed = design.isError && activeSnapshot === undefined;
+  const otherBuild =
+    linkedBuild !== undefined && activeSnapshot !== undefined && linkedBuild !== activeSnapshot.buildId;
+  const linkedDesign = useQuery({
+    queryKey: ['build-design', gameId, linkedBuild],
+    queryFn: () => getBuildDesign(gameId, linkedBuild!),
+    enabled: gameId !== '' && otherBuild,
+    retry: false,
+  });
+  const linkedSnapshot = otherBuild ? linkedDesign.data : undefined;
   const previews = useQuery({
     queryKey: ['editor-previews', gameId],
     queryFn: () => getEditorPreviews(gameId),
@@ -176,7 +188,7 @@ export function GameScreen() {
   const activePreview = candidatePreview && previewDesign.data ? candidatePreview : undefined;
   useLayoutEffect(
     () => setFrameState(initialFrameState),
-    [gameId, branch, activeSnapshot, activePreview?.accessId, frameAttempt],
+    [gameId, branch, activeSnapshot, linkedSnapshot, activePreview?.accessId, frameAttempt],
   );
   const stage = useQuery({
     queryKey: ['editor-stage', gameId, jobBranch],
@@ -393,18 +405,28 @@ export function GameScreen() {
 
   useEffect(() => {
     const container = containerRef.current;
-    const snapshot = activeSnapshot;
-    if (container === null || snapshot === undefined || gameId === '') return;
-    if (waitingForPreview) return;
-    if (waitingForStage) return;
-    if (waitingForScenery) return;
-    if (activePreview && !previewDesign.data) return;
-    if (snapshot.buildId === NO_BUILD_ID && !activePreview && !activeStage && previewSource === undefined) {
-      if (previewSourceError) setFrameState({ bridgeState: 'error', dropped: 0 });
+    if (container === null || activeSnapshot === undefined || gameId === '') return;
+    if (otherBuild && linkedDesign.isError) {
+      setFrameState({ bridgeState: 'error', dropped: 0 });
       return;
     }
+    if (otherBuild && linkedSnapshot === undefined) return;
+    const snapshot = linkedSnapshot ?? activeSnapshot;
+    /* A linked build plays as it was built: no request-only preview, stage or scenery stands in for it. */
+    const framePreview = linkedSnapshot ? undefined : activePreview;
+    const frameStage = linkedSnapshot ? undefined : activeStage;
+    if (!linkedSnapshot) {
+      if (waitingForPreview) return;
+      if (waitingForStage) return;
+      if (waitingForScenery) return;
+      if (framePreview && !previewDesign.data) return;
+      if (snapshot.buildId === NO_BUILD_ID && !framePreview && !frameStage && previewSource === undefined) {
+        if (previewSourceError) setFrameState({ bridgeState: 'error', dropped: 0 });
+        return;
+      }
+    }
     setFrameState(initialFrameState);
-    const restoreOnStart = mode === 'play' && roomId === undefined && !activePreview && !skipRestore.current;
+    const restoreOnStart = mode === 'play' && roomId === undefined && !framePreview && !skipRestore.current;
     const away = restoreOnStart ? readAway(gameId, snapshot.buildId) : undefined;
     if (away) {
       awayHold.current = true;
@@ -413,20 +435,20 @@ export function GameScreen() {
     skipRestore.current = false;
     let controller: GameFrameController;
     try {
-      controller = activeStage
-        ? mountStagePreview(container, activeStage, setFrameState)
-        : snapshot.buildId === NO_BUILD_ID && !activePreview
+      controller = frameStage
+        ? mountStagePreview(container, frameStage, setFrameState)
+        : snapshot.buildId === NO_BUILD_ID && !framePreview
           ? mountSceneryPreview(container, previewSource!, snapshot.doc, setFrameState)
           : mountGameFrame({
               container,
               gamesOrigin,
               gameId,
-              buildId: activePreview?.accessId ?? snapshot.buildId,
-              ...(activePreview ? { preview: true } : {}),
+              buildId: framePreview?.accessId ?? snapshot.buildId,
+              ...(framePreview ? { preview: true } : {}),
               mode: mode === 'edit' ? 'play' : mode,
               ...(scenario === null ? {} : { params: { scenario } }),
               ...(restoreOnStart ? saveOptions(gameId, roomIdRef, menuOpenRef, away, awayHold) : {}),
-              design: activePreview ? previewDesign.data! : snapshot,
+              design: framePreview ? previewDesign.data! : snapshot,
               build,
               onState: setFrameState,
               onSaveWrite: () => setLastSaveAt(new Date().toISOString()),
@@ -465,6 +487,9 @@ export function GameScreen() {
     activePreview?.buildId,
     activePreview?.accessId,
     previewDesign.data,
+    otherBuild,
+    linkedDesign.isError,
+    linkedSnapshot,
   ]);
 
   useEffect(() => {
@@ -713,9 +738,11 @@ export function GameScreen() {
             transport={() => ({ rttMs: room.snapshot?.rttMs })}
           />
         ) : null}
-        {!designLoadFailed && (!noBuild || activePreview !== undefined) && frameState.bridgeState !== 'error' ? (
+        {!designLoadFailed &&
+        (!noBuild || activePreview !== undefined || linkedSnapshot !== undefined) &&
+        frameState.bridgeState !== 'error' ? (
           <LoadingLayer
-            key={`${activePreview?.accessId ?? activeSnapshot?.buildId ?? 'pending'}-${frameAttempt}`}
+            key={`${linkedSnapshot?.buildId ?? activePreview?.accessId ?? activeSnapshot?.buildId ?? 'pending'}-${frameAttempt}`}
             game={game.data ?? listedGame ?? { familyId: '', title: '' }}
             load={frameState.load}
             firstFrame={frameState.firstFrame}
@@ -970,6 +997,7 @@ export function GameScreen() {
             onClick={() => {
               if (designLoadFailed) void design.refetch();
               if (activeSnapshot?.buildId === NO_BUILD_ID) void scenerySource.refetch();
+              if (linkedDesign.isError) void linkedDesign.refetch();
               setFrameAttempt((attempt) => attempt + 1);
             }}
           >

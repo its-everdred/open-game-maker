@@ -266,6 +266,28 @@ describe('design log routes', () => {
     });
   });
 
+  it("serves a build's own design, not the edited branch head, so a review link plays what was reviewed", async () => {
+    const { app } = await setup();
+    const lease = await acquire(app, 'browser-one');
+    await app.request(`${branchUrl}/transactions`, {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify(transaction(0, lease.body.token, 'browser-one', 2)),
+    });
+    const build = await app.request(`/api/v1/games/${ids.game}/builds/${ids.build}/design`, {
+      headers: asUser(ids.creator),
+    });
+    expect(await build.json()).toEqual({
+      rev: 0,
+      buildId: ids.build,
+      doc: { schemaVersion: 1, globals: { gravity: 1 }, entities: {} },
+    });
+    const missing = await app.request(`/api/v1/games/${ids.game}/builds/build_01K8Z6Y7X8P9Q0R1S2T3V4W5XB/design`, {
+      headers: asUser(ids.creator),
+    });
+    expect(missing.status).toBe(404);
+  });
+
   it('serializes 50 competing writers into revisions 1 through 50', async () => {
     const { app } = await setup();
     const lease = await acquire(app, 'browser-one');

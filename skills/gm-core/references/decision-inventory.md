@@ -79,6 +79,9 @@ Play: <play link>   Clip: <phone-playable MP4>
 **Weigh in on:** enemies-first-biome, town-shop-building, inventory-ui-grid
 ```
 
+- **Play** opens the game's editor in the app with that build selected,
+  `<app origin>/g/<gameId>?mode=edit&build=<buildId>` (add `&scenario=` for a slice). Never the games-host build URL
+  (`/g/<gameId>/<buildId>/`): it takes the home-screen app out to the browser, and `gm check` fails it.
 - **Works now** and **Known limitations** are checked in that build, not copied from the ticket. A limitation the
   creator would hit in the first minute is always listed.
 - **Weigh in on** names 3–6 inventory ids this build makes judgeable, each raised as its own decision.

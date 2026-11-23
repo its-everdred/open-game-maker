@@ -57,6 +57,11 @@ export function checkPrReview(cwd: string, bodyFile: string, base: string): stri
     const field = (name: string) => new RegExp(`^${name}\\s*:\\s*(.+)$`, 'im').exec(reviewSection)?.[1]?.trim() ?? '';
     for (const required of ['Play', 'Clip', 'Works now', 'Known limitations', 'Weigh in on'])
       if (!field(required)) problems.push(`Prototype review is missing ${required}`);
+    const playLink = /\bhttps?:\/\/\S+/u.exec(field('Play'))?.[0];
+    if (playLink && gamesHostLink(playLink))
+      problems.push(
+        `Prototype review Play links the games host (${playLink}), which opens the browser from the home-screen app; link the game's editor: <app>/g/<gameId>?mode=edit&build=<buildId>`,
+      );
     const reviewedIds = field('Weigh in on').match(/[A-Za-z][A-Za-z0-9_-]*/g) ?? [];
     if (reviewedIds.length < 3 || reviewedIds.length > 6)
       problems.push('Prototype review must name 3–6 decision ids under Weigh in on');
@@ -67,4 +72,15 @@ export function checkPrReview(cwd: string, bodyFile: string, base: string): stri
     }
   }
   return problems;
+}
+
+/* A build on the games host: its `/g/<gameId>/<buildId>/` path, or the host's port. The editor page is `/g/<gameId>`. */
+function gamesHostLink(link: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(link);
+  } catch {
+    return false;
+  }
+  return url.port === '10000' || /^\/g\/[^/]+\/[^/]+/u.test(url.pathname);
 }

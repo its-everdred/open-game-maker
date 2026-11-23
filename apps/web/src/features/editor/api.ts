@@ -97,6 +97,11 @@ export async function getDesignSnapshot(gameId: string, branch: string): Promise
   return { ...snapshot, buildId: snapshot.buildId ?? NO_BUILD_ID };
 }
 
+/** One build's own design, for a link that names the build to play rather than the branch head. */
+export function getBuildDesign(gameId: string, buildId: string): Promise<DesignSnapshot> {
+  return api(`/games/${segment(gameId)}/builds/${segment(buildId)}/design`);
+}
+
 export function getScenerySource(gameId: string, branch = 'main', buildId?: string): Promise<ScenerySource> {
   return api(
     `/games/${segment(gameId)}/scenery/source?branch=${encodeURIComponent(branch)}${buildId ? `&build=${encodeURIComponent(buildId)}` : ''}`,
