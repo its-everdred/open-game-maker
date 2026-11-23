@@ -6,6 +6,7 @@ undergarments) through the same camera and frames, for the pixel finish's cloth 
 spec: {"mesh": glb, "rotz": deg, "motion": {"kind": "kaykit"|"bvh"|"handkey"|"none", "path", "action",
        "frames": [f0, f1] | "auto", "loop": true, "foot_ik": true, "clip": "walk"|"attack"},
        "weapon": {"path": glb, "bone": "hand.R", "length": 0.3, "spin": deg, "roll": deg}}
+       With "rigged" (rigged.py) the body arrives rigged: no fit, no retarget.py, no stance, no IK.
 keys: rows=1,2 (sheet rows E=0 SE=1 S=2 ...)  frames=15  cell=128  height_px=43  origin_row=88  engine=cycles|workbench
       samples=32 supersample=1 threads=6
 Camera, light and scale match gpu_bake_rig.py: orthographic, 60 deg from vertical, yaw 45; the rig's rest pose in the
@@ -26,6 +27,7 @@ from mathutils import Matrix, Vector
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fit_rig  # noqa: E402
 import retarget  # noqa: E402
+import rigged  # noqa: E402
 
 argv = sys.argv[sys.argv.index('--') + 1:]
 OUT, SPEC = argv[0], json.load(open(argv[1]))
@@ -219,17 +221,18 @@ def fitted(spec):
     return ob, rig, lm, rep
 
 
-def mask_frames(sc, root, rows, ob, wob):
+def mask_frames(sc, root, rows, ob, wob, goto):
     """The cloth mask for every frame, before the colour frames (the mask pass replaces the materials, so the colour
     pass runs on copies)."""
     keep = {o: [m.copy() if m else None for m in o.data.materials] for o in (ob, wob) if o}
     mask_materials(ob, wob)
     engine, samples = sc.render.engine, getattr(sc.cycles, 'samples', 1)
     sc.render.engine, sc.cycles.samples = 'CYCLES', 4
+    sc.cycles.use_denoising = False  # after a workbench scene: this Blender build has no OpenImageDenoise
     for row in rows:
         root.rotation_euler = (0, 0, math.radians(135 - 45 * row))
         for col in range(N):
-            sc.frame_set(1 + col)
+            goto(col)
             sc.render.filepath = f'{OUT}/mask_{row}_{col}.png'
             bpy.ops.render.render(write_still=True)
     sc.render.engine, sc.cycles.samples = engine, samples
@@ -242,13 +245,33 @@ def main():
     t0 = time.time()
     sc = scene()
     os.makedirs(OUT, exist_ok=True)
-    ob, rig, lm, rep = fitted(SPEC)
+    if SPEC.get('rigged'):
+        ob, rig, times, offsets, mrep = rigged.setup(SPEC, N)
+        lm, rep = {}, {'rigged': SPEC['rigged']['path']}
+    else:
+        ob, rig, lm, rep = fitted(SPEC)
     matte(ob)
+    if SPEC.get('rigged') and SPEC.get('weapon'):  # a vendor rig's hand roll and scale are its own
+        bpy.context.view_layer.update()
+        if 'roll' not in SPEC['weapon']:
+            SPEC['weapon']['roll'] = rigged.weapon_roll(rig, SPEC['weapon']['bone'])
+        rig.data.pose_position = 'REST'
+        bpy.context.view_layer.update()
+        SPEC['weapon']['length'] = rigged.weapon_length(rig, ob, SPEC['weapon'].get('length', 0.3))
+        rig.data.pose_position = 'POSE'
     wob = weapon(rig, SPEC['weapon']) if SPEC.get('weapon') else None
-    mrep = motion(rig, SPEC.get('motion', {}))
+    if not SPEC.get('rigged'):
+        mrep = motion(rig, SPEC.get('motion', {}))
     root = bpy.data.objects.new('root', None)
     sc.collection.objects.link(root)
     rig.parent = root
+    base = rig.location.copy()
+
+    def goto(col):  # sheet frame col: the fitted rig is keyed at 1..N; a rigged one plays its clip at its own times
+        if SPEC.get('rigged'):
+            rigged.goto(rig, base, times[col], offsets[col])
+        else:
+            sc.frame_set(1 + col)
     rig.data.pose_position = 'REST'
     root.rotation_euler = (0, 0, math.radians(45))  # S view
     bpy.context.view_layer.update()
@@ -269,7 +292,7 @@ def main():
         if old.endswith('.png') and (old.startswith('mask_') or (old.startswith('raw_') and not P['mask_only'])):
             os.remove(os.path.join(OUT, old))
     if masks:
-        mask_frames(sc, root, rows, ob, wob)
+        mask_frames(sc, root, rows, ob, wob, goto)
     if P['mask_only']:  # the colour frames, feet and reports from the full render stay as they were
         return
     feet = {}
@@ -277,8 +300,8 @@ def main():
         root.rotation_euler = (0, 0, math.radians(135 - 45 * row))
         feet[row] = []
         for col in range(N):
-            sc.frame_set(1 + col)
-            fp = foot_points(rig)
+            goto(col)
+            fp = rigged.foot_points(rig, SPEC['rigged']['feet']) if SPEC.get('rigged') else foot_points(rig)
             feet[row].append({sd: {k: list(world_to_camera_view(sc, sc.camera, w))[:2] + [w.z]
                                    for k, w in d.items()} for sd, d in fp.items()})
             sc.render.filepath = f'{OUT}/raw_{row}_{col}.png'

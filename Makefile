@@ -18,6 +18,7 @@ test-py:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-trailer/scripts/test_trailer.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/py/maps/test_layout_fields.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_fal3d.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_sampling.py
 	$(MAKE) py-compile
 
 test-py-models:

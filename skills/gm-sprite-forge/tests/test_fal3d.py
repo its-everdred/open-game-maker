@@ -53,5 +53,36 @@ class Fal3dLedgerTests(unittest.TestCase):
         self.assertEqual(self.fal.ledger_path(), os.path.expanduser('~/.local/share/ogm/fal-ledger.json'))
 
 
+class Fal3dUploadTests(unittest.TestCase):
+    """A rigging call uploads our own mesh: sent as an image, fal's rigger cannot read it (the Meshy and Hyper3D arms
+    of #1282 upload .glb, and .fbx clips), while reference images must still go up as PNG."""
+
+    def setUp(self):
+        self.tmp = TemporaryDirectory()
+        self.fal = load()
+        self.init, self.put = [], []
+        self.fal.call = lambda url, data=None: self.init.append(data) or {'upload_url': 'https://upload.invalid/x', 'file_url': 'f'}
+
+        class Resp:
+            def read(self):
+                return b''
+
+        self.urlopen = self.fal.urllib.request.urlopen  # the real module: put it back for the other tests
+        self.fal.urllib.request.urlopen = lambda req, timeout=None: self.put.append(req.get_header('Content-type')) or Resp()
+
+    def tearDown(self):
+        self.fal.urllib.request.urlopen = self.urlopen
+        self.tmp.cleanup()
+
+    def test_each_file_goes_up_as_its_own_type(self):
+        for name, want in (('body.GLB', 'model/gltf-binary'), ('walk.fbx', 'application/octet-stream'),
+                           ('ref.png', 'image/png')):
+            path = os.path.join(self.tmp.name, name)
+            Path(path).write_bytes(b'x')
+            self.assertEqual(self.fal.upload(path), 'f')
+            self.assertEqual(self.init[-1]['content_type'], want, name)
+            self.assertEqual(self.put[-1], want, name)
+
+
 if __name__ == '__main__':
     unittest.main()

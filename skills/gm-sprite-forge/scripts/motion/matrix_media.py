@@ -1,4 +1,4 @@
-"""Review matrix for the #1202 rig/motion spike: the pack's own animation in column 1, then each rig/motion cell.
+"""Review matrix for rig/motion cells (#1202, #1282): the pack's own animation in column 1, then each rig/motion cell.
 
 Usage: matrix_media.py <out_dir> <pack_sheet.png> <title> <cell_dir> ... [--rows 1,2] [--fps 15] [--loops 4]
 Each cell_dir holds out/sheet.png, scores.json (score_cell.py) and recipe.json (kind, model, cost, skill, arm,
@@ -102,8 +102,8 @@ def main():
     ap.add_argument('--fps', type=int, default=15)
     ap.add_argument('--loops', type=int, default=4)
     a = ap.parse_args()
-    if len(a.cells) > 6:
-        ap.error('at most 6 cells beside the pack')
+    if len(a.cells) > 10:
+        ap.error('at most 10 cells beside the pack')
     a.out.mkdir(parents=True, exist_ok=True)
     recs = [json.loads((c / 'recipe.json').read_text()) for c in a.cells]
     scs = [json.loads((c / 'scores.json').read_text()) for c in a.cells]

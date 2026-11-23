@@ -63,10 +63,12 @@ def write(lg):
 
 def upload(path):
     """fal storage (CDN v3): initiate, then PUT the bytes; returns the public file URL. fal rejects data URIs."""
+    ctype = {'.glb': 'model/gltf-binary', '.fbx': 'application/octet-stream'}.get(
+        os.path.splitext(path)[1].lower(), 'image/png')  # a mesh or clip is sent as itself, not as an image
     init = call('https://rest.alpha.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3',
-                {'content_type': 'image/png', 'file_name': os.path.basename(path)})
+                {'content_type': ctype, 'file_name': os.path.basename(path)})
     req = urllib.request.Request(init['upload_url'], data=open(path, 'rb').read(), method='PUT',
-                                 headers={'Content-Type': 'image/png'})
+                                 headers={'Content-Type': ctype})
     urllib.request.urlopen(req, timeout=180).read()
     return init['file_url']
 

@@ -1,7 +1,8 @@
 # Rig and motion (hero Stage 2, #1202)
 
 How a TRELLIS character mesh becomes an animated sprite sheet judged against the pack's own animation. Everything runs
-locally on the CPU, costs nothing and sends nothing to a cloud service.
+locally on the CPU, costs nothing and sends nothing to a cloud service, except a vendor rig (see Rigged bodies), which
+is a paid fal call the creator approves first and which uploads only our own mesh, never a pack file.
 
 **Gate.** Animation waits behind an approved static sprite (SKILL.md). The one exception is the #1202 ticket's: the
 tooling may be built and debugged on an existing mesh as a test subject, with no creator review of the result. Only an
@@ -23,9 +24,11 @@ worn gear that bends with the body is not built yet.
 | `scripts/motion/fit_rig.py`, `retarget.py`, `handkey.py` | Blender (modules) | Reached through `render_motion.py`; not commands |
 | `scripts/motion/score_cell.py` | `gm py --` | Finish frames, `score.py` metrics, loop phase, foot slide -> `scores.json` |
 | `scripts/pixel_finish.py` | `gm py --` | Pack-style pixel finish (few colours, cloth on its own ramp); `score_cell.py` runs it for `pixel` |
-| `scripts/motion/matrix_media.py` | `gm py --` (needs ffmpeg with libx264) | Review matrix: pack column plus at most 6 cells, GIF + MP4, 1x and 4x |
+| `scripts/motion/matrix_media.py` | `gm py --` (needs ffmpeg with libx264) | Review matrix: pack column plus at most 10 cells, GIF + MP4, 1x and 4x |
 | `scripts/motion/strip.py` | `gm py --` | Quick zoomed strip for looking: `strip.py <cell_dir> <out.png> [rows=1,2] [zoom=3] [ref=<pack sheet>]` |
 | `scripts/motion/fit_accuracy.py` | Blender | Landmark error against rigged characters; exits 1 if any case fails |
+| `scripts/motion/rigged.py`, `sampling.py` | Blender module / plain | A body that arrives rigged (#1282): its own clip or a plain copy retarget, sampled evenly or on key poses |
+| `scripts/motion/pose_overlay.py` | `gm py --` | Frame-by-frame silhouettes over the pack clip (pack red, ours cyan) with per-frame IoU |
 
 Blender 4.3 needs the `gm py setup` environment's NumPy and SciPy (the glTF importer needs NumPy too). Use a wrapper
 such as `PYTHONPATH=<gm py env>/lib/python3.13/site-packages nice -n 10 blender -b --factory-startup
@@ -103,7 +106,7 @@ loop, none for an attack, in pixels at the pack cell.
   `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`, `mask_s`, `mask_v` (`mask=1` is added
   for you when `pixel.cloth` is set). Use the pack class's Stage 1 values
   for `height_px` and `origin_row` (Warrior 43 and 88).
-- `motion`: `kind` is `kaykit`, `bvh`, `handkey` or `none`. `loop` defaults to true for a walk and false for an attack.
+- `motion`: `kind` is `kaykit`, `bvh`, `handkey` or `none` (`own` and `copy` for a rigged cell, below). `loop` defaults to true for a walk and false for an attack.
   `foot_ik` defaults to true (false copies rotations only). `frames: [f0, f1]` overrides the automatic cut. For an
   attack BVH, `seconds` (1.1) and `fps` (30; CMU is 120) size the window.
 - Hand-keyed `params`: walk `stride`, `lift`, `bob`, `sway` (fractions of leg length), `yaw`, `lean`, `arm` (degrees),
@@ -132,6 +135,91 @@ the renders and runs the finish and scoring again (after a new `finish` or `pixe
 when `pixel.cloth` needs them and the cell lacks them. It refuses a cell whose mesh, motion, stance or weapon in
 `cells.json` changed since its render: render that cell again.
 `matrix_media.py` reads `out/sheet.png`, `scores.json` and `recipe.json` from each cell directory.
+
+## Rigged bodies (#1282 bake-off)
+
+**Round scope (Kevin, 2026-11-23; holds for every later rung until he widens it):** a motion round carries exactly
+one walk and one basic attack per arm, on the one body under test. No roll, push, block or extra attacks, no second
+attack clip in any arm, and no other classes or bodies. The attack recreates the pack's own clip (Warrior: 6Barbarian
+Attack1): the same beats, frame count and directions. Post the round as soon as every arm has rendered; the next
+motions wait for his pick.
+
+**Recreate the pack's clip, not a look-alike (Kevin, 2026-11-23, every later rung).** Study the pack frames first and
+write the key pose of each one down. Then match every arm to those poses: a vendor arm takes its closest clip,
+retimed and key-posed onto the pack's frames (`sample: keys`). The control and the plain copy retarget or hand-pose
+to the same poses. Keep the pack's frame count, timing and directions. Score every cell frame by frame with
+`pose_overlay.py`, and show it beside the pack (pack in column 1) at 1x and 4x. The walk matches the pack's Walk the
+same way. For the Warrior (6Barbarian, 15 frames, S = sheet row 2, SE = row 1):
+
+| Frame | Attack1 key pose | `holds` |
+|---|---|---|
+| 0 | ready crouch, axe low in front | 1 |
+| 1 | axe drawn back low | 1 |
+| 2 | axe out level at head height (wind-up) | 1 |
+| 3-4 | axe high overhead, off arm out; then vertical, torso twisting | 2 |
+| 5 | strike 1: diagonal chop to low front, lunge | 1 |
+| 6-7 | axe raised again; behind the head, crouch (second wind-up) | 2 |
+| 8 | wide horizontal sweep, low lunge | 1 |
+| 9 | axe overhead again | 1 |
+| 10 | strike 2 down the right side | 1 |
+| 11-12 | recovery crouch, axe at waist | 2 |
+| 13-14 | settle back to ready | 2 |
+
+Walk: a 15-frame hunched heavy walk, axe low in the right hand, small arm swing; key-posed as 8 phases from the left
+heel strike (the frame where the feet are farthest apart), each held 2 frames and the last 1. A one-swing source
+replays its wind-up and strike for the pack's second swing (`keys` may repeat a source frame).
+
+Bake-off result (#1282, mean silhouette IoU against Attack1, S / SE): Quaternius sword chop on the mannequin
+0.29 / 0.22-0.24, on the Hyper3D rig 0.34-0.35 / 0.28-0.29, and on the Meshy rig (plain copy) 0.33 / 0.25. Meshy's
+Double_Combo_Attack scored 0.22-0.23 / 0.02 (it turns away). No library attack reaches the pack's wide overhead arcs
+and low lunges; the walks score 0.46-0.60 / 0.39-0.52.
+
+A cell with `rigged` skips steps 1-5 (the top-level `mesh` and `pack` are still required; `recipe.json` names the
+rigged file as the cell's mesh): the body arrives rigged (a vendor rig such as Meshy or Hyper3D, or a library
+character such as the Quaternius mannequin) and nothing of ours touches the motion but the sampling.
+
+```json
+{"name": "A-meshy-combo-keys", "clip": "attack", "model": "...", "cost_usd": 0.8, "licence": "...",
+ "rigged": {"path": "<rigged>.glb", "action": "Double_Combo", "hips": "mixamorig:Hips",
+            "feet": {"L": ["mixamorig:LeftFoot", "mixamorig:LeftToeBase"], "R": ["mixamorig:RightFoot", "mixamorig:RightToeBase"]}},
+ "motion": {"kind": "own", "in_place": true, "sample": "keys", "keys": [0, 2.4, 4.9], "holds": [5, 5, 5]},
+ "weapon": {"path": "<axe>.gltf", "bone": "mixamorig:RightHand", "length": 0.75}}
+```
+
+- `action` is the action's name, or a part of it that only one action contains (importers add `_Armature`); an
+  ambiguous or missing name fails. `colour` (linear RGB) paints an untextured library mannequin flat so the skin pass
+  has skin to match.
+- `kind: own` plays the file's action as delivered. `kind: copy` (with `path`, `action` or `frames`, `map`: target
+  bone -> source bone, `src_hips`) is the plain retarget: each mapped bone takes its source bone's world rotation away
+  from the source rest pose, applied to the target's rest bone first turned to point where the source rest bone
+  points (a T-pose clip drives an A-pose body), and the hips take the source travel scaled by hip height. No stance,
+  no foot lock, no IK. `in_place` removes a clip's straight-line travel and keeps its sway.
+- The body is turned to face -Y from its feet (heel to toe), the source of a copy from its first posed frame. The
+  weapon's roll is set so it points forward out of the fist at rest (unless the cell gives `roll`), and its `length`
+  (sized for a 1.8 m body) is always scaled to the rig's height (Hyper3D's rig comes back about 1 m tall). A rigged
+  cell does not inherit the top-level `rotz`.
+- `sample`: `even` spreads the sheet's 15 frames over the clip (a loop leaves out its closing frame); `keys` holds
+  key poses (`keys` source frames, `holds` sheet frames each, summing to 15) on the pack clip's beats, and may replay
+  poses (a one-swing clip swung twice for the pack's two-swing Attack1); `times` gives every frame outright.
+- The pack 6Barbarian Walk and Attack1 face about 45 degrees off the travel direction in every row (the Idle does
+  not): the rows are right (all 8 Idle rows match the render's), the pack's walk and attack carry a turned stance.
+
+**Vendors (fal, 2026-11-23).** `fal3d.py price` lists `fal-ai/meshy/rigging` at $0.80 and `fal-ai/hyper3d/rigging`
+at $0.40 a call, not the model pages' $0.32 and $0.20; book the higher. Meshy (`skeleton_template: mixamo`,
+`height_meters`, `enable_animation` with one `animation_action_id`) returns the rig, a walk, a run and the one library
+clip as GLB and FBX in about a minute; one clip per call. Hyper3D's `animation_urls` must already be on its own rig
+(it does not retarget them): our Quaternius and Bandai FBX clips were rejected with a 422, and its stock presets need
+ids from a catalog only a billed call reaches, so the rig alone was taken and played through `kind: copy`. Run one
+through the ledger, uploading only our own base-body mesh:
+
+```sh
+OGM_FAL_LEDGER=<costs.json> OGM_FAL_STOP_USD=<cap> gm py -- skills/gm-sprite-forge/scripts/fal3d.py run fal-ai/meshy/rigging \
+  <out>/gen 0.80 model_url=@<base body>.glb skeleton_template=mixamo height_meters=1.8 enable_animation=true animation_action_id=92
+```
+
+Check every cell frame by frame against the pack clip: `gm py -- skills/gm-sprite-forge/scripts/motion/pose_overlay.py
+<out.png> <pack sheet> <cell_dir> ... [--rows 1,2] [--zoom 3]` lays each frame's silhouette over the pack's (pack red,
+ours cyan, both white) and writes the per-frame IoU to `<out>.json`.
 
 ## Files stay local
 
