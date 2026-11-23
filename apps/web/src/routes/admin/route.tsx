@@ -1,4 +1,5 @@
 import type { ScreenRoute } from '../../app/screen';
+import { EnergyAdmin } from '../../features/energy/EnergyAdmin';
 import { AdminLayout } from './AdminLayout';
 import { Budgets } from './Budgets';
 import { Intake } from './Intake';
@@ -20,6 +21,7 @@ export const route: ScreenRoute = {
     { path: 'invites', element: <Invites /> },
     { path: 'users', element: <Users /> },
     { path: 'budgets', element: <Budgets /> },
+    { path: 'energy', element: <EnergyAdmin /> },
     { path: 'builds', element: <BuildsList /> },
     { path: 'builds/:jobId', element: <BuildDetail /> },
     { path: 'intake', element: <Intake /> },
