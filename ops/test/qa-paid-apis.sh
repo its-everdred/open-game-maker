@@ -115,14 +115,33 @@ rm "$HOME/.config/ogm/daemons/qa-review/hook-secret"
 run
 assert_grep 'preview on castle: refused (422 paid_integration)' "$scratch/out"
 
-# Without any game daemon secret it cannot prove the preview gate, so it fails rather than pass on three checks.
-rm "$HOME/.config/ogm/daemons/castle/hook-secret" "$HOME/.config/ogm/daemons/attic/hook-secret"
+# A secret held only by an unlinked game's daemon still opens the route, but the check has no upload it may send: it
+# cannot prove the preview gate, so it fails rather than pass on three checks.
+rm "$HOME/.config/ogm/daemons/castle/hook-secret"
 set +e
 run
 rc=$?
 set -e
-assert_eq 1 "$rc" 'no daemon secret fails the check'
+assert_eq 1 "$rc" 'a secret only on an unlinked daemon fails the check'
 assert_grep 'preview: no game daemon with a readable hook secret' "$scratch/out"
+
+# No daemon holds a secret (#1309: prod's one daemon has none; an empty file is none): the upload route rejects every
+# caller before the scan, so the preview is unreachable and the check passes on the three refusals without uploading.
+: > "$HOME/.config/ogm/daemons/attic/hook-secret"
+: > "$scratch/requests"
+run
+assert_grep 'narration: refused (403 paid_apis_off_during_gameplay)' "$scratch/out"
+assert_grep 'preview: unreachable (no daemon holds a hook secret, so no upload can reach the paid-host scan)' "$scratch/out"
+assert_grep 'exit=0 qa-paid-apis' "$scratch/out"
+assert_not_grep '/internal/' "$scratch/requests"
+# Unreachable never hides a refusal the gate missed.
+echo /api/v1/voice/token > "$scratch/broken"
+set +e
+run
+rc=$?
+set -e
+rm "$scratch/broken"
+assert_eq 1 "$rc" 'a let-through request still fails with no daemon secret'
 
 # An API that does not answer fails every request.
 set +e

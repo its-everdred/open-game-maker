@@ -513,7 +513,8 @@ fails. Run `ops/bin/ogm-voice-host build` and `restart` before it when the voice
 origin as `Origin`, it posts to `/api/v1/voice/token`, `/api/v1/voice/dictation-token` and the QA game's
 `/narration/render`, and each must answer 403 `paid_apis_off_during_gameplay`. It then uploads a preview whose script
 calls `api.openai.com`, with the QA game's daemon hook secret (another linked game's when the QA game has none), and it must
-answer 422 `paid_integration`. It makes no paid call and installs nothing: each request is one the route rejects right after its gate (an empty body,
+answer 422 `paid_integration`. When no game daemon holds a hook secret, the upload route rejects every caller before
+the scan, so it prints `preview: unreachable` and does not fail. It makes no paid call and installs nothing: each request is one the route rejects right after its gate (an empty body,
 no narration lines, an invalid cache plan in the preview), so a broken gate answers 400, 503 or 422 `cache_plan_invalid`
 and the check fails. With the setting on it sends nothing and passes.
 
