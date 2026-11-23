@@ -49,12 +49,13 @@ function insertJob(
   issueNumber: number,
   state: 'queued' | 'admitted' | 'running' | 'done',
   releasedAt: string | null = null,
+  gameId = 'g_1',
 ) {
   deps.db
     .insert(schema.jobs)
     .values({
       id,
-      gameId: 'g_1',
+      gameId,
       branchId: 'main',
       familyId: 'f_1',
       creatorId: 'u_1',
@@ -98,5 +99,34 @@ describe('job projection directory', () => {
       { jobId: 'j_running', ticket: '142' },
     ]);
     expect(activeJobsForSlug(deps.db, 'OWNER-GAME')).toEqual([{ kind: 'feature' }, { kind: 'feature' }]);
+  });
+
+  // #1270: Dusk Helm was registered into the open-games repository and shares its daemon (`blobs`), with no daemon
+  // row of its own. The worker's replies arrive on that daemon's feed and must still reach Dusk Helm's job chat.
+  it('maps a shared daemon’s tickets to the jobs of every game that shares it', () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: 'g_2',
+        familyId: 'f_1',
+        ownerId: 'u_1',
+        title: 'Dusk Helm',
+        slug: 'dusk-helm',
+        visibility: 'private',
+        githubOwner: 'Owner',
+        githubRepo: 'Game',
+        repoVisibility: 'private',
+        createdAt: '2026-11-01T00:00:00.000Z',
+      })
+      .run();
+    insertJob(deps, 'j_owner', 150, 'running');
+    insertJob(deps, 'j_dusk', 151, 'running', null, 'g_2');
+
+    expect(byTicket(deps.db, 'owner-game', '151')).toEqual({ id: 'j_dusk', state: 'running' });
+    expect(activeJobs(deps.db, 'owner-game')).toEqual([
+      { jobId: 'j_owner', ticket: '150' },
+      { jobId: 'j_dusk', ticket: '151' },
+    ]);
   });
 });

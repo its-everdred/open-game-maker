@@ -1,5 +1,7 @@
 import { createServer } from 'node:net';
+import { join } from 'node:path';
 import { createAiurClient, type AiurClient } from '@ogm/aiur-client';
+import { parse } from 'yaml';
 
 import { preflight } from '../policy/preflight.js';
 import { externalPreflight, sameDirectory } from './external-preflight.js';
@@ -36,7 +38,8 @@ export const LAST_PORT = 4199;
 export const IDLE_STOP_MS = 30 * 60_000;
 
 export type EnsureResult =
-  | { status: 'running'; daemon: GameDaemon }
+  // `labelPrefix` is set only for a registered daemon, whose own config names it; a fleet daemon's is the game slug.
+  | { status: 'running'; daemon: GameDaemon; labelPrefix?: string }
   | { status: 'waiting_capacity'; live: number }
   | { status: 'stopped'; reasons: string[] };
 
@@ -223,6 +226,21 @@ export function createFleet(deps: FleetDeps) {
     };
   }
 
+  // A registered daemon is used as it is: the fleet never starts it, renders into it or resizes it.
+  async function registeredResult(row: DaemonRow): Promise<EnsureResult> {
+    if (row.status !== 'running' && row.status !== 'idle') {
+      return { status: 'stopped', reasons: [`registered daemon ${row.slug} (${row.unit}) is not running`] };
+    }
+    const labelPrefix = await readIfPresent(join(row.checkoutPath, '.aiur/config'))
+      .then((text) => parse(text ?? '') as { tracker?: { github?: { label_prefix?: unknown } } } | null)
+      .then((config) => config?.tracker?.github?.label_prefix)
+      .catch(() => undefined);
+    if (typeof labelPrefix !== 'string' || labelPrefix === '') {
+      return { status: 'stopped', reasons: [`registered daemon ${row.slug} has no readable tracker label_prefix`] };
+    }
+    return { status: 'running', daemon: await toDaemon(row), labelPrefix };
+  }
+
   async function fail(row: DaemonRow, reasons: string[]): Promise<EnsureResult> {
     await setStatus(row, 'stopped', { lastError: reasons.join('; ') });
     return { status: 'stopped', reasons };
@@ -266,14 +284,7 @@ export function createFleet(deps: FleetDeps) {
 
   async function claim(key: DaemonKey, kind: JobKind): Promise<Claim> {
     let row = await rowFor(key);
-    if (isRegistered(row)) {
-      return {
-        done: {
-          status: 'stopped',
-          reasons: [`${key.slug} uses the registered daemon ${row.slug} (${row.unit}), which the fleet does not run`],
-        },
-      };
-    }
+    if (isRegistered(row)) return { done: await registeredResult(row) };
     if (isStale(row)) row = await setStatus(row, 'stopped');
     const shape = jobShape(kind, await activeJobs(row.slug));
 

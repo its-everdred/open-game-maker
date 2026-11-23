@@ -26,7 +26,8 @@ export type IntakeDeps = {
         ensureDaemon(key: DaemonKey, kind: 'new_game' | 'feature' | 'repair'): Promise<EnsureResult>;
       };
   issues: IssuesClient;
-  aiurForGame: (gameSlug: string) => Promise<Pick<AiurClient, 'setSpendCap' | 'nudgeTodo'>>;
+  // Keyed by the daemon the game resolved to: its own, or the registered daemon its repository shares.
+  aiurForGame: (daemonSlug: string) => Promise<Pick<AiurClient, 'setSpendCap' | 'nudgeTodo'>>;
   shippedSkills: readonly string[];
   coreRepo?: string;
   failJob: (jobId: string) => void;

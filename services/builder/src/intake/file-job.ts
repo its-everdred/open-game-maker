@@ -79,6 +79,9 @@ export function createIntake(deps: IntakeDeps) {
     const fleetResult = await deps.fleet.ensureDaemon({ slug: gameSlug, repo }, fleetKind(found.job.kind));
     if (fleetResult.status === 'waiting_capacity') return { deferred: 'capacity' };
     if (fleetResult.status === 'stopped') return failPreflight(found.job, fleetResult.reasons);
+    // A game sharing its repository's registered daemon is worked by that daemon, which reads its own label prefix.
+    const daemonSlug = fleetResult.daemon.slug;
+    const todo = `${fleetResult.labelPrefix ?? gameSlug}:todo`;
 
     if (found.job.kind === 'new_game') {
       const parent = parentIssueFor(deps.db, found.job, found.game);
@@ -100,7 +103,7 @@ export function createIntake(deps: IntakeDeps) {
 
     try {
       await deps.issues.ensureLabel(repo, `feature:gm-${jobId}`, '0e8a16', 'OGM job');
-      await deps.issues.ensureLabel(repo, `${gameSlug}:todo`, '6f42c1', 'ready to be worked');
+      await deps.issues.ensureLabel(repo, todo, '6f42c1', 'ready to be worked');
       if (found.job.kind === 'feature') {
         await deps.issues.ensureLabel(repo, 'phase:mock', 'bfd4f2', 'creator review mock phase');
         await deps.issues.ensureLabel(repo, 'model:low', 'ededed', 'low reasoning effort');
@@ -114,7 +117,7 @@ export function createIntake(deps: IntakeDeps) {
     const spendCap = usdFromMicro(reservation.amountMicroUsd);
     let aiur: Awaited<ReturnType<IntakeDeps['aiurForGame']>>;
     try {
-      aiur = await deps.aiurForGame(gameSlug);
+      aiur = await deps.aiurForGame(daemonSlug);
     } catch (error) {
       await notify({ code: 'spend_cap_failed', jobId, reasons: [message(error)] });
       return { deferred: 'aiur' };
@@ -221,7 +224,6 @@ export function createIntake(deps: IntakeDeps) {
 
       if (row.todoAt === null) {
         try {
-          const todo = `${gameSlug}:todo`;
           const labels = await deps.issues.labels(repo, row.issueNumber);
           if (!labels.includes(todo)) await deps.issues.addLabel(repo, row.issueNumber, todo);
         } catch (error) {

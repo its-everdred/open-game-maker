@@ -218,23 +218,43 @@ describe('ensureDaemon', () => {
 
   // #1270: Dusk Helm shares the operator-registered open-games daemon. A job for it once inserted a second row and
   // an empty daemon directory, which re-pointed every lookup for the game away from its real checkout.
-  it('never provisions a daemon for a game that shares its repository’s registered daemon', async () => {
+  it('works a game through its repository’s registered daemon and never provisions one beside it', async () => {
     const home = await tempHome();
     const checkout = join(home, 'games/open-games');
+    await mkdir(join(checkout, '.aiur'), { recursive: true });
+    await writeFile(join(checkout, '.aiur/config'), 'tracker:\n  github:\n    label_prefix: agent\n');
     const shared = liveRow(1, 'running', { slug: 'blobs', repo: 'owner/open-games', checkoutPath: checkout });
     const store = memoryStore([shared]);
     const { fleet, runner } = buildFleet(home, { store, preflight: okPreflight });
 
-    await expect(fleet.ensureDaemon({ slug: 'dusk-helm', repo: 'owner/open-games' }, 'feature')).resolves.toEqual({
-      status: 'stopped',
-      reasons: [`dusk-helm uses the registered daemon blobs (${shared.unit}), which the fleet does not run`],
-    });
+    // The shared daemon reads `agent:` labels, so a `dusk-helm:todo` ticket would never be picked up.
+    await expect(fleet.ensureDaemon({ slug: 'dusk-helm', repo: 'owner/open-games' }, 'feature')).resolves.toMatchObject(
+      {
+        status: 'running',
+        daemon: { slug: 'blobs', checkoutPath: checkout },
+        labelPrefix: 'agent',
+      },
+    );
     await fleet.prepareDaemonDir({ slug: 'dusk-helm', repo: 'owner/open-games' }, 'feature');
 
     expect([...store.rows.keys()]).toEqual(['blobs']);
     expect(store.rows.get('blobs')).toMatchObject({ checkoutPath: checkout, status: 'running' });
     await expect(lstat(join(home, '.local/share/ogm/daemons/dusk-helm'))).rejects.toThrow(/ENOENT/);
     await expect(lstat(join(home, '.local/share/ogm/daemons/blobs'))).rejects.toThrow(/ENOENT/);
+    expect(runner.calls).toEqual([]);
+  });
+
+  it('never starts a stopped registered daemon for a game that shares it', async () => {
+    const home = await tempHome();
+    const shared = liveRow(1, 'stopped', { slug: 'blobs', repo: 'owner/open-games', checkoutPath: join(home, 'og') });
+    const store = memoryStore([shared]);
+    const { fleet, runner } = buildFleet(home, { store, preflight: okPreflight });
+
+    await expect(fleet.ensureDaemon({ slug: 'dusk-helm', repo: 'owner/open-games' }, 'feature')).resolves.toEqual({
+      status: 'stopped',
+      reasons: [`registered daemon blobs (${shared.unit}) is not running`],
+    });
+    expect([...store.rows.keys()]).toEqual(['blobs']);
     expect(runner.calls).toEqual([]);
   });
 

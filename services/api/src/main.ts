@@ -212,9 +212,9 @@ const intake = createIntake({
   db,
   fleet,
   issues,
-  async aiurForGame(gameSlug) {
-    const running = await fleet.daemonFor(gameSlug);
-    if (!running) throw new Error(`Aiur daemon is unavailable for ${gameSlug}`);
+  async aiurForGame(daemonSlug) {
+    const running = await fleet.daemonFor(daemonSlug);
+    if (!running) throw new Error(`Aiur daemon ${daemonSlug} is unavailable`);
     return running.client;
   },
   shippedSkills: skillPack().discovery.map(({ name }) => name),
