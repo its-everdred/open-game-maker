@@ -3,6 +3,7 @@ import { schema, type Db } from '@ogm/db';
 import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm';
 
 import type { ChatJob, ChatJobDirectory } from '../app/registry.js';
+import { daemonRowForGame } from '../jobs/daemons.js';
 
 const ACTIVE_CHAT_STATES: JobState[] = ['filed', 'running', 'paused_budget'];
 
@@ -33,8 +34,8 @@ function toChatJob(row: ChatJobRow): ChatJob {
 }
 
 export function createChatJobDirectory(db: Db): ChatJobDirectory {
-  // The daemon a job talks to is its game's daemon: `game_daemons.slug` is the game's slug, so the join goes through
-  // the game rather than through the repository two games can share.
+  // The daemon a job talks to is its game's daemon (`daemonRowForGame`): its own row, or the registered daemon its
+  // repository shares, never another game's in the same repository.
   const selection = {
     jobId: schema.jobs.id,
     gameId: schema.jobs.gameId,
@@ -42,20 +43,18 @@ export function createChatJobDirectory(db: Db): ChatJobDirectory {
     ownerId: schema.jobs.creatorId,
     kind: schema.jobs.kind,
     state: schema.jobs.state,
-    daemonSlug: schema.gameDaemons.slug,
     issueNumber: schema.jobs.aiurIssueNumber,
   };
 
+  const withDaemon = (row: Omit<ChatJobRow, 'daemonSlug'>): ChatJobRow => ({
+    ...row,
+    daemonSlug: daemonRowForGame(db, row.gameId)?.slug ?? null,
+  });
+
   return {
     async get(jobId) {
-      const row = db
-        .select(selection)
-        .from(schema.jobs)
-        .leftJoin(schema.games, eq(schema.games.id, schema.jobs.gameId))
-        .leftJoin(schema.gameDaemons, eq(schema.gameDaemons.slug, schema.games.slug))
-        .where(eq(schema.jobs.id, jobId))
-        .get();
-      if (row) return toChatJob(row);
+      const row = db.select(selection).from(schema.jobs).where(eq(schema.jobs.id, jobId)).get();
+      if (row) return toChatJob(withDaemon(row));
       const draft = db
         .select()
         .from(schema.gameDrafts)
@@ -76,11 +75,11 @@ export function createChatJobDirectory(db: Db): ChatJobDirectory {
       const regular = db
         .select(selection)
         .from(schema.jobs)
-        .innerJoin(schema.games, eq(schema.games.id, schema.jobs.gameId))
-        .innerJoin(schema.gameDaemons, eq(schema.gameDaemons.slug, schema.games.slug))
         .where(and(inArray(schema.jobs.state, ACTIVE_CHAT_STATES), isNotNull(schema.jobs.aiurIssueNumber)))
         .orderBy(asc(schema.jobs.createdAt), asc(schema.jobs.id))
         .all()
+        .map(withDaemon)
+        .filter((row) => row.daemonSlug !== null)
         .map(toChatJob);
       const drafts = db
         .select()

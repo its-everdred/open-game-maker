@@ -86,6 +86,46 @@ describe('build chat job directory', () => {
     expect(await directory.active()).toEqual([await directory.get('j_running')]);
   });
 
+  // #1270: Dusk Helm shares the open-games daemon (`blobs`) and has no row of its own. Its worker's replies arrive on
+  // `blobs`, so the chat must address that daemon, or they never reach Dusk Helm's edit chat.
+  it('addresses a game’s chat to the registered daemon its repository shares', async () => {
+    const deps = makeDeps();
+    deps.db.insert(schema.families).values({ id: 'f_1', name: 'Family', ownerUserId: 'u_1', createdAt: NOW }).run();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: 'g_1',
+        familyId: 'f_1',
+        ownerId: 'u_1',
+        title: 'Dusk Helm',
+        slug: 'dusk-helm',
+        githubOwner: 'owner',
+        githubRepo: 'open-games',
+        visibility: 'private',
+        repoVisibility: 'public',
+        createdAt: NOW,
+      })
+      .run();
+    deps.db
+      .insert(schema.gameDaemons)
+      .values({
+        slug: 'blobs',
+        repo: 'owner/open-games',
+        checkoutPath: '/games/open-games',
+        unit: 'aiur-main@open-games',
+        envFile: '/games/open-games/.aiur/config',
+        port: 4011,
+        status: 'running',
+        createdAt: NOW,
+      })
+      .run();
+    insertJob(deps, 'j_running', 'running', 7);
+
+    const directory = createChatJobDirectory(deps.db);
+    expect(await directory.get('j_running')).toMatchObject({ aiur: { daemonSlug: 'blobs', ticket: '7' } });
+    expect(await directory.active()).toEqual([await directory.get('j_running')]);
+  });
+
   it('resolves draft scope chats through the shared daemon without a game row', async () => {
     const deps = makeDeps();
     deps.db.insert(schema.families).values({ id: 'f_1', name: 'Family', ownerUserId: 'u_1', createdAt: NOW }).run();

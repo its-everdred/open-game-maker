@@ -240,6 +240,26 @@ describe('job admission', () => {
     expect(changed).toHaveLength(1);
   });
 
+  // #1270: the edit chat's first message becomes the job, and the composer posts nothing more. Without this row the
+  // creator's message never appeared in the chat it was typed into.
+  it('opens an edit-chat job’s conversation with the creator’s message, already delivered by the ticket', async () => {
+    const { deps } = harness({ daily: 100_000_000 });
+    const deps2 = { db: deps.db, sqlite: deps.sqlite, events: deps.events, now: () => NOW, defaults };
+    const typed = await admit(deps2, request({ complexity: 1, idempotencyKey: 'edit:g:main' }), actor);
+    await admit(deps2, request({ complexity: 1, idempotencyKey: 'edit:g:main' }), actor);
+    // A voice edit's opening turn is stored in full by the voice transcript; a row here would show it twice.
+    const spoken = await admit(deps2, request({ complexity: 1, idempotencyKey: 'voice-edit:g:session' }), actor);
+    const other = await admit(deps2, request({ complexity: 1, idempotencyKey: 'voice:session:2' }), actor);
+
+    const rows = deps.db.select().from(schema.buildChatMessages).all();
+    expect(rows).toEqual([
+      expect.objectContaining({ jobId: typed.jobId, actor: 'creator', kind: 'text', text: 'Add the camp' }),
+    ]);
+    // `sent`: the mirror never sends it again, so the worker does not get the instruction twice.
+    expect(rows[0]?.mirrorState).toBe('sent');
+    expect(rows.some((row) => row.jobId === other.jobId || row.jobId === spoken.jobId)).toBe(false);
+  });
+
   it('rejects a non-main branch', async () => {
     const { deps } = harness();
     await expect(

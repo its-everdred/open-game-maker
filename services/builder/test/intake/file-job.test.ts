@@ -167,11 +167,12 @@ function harness(twoTickets = false, kind: 'feature' | 'scope' = 'feature', prot
       .where(eq(schema.jobs.id, jobId))
       .run();
   });
+  const aiurForGame = vi.fn<(daemonSlug: string) => Promise<typeof aiur>>(async () => aiur);
   const intake = createIntake({
     db,
     fleet,
     issues,
-    aiurForGame: async () => aiur,
+    aiurForGame,
     shippedSkills: ['gm-core', 'gm-verify', ...(prototypeShipped ? ['gm-prototype'] : [])],
     coreRepo: 'example/core',
     failJob,
@@ -180,7 +181,7 @@ function harness(twoTickets = false, kind: 'feature' | 'scope' = 'feature', prot
     sleep: async () => undefined,
     alert: (event) => alerts.push(event),
   });
-  return { sqlite, db, calls, issues, aiur, fleet, intake, alerts, failJob, completeJob };
+  return { sqlite, db, calls, issues, aiur, aiurForGame, fleet, intake, alerts, failJob, completeJob };
 }
 
 function close(input: Harness) {
@@ -332,6 +333,25 @@ describe('fileJob', () => {
 
     await expect(input.intake.fileJob('j_1')).resolves.toEqual({ skipped: 'state:filed' });
     expect(input.issues.create).toHaveBeenCalledTimes(2);
+    close(input);
+  });
+
+  // #1270: Dusk Helm shares the open-games daemon (`blobs`), which reads `agent:` labels. A `dusk-helm:todo` ticket
+  // would sit unworked, and the cap and nudge must reach the daemon that will work it.
+  it('files a game that shares a registered daemon with that daemon’s label prefix and client', async () => {
+    const input = harness();
+    const running = await input.fleet.ensureDaemon();
+    input.fleet.ensureDaemon.mockResolvedValue({
+      ...running,
+      daemon: { ...running.daemon, slug: 'blobs' },
+      labelPrefix: 'agent',
+    });
+
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ filed: true, issues: [1] });
+
+    expect(input.calls).toContain('label:1:agent:todo');
+    expect(input.calls.filter((call) => call.includes('castle-run:todo'))).toEqual([]);
+    expect(input.aiurForGame).toHaveBeenCalledWith('blobs');
     close(input);
   });
 

@@ -18,6 +18,7 @@ import { reserve } from '../budget/ledger.js';
 import { dayKey, nextReset } from '../budget/reset.js';
 import { getBudgetSettings, type BudgetDefaults } from '../budget/settings.js';
 import { HttpError } from '../app/errors.js';
+import { insertChatRow } from '../build-chat/store.js';
 import { energySource } from '../energy/source.js';
 import { energyBlock } from '../energy/view.js';
 import type { AppEvents } from '../app/events.js';
@@ -186,6 +187,19 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
           updatedAt: at,
         })
         .run();
+      // The typed edit chat's first message becomes the job (its plan and its ticket body), so it is also the
+      // conversation's first message: stored with the job, already delivered by the ticket (#1270). A voice edit's
+      // opening turn is stored in full by the voice transcript, so it gets no row here.
+      if (request.idempotencyKey?.startsWith('edit:')) {
+        insertChatRow(deps.sqlite, {
+          jobId: id,
+          at,
+          actor: 'creator',
+          kind: 'text',
+          text: request.plan.summary,
+          mirrorState: 'sent',
+        });
+      }
       reserve({
         db: deps.db,
         jobId: id,

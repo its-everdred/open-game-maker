@@ -27,8 +27,7 @@ import { createChatJobDirectory } from './build-chat/job-directory.js';
 import { createDraftScopeTicket } from './new-game/draft-assistant.js';
 import { startDraftCleanup } from './game-drafts/cleanup.js';
 import { finishRun, startBuildSweep } from './builds/publish.js';
-import { gameSlugFor } from './games/games.js';
-import { createDaemonDirectory } from './jobs/daemons.js';
+import { createDaemonDirectory, daemonRowForGame } from './jobs/daemons.js';
 import { recordDaemonReadTokenStatus } from './job-commands/health.js';
 import { activeJobs, activeJobsForSlug, byTicket } from './jobs/repo.js';
 import { applyAiurEvent, applyIssueSnapshot, applyProgress } from './jobs/projection.js';
@@ -213,9 +212,9 @@ const intake = createIntake({
   db,
   fleet,
   issues,
-  async aiurForGame(gameSlug) {
-    const running = await fleet.daemonFor(gameSlug);
-    if (!running) throw new Error(`Aiur daemon is unavailable for ${gameSlug}`);
+  async aiurForGame(daemonSlug) {
+    const running = await fleet.daemonFor(daemonSlug);
+    if (!running) throw new Error(`Aiur daemon ${daemonSlug} is unavailable`);
     return running.client;
   },
   shippedSkills: skillPack().discovery.map(({ name }) => name),
@@ -277,8 +276,8 @@ const stopBriefingPush =
 const usageReconciler = startUsageReconciler({
   ...lifecycleDeps,
   daemonFor: async (gameId) => {
-    const slug = gameSlugFor(db, gameId);
-    return slug === null ? null : ((await fleet.daemonFor(slug))?.client ?? null);
+    const row = daemonRowForGame(db, gameId);
+    return row ? ((await fleet.daemonFor(row.slug))?.client ?? null) : null;
   },
   applyUsage: createApplyUsage(lifecycleDeps),
   log,

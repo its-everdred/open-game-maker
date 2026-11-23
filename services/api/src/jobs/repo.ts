@@ -3,6 +3,7 @@ import { schema, type Db } from '@ogm/db';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { HttpError } from '../app/errors.js';
+import { daemonRowForGame } from './daemons.js';
 import { SLOT_STATES } from './state.js';
 
 export type JobRow = typeof schema.jobs.$inferSelect;
@@ -111,37 +112,31 @@ export function acceptedFor(db: Db, row: JobRow): CreateJobAccepted {
   return { jobId: row.id, state: row.state, reservation, slot: row.slot, position: Math.max(1, position) };
 }
 
-// A daemon's ticket maps to a job through the daemon's game, not its repository: several games share one repo, and
-// issue numbers are only unique inside a repository.
+// A daemon's ticket maps to a job through the job's game: the game's own daemon, or the registered daemon its
+// repository shares (`daemonRowForGame`). Several games share one repo, and issue numbers are only unique inside one.
 export function byTicket(db: Db, daemonSlug: string, ticket: string): { id: string; state: JobState } | null {
   const issueNumber = Number(ticket);
   if (!Number.isSafeInteger(issueNumber)) return null;
   const found = db
-    .select({ id: schema.jobs.id, state: schema.jobs.state })
+    .select({ id: schema.jobs.id, state: schema.jobs.state, gameId: schema.jobs.gameId })
     .from(schema.jobs)
-    .innerJoin(schema.games, eq(schema.games.id, schema.jobs.gameId))
-    .where(and(eq(schema.games.slug, daemonSlug), eq(schema.jobs.aiurIssueNumber, issueNumber)))
-    .get();
-  return found ?? null;
+    .where(eq(schema.jobs.aiurIssueNumber, issueNumber))
+    .all()
+    .find((job) => daemonRowForGame(db, job.gameId)?.slug === daemonSlug);
+  return found ? { id: found.id, state: found.state } : null;
 }
 
 const NON_TERMINAL_STATES: JobState[] = ['queued', 'admitted', 'filed', 'running', 'paused_budget'];
 
 export function activeJobs(db: Db, daemonSlug: string): { jobId: string; ticket: string }[] {
   return db
-    .select({ jobId: schema.jobs.id, issueNumber: schema.jobs.aiurIssueNumber })
+    .select({ jobId: schema.jobs.id, gameId: schema.jobs.gameId, issueNumber: schema.jobs.aiurIssueNumber })
     .from(schema.jobs)
-    .innerJoin(schema.games, eq(schema.games.id, schema.jobs.gameId))
-    .where(
-      and(
-        eq(schema.games.slug, daemonSlug),
-        inArray(schema.jobs.state, NON_TERMINAL_STATES),
-        isNull(schema.jobs.releasedAt),
-      ),
-    )
+    .where(and(inArray(schema.jobs.state, NON_TERMINAL_STATES), isNull(schema.jobs.releasedAt)))
     .orderBy(asc(schema.jobs.aiurIssueNumber), asc(schema.jobs.id))
     .all()
-    .filter((row): row is { jobId: string; issueNumber: number } => row.issueNumber !== null)
+    .filter((row): row is { jobId: string; gameId: string; issueNumber: number } => row.issueNumber !== null)
+    .filter((row) => daemonRowForGame(db, row.gameId)?.slug === daemonSlug)
     .map(({ jobId, issueNumber }) => ({ jobId, ticket: String(issueNumber) }));
 }
 

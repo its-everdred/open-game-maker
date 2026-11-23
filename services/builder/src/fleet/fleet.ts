@@ -1,5 +1,7 @@
 import { createServer } from 'node:net';
+import { join } from 'node:path';
 import { createAiurClient, type AiurClient } from '@ogm/aiur-client';
+import { parse } from 'yaml';
 
 import { preflight } from '../policy/preflight.js';
 import { externalPreflight, sameDirectory } from './external-preflight.js';
@@ -36,7 +38,8 @@ export const LAST_PORT = 4199;
 export const IDLE_STOP_MS = 30 * 60_000;
 
 export type EnsureResult =
-  | { status: 'running'; daemon: GameDaemon }
+  // `labelPrefix` is set only for a registered daemon, whose own config names it; a fleet daemon's is the game slug.
+  | { status: 'running'; daemon: GameDaemon; labelPrefix?: string }
   | { status: 'waiting_capacity'; live: number }
   | { status: 'stopped'; reasons: string[] };
 
@@ -87,6 +90,9 @@ export function createFleet(deps: FleetDeps) {
   }
 
   const isStale = (row: DaemonRow) => row.status === 'starting' && !starting.has(row.slug);
+  // An operator-registered daemon (`gm games register`) runs from its own checkout under its own unit; the fleet only
+  // renders, starts and stops the daemons it made under its own directory.
+  const isRegistered = (row: DaemonRow) => row.checkoutPath !== daemonPaths(env.home, row.slug).dir;
 
   function clientFor(row: DaemonRow, token: string): AiurClient {
     return createAiurClient({ baseUrl: `http://127.0.0.1:${row.port}`, token }, deps.fetch);
@@ -133,6 +139,13 @@ export function createFleet(deps: FleetDeps) {
     const existing = await store.bySlug(slug);
     if (existing) return existing.repo === repo ? existing : store.update(slug, { repo });
     const rows = await store.list();
+    // A game registered into a repository whose daemon is already registered shares that daemon and has no row of its
+    // own; a new row here would put a second, empty daemon beside it and re-point the game at it (#1270).
+    const registered = rows.filter((row) => row.repo === repo && isRegistered(row));
+    if (registered.length > 1) {
+      throw new Error(`${repo} has ${registered.length} registered daemons; cannot choose one for ${slug}`);
+    }
+    if (registered[0]) return registered[0];
     const paths = daemonPaths(env.home, slug);
     const row: DaemonRow = {
       slug,
@@ -213,6 +226,21 @@ export function createFleet(deps: FleetDeps) {
     };
   }
 
+  // A registered daemon is used as it is: the fleet never starts it, renders into it or resizes it.
+  async function registeredResult(row: DaemonRow): Promise<EnsureResult> {
+    if (row.status !== 'running' && row.status !== 'idle') {
+      return { status: 'stopped', reasons: [`registered daemon ${row.slug} (${row.unit}) is not running`] };
+    }
+    const labelPrefix = await readIfPresent(join(row.checkoutPath, '.aiur/config'))
+      .then((text) => parse(text ?? '') as { tracker?: { github?: { label_prefix?: unknown } } } | null)
+      .then((config) => config?.tracker?.github?.label_prefix)
+      .catch(() => undefined);
+    if (typeof labelPrefix !== 'string' || labelPrefix === '') {
+      return { status: 'stopped', reasons: [`registered daemon ${row.slug} has no readable tracker label_prefix`] };
+    }
+    return { status: 'running', daemon: await toDaemon(row), labelPrefix };
+  }
+
   async function fail(row: DaemonRow, reasons: string[]): Promise<EnsureResult> {
     await setStatus(row, 'stopped', { lastError: reasons.join('; ') });
     return { status: 'stopped', reasons };
@@ -256,6 +284,7 @@ export function createFleet(deps: FleetDeps) {
 
   async function claim(key: DaemonKey, kind: JobKind): Promise<Claim> {
     let row = await rowFor(key);
+    if (isRegistered(row)) return { done: await registeredResult(row) };
     if (isStale(row)) row = await setStatus(row, 'stopped');
     const shape = jobShape(kind, await activeJobs(row.slug));
 
@@ -307,6 +336,7 @@ export function createFleet(deps: FleetDeps) {
     prepareDaemonDir(key: DaemonKey, kind: JobKind): Promise<void> {
       return locked(async () => {
         const row = await rowFor(key);
+        if (isRegistered(row)) return;
         const rendered = await render(row, kind, await store.list());
         await writeDaemonSecrets(rendered.paths, env, rendered.input.codexHome as string);
       });
@@ -333,7 +363,8 @@ export function createFleet(deps: FleetDeps) {
       for (const { slug } of await store.list()) {
         await locked(async () => {
           const row = await store.bySlug(slug);
-          if (!row) return;
+          // A registered daemon is the operator's: its sharing games' jobs are not counted here, and its unit is not ours.
+          if (!row || isRegistered(row)) return;
           if (isStale(row)) {
             await systemctl.stop(row.slug).catch(() => undefined);
             await setStatus(row, 'stopped', { lastError: 'start interrupted by an API restart' });
@@ -367,6 +398,7 @@ export function createFleet(deps: FleetDeps) {
     async checkHealth(): Promise<void> {
       for (const row of await store.list()) {
         if (row.status !== 'running' && row.status !== 'idle') continue;
+        if (isRegistered(row)) continue;
         const token = (await readIfPresent(daemonPaths(env.home, row.slug).clientToken))?.trim() ?? '';
         const healthy = await passes(() => clientFor(row, token).healthz());
         const verdict = misses.record(row.slug, healthy);
