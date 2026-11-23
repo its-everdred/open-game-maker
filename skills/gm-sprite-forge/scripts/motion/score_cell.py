@@ -96,21 +96,27 @@ def foot_slide(feet, rows, loop):
     return {'mean_px': round(float(np.mean(vals)), 2) if vals else None, 'rows': per_row}
 
 
-def cloth_sheet(cell_dir, shape, cell=128):
-    """The cloth mask at sheet size: each mask_<row>_<col>.png box-downsampled into its cell, as gpu_bake_finish places
-    raw_<row>_<col>.png. A cell is cloth where the mask is mostly white over visible pixels."""
+def mask_sheets(cell_dir, shape, cell=128):
+    """The cloth and weapon masks at sheet size: each mask_<row>_<col>.png box-downsampled into its cell, as
+    gpu_bake_finish places raw_<row>_<col>.png. A cell is cloth where the mask is mostly white over visible pixels,
+    weapon where it is mostly red (render_motion.mask_materials); masks rendered before the weapon was red have none."""
     masks = sorted(cell_dir.glob('mask_*_*.png'))
     if {p.stem[5:] for p in masks} != {p.stem[4:] for p in cell_dir.glob('raw_*_*.png')}:
         raise SystemExit(f'{cell_dir}: --cloth needs one mask_<row>_<col>.png per raw frame (render_motion.py mask=1)')
-    out = np.zeros(shape, bool)
+    cloth, weapon = np.zeros(shape, bool), np.zeros(shape, bool)
     for p in masks:
         r, c = map(int, p.stem.split('_')[1:])
         m = np.asarray(Image.open(p).convert('RGBA'), dtype=float) / 255
         f = m.shape[0] // cell
-        white = (m[..., :3].mean(-1) * m[..., 3]).reshape(cell, f, cell, f).mean((1, 3))
-        cover = m[..., 3].reshape(cell, f, cell, f).mean((1, 3))
-        out[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell] = white > 0.5 * np.maximum(cover, 1e-6)
-    return out
+
+        def down(x):
+            return x.reshape(cell, f, cell, f).mean((1, 3))
+        cover = np.maximum(down(m[..., 3]), 1e-6)
+        green, red = down(m[..., 1] * m[..., 3]), down((m[..., 0] - m[..., 1]).clip(0) * m[..., 3])
+        box = np.s_[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell]
+        cloth[box] = green > 0.5 * cover
+        weapon[box] = red > 0.5 * cover
+    return cloth, weapon
 
 
 def main():
@@ -124,9 +130,12 @@ def main():
     ap.add_argument('--pixel', type=int, help='pack-style pixel finish: colours for everything but the cloth (pick B: 8, with --cloth 6)')
     ap.add_argument('--smooth', action='store_true', help='with --pixel: 3x3 Lab median before the palette')
     ap.add_argument('--cloth', type=int, help='with --pixel: colours for the cloth, from the mask frames')
+    ap.add_argument('--weapon', type=int, help='with --cloth: colours for the weapon, from the same mask frames')
     a = ap.parse_args()
     if a.skin_ref and not a.finish:
         ap.error('--skin-ref is part of the finish pass: add --finish')
+    if a.weapon and not a.cloth:
+        ap.error('--weapon reads the mask frames: add --cloth')
     if (a.pixel or a.smooth or a.cloth) and not (a.finish and a.pixel):
         ap.error('--pixel is part of the finish pass: add --finish (and --pixel N for --smooth or --cloth)')
     rows = [int(r) for r in a.rows.split(',')]
@@ -135,17 +144,21 @@ def main():
         ref = [] if a.skin_ref else ['--colour-ref', a.pack_sheet]
         subprocess.run([sys.executable, str(HERE.parent / 'gpu_bake_finish.py'), str(a.cell_dir), str(out),
                         '--cell', '128', *ref], check=True, stdout=subprocess.DEVNULL)
+        shape = np.asarray(Image.open(out / 'sheet.png')).shape[:2]
+        cloth, weapon = mask_sheets(a.cell_dir, shape) if a.cloth else (None, None)
+        weapon = weapon if a.weapon else None
         if a.skin_ref:
             import finish_base
             (out / 'sheet.png').replace(out / 'sheet_finish.png')
-            sheet, _ = finish_base.base_pass(finish_base.sm.load(out / 'sheet_finish.png'), finish_base.sm.load(a.skin_ref))
+            sheet, _ = finish_base.base_pass(finish_base.sm.load(out / 'sheet_finish.png'), finish_base.sm.load(a.skin_ref),
+                                             keep=weapon)
             Image.fromarray(sheet).save(out / 'sheet.png')
         if a.pixel:
             from pixel_finish import pixel_finish
             (out / 'sheet.png').replace(out / 'sheet_colour.png')
             colour = np.asarray(Image.open(out / 'sheet_colour.png').convert('RGBA'))
-            cloth = cloth_sheet(a.cell_dir, colour.shape[:2]) if a.cloth else None
-            sheet = pixel_finish(colour, a.pixel, a.smooth, cloth=cloth, cloth_colours=a.cloth or 6)
+            sheet = pixel_finish(colour, a.pixel, a.smooth, cloth=cloth, cloth_colours=a.cloth or 6, weapon=weapon,
+                                 weapon_colours=a.weapon or 4)
             Image.fromarray(sheet).save(out / 'sheet.png')
     tmp = a.cell_dir / '_score'
     tmp.mkdir(exist_ok=True)

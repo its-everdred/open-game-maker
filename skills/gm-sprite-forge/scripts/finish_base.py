@@ -23,8 +23,9 @@ def pack_skin(lab):
     return (lab[..., 1] > 6) & (lab[..., 2] > 6) & (lab[..., 0] > 48)
 
 
-def base_pass(sheet, ref):
-    """sheet, ref: RGBA uint8 arrays. Returns the recoloured sheet and (warm, visible) pixel counts.
+def base_pass(sheet, ref, keep=None):
+    """sheet, ref: RGBA uint8 arrays; keep: optional bool mask of pixels left as rendered (the weapon: its wooden haft
+    is warm, and was turned skin). Returns the recoloured sheet and (warm, visible) pixel counts.
 
     No skin/cloth classes: a per-pixel split by chroma percentile (v1) sorted pale skin as cloth (grey blotches) and
     some cloth as skin (missing underwear; Kevin, 2026-11-22). Instead a*b* move toward the pack skin's median hue in
@@ -35,7 +36,7 @@ def base_pass(sheet, ref):
     rs = rl[pack_skin(rl)]
     if not len(rs):
         raise ValueError('the pack reference has no skin pixels (light and warm): use the class Idle sheet')
-    obj = sm.mask(a)
+    obj = sm.mask(a) & (True if keep is None else ~keep)
     al = rgb2lab(a[obj][:, :3][None] / 255)[0]
     w = np.clip((np.hypot(al[:, 1], al[:, 2]) - 3) / 6, 0, 1)  # 0 for neutral cloth, 1 for clearly warm skin
     warm = w > 0.8
