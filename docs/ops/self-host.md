@@ -26,11 +26,17 @@ to deploy without the required origins. `VITE_GAMES_ORIGIN` is baked into the we
 proxies `/api/*` and `/auth/*`; deploy writes `_redirects` from it, so the repo keeps no copy:
 
 ```
+OGM_PUBLIC_APP_ORIGIN=<app-origin>
+OGM_APP_ALIAS_ORIGINS=<other-app-domain>
 OGM_INSTANCE_ALL_ASSETS=1
 VITE_GAMES_ORIGIN=https://<tailnet-host>:10000
 VITE_API_ORIGIN=https://<tailnet-host>:8443
 VITE_INSTANCE_LOGO_URL=/branding/logo.webp
 ```
+
+`OGM_PUBLIC_APP_ORIGIN` is the one app origin (see [App domains](../layers.md#app-domains)): `OGM_APP_ORIGIN` in
+`games.env`, `api.env` and `rooms.env` must list it, or deploy refuses. `OGM_APP_ALIAS_ORIGINS` is optional: list
+every other domain the Netlify site answers on, space-separated, and deploy redirects each one to the app origin.
 
 `VITE_INSTANCE_LOGO_URL` is optional: leave it blank for the Open Game Maker 2000 logo, or point it at a PNG, WebP or SVG
 (root-relative path or HTTPS URL) to brand this instance. The configured image is fitted into the existing title, sign-in

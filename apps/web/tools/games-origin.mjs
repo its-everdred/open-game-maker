@@ -52,7 +52,46 @@ export const readGamesOrigin = (envDir) => readOrigin(envDir, 'VITE_GAMES_ORIGIN
 export const readApiOrigin = (envDir) => readOrigin(envDir, 'VITE_API_ORIGIN', ['api.env', 'OGM_PUBLIC_ORIGIN']);
 
 // The custom domain is deployment configuration, so previews and self-hosted deployments do not bake in this host's URL.
-export const readPublicAppOrigin = (envDir) => readOrigin(envDir, 'OGM_PUBLIC_APP_ORIGIN');
+// It is the one app origin the services trust (#1297): the games host's frame-ancestors, the API's auth origin and the
+// rooms CORS origin must each list it, or a deploy would ship an app whose games show Try again.
+export function readPublicAppOrigin(envDir) {
+  const origin = readOrigin(envDir, 'OGM_PUBLIC_APP_ORIGIN');
+  // A unit file on this host must name the app; one that is absent belongs to a host that is not this one.
+  for (const unit of ['games.env', 'api.env', 'rooms.env']) {
+    const file = join(envDir, unit);
+    if (!existsSync(file)) continue;
+    const listed = readEnvValue(file, 'OGM_APP_ORIGIN').split(/\s+/).filter(Boolean);
+    if (!listed.some((value) => value.replace(/\/$/, '') === origin)) {
+      throw new Error(`OGM_APP_ORIGIN in ${file} does not list OGM_PUBLIC_APP_ORIGIN ${origin}`);
+    }
+  }
+  return origin;
+}
+
+// Other domains the app site answers on (the bare domain, an old name): each 301s to OGM_PUBLIC_APP_ORIGIN, so a
+// player only ever runs the app on the origin the services trust.
+export function readAppAliasOrigins(envDir) {
+  const name = 'OGM_APP_ALIAS_ORIGINS';
+  const file = join(envDir, 'web.env');
+  const raw = existsSync(file) ? readEnvValue(file, name) : '';
+  const canonical = readPublicAppOrigin(envDir);
+  return raw
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((value) => {
+      let url;
+      try {
+        url = new URL(value);
+      } catch {
+        throw new Error(`${name} in ${file} holds a value that is not a URL`);
+      }
+      if (url.protocol !== 'https:' || url.origin !== value.replace(/\/$/, '')) {
+        throw new Error(`${name} in ${file} must hold bare https origins`);
+      }
+      if (url.origin === canonical) throw new Error(`${name} in ${file} lists OGM_PUBLIC_APP_ORIGIN itself`);
+      return url.origin;
+    });
+}
 
 export function readInstanceAllAssets(envDir) {
   const name = 'OGM_INSTANCE_ALL_ASSETS';

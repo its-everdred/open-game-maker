@@ -1,6 +1,7 @@
 import type { Tier, ViewId } from '@ogm/contracts';
 import {
   chromium,
+  webkit,
   type Browser,
   type BrowserContext,
   type BrowserContextOptions,
@@ -41,6 +42,11 @@ export function launch(
     ? [...SOFTWARE_ARGS, ...(disableGpuCompositing ? ['--disable-gpu-compositing'] : [])]
     : GPU_ARGS;
   return chromium.launch({ headless: true, args: [...args, ...extraArgs], handleSIGINT });
+}
+
+/** Headless WebKit, the engine behind every iPhone browser. */
+export function launchWebkit(): Promise<Browser> {
+  return webkit.launch({ headless: true });
 }
 
 /** The WebGL `UNMASKED_RENDERER_WEBGL` string of this page's GPU process. */

@@ -136,19 +136,19 @@ Check: ffmpeg -version && 7z
 
 Hand back to the human: Install ffmpeg, p7zip, git, curl, OpenSSL, unrar from non-free, and optional Blender with sudo.
 
-### 2.5 Install Chromium for Playwright, including its sudo-managed system dependencies once. (HAND)
+### 2.5 Install Chromium and WebKit for Playwright, including their sudo-managed system dependencies once. (HAND)
 
 Command:
 
 ```sh
-pnpm --dir apps/web exec playwright install --with-deps chromium
+pnpm --dir apps/web exec playwright install --with-deps chromium webkit
 ```
 
 Writes: `~/.cache/ms-playwright`
 
 Check: pnpm --dir apps/web run e2e -- --list
 
-Hand back to the human: Install Chromium for Playwright, including its sudo-managed system dependencies once.
+Hand back to the human: Install Chromium and WebKit for Playwright, including their sudo-managed system dependencies once.
 
 ### 2.6 Install the Codex CLI and Claude Code through their official installers and complete their subscription logins without API keys. (HAND)
 
@@ -203,7 +203,7 @@ Check: bash scripts/sandbox/seed-store.sh prints the store size
 
 > You are setting up Open Game Maker 2000 on this machine for me. Clone `https://github.com/its-everdred/open-game-maker-2000` (I have access) if it is not at `~/games/open-game-maker-2000`, read `SETUP.md` at its root, and do **step 2, Install dependencies**, sub-steps in order. Run each step's Check before moving on. Stop when you reach a hand step and print it for me exactly as written (sudo, browser sign-ins and consoles are mine); continue after I say done. Never add a provider API key, never authorise spending, never print a secret, and never commit anything under `assets-local/` or `~/.config/ogm`. Report each sub-step as done, skipped (why) or blocked (what you need from me).
 >
-> Hand steps in this step: `Install ffmpeg, p7zip, git, curl, OpenSSL, unrar from non-free, and optional Blender with sudo`; `Install Chromium for Playwright, including its sudo-managed system dependencies once`; `Install the Codex CLI and Claude Code through their official installers and complete their subscription logins without API keys`.
+> Hand steps in this step: `Install ffmpeg, p7zip, git, curl, OpenSSL, unrar from non-free, and optional Blender with sudo`; `Install Chromium and WebKit for Playwright, including their sudo-managed system dependencies once`; `Install the Codex CLI and Claude Code through their official installers and complete their subscription logins without API keys`.
 
 ## 3. Set up aiur for agent orchestration
 
@@ -568,6 +568,7 @@ Command:
 # Write the Netlify site id to apps/web/.netlify-site-id.
 pnpm --filter @ogm/config exec ogm-env-init web
 # Set OGM_PUBLIC_APP_ORIGIN=<app-origin> in web.env; each instance uses its own subdomain or domain.
+# List any other domain the site answers on in OGM_APP_ALIAS_ORIGINS in web.env; deploy.sh 301s each to the app origin.
 # OGM_INSTANCE_ALL_ASSETS=1 is the generated instance default; licensed files stay gitignored and are staged only for this deploy.
 # Set VITE_GAMES_ORIGIN=https://<tailnet-host>:10000 in web.env; deploy.sh bakes it in and refuses without it.
 # Set VITE_API_ORIGIN=https://<tailnet-host>:8443 in web.env; deploy.sh writes _redirects from it.

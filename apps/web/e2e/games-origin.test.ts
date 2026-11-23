@@ -8,13 +8,20 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { readApiOrigin, readGamesOrigin, readInstanceAllAssets, readPublicAppOrigin } from '../tools/games-origin.mjs';
+import {
+  readApiOrigin,
+  readAppAliasOrigins,
+  readGamesOrigin,
+  readInstanceAllAssets,
+  readPublicAppOrigin,
+} from '../tools/games-origin.mjs';
 
-async function envDir(contents?: string, rooms?: string, api?: string): Promise<string> {
+async function envDir(contents?: string, rooms?: string, api?: string, games?: string): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'ogm-web-env-'));
   if (contents !== undefined) await writeFile(join(dir, 'web.env'), contents);
   if (rooms !== undefined) await writeFile(join(dir, 'rooms.env'), rooms);
   if (api !== undefined) await writeFile(join(dir, 'api.env'), api);
+  if (games !== undefined) await writeFile(join(dir, 'games.env'), games);
   return dir;
 }
 
@@ -208,5 +215,65 @@ describe('public app origin', () => {
       const dir = await envDir(`OGM_PUBLIC_APP_ORIGIN=${value}\n`);
       expect(() => readPublicAppOrigin(dir)).toThrow(/https origin/);
     }
+  });
+});
+
+// 2026-11-23: the app also answered on the bare domain, which the games host's frame-ancestors did not list, so every
+// game showed Try again on a phone (#1297). The web deploy config names the one app origin; aliases redirect to it.
+describe('app domains', () => {
+  const web = 'OGM_PUBLIC_APP_ORIGIN=https://app.example\n';
+
+  it('refuses a public app origin the games host, API or rooms would not trust', async () => {
+    const framed = await envDir(
+      web,
+      undefined,
+      undefined,
+      'OGM_APP_ORIGIN="https://old.example https://app.example/"\n',
+    );
+    expect(readPublicAppOrigin(framed)).toBe('https://app.example');
+
+    for (const [rooms, api, games, file] of [
+      [undefined, undefined, 'OGM_APP_ORIGIN=https://old.example\n', 'games.env'],
+      [undefined, 'OGM_APP_ORIGIN=https://old.example\n', undefined, 'api.env'],
+      ['OGM_APP_ORIGIN=https://old.example\n', undefined, undefined, 'rooms.env'],
+      // A unit file that names no app trusts none: blank is not "nothing to check".
+      [undefined, undefined, 'OGM_GAMES_PORT=10000\n', 'games.env'],
+    ] as const) {
+      const dir = await envDir(web, rooms, api, games);
+      expect(() => readPublicAppOrigin(dir)).toThrow(new RegExp(`${file.replace('.', '\\.')} does not list`));
+    }
+  });
+
+  it('reads alias origins and refuses unsafe ones or the public origin itself', async () => {
+    expect(readAppAliasOrigins(await envDir(web))).toEqual([]);
+    const aliases = `${web}OGM_APP_ALIAS_ORIGINS="https://bare.example https://www.bare.example/"\n`;
+    expect(readAppAliasOrigins(await envDir(aliases))).toEqual(['https://bare.example', 'https://www.bare.example']);
+
+    for (const [value, error] of [
+      ['http://bare.example', /bare https origins/],
+      ['https://bare.example/app', /bare https origins/],
+      ['bare.example', /not a URL/],
+      ['https://app.example', /lists OGM_PUBLIC_APP_ORIGIN itself/],
+    ] as const) {
+      const dir = await envDir(`${web}OGM_APP_ALIAS_ORIGINS=${value}\n`);
+      expect(() => readAppAliasOrigins(dir)).toThrow(error);
+    }
+  });
+
+  it('redirects every alias to the public app origin in the generated _redirects', async () => {
+    const run = runCli(
+      await envDir(
+        `${web}VITE_API_ORIGIN=https://api.example:8443\nOGM_APP_ALIAS_ORIGINS=https://bare.example\n`,
+        undefined,
+        undefined,
+        'OGM_APP_ORIGIN=https://app.example\n',
+      ),
+      'redirects.mjs',
+    );
+    expect([run.status, run.stderr]).toEqual([0, '']);
+    expect(run.stdout.split('\n').slice(0, 2)).toEqual([
+      'https://ogm2000.netlify.app/*  https://app.example/:splat  301!',
+      'https://bare.example/*  https://app.example/:splat  301!',
+    ]);
   });
 });

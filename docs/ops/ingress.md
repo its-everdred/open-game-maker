@@ -22,9 +22,9 @@ proxies carry no WebSocket upgrades, so sockets connect to 8443 directly with sh
 
 ## Netlify lines (OGM-070 copies these)
 
-`_redirects`, the retired-host redirect and proxies before the SPA fallback. The repo holds no copy:
-`apps/web/tools/deploy.sh` writes it into the deploy payload from `OGM_PUBLIC_APP_ORIGIN=https://makeopen.games` and
-`VITE_API_ORIGIN=https://<tailnet-host>:8443` in `~/.config/ogm/env/web.env`
+`_redirects`, the retired-host and alias redirects and proxies before the SPA fallback. The repo holds no copy:
+`apps/web/tools/deploy.sh` writes it into the deploy payload from `OGM_PUBLIC_APP_ORIGIN=https://makeopen.games`,
+`OGM_APP_ALIAS_ORIGINS` (one `301!` line each) and `VITE_API_ORIGIN=https://<tailnet-host>:8443` in `~/.config/ogm/env/web.env`
 (`apps/web/tools/redirects.mjs`):
 
 ```

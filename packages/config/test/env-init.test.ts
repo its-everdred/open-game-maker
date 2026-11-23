@@ -105,7 +105,7 @@ describe('ogm-env-init', () => {
 
     expect(result.status, result.stderr).toBe(0);
     expect(contents).toBe(
-      'OGM_PUBLIC_APP_ORIGIN=\nOGM_INSTANCE_ALL_ASSETS=1\nVITE_GAMES_ORIGIN=\nVITE_API_ORIGIN=\nVITE_ICE_URLS=\nVITE_INSTANCE_LOGO_URL=\n',
+      'OGM_PUBLIC_APP_ORIGIN=\nOGM_APP_ALIAS_ORIGINS=\nOGM_INSTANCE_ALL_ASSETS=1\nVITE_GAMES_ORIGIN=\nVITE_API_ORIGIN=\nVITE_ICE_URLS=\nVITE_INSTANCE_LOGO_URL=\n',
     );
   });
 

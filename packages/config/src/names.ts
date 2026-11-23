@@ -82,7 +82,13 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
     name: 'OGM_PUBLIC_APP_ORIGIN',
     unit: 'web',
     kind: 'url',
-    doc: 'public app origin deploy.sh uses for the retired Netlify-host redirect',
+    doc: 'the one app origin; every OGM_APP_ORIGIN must list it',
+  },
+  {
+    name: 'OGM_APP_ALIAS_ORIGINS',
+    unit: 'web',
+    kind: 'string',
+    doc: 'other app domains (space-separated); deploy.sh 301s each to OGM_PUBLIC_APP_ORIGIN',
   },
   {
     name: 'OGM_INSTANCE_ALL_ASSETS',

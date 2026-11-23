@@ -9,6 +9,7 @@ the full origin map.
 | Where | Value |
 | --- | --- |
 | `_redirects`, written by `apps/web/tools/deploy.sh` from `OGM_PUBLIC_APP_ORIGIN` in `web.env` | `https://ogm2000.netlify.app/*  https://makeopen.games/:splat  301!` |
+| | one `<alias>/*  https://makeopen.games/:splat  301!` per origin in `OGM_APP_ALIAS_ORIGINS` |
 | `_redirects`, written by `apps/web/tools/deploy.sh` from `VITE_API_ORIGIN` in `web.env`, before the SPA fallback | `/api/*  https://<tailnet-host>:8443/api/:splat  200` |
 | | `/auth/*  https://<tailnet-host>:8443/auth/:splat  200` |
 | `OGM_APP_ORIGIN` in `~/.config/ogm/env/api.env` | `https://makeopen.games` (Better Auth `baseURL`, `trustedOrigins`, passkey `origin`) |

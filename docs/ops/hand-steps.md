@@ -30,7 +30,7 @@ Fill the placeholders first: `<user>` is the account that runs OGM, `<tailnet-ho
   - ctx: docs/ops/hand-steps.md · docs/ops/sandbox.md
 - [ ] `sudo apt update && sudo apt install -y unrar` — first add `non-free` to your Debian apt sources (the `Components:` line of `/etc/apt/sources.list.d/debian.sources`, or each `deb` line of `/etc/apt/sources.list`; Ubuntu: `multiverse`); `unrar` lives there, and some RAR packs use a method `7z` cannot read
   - ctx: docs/ops/hand-steps.md · docs/reference/local-asset-library.md
-- [ ] `pnpm --dir apps/web exec playwright install --with-deps chromium` — the `--with-deps` part installs Chromium's system libraries with sudo, once, for `gm verify` and the browser tests
+- [ ] `pnpm --dir apps/web exec playwright install --with-deps chromium webkit` — the `--with-deps` part installs the browsers' system libraries with sudo, once, for `gm verify`, the browser tests and the WebKit frame check
   - ctx: docs/ops/hand-steps.md · apps/web/package.json
 - [ ] `sudo apt install blender` — optional: only when 3D asset work starts (R87)
   - ctx: OGM-008 docs/ops/hand-steps.md
