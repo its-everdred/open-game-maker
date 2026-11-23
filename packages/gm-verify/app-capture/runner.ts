@@ -18,7 +18,7 @@ import { measureImageDistortion, type ImageDistortion } from './image-distortion
 import { frameCovered, frameTransform } from './frame-geometry';
 import { trackShadowRoots } from './capture-instrumentation';
 
-const [dist, out, tapsJson, editArg, videoArg, softwareArg, testFastArg, limitsJson] = process.argv.slice(2);
+const [dist, out, tapsJson, editArg, videoArg, softwareArg, testFastArg, limitsJson, scenario] = process.argv.slice(2);
 if (!dist || !out || !tapsJson) throw new Error('missing capture arguments');
 const taps = JSON.parse(tapsJson) as string[];
 const design = JSON.parse(readFileSync(resolve(dist, 'design/design.json'), 'utf8')) as DesignDoc;
@@ -54,6 +54,7 @@ try {
     });
     try {
       const { context, page, errors } = await openShell(browser, {
+        ...(scenario ? { scenario } : {}),
         game: { dist },
         server,
         web,

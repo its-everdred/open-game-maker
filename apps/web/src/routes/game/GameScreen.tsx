@@ -729,7 +729,7 @@ export function GameScreen() {
 
   const gameStage = (
     <div className="game-stage-area" data-edit-frame={mode === 'edit' ? '' : undefined}>
-      {mode === 'edit' && <SceneStrip gameId={gameId} />}
+      {mode === 'edit' && <SceneStrip gameId={gameId} scenarios={frameState.manifest?.scenarios} />}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
         {mode === 'play' && frameController !== undefined ? (

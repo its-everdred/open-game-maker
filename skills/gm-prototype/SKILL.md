@@ -50,7 +50,9 @@ prototype needs the creator's approved mock, a build needs the approved prototyp
 7. **Ship each round that beats prod.** Mark the PR ready with `Refs #<ticket>`, so it merges and publishes, and
    keep iterating on a new branch. The ticket stays open until the creator approves the last rung. A playable
    round that changes what the creator can do or see carries its prototype review in the round and the PR body:
-   play link, phone clip, works now, known limitations (checked in that build), 3–6 decisions to weigh in on.
+   play link, phone clip, works now, known limitations (checked in that build), 3–6 decisions to weigh in on. The
+   play link starts the slice you built: declare it in the game's `scenarios` (named start state, fixed seed, no
+   title or menus) and name it with `&scenario=`, so the creator plays the piece on the card without loading the game.
 8. **Decide engineering yourself.** Only taste and product choices go to the creator, and every one of those
    does: never settle an inventory decision silently. Ship, scope, retries and tooling are yours, or the
    Executor's for host-only steps.

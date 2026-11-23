@@ -138,3 +138,23 @@ describe('SceneStrip', () => {
     expect(strip).not.toHaveClass('is-hidden');
   });
 });
+
+/* Kevin, #1281: the editor starts any moment of the game, so the build's declared scenarios are chips too. */
+describe('declared scenarios', () => {
+  it('lists the running build’s scenarios and starts the game in the one tapped', async () => {
+    render(
+      <MemoryRouter initialEntries={['/g/blobs?mode=edit']}>
+        <SceneStrip gameId="blobs" scenarios={['endless/wave-3', 'goo-chain']} />
+        <Probe />
+      </MemoryRouter>,
+    );
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Endless wave 3, changed by an agent' }));
+    expect(new URLSearchParams(search).get('scenario')).toBe('endless/wave-3');
+    expect(screen.getByRole('button', { name: 'Endless wave 3, changed by an agent' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Goo chain, changed by an agent' })).toBeVisible();
+  });
+});

@@ -18,6 +18,8 @@ export type Round = {
   sourceTickets?: string[];
   clipStatus?: 'captured' | 'unchecked' | null;
   playUrl?: string | null;
+  /** The reviewed build started in its scenario, which the card plays in place (#1281). */
+  sliceUrl?: string | null;
   id: string;
   ticket: string;
   question: string | null;
@@ -96,6 +98,17 @@ export function RoundCard({
   const media = (
     <>
       <RoundMedia media={round.media} />
+      {round.sliceUrl ? (
+        <div className="review-deck-playable">
+          <iframe
+            allow="autoplay; fullscreen; gamepad"
+            className="review-slice"
+            loading="lazy"
+            src={inAppPath(round.sliceUrl)}
+            title={`Play the build for ticket ${round.ticket}`}
+          />
+        </div>
+      ) : null}
       {round.question ? <p>{round.question}</p> : null}
       {round.playUrl ? (
         <p>

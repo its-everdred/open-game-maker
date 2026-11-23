@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { SCENARIO_NAME } from '@ogm/contracts';
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson, resolveContainedPath } from '../../context.js';
 import { rejectSymlinkDirectories, runChild } from '../capture/shell.js';
@@ -48,11 +49,12 @@ export function captureScratch(cwd: string, base = tmpdir()): { path: string; lo
 export const command: GmCommand = {
   name: 'look shell',
   summary: 'capture a local game in the real app shell with mocked sign-in',
-  usage: "--dist <game dist> --out <directory> [--tap 'Play>Endless'] [--edit] [--mp4]",
+  usage: "--dist <game dist> --out <directory> [--scenario <name> | --tap 'Play>Endless'] [--edit] [--mp4]",
   flags: {
     dist: { type: 'string', help: 'built game directory' },
     out: { type: 'string', help: 'output directory' },
     tap: { type: 'string', help: 'exact game text to tap, separated by >' },
+    scenario: { type: 'string', help: "start in one of the game's declared scenarios, as its review slice does" },
     edit: { type: 'boolean', default: false, help: 'capture the editor' },
     mp4: { type: 'boolean', default: false, help: 'record an MP4 per viewport (requires ffmpeg)' },
     timeout: { type: 'number', default: 600, help: 'total timeout in seconds' },
@@ -78,6 +80,8 @@ export const command: GmCommand = {
       )
     )
       throw new UsageError('invalid play-area limits', 'gm help look shell');
+    const scenario = typeof flags.scenario === 'string' ? flags.scenario : '';
+    if (scenario && !SCENARIO_NAME.test(scenario)) throw new UsageError('invalid scenario name', 'gm help look shell');
     const tap = flags.tap ?? (config === false ? undefined : config.tap);
     const taps = typeof tap === 'string' ? tap.split('>').map((text) => text.trim()) : [];
     if (taps.some((text) => !text)) throw new UsageError('empty tap target', 'gm help look shell');
@@ -163,6 +167,7 @@ export const command: GmCommand = {
             software ? '1' : '0',
             '',
             JSON.stringify(limits),
+            scenario,
           ],
           localTemp ? { ...ctx.env, TMPDIR: temp } : (ctx.env ?? {}),
           remainingMs,

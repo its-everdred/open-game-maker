@@ -27,6 +27,8 @@ export interface ShellOptions {
   gameConsole?: boolean;
   /** Install capture instrumentation before any page script runs. */
   initScript?: () => void;
+  /** Start the game in this declared scenario (`?scenario=`), the same entry a review slice uses. */
+  scenario?: string;
 }
 
 export interface OpenShell {
@@ -103,7 +105,9 @@ export async function openShell(browser: Browser, options: ShellOptions): Promis
     const entry = page.waitForResponse((response) => response.url().includes(`/${buildId}/index.html`), {
       timeout: 30_000,
     });
-    await page.goto(new URL('g/game?test=1', options.server.url).href);
+    const entryUrl = new URL('g/game?test=1', options.server.url);
+    if (options.scenario) entryUrl.searchParams.set('scenario', options.scenario);
+    await page.goto(entryUrl.href);
     console.error(`shell capture: waiting for game entry at ${size}`);
     const response = await entry;
     if (!response.ok()) throw new Error(`game entry failed: ${response.status()}`);

@@ -25,6 +25,12 @@ export const command: GmCommand = {
     }
     const parsed = ReviewSubmission.safeParse(input);
     if (!parsed.success) throw new CommandError(parsed.error.issues.map((issue) => issue.message).join('; '));
+    /* The creator plays a review in place, so every playable build starts in the slice it reviews (#1281). */
+    if (parsed.data.media.some((media) => media.kind === 'build' && !media.scenario))
+      throw new UsageError(
+        'a playable build item names no scenario',
+        'declare the slice in the game\'s scenarios and add "scenario": "<name>" to the build item',
+      );
     const root = realpathSync(workspaceRoot(ctx.cwd));
     const slottedStills = parsed.data.media.filter(
       (media): media is Extract<(typeof parsed.data.media)[number], { kind: 'still' }> =>

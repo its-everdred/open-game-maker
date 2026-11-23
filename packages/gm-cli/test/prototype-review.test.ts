@@ -29,6 +29,19 @@ describe('prototype review summaries', () => {
     });
   });
 
+  /* The published review embeds the slice the merged PRs reviewed, so it plays in place (#1281). */
+  it('carries the latest Play link scenario into the merged review', () => {
+    const review = (play: string) => `## Prototype review\nPlay: ${play}   Clip: clip.mp4\n**Works now:** walk`;
+    expect(
+      mergePrototypeReviews([
+        review('https://app.example/g/g_1?mode=edit&build=b1&scenario=town%2Flantern-dusk'),
+        review('https://app.example/g/g_1?mode=edit&build=b2&scenario=goo-wave-3'),
+        review('https://app.example/g/g_1?mode=edit&build=b3'),
+      ]).scenario,
+    ).toBe('goo-wave-3');
+    expect(parsePrototypeReview(review('https://app.example/g/g_1?build=b1&scenario=../x')).scenario).toBeUndefined();
+  });
+
   it('distinguishes explicitly non-visible changes from missing review sections', () => {
     expect(mergePrototypeReviews(['Prototype review: none', 'Prototype review: none']).disposition).toBe('none');
     expect(mergePrototypeReviews(['Prototype review: none', 'creator-visible code change']).disposition).toBe(

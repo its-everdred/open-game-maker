@@ -507,8 +507,8 @@ export const command: GmCommand = {
               publishAttention ||= 'The decision inventory could not be read; posted without weigh-in ids.';
             }
           }
-          const media: { kind: 'build' | 'clip' | 'still'; ref: string; hasAudio?: boolean }[] = [
-            { kind: 'build', ref: buildId },
+          const media: { kind: 'build' | 'clip' | 'still'; ref: string; hasAudio?: boolean; scenario?: string }[] = [
+            { kind: 'build', ref: buildId, ...(review.scenario ? { scenario: review.scenario } : {}) },
           ];
           let clipStatus: 'captured' | 'unchecked' = 'unchecked';
           const gamesOrigin = env.OGM_GAMES_ORIGIN?.replace(/\/+$/, '');

@@ -72,7 +72,9 @@ or `sound`), owning `ticket`, commit `sha`, optional `prNumber`, and `media` arr
 committed game directory at `review/tracks/<track>.json`, with the track `id`, `category`, and an ordered `phases` array.
 Each phase has an `id` and literal `template`; the first can specify its existing `ticket`. The API records the owner
 of later phases when approval creates their tickets. Gameplay submissions need
-a `build` reference from `gm preview` and a `question`. Sound submissions after mock need a `clip` reference to a
+a `build` reference from `gm preview` and a `question`. Every `build` item names the `scenario` it reviews, one of
+the game's `GameModule.scenarios`; `gm review post` refuses a build item without one, because the review card plays the
+build from that moment. Sound submissions after mock need a `clip` reference to a
 stored MP4 containing video and audio, with `hasAudio: true`; sound mocks can also use an audio file. Art stills and clips use stored
 blob hashes as `ref`; media entries use `kind` and `ref`.
 To compare against a concept, include one still with `role: "target"` alongside the submitted work. The review shows
@@ -89,7 +91,8 @@ for creator-visible changes. It captures the hosted build with `gm qa playtest -
 posts any stills that were produced and marks the clip unchecked. A missing `## Prototype review` section posts the
 play link with “Limitations not stated” and reports the merged PRs that need review notes. If every PR says
 `Prototype review: none`, no round is posted. The review links to the published build and carries current works,
-limitations and eligible decision ids.
+limitations and eligible decision ids. When the merged PRs' Play links name a `scenario=`, the latest one rides on the
+build, and the review card embeds that slice (`/g/<gameId>/play?build=<buildId>&scenario=<name>`) to play in place.
 
 The publish host's `api.env` supplies `OGM_GAMES_ORIGIN` so the review link opens the exact published build. Set
 `OGM_PUBLISH_BUILD_TIMEOUT_MS` in that file to change the production build deadline in milliseconds; it defaults to
@@ -141,7 +144,8 @@ gate result. `--phase` supplies the current look rung when evaluating provisiona
 `prototype` when no provisional scope is declared. A provisional scope requires the caller to pass the current rung, so
 expiry cannot remain green because a command defaulted to an earlier phase.
 In ticket PR mode, pass `--body <file>` and `--base <ref>` to also reject open creator decisions and
-creator-visible changes without a prototype review section (or `Prototype review: none` for code-only changes).
+creator-visible changes without a prototype review section (or `Prototype review: none` for code-only changes), and a
+Play link that starts no `scenario=`.
 Pass `--lane creative` or `--lane clone` when checking a PR for those ticket lanes. A creative mock PR cannot change
 game source; changed mock images need their `request-mock.py` image record with two real pack/set references, or the
 game logo for title, loading, end, and thumbnail screens. Prototype and build rungs require an approved target in the

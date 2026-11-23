@@ -11,6 +11,7 @@ import { createNetController } from '../net/index.js';
 import { createSaveMachine, type SaveMachine } from '../saves/machine.js';
 import { createSaveThumbnailCache } from '../saves/thumbnail.js';
 import { installQa } from './qa.js';
+import { startScenario } from './scenarios.js';
 import { dispatchTest } from '../test/dispatch.js';
 import { SdkHooks } from '../test/hooks.js';
 
@@ -51,7 +52,15 @@ function compiledBuild(): BuildKind {
  * stored slot before it offers Load. Both come from the running instance, so a static `manifest.json` cannot drift
  * from the code that actually writes saves — and a build without a `migrate` hook cannot claim a migration it lacks.
  */
-function readyManifest<D, S>(manifest: GameManifest, instance: GameInstance<D, S>): GameManifest {
+function readyManifest<D, S>(
+  module: GameModule<D, S>,
+  instance: GameInstance<D, S>,
+  inScenario: boolean,
+): GameManifest {
+  const names = Object.keys(module.scenarios ?? {});
+  const manifest: GameManifest = names.length ? { ...module.manifest, scenarios: names } : module.manifest;
+  /* A scenario run is a slice, not the player's game: the host neither restores nor keeps its saves. */
+  if (inScenario) return { ...manifest, saves: false, manualSaveSlots: false };
   if (!manifest.saves) return manifest;
   const saveSchema = instance.serialize().saveSchemaVersion;
   const next: GameManifest = { ...manifest, saveSchema };
@@ -144,7 +153,8 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     host.setCapabilities(hello.payload.capabilities);
     const initialDesign = module.designSchema.parse({});
     designState.current = structuredClone(initialDesign);
-    const instance = await module.mount(host, initialDesign);
+    const scenario = startScenario(module, typeof location === 'undefined' ? '' : location.search);
+    const instance = await module.mount(host, initialDesign, scenario?.save);
     const runtime = new RuntimeImpl(
       instance,
       host,
@@ -184,11 +194,16 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     runtime.attachHooks(hooks);
     host.test.register(hooks);
     const thumbnails =
-      module.manifest.saves && module.manifest.manualSaveSlots
+      !scenario && module.manifest.saves && module.manifest.manualSaveSlots
         ? createSaveThumbnailCache({ onFrame: (callback) => runtime.onFrame(callback) })
         : undefined;
     if (thumbnails) runtime.addCleanup(() => thumbnails.dispose());
-    const saveMachine = createSaveMachine({ instance, send, captureThumbnail: () => thumbnails?.current() });
+    const saveMachine = createSaveMachine({
+      instance,
+      // A scenario run never writes the player's save.
+      send: scenario ? () => undefined : send,
+      captureThumbnail: () => thumbnails?.current(),
+    });
     saveMachineState.current = saveMachine;
     runtime.addCleanup(() => saveMachine.dispose());
     runtime.onStep(() => saveMachine.markDirty());
@@ -232,7 +247,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     hooks.ready = true;
     send('ready', {
       protocol: SDK_PROTOCOL,
-      manifest: readyManifest(module.manifest, instance),
+      manifest: readyManifest(module, instance, scenario !== undefined),
       marks,
       firstFrameSignal: true,
       ...(hello.payload.startupHold ? { startupHold: true } : {}),

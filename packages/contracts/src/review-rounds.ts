@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { SLOT_IDS, VIEWPORT_IDS } from './image-slots.js';
+import { scenarioNameSchema } from './game.js';
 import { MediaMeta } from './media-meta.js';
 
 const Key = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/u);
@@ -69,7 +70,15 @@ export const ReviewMedia = z.discriminatedUnion('kind', [
       meta: MediaMeta.optional(),
     })
     .strict(),
-  z.object({ kind: z.literal('build'), ref: z.string().min(1).max(512), meta: MediaMeta.optional() }).strict(),
+  z
+    .object({
+      kind: z.literal('build'),
+      ref: z.string().min(1).max(512),
+      /** The scenario the review plays (`GameModule.scenarios`): the card embeds the build started there (#1281). */
+      scenario: scenarioNameSchema.optional(),
+      meta: MediaMeta.optional(),
+    })
+    .strict(),
   z.object({ kind: z.literal('audio'), ref: z.string().min(1).max(512), meta: MediaMeta.optional() }).strict(),
 ]);
 

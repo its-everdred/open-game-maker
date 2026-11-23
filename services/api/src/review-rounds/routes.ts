@@ -8,7 +8,7 @@ import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
 import { authorizedGame } from '../games/authorize.js';
-import { editorBuildUrl } from '../games/editor-url.js';
+import { editorBuildUrl, sliceUrl } from '../games/editor-url.js';
 import { reviewMediaUrl } from '../blobs/review-url.js';
 import { currentPreview, listPreviews } from '../previews/store.js';
 import { answerRound, getRound, latestPublishedPrototypeRound, latestRoundForTicket } from './store.js';
@@ -20,7 +20,7 @@ const Answer = z
   .object({ verdict: z.enum(['approved', 'needs_work']), note: z.string().max(3900).optional() })
   .strict();
 
-type Media = { kind: string; ref: string; role?: 'target'; meta?: unknown };
+type Media = { kind: string; ref: string; role?: 'target'; meta?: unknown; scenario?: string };
 export default new Hono<ApiBindings>()
   .get('/games/:gameId/review-rounds', async (c) => {
     const game = authorizedGame(c, 'game.edit');
@@ -78,6 +78,8 @@ export default new Hono<ApiBindings>()
               url: await reviewMediaUrl(deps.blobStore, deps.config.appOrigin, item.ref as BlobHash),
             })),
         );
+        const build = media.find((item) => item.kind === 'build');
+        const published = round.track === 'prototype-publish' && build && game.slug ? build : undefined;
         return {
           id: round.id,
           ticket: round.ticket,
@@ -90,10 +92,10 @@ export default new Hono<ApiBindings>()
           decisionIds: JSON.parse(round.decisionIds) as string[],
           clipStatus: round.clipStatus,
           sourceTickets: JSON.parse(round.sourceTickets) as string[],
-          playUrl:
-            round.track === 'prototype-publish' && media.find((item) => item.kind === 'build') && game.slug
-              ? editorBuildUrl(deps.config.appOrigin, game.id, media.find((item) => item.kind === 'build')!.ref)
-              : null,
+          playUrl: published ? editorBuildUrl(deps.config.appOrigin, game.id, published.ref, published.scenario) : null,
+          sliceUrl: published?.scenario
+            ? sliceUrl(deps.config.appOrigin, game.id, published.ref, published.scenario)
+            : null,
           media: items,
           postedAt: round.postedAt,
         };
