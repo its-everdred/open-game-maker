@@ -99,7 +99,7 @@ function GameMenuProbe() {
   const { controls, open, setOpen } = useGameMenu();
   return (
     <aside data-testid="game-menu-probe">
-      {controls?.button ? <span data-testid="menu-theme">{JSON.stringify(controls.button)}</span> : null}
+      {controls ? <span data-testid="menu-controls">{Object.keys(controls).join(',')}</span> : null}
       <button type="button" aria-label="Menu" onClick={() => setOpen(!open)} />
       {open && controls ? (
         <div role="group" aria-label="Menu">
@@ -137,7 +137,7 @@ function renderGame(entry = '/g/game', client = new QueryClient({ defaultOptions
   );
 }
 
-async function readyPlayFrame(playMenuButton?: { colour: string; icon: 'pause' | 'menu' }) {
+async function readyPlayFrame(playMenuButton?: unknown) {
   await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
   act(() => {
     host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
@@ -356,14 +356,11 @@ describe('GameScreen', () => {
     /* Never the branch head in its place: the creator asked for that build. */
     expect(host.mountGameFrame).not.toHaveBeenCalled();
   });
-  it('passes the ready manifest button theme to the play menu', async () => {
+  it("keeps an older build's own menu button look out of the shared play menu", async () => {
     renderGame();
     await readyPlayFrame({ colour: '#e02020', icon: 'pause' });
-    await waitFor(() => expect(screen.getByTestId('menu-theme')).toHaveTextContent('"colour":"#e02020"'));
-    expect(screen.getByTestId('menu-theme')).toHaveTextContent('"icon":"pause"');
-    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Paused' })).getByRole('button', { name: 'Edit' }));
-    await waitFor(() => expect(screen.queryByTestId('menu-theme')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('menu-controls')).toHaveTextContent('hideButton'));
+    expect(screen.getByTestId('menu-controls').textContent?.split(',')).not.toContain('button');
   });
   // Restart has to start a fresh game, not just close the menu: the frame is mounted again from scratch.
   it('restarts solo play from the pause panel with a new game frame', async () => {

@@ -668,7 +668,6 @@ export function StudioMenu() {
         type="button"
         className="studio-menu-button"
         hidden={hasStudioHeader || pausePanelVisible || (controls?.hideButton === true && !open && !blocked)}
-        style={controls?.button ? ({ '--play-menu-colour': controls.button.colour } as CSSProperties) : undefined}
         data-game-play={Boolean(isGameView && controls)}
         data-building={buildingJobs.length > 0}
         data-blocking={blocked}
@@ -682,7 +681,7 @@ export function StudioMenu() {
         }}
       >
         <span className="studio-menu-ring" aria-hidden="true" />
-        <Icon name={controls?.button?.icon ?? 'menu'} />
+        <Icon name="menu" />
         {menuBadge > 0 && !open && !hasStudioHeader ? (
           <span className="studio-menu-badge" aria-hidden="true">
             {menuBadge}

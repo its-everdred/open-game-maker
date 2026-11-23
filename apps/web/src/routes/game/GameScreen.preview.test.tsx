@@ -97,7 +97,6 @@ function GameMenuProbe() {
   const { controls, open, setOpen } = useGameMenu();
   return (
     <aside data-testid="game-menu-probe">
-      {controls?.button ? <span data-testid="menu-theme">{JSON.stringify(controls.button)}</span> : null}
       <button type="button" aria-label="Menu" onClick={() => setOpen(!open)} />
       {open && controls ? (
         <div role="group" aria-label="Menu">

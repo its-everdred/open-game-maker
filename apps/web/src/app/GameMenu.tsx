@@ -25,7 +25,6 @@ export type GameMenuAction = {
 export type GameMenuControls = {
   actions: GameMenuAction[];
   extras: ReactElement[];
-  button?: { colour: string; icon: 'pause' | 'menu' };
   /** The game is on its own menu screen (`host.pause.visible` false). */
   hideButton?: boolean;
 };

@@ -8,7 +8,7 @@ import type { EnergyView } from '@ogm/contracts/browser';
 import type { WorkerReview } from '../features/worker-builds/useWorkerReviews';
 
 import { useDeckDraft, useReviewDraft } from '../features/commands-inbox/drafts';
-import { GameMenuProvider, useGameMenuControls } from './GameMenu';
+import { GameMenuProvider, useGameMenuControls, type GameMenuControls } from './GameMenu';
 import { StudioMenu } from './StudioMenu';
 import { pushUpdate, setUpdateOwner } from '../lib/notify/slice';
 
@@ -69,7 +69,8 @@ function TestPendingControls() {
 
 function ThemedControls() {
   const controls = useMemo(
-    () => ({ actions: [], extras: [], button: { colour: '#e02020', icon: 'pause' as const } }),
+    /* An older build's manifest look, which the shell no longer reads: every game gets the same button (#1294). */
+    () => ({ actions: [], extras: [], button: { colour: '#e02020', icon: 'pause' as const } }) as GameMenuControls,
     [],
   );
   useGameMenuControls(controls);
@@ -332,8 +333,17 @@ describe('StudioMenu', () => {
     expect(screen.getByText('50%')).toBeVisible();
     expect(screen.queryByText(/left/)).toBeNull();
   });
-  it('applies the play theme and restores the default when the game leaves', () => {
+  it('draws the same menu button for every game, whatever look its controls ask for', () => {
     const view = render(
+      <MemoryRouter>
+        <GameMenuProvider>
+          <StudioMenu />
+        </GameMenuProvider>
+      </MemoryRouter>,
+    );
+    const button = screen.getByRole('button', { name: 'Menu' });
+    const shared = button.innerHTML;
+    view.rerender(
       <MemoryRouter>
         <GameMenuProvider>
           <StudioMenu />
@@ -341,18 +351,8 @@ describe('StudioMenu', () => {
         </GameMenuProvider>
       </MemoryRouter>,
     );
-    const button = screen.getByRole('button', { name: 'Menu' });
-    expect(button.style.getPropertyValue('--play-menu-colour')).toBe('#e02020');
-    expect(button.querySelector('path')?.getAttribute('d')).toBe('M96 64v128M160 64v128');
-    view.rerender(
-      <MemoryRouter>
-        <GameMenuProvider>
-          <StudioMenu />
-        </GameMenuProvider>
-      </MemoryRouter>,
-    );
-    expect(button.style.getPropertyValue('--play-menu-colour')).toBe('');
-    expect(button.querySelector('path')?.getAttribute('d')).not.toBe('M96 64v128M160 64v128');
+    expect(button.getAttribute('style')).toBeNull();
+    expect(button.innerHTML).toBe(shared);
   });
   it('hides the Pause control on a game menu screen and brings it back in play and after the game leaves', () => {
     const screenWith = (game: ReactElement | null) => (
