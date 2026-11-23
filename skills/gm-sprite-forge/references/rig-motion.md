@@ -144,6 +144,36 @@ attack clip in any arm, and no other classes or bodies. The attack recreates the
 Attack1): the same beats, frame count and directions. Post the round as soon as every arm has rendered; the next
 motions wait for his pick.
 
+**Recreate the pack's clip, not a look-alike (Kevin, 2026-11-23, every later rung).** Study the pack frames first and
+write the key pose of each one down. Then match every arm to those poses: a vendor arm takes its closest clip,
+retimed and key-posed onto the pack's frames (`sample: keys`). The control and the plain copy retarget or hand-pose
+to the same poses. Keep the pack's frame count, timing and directions. Score every cell frame by frame with
+`pose_overlay.py`, and show it beside the pack (pack in column 1) at 1x and 4x. The walk matches the pack's Walk the
+same way. For the Warrior (6Barbarian, 15 frames, S = sheet row 2, SE = row 1):
+
+| Frame | Attack1 key pose | `holds` |
+|---|---|---|
+| 0 | ready crouch, axe low in front | 1 |
+| 1 | axe drawn back low | 1 |
+| 2 | axe out level at head height (wind-up) | 1 |
+| 3-4 | axe high overhead, off arm out; then vertical, torso twisting | 2 |
+| 5 | strike 1: diagonal chop to low front, lunge | 1 |
+| 6-7 | axe raised again; behind the head, crouch (second wind-up) | 2 |
+| 8 | wide horizontal sweep, low lunge | 1 |
+| 9 | axe overhead again | 1 |
+| 10 | strike 2 down the right side | 1 |
+| 11-12 | recovery crouch, axe at waist | 2 |
+| 13-14 | settle back to ready | 2 |
+
+Walk: a 15-frame hunched heavy walk, axe low in the right hand, small arm swing; key-posed as 8 phases from the left
+heel strike (the frame where the feet are farthest apart), each held 2 frames and the last 1. A one-swing source
+replays its wind-up and strike for the pack's second swing (`keys` may repeat a source frame).
+
+Bake-off result (#1282, mean silhouette IoU against Attack1, S / SE): Quaternius sword chop on the mannequin
+0.29 / 0.22-0.24, on the Hyper3D rig 0.34-0.35 / 0.28-0.29, and on the Meshy rig (plain copy) 0.33 / 0.25. Meshy's
+Double_Combo_Attack scored 0.22-0.23 / 0.02 (it turns away). No library attack reaches the pack's wide overhead arcs
+and low lunges; the walks score 0.46-0.60 / 0.39-0.52.
+
 A cell with `rigged` skips steps 1-5 (the top-level `mesh` and `pack` are still required; `recipe.json` names the
 rigged file as the cell's mesh): the body arrives rigged (a vendor rig such as Meshy or Hyper3D, or a library
 character such as the Quaternius mannequin) and nothing of ours touches the motion but the sampling.
