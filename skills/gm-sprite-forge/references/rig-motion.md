@@ -22,6 +22,7 @@ worn gear that bends with the body is not built yet.
 | `scripts/motion/render_motion.py` | Blender | One cell: fit (or reuse the cached fit), skin, motion, render S and SE, write `feet.json` |
 | `scripts/motion/fit_rig.py`, `retarget.py`, `handkey.py` | Blender (modules) | Reached through `render_motion.py`; not commands |
 | `scripts/motion/score_cell.py` | `gm py --` | Finish frames, `score.py` metrics, loop phase, foot slide -> `scores.json` |
+| `scripts/pixel_finish.py` | `gm py --` | Pack-style pixel finish (few colours, cloth on its own ramp); `score_cell.py` runs it for `pixel` |
 | `scripts/motion/matrix_media.py` | `gm py --` (needs ffmpeg with libx264) | Review matrix: pack column plus at most 6 cells, GIF + MP4, 1x and 4x |
 | `scripts/motion/strip.py` | `gm py --` | Quick zoomed strip for looking: `strip.py <cell_dir> <out.png> [rows=1,2] [zoom=3] [ref=<pack sheet>]` |
 | `scripts/motion/fit_accuracy.py` | Blender | Landmark error against rigged characters; exits 1 if any case fails |
@@ -54,7 +55,9 @@ Blender at a time on the NUC.
 4. **Stance.** Kevin (2026-11-22): stance changes belong to the rigging step, not the modeling step.
    `retarget.STANCES` holds additive pose layers: `ssi-barbarian` hunches the chest, pushes the head out, hangs the
    arms in front and crouches 5% of a leg; `ssi-wizard` and `ssi-ranger` turn the torso 35 degrees off the facing,
-   bend the knees and hold the arms out, as in those packs' Idles. Every motion source in a batch gets the same layer.
+   bend the knees and hold the arms out, as in those packs' Idles; `ssi-wizard-walk` raises the casting hand ahead
+   at face height, as the pack Wizard walks. Every motion source in a batch gets the same layer unless a cell names
+   its own.
 5. **Feet.** The foot lock keeps each planted ankle on one ground speed (a loop) or in place (an attack). A two-bone IK
    pass then solves thigh and shin to it and lowers the hips when a leg cannot reach.
 6. **Render.** S and SE (sheet rows 2 and 1) through the pack camera, with the same projection and scale rule as
@@ -82,29 +85,52 @@ loop, none for an attack, in pixels at the pack cell.
 ```
 
 - `pack` needs only the clips used. `model`, `cost_usd` and a cell's `arm` go into `recipe.json`.
+- `finish`: `"base"` for a base body (white undergarments). The pack colour match paints the pack character's dark
+  trousers onto bare legs, so `finish_base.py` matches only the skin, to `pack.idle` (the class's Idle sheet: attack
+  sheets carry light, warm effect pixels): each pixel's hue moves toward the pack skin in proportion to its own chroma,
+  with one lightness scale, so white undergarments stay white. Never split skin from cloth per pixel: that greyed pale
+  skin and erased underwear (Kevin, 2026-11-22). `pack.idle` is required: `run_cells.py` refuses to start without
+  it, and the pass fails if either sheet has no skin pixels. The sheet before that pass is kept as
+  `out/sheet_finish.png`. Without `finish`, the whole sheet is matched to the clip's pack sheet.
+- `pixel`: `{"colours": 8, "cloth": 6, "smooth": true}` runs `scripts/pixel_finish.py` after the colour pass: one
+  palette over the whole sheet, `colours` for everything but the cloth and `cloth` for the cloth (14 in all) (the same colours in every frame), a 3x3 median first with `smooth`. This is Kevin's
+  pick "B" (hero-finish1-warrior, 2026-11-22: fewer shades, less detail, as the pack). `cloth` renders a cloth mask
+  per frame (`mask_<row>_<col>.png`: white where the base-colour texture is pale and unsaturated) and gives the
+  undergarments their own colours: on one palette they merge into pale skin. The sheet before it is kept as
+  `out/sheet_colour.png`. `render` keys `mask_s` and `mask_v` (0.16, 0.5) set the cloth thresholds; stricter ones
+  lose the briefs.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,
-  `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`. Use the pack class's Stage 1 values
+  `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`, `mask_s`, `mask_v` (`mask=1` is added
+  for you when `pixel.cloth` is set). Use the pack class's Stage 1 values
   for `height_px` and `origin_row` (Warrior 43 and 88).
 - `motion`: `kind` is `kaykit`, `bvh`, `handkey` or `none`. `loop` defaults to true for a walk and false for an attack.
   `foot_ik` defaults to true (false copies rotations only). `frames: [f0, f1]` overrides the automatic cut. For an
   attack BVH, `seconds` (1.1) and `fps` (30; CMU is 120) size the window.
 - Hand-keyed `params`: walk `stride`, `lift`, `bob`, `sway` (fractions of leg length), `yaw`, `lean`, `arm` (degrees),
-  `elbow` ([min, max] degrees); attack `keys` (`chop` or `combo`) and `step`.
-- `weapon` (per cell or top level): `{"path": glb, "bone": "hand.R", "length": 0.3, "grip": 0.25, "spin": 0}` puts a
-  separate weapon mesh on a hand bone.
+  `elbow` ([min, max] degrees); attack `keys` (`chop`, `combo`, `cast` for the pack Wizard CastSpell, `bow` for the
+  pack Archer QuickShot) and `step`.
+- `stance` (top level, or in a cell's `motion` to override it for that cell): a name in `retarget.STANCES`.
+- `weapon` (per cell or top level): `{"path": glb, "bone": "hand.R", "length": 0.3, "grip": 0.25, "spin": 0, "roll": 0}`
+  puts a separate weapon mesh on a hand bone, its long axis across the fist. `spin` turns it about that axis, `roll`
+  about the hand bone (a bow needs `"roll": 90` to stand upright). Shape keys are dropped (the KayKit bow's `Draw` key
+  otherwise kept it in its import pose).
 
 Run from the repository root:
 
 ```sh
 gm py -- skills/gm-sprite-forge/scripts/motion/run_cells.py cells.json <out> --engine workbench   # fast scoring pass
 gm py -- skills/gm-sprite-forge/scripts/motion/run_cells.py cells.json <out> --engine cycles --only A-handkey-walk
+gm py -- skills/gm-sprite-forge/scripts/motion/run_cells.py cells.json <out> --rescore   # new finish/pixel, same renders
 gm py -- skills/gm-sprite-forge/scripts/motion/matrix_media.py <media> <pack Walk sheet> "Walk" <out>/A-handkey-walk ...
 <blender wrapper> --python skills/gm-sprite-forge/scripts/motion/fit_accuracy.py -- fitacc.json 43 <rigged.fbx[:mesh]> ...
 ```
 
 Each cell directory gets `raw_<row>_<col>.png`, `out/sheet.png`, `scores.json`, `recipe.json` (`ai_generated: true`,
 motion licence), `fit.json`, `feet.json`, `landmarks.png` (first fit only) and `render.log`; `<out>/summary.txt` lists
-the batch and `run_cells.py` exits 1 if any cell failed. A rerun clears a cell's old results first.
+the batch and `run_cells.py` exits 1 if any cell failed. A rerun clears a cell's old results first. `--rescore` keeps
+the renders and runs the finish and scoring again (after a new `finish` or `pixel`), rendering only the cloth masks
+when `pixel.cloth` needs them and the cell lacks them. It refuses a cell whose mesh, motion, stance or weapon in
+`cells.json` changed since its render: render that cell again.
 `matrix_media.py` reads `out/sheet.png`, `scores.json` and `recipe.json` from each cell directory.
 
 ## Files stay local
@@ -175,9 +201,13 @@ base bodies, not on those meshes:
 - One stance layer per class in `retarget.STANCES`, matched to that class's pack Idle (`ssi-barbarian`,
   `ssi-wizard`, `ssi-ranger`). Fix stance here, not by asking for a new mesh. An Idle stance does not fit every
   clip: on the base-body dry run it raised the Ranger's hand-keyed walk from 0.43 to 0.53 but lowered the Wizard's
-  from 0.37 to 0.21, because the pack Wizard walks with its casting arm raised ahead. Give such a clip its own layer.
+  from 0.37 to 0.21, because the pack Wizard walks with its casting arm raised ahead. Give such a clip its own layer
+  in the cell's `motion` (`"stance": "ssi-wizard-walk"`).
+- Base bodies set `"finish": "base"` with `pack.idle`. The attack is scored against the class's own clip: Warrior
+  Attack1 (`chop`), Wizard CastSpell (`cast`), Ranger QuickShot (`bow`).
 - The class weapon goes in `weapon` on the hand bone, never fused into the body. With nothing fused, the fit's
-  weapon cut-off does nothing.
+  weapon cut-off does nothing. Size it to the pack clip, not the default: the Warrior's KayKit `axe_1handed` needs
+  `"length": 0.75` (at 0.35 it vanished into the fist at 1x), the Ranger's `bow_withString` `0.9` with `"roll": 90`.
 
 Dry run (2026-11-22, unapproved base bodies, workbench, debug only): the fit lands knees, elbows, wrists and ankles on
 the joints of all six bodies (`landmarks.png`), with no tearing at sprite scale. Hand-keyed walks score 0.32-0.58 with

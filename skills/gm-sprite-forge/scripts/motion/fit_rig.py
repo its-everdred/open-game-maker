@@ -47,6 +47,8 @@ def prepare(new, rotz=0.0, max_faces=60000, apply_pose=False):
             bpy.data.objects.remove(bpy.data.objects[name])
     ob.vertex_groups.clear()
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    if ob.data.shape_keys:  # Mesh.transform below skips shape keys, and the keys are what renders (KayKit bow 'Draw')
+        ob.shape_key_clear()
     if len(ob.data.polygons) > max_faces:
         dec = ob.modifiers.new('dec', 'DECIMATE')
         dec.ratio = max_faces / len(ob.data.polygons)

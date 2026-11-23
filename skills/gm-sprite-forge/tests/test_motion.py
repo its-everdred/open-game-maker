@@ -13,7 +13,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts/motion'))
-from score_cell import best_shift, foot_slide  # noqa: E402
+from score_cell import best_shift, cloth_sheet, foot_slide  # noqa: E402
 
 CELL = 128
 PX_PER_UNIT = CELL / (2 * 2 ** 0.5)
@@ -219,6 +219,63 @@ class SeamAndFootLockTest(unittest.TestCase):
         run = [y[i] for i in range(len(y)) if c[i] and (i == 0 or c[i - 1]) and all(c[: i + 1])]
         self.assertGreater(len(run), 4)
         self.assertEqual(len(set(round(x, 9) for x in run)), 1)
+
+
+SHAPE_KEYS = '''
+import sys, json
+sys.path.insert(0, sys.argv[-2])
+import bpy
+import numpy as np
+import fit_rig
+bpy.ops.wm.read_factory_settings(use_empty=True)
+bpy.ops.mesh.primitive_cube_add(size=1)
+bar = bpy.context.object
+bar.scale = (0.2, 3.0, 0.5)  # long along Y, like the KayKit bow
+bar.shape_key_add(name='Basis')
+bar.shape_key_add(name='Draw').value = 0.0
+ob, _ = fit_rig.prepare([bar], 90.0)  # turn 90 degrees and scale to 1.8 high
+ev = ob.evaluated_get(bpy.context.evaluated_depsgraph_get()).to_mesh()
+drawn = np.array([v.co for v in ev.vertices])
+want = fit_rig.verts(ob)
+json.dump({'drawn': (drawn.max(0) - drawn.min(0)).tolist(), 'measured': (want.max(0) - want.min(0)).tolist()},
+          open(sys.argv[-1], 'w'))
+'''
+
+
+@unittest.skipUnless(shutil.which('blender'), 'needs Blender 4.3')
+class ShapeKeyTest(unittest.TestCase):
+    def test_a_shape_keyed_mesh_renders_as_prepared(self):
+        # Mesh.transform skips shape keys, and a shape-keyed mesh renders from its keys: the KayKit bow ignored every
+        # turn, scale and grip and was drawn flat across the hand (#1202). What renders must be what prepare measured.
+        with tempfile.TemporaryDirectory() as t:
+            script, out = Path(t) / 'keys.py', Path(t) / 'out.json'
+            script.write_text(SHAPE_KEYS)
+            subprocess.run(['blender', '-b', '--factory-startup', '--python-use-system-env', '--python-exit-code', '1',
+                            '--python', str(script), '--', str(ROOT / 'scripts/motion'), str(out)],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           env=os.environ | {'PYTHONPATH': os.environ.get('OGM_FORGE_SITE', '')})
+            r = json.loads(out.read_text())
+            np.testing.assert_allclose(r['drawn'], r['measured'], atol=1e-4)
+            self.assertAlmostEqual(r['measured'][2], 1.8, places=4)
+            self.assertGreater(r['measured'][0], r['measured'][1])  # the long axis turned from Y to X
+
+
+class ClothSheetTest(unittest.TestCase):
+    def test_masks_land_on_their_own_frames(self):
+        # The pixel finish gives cloth its own colours; a mask on the wrong frame would paint skin as underwear.
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            Image.new('RGBA', (256, 256)).save(d / 'raw_1_2.png')  # supersampled 2x, as a Cycles cell
+            m = np.zeros((256, 256, 4), np.uint8)
+            m[40:200, 40:200] = (0, 0, 0, 255)  # the body: skin renders black
+            m[64:128, 64:128] = (255, 255, 255, 255)  # the briefs render white
+            Image.fromarray(m).save(d / 'mask_1_2.png')
+            cloth = cloth_sheet(d, (8 * 128, 15 * 128))
+            self.assertTrue(cloth[128 + 32:128 + 64, 2 * 128 + 32:2 * 128 + 64].all())
+            self.assertEqual(cloth.sum(), 32 * 32)  # nothing else: not the skin, not another frame
+            (d / 'mask_1_2.png').rename(d / 'mask_2_2.png')  # a mask for a frame that was not rendered
+            with self.assertRaises(SystemExit):
+                cloth_sheet(d, (8 * 128, 15 * 128))
 
 
 if __name__ == '__main__':

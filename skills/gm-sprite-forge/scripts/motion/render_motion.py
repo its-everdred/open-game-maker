@@ -1,9 +1,11 @@
 """Fit, animate and render one rig/motion cell through the pack camera (Blender 4.3, CPU; #1202 rig spike).
 
 Usage: blender -b --factory-startup --python render_motion.py -- <out_dir> <spec.json> [key=value ...]
+mask=1 also renders mask_<row>_<col>.png (white where the base-colour texture is cloth: pale and unsaturated, the
+undergarments) through the same camera and frames, for the pixel finish's cloth ramp; mask_only=1 renders only those.
 spec: {"mesh": glb, "rotz": deg, "motion": {"kind": "kaykit"|"bvh"|"handkey"|"none", "path", "action",
        "frames": [f0, f1] | "auto", "loop": true, "foot_ik": true, "clip": "walk"|"attack"},
-       "weapon": {"path": glb, "bone": "hand.R", "length": 0.3, "spin": deg}}
+       "weapon": {"path": glb, "bone": "hand.R", "length": 0.3, "spin": deg, "roll": deg}}
 keys: rows=1,2 (sheet rows E=0 SE=1 S=2 ...)  frames=15  cell=128  height_px=43  origin_row=88  engine=cycles|workbench
       samples=32 supersample=1 threads=6
 Camera, light and scale match gpu_bake_rig.py: orthographic, 60 deg from vertical, yaw 45; the rig's rest pose in the
@@ -28,7 +30,8 @@ import retarget  # noqa: E402
 argv = sys.argv[sys.argv.index('--') + 1:]
 OUT, SPEC = argv[0], json.load(open(argv[1]))
 P = {'rows': '1,2', 'frames': 15, 'cell': 128, 'height_px': 43.0, 'origin_row': 88.0, 'engine': 'cycles',
-     'samples': 32, 'supersample': 1, 'threads': 6, 'sun_elev': 55.0, 'sun_az': -60.0, 'sun_energy': 4.0, 'sky': 0.35}
+     'samples': 32, 'supersample': 1, 'threads': 6, 'sun_elev': 55.0, 'sun_az': -60.0, 'sun_energy': 4.0, 'sky': 0.35,
+     'mask': 0.0, 'mask_only': 0.0, 'mask_s': 0.16, 'mask_v': 0.5}
 for kv in argv[2:]:
     k, v = kv.split('=', 1)
     P[k] = v if k in ('rows', 'engine') else float(v)
@@ -90,6 +93,38 @@ def matte(ob):
                     b.inputs[name].default_value = val
 
 
+def mask_materials(ob, wob):
+    """Emission only: white where the body's base-colour texture is cloth (saturation < mask_s, value > mask_v, in sRGB),
+    black elsewhere (skin, eyes) and on the weapon. As hero-base/tools/e_mask.py, the Stage 1 still's mask."""
+    for o, cloth in ((ob, True), (wob, False)):
+        if o is None:
+            continue
+        for m in o.data.materials:
+            if not (m and m.use_nodes):
+                continue
+            nt = m.node_tree
+            bsdf = next((n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+            lk = bsdf.inputs['Base Color'].links if bsdf else []
+            tex = lk[0].from_node if cloth and lk and lk[0].from_node.type == 'TEX_IMAGE' else None
+            em = nt.nodes.new('ShaderNodeEmission')
+            em.inputs['Color'].default_value = (0, 0, 0, 1)
+            if tex:
+                gam = nt.nodes.new('ShaderNodeGamma')
+                gam.inputs['Gamma'].default_value = 1 / 2.2  # the texture is linear; the thresholds are sRGB
+                hsv = nt.nodes.new('ShaderNodeSeparateColor')
+                hsv.mode = 'HSV'
+                s_lt, v_gt, both = (nt.nodes.new('ShaderNodeMath') for _ in range(3))
+                s_lt.operation, v_gt.operation, both.operation = 'LESS_THAN', 'GREATER_THAN', 'MULTIPLY'
+                s_lt.inputs[1].default_value, v_gt.inputs[1].default_value = P['mask_s'], P['mask_v']
+                for a, b in ((tex.outputs['Color'], gam.inputs['Color']), (gam.outputs['Color'], hsv.inputs['Color']),
+                             (hsv.outputs[1], s_lt.inputs[0]), (hsv.outputs[2], v_gt.inputs[0]),
+                             (s_lt.outputs[0], both.inputs[0]), (v_gt.outputs[0], both.inputs[1]),
+                             (both.outputs[0], em.inputs['Color'])):
+                    nt.links.new(a, b)
+            out = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
+            nt.links.new(em.outputs['Emission'], out.inputs['Surface'])
+
+
 def weapon(rig, w):
     """A separate weapon mesh on a hand bone: its longest axis along the grip, scaled to `length` (rig units)."""
     before = set(bpy.data.objects)
@@ -107,7 +142,9 @@ def weapon(rig, w):
         if i != ax:
             grip[i] = (v[:, i].min() + v[:, i].max()) / 2
     to_x = {0: Matrix(), 1: Matrix.Rotation(-math.pi / 2, 4, 'Z'), 2: Matrix.Rotation(math.pi / 2, 4, 'Y')}[ax]
-    ob.data.transform(Matrix.Rotation(math.radians(w.get('spin', 0)), 4, 'X') @ to_x @ Matrix.Scale(s, 4) @
+    # spin turns the weapon about its own long axis; roll turns it about the hand bone (Y), e.g. to stand a bow upright
+    ob.data.transform(Matrix.Rotation(math.radians(w.get('roll', 0)), 4, 'Y') @
+                      Matrix.Rotation(math.radians(w.get('spin', 0)), 4, 'X') @ to_x @ Matrix.Scale(s, 4) @
                       Matrix.Translation(Vector(-grip)))
     pb = rig.pose.bones[w.get('bone', 'hand.R')]
     ob.parent = rig
@@ -182,6 +219,25 @@ def fitted(spec):
     return ob, rig, lm, rep
 
 
+def mask_frames(sc, root, rows, ob, wob):
+    """The cloth mask for every frame, before the colour frames (the mask pass replaces the materials, so the colour
+    pass runs on copies)."""
+    keep = {o: [m.copy() if m else None for m in o.data.materials] for o in (ob, wob) if o}
+    mask_materials(ob, wob)
+    engine, samples = sc.render.engine, getattr(sc.cycles, 'samples', 1)
+    sc.render.engine, sc.cycles.samples = 'CYCLES', 4
+    for row in rows:
+        root.rotation_euler = (0, 0, math.radians(135 - 45 * row))
+        for col in range(N):
+            sc.frame_set(1 + col)
+            sc.render.filepath = f'{OUT}/mask_{row}_{col}.png'
+            bpy.ops.render.render(write_still=True)
+    sc.render.engine, sc.cycles.samples = engine, samples
+    for o, mats in keep.items():
+        for i, m in enumerate(mats):
+            o.data.materials[i] = m
+
+
 def main():
     t0 = time.time()
     sc = scene()
@@ -207,11 +263,16 @@ def main():
     root.scale = (s, s, s)
     rig.data.pose_position = 'POSE'
     os.makedirs(OUT, exist_ok=True)
-    for old in os.listdir(OUT):
-        if old.startswith('raw_') and old.endswith('.png'):
-            os.remove(os.path.join(OUT, old))
-    feet = {}
     rows = [int(r) for r in str(P['rows']).split(',')]
+    masks = P['mask'] or P['mask_only']
+    for old in os.listdir(OUT):
+        if old.endswith('.png') and (old.startswith('mask_') or (old.startswith('raw_') and not P['mask_only'])):
+            os.remove(os.path.join(OUT, old))
+    if masks:
+        mask_frames(sc, root, rows, ob, wob)
+    if P['mask_only']:  # the colour frames, feet and reports from the full render stay as they were
+        return
+    feet = {}
     for row in rows:
         root.rotation_euler = (0, 0, math.radians(135 - 45 * row))
         feet[row] = []
