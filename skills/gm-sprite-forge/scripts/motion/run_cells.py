@@ -126,7 +126,7 @@ def main():
             px = spec['pixel']
             loop += ['--pixel', str(px['colours'])] + (['--smooth'] if px.get('smooth') else []) + \
                 (['--cloth', str(px['cloth'])] if px.get('cloth') else []) + \
-                (['--weapon', str(px['weapon'])] if px.get('weapon') else [])
+                (['--weapon', str(px['weapon'])] if px.get('weapon') and c.get('weapon', spec.get('weapon')) else [])
         s = subprocess.run([sys.executable, '-I', str(HERE / 'score_cell.py'), str(d), spec['pack'][c['clip']], '--finish', *loop],
                            capture_output=True, text=True)
         if s.returncode:

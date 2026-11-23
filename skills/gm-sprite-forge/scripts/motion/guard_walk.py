@@ -15,7 +15,6 @@ import json
 import math
 
 FPS = 30
-JOINTS = ('Hips', 'Head', 'LeftFoot', 'RightFoot', 'LeftHand', 'RightHand', 'LeftToe', 'RightToe')
 
 
 def _flat(a, b):

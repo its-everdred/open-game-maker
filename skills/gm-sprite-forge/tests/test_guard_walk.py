@@ -13,19 +13,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts/motion'))
 from guard_walk import rank  # noqa: E402
 
 FPS, CYCLE, SPEED = 30, 30, 0.9
+GUARD = {'lean': 0.3, 'head': 1.5, 'hand_z': 1.2, 'hand_fwd': 0.3}
 
 
-def take(lean=0.0, head=1.7, hand_z=0.8, hand_fwd=0.0, toe=1.0, turn_deg=0.0, cycles=3):
-    """Synthetic walk along a heading that bends by turn_deg per cycle: the left foot plants for 10 of every
-    30 frames and swings for the rest; toe=1 points the toes along the travel, -1 against it."""
+def take(lean=0.0, head=1.7, hand_z=0.8, hand_fwd=0.0, toe=1.0, turn_deg=0.0, cycles=3, speed=SPEED, cycle=CYCLE):
+    """Synthetic walk along a heading that bends by turn_deg per cycle: the left foot plants for the first third
+    of every cycle and swings for the rest; toe=1 points the toes along the travel, -1 against it."""
     T = {j: [] for j in ('Hips', 'Head', 'LeftFoot', 'RightFoot', 'LeftHand', 'RightHand', 'LeftToe', 'RightToe')}
     x = y = 0.0
     foot = [0.0, 0.0]
-    for f in range(CYCLE * cycles + 2):
-        a = math.radians(turn_deg * f / CYCLE)
+    for f in range(cycle * cycles + 2):
+        a = math.radians(turn_deg * f / cycle)
         ux, uy = math.cos(a), math.sin(a)
-        x, y = x + ux * SPEED / FPS, y + uy * SPEED / FPS
-        if f % CYCLE >= 10:  # swing: the foot catches up with the hips
+        x, y = x + ux * speed / FPS, y + uy * speed / FPS
+        if f % cycle >= cycle // 3:  # swing: the foot catches up with the hips
             foot = [x, y]
         T['Hips'].append([x, y, 1.0])
         T['Head'].append([x + ux * lean, y + uy * lean, head])
@@ -39,17 +40,27 @@ def take(lean=0.0, head=1.7, hand_z=0.8, hand_fwd=0.0, toe=1.0, turn_deg=0.0, cy
 
 class GuardWalk(unittest.TestCase):
     def test_hunched_hands_up_ranks_above_upright(self):
-        got = rank({'guard': take(lean=0.3, head=1.5, hand_z=1.2, hand_fwd=0.3), 'relaxed': take()})
+        got = rank({'guard': take(**GUARD), 'relaxed': take()})
         self.assertTrue(got)
         self.assertEqual(got[0]['take'], 'guard')
         self.assertGreater(min(c['score'] for c in got if c['take'] == 'guard'),
                            max(c['score'] for c in got if c['take'] == 'relaxed'))
 
     def test_backing_off_is_dropped(self):
-        self.assertEqual(rank({'back': take(lean=0.3, head=1.5, hand_z=1.2, hand_fwd=0.3, toe=-1.0)}), [])
+        self.assertEqual(rank({'back': take(**GUARD, toe=-1.0)}), [])
 
     def test_turning_is_dropped(self):
-        self.assertEqual(rank({'turn': take(lean=0.3, head=1.5, hand_z=1.2, hand_fwd=0.3, turn_deg=90)}), [])
+        self.assertEqual(rank({'turn': take(**GUARD, turn_deg=90)}), [])
+
+    def test_standing_shuffle_and_running_are_dropped(self):
+        # a sheet walk is a walking pace: a near-still shuffle or a run would play at the wrong speed in place
+        self.assertEqual(rank({'shuffle': take(**GUARD, speed=0.3)}), [])
+        self.assertEqual(rank({'run': take(**GUARD, speed=2.0)}), [])
+
+    def test_short_and_long_strides_are_dropped(self):
+        # a cycle far from one walking stride (a stutter step, or a pause mid-step) is not one gait cycle
+        self.assertEqual(rank({'stutter': take(**GUARD, cycle=15, cycles=6)}), [])
+        self.assertEqual(rank({'pause': take(**GUARD, speed=0.6, cycle=60)}), [])
 
     def test_cycle_spans_one_plant_to_the_next(self):
         c = rank({'guard': take(lean=0.3)})[0]

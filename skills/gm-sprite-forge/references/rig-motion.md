@@ -238,10 +238,18 @@ higher ($1.40 for 10). Ten clips took 90 s. Names and ids come from the library 
   height_meters=1.8 'animation_action_ids=[21,119,559,560,112,4,128,237,242,105]'
 ```
 
-Guarded stepping in long mocap takes: `motion/bvh_track.py` (Blender) dumps the joints of BVH takes and
-`motion/guard_walk.py <tracks.json> <out.json>` ranks one-cycle windows by forward lean, a low head and both hands up
-in front, keeping steady forward travel with the toes along it; the three LaFAN1 fight takes give 69 such cycles. Play
-one as `kind: copy` with `frames: [f0, f1]` and `in_place`. The Synty Goblin Locomotion walk (owned, local only) maps
+Guarded stepping in long mocap takes (LaFAN1 joint names, centimetres, 30 fps; the fight takes are
+`fight1_subject{2,3,5}.bvh` in the LaFAN1 zip): `motion/bvh_track.py` dumps their joints and `motion/guard_walk.py`
+ranks one-cycle windows by forward lean, a low head and both hands up in front, keeping steady forward travel with the
+toes along it; the three fight takes give 69 such cycles.
+
+```sh
+<blender wrapper> --python scripts/motion/bvh_track.py -- tracks.json fight1_subject2.bvh fight1_subject5.bvh
+gm py -- scripts/motion/guard_walk.py tracks.json cycles.json   # prints the best: take, f0, f1, v, lean, hands, score
+```
+
+A cycle's `f0` and `f1` are the take's own frame numbers: play it as `kind: copy` with `path` the take,
+`frames: [f0, f1]`, `in_place` and the LaFAN1 names in `map` (mixamo `LeftToeBase` is LaFAN1 `LeftToe`). The Synty Goblin Locomotion walk (owned, local only) maps
 onto the Meshy rig by name (Shoulder/Elbow are the upper arm and forearm, Ankle the foot, Ball the toe).
 
 Check every cell frame by frame against the pack clip: `gm py -- skills/gm-sprite-forge/scripts/motion/pose_overlay.py
@@ -290,6 +298,8 @@ the axe passes through every frame, one way. Write the full pose at key 0; later
 - Two opposite directions in neighbouring keys fail: add a key between them to say which way round the swing goes.
 - Check the keys with `swing_curves.py` before rendering (seconds, no render): a swing that reverses, or a bone that
   turns more than about 130 degrees in a frame, needs a key between.
+  `<blender wrapper> --python scripts/motion/swing_curves.py -- cells.json <cell name> <out>.json` per cell, then
+  `gm py -- scripts/motion/swing_chart.py chart.png <out>.json ...` draws them side by side.
 - Block the arc in `workbench` and look at a 3x strip beside the pack before Cycles. The S camera looks down the
   forward axis: a strike or follow-through pointed forward is foreshortened and hides in front of the body. Swing it
   out to the side (as the pack's wide sweeps), with straight elbows through the strike.

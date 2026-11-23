@@ -269,7 +269,6 @@ class ClothSheetTest(unittest.TestCase):
             m = np.zeros((256, 256, 4), np.uint8)
             m[40:200, 40:200] = (0, 0, 0, 255)  # the body: skin renders black
             m[64:128, 64:128] = (255, 255, 255, 255)  # the briefs render white
-            Image.fromarray(m).save(d / 'mask_1_2.png')
             m[150:200, 40:60] = (255, 0, 0, 255)  # the axe renders red
             Image.fromarray(m).save(d / 'mask_1_2.png')
             cloth, weapon = mask_sheets(d, (8 * 128, 15 * 128))
