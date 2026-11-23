@@ -8,6 +8,9 @@ function listen({ name, skipOrigin }: { name: string; skipOrigin: string | null 
   document.addEventListener(
     'securitypolicyviolation',
     (event) => {
+      /* A refused eval throws EvalError where it runs: an uncaught one is already a page error, and a caught one is
+       * a feature probe that falls back (zod's `new Function('')` check in every game). */
+      if (event.blockedURI === 'eval') return;
       const report = (window as unknown as Record<string, (text: string) => Promise<void>>)[name];
       const where = event.sourceFile ? ` at ${event.sourceFile}:${event.lineNumber}` : '';
       void report?.(`CSP violation: ${event.effectiveDirective} blocked ${event.blockedURI || 'inline'}${where}`);

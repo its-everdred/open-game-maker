@@ -69,6 +69,11 @@ export function cspProblemsInHtml(html: string): string[] {
       if (['href', 'src', 'action', 'formaction'].includes(name) && /^\s*javascript:/iu.test(value))
         problems.push(`a javascript: URL on <${tag}>`);
     if (['iframe', 'frame', 'object', 'embed'].includes(tag)) problems.push(`an <${tag}>`);
+    for (const url of [
+      ...(attrs.get('srcset') ?? '').split(',').map((item) => item.trim().split(/\s+/u)[0] ?? ''),
+      attrs.get('poster') ?? '',
+    ])
+      if (offOrigin(url)) problems.push(`<${tag}> loading ${url.trim().slice(0, 80)} from another origin`);
     const load = LOADS[tag];
     const url = load && attrs.get(load);
     if (!url || !offOrigin(url)) continue;
@@ -79,18 +84,30 @@ export function cspProblemsInHtml(html: string): string[] {
   return [...new Set(problems)];
 }
 
-function htmlFiles(dir: string): string[] {
+/** Off-origin `@import` and `url()` loads (fonts, images, stylesheets) in a stylesheet. */
+export function cspProblemsInCss(css: string): string[] {
+  const problems: string[] = [];
+  const text = css.replace(/\/\*[\s\S]*?\*\//gu, '');
+  for (const [, url] of text.matchAll(/(?:url\(\s*["']?|@import\s+["'])([^"')\s]+)/giu))
+    if (offOrigin(url!)) problems.push(`a stylesheet load of ${url!.slice(0, 80)} from another origin`);
+  return [...new Set(problems)];
+}
+
+function distFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return htmlFiles(path);
-    return entry.isFile() && /\.html?$/iu.test(entry.name) ? [path] : [];
+    if (entry.isDirectory()) return distFiles(path);
+    return entry.isFile() && /\.(?:html?|css)$/iu.test(entry.name) ? [path] : [];
   });
 }
 
-/** Every HTML file in a built game, checked against the games host's CSP. */
+/**
+ * Every HTML page and stylesheet in a built game, checked against the games host's CSP. Loads made from scripts are
+ * left to the capture gates, which run the build under the same CSP.
+ */
 export function checkDistCsp(dist: string): string[] {
-  return htmlFiles(dist).flatMap((file) =>
-    cspProblemsInHtml(readFileSync(file, 'utf8')).map(
+  return distFiles(dist).flatMap((file) =>
+    (/\.css$/iu.test(file) ? cspProblemsInCss : cspProblemsInHtml)(readFileSync(file, 'utf8')).map(
       (problem) =>
         `dist/${relative(dist, file).split('\\').join('/')} has ${problem}, which the games host's CSP blocks`,
     ),

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { cspProblemsInHtml } from '../src/csp-check.js';
+import { cspProblemsInCss, cspProblemsInHtml } from '../src/csp-check.js';
 import { checkPublishDist } from '../src/dist-validation.js';
 
 /** A complete dist whose index.html the test chooses. */
@@ -60,6 +60,11 @@ describe('the games host CSP check on a built dist', () => {
     ],
     ['<img src="http://example.com/a.png">', '<img> loading http://example.com/a.png from another origin'],
     ['<iframe src="./other.html"></iframe>', 'an <iframe>'],
+    [
+      '<img srcset="./a.png 1x, https://cdn.example/b.png 2x">',
+      '<img> loading https://cdn.example/b.png from another origin',
+    ],
+    ['<video poster="//cdn.example/p.jpg"></video>', '<video> loading //cdn.example/p.jpg from another origin'],
   ])('flags %s', (html, problem) => {
     expect(cspProblemsInHtml(html)).toEqual([problem]);
   });
@@ -73,5 +78,23 @@ describe('the games host CSP check on a built dist', () => {
     ['a handler-like word in an attribute value', '<div title="on=1 onclick=go()">'],
   ])('allows %s', (_name, html) => {
     expect(cspProblemsInHtml(html)).toEqual([]);
+  });
+
+  it('checks stylesheets for off-origin fonts and imports, but not their own files', () => {
+    expect(
+      cspProblemsInCss(
+        "@import 'https://fonts.example/a.css'; @font-face { src: url(https://fonts.example/f.woff2) }" +
+          ' .a { background: url("./bg.png") } .b { background: url(data:image/png;base64,AA) } /* url(https://x.example/c) */',
+      ),
+    ).toEqual([
+      'a stylesheet load of https://fonts.example/a.css from another origin',
+      'a stylesheet load of https://fonts.example/f.woff2 from another origin',
+    ]);
+    const dir = dist('<link rel="stylesheet" href="./assets/a.css">');
+    mkdirSync(join(dir, 'assets'));
+    writeFileSync(join(dir, 'assets/a.css'), 'body { font-family: x; src: url(//fonts.example/x.woff2) }');
+    expect(checkPublishDist(dir)).toEqual([
+      "dist/assets/a.css has a stylesheet load of //fonts.example/x.woff2 from another origin, which the games host's CSP blocks",
+    ]);
   });
 });
