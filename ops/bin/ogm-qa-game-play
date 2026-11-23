@@ -133,7 +133,12 @@ def main(argv):
             print(f'{slug} {build_id}: ok' + (f" (unchecked: {'; '.join(clean(item) for item in unchecked)})" if unchecked else ''))
             continue
         failed = 1
-        line = f"{slug} {build_id}: {'; '.join(clean(item) for item in failures)}; trace {trace_line(report)}; stills {out}"
+        # The browser shares this host: a heavy load average makes a slow boot the host's, not the game's.
+        load = f'{os.getloadavg()[0]:.0f}'
+        line = (
+            f"{slug} {build_id}: {'; '.join(clean(item) for item in failures)}; trace {trace_line(report)}; "
+            f'host load {load}; stills {out}'
+        )
         print(line)
         if attention:
             stamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')

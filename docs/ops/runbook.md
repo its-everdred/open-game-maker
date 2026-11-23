@@ -547,10 +547,10 @@ trace, page errors) land in `assets-local/review/app/play-check/<build>/`.
 allows the hook 20 minutes), and every game after a deploy that touches the boot path
 (`apps/web/src/{routes/game,features/editor,features/room}/`, `apps/web` build files,
 `packages/{contracts,host,iframe-bridge,sdk}/`, `services/games-host/`, `services/api/src/{games,builds}/`). A game that
-fails appends one `qa-game-play failed` line to the attention file with its failures, the bridge messages it got and its
-stills folder, and fails the hook; a crash of the check itself exits 70 and the hook writes the line instead. Replay a
-build against an older shell with `--web-dist <web build>`; `--stall <seconds>` holds the game's load reports that long
-after the first, the silence that left the shell on Try again (#1267).
+fails appends one `qa-game-play failed` line to the attention file with its failures, the bridge messages it got, the
+host's load average and its stills folder, and fails the hook; a crash of the check itself exits 70 and the hook writes
+the line instead. Replay a build against an older shell with `--web-dist <web build>`; `--stall <seconds>` holds the
+game's load reports that long after the first, the silence that left the shell on Try again (#1267).
 
 ## Prove the instance monorepo flow
 

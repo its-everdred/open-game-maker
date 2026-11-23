@@ -70,11 +70,11 @@ qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/bui
 assert_grep 'ok build_new: ok' "$scratch/out"
 assert_grep 'new: no tested build, not played' "$scratch/out"
 # A type the game sent with a newline in it is shown as ?, so it cannot forge an attention line.
-line="bad build_bad: bridge error; the shell shows Try again; trace hello>load.progress x65>?; stills $stack/assets-local/review/app/play-check/build_bad"
-assert_grep "$line" "$scratch/out"
+line="bad build_bad: bridge error; the shell shows Try again; trace hello>load.progress x65>[?]; host load [0-9]+; stills $stack/assets-local/review/app/play-check/build_bad"
+grep -qE "$line" "$scratch/out" || fail "missing failure line: $line"
 assert_grep 'exit=1 qa-game-play' "$scratch/out"
 assert_eq 1 "$(wc -l < "$attention")" 'one attention line for the one failing game'
-assert_grep "qa-game-play failed: $line" "$attention"
+grep -qE "qa-game-play failed: $line" "$attention" || fail 'attention line lacks the failure, trace, load and stills'
 
 # The publish hook plays only the game it published.
 : > "$scratch/calls"
