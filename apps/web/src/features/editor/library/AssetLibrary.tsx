@@ -88,7 +88,13 @@ export function AssetLibrary({
           onClick={(event) => onPlace?.(armedItem.id, { clientX: event.clientX, clientY: event.clientY })}
         />
       ) : null}
-      <section ref={sheet} className={open ? 'asset-library is-open' : 'asset-library'} aria-label="Library">
+      <section
+        ref={sheet}
+        className={open ? 'asset-library is-open' : 'asset-library'}
+        aria-label="Library"
+        /* The chat bubble rises above the sheet; the value changes with its height so the edit page measures again. */
+        data-bubble-clear={open ? 'open' : 'closed'}
+      >
         <button
           className="asset-library-handle"
           type="button"
