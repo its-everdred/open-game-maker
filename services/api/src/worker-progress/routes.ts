@@ -18,6 +18,7 @@ import { HttpError } from '../app/errors.js';
 import { authorizedGame } from '../games/authorize.js';
 import { requirePrincipal } from '../app/principal.js';
 import { listWorkers } from './list.js';
+import { logIncomplete, sourceError } from './incomplete-log.js';
 import { recentCompletions } from './completions.js';
 import { belongsToGame, ticketScope } from './scope.js';
 import { isQaGame } from '../qa/state.js';
@@ -42,12 +43,20 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
     .where(and(eq(schema.jobs.gameId, game.id), inArray(schema.jobs.state, ['admitted', 'filed', 'running'])))
     .get();
   // A game without a linked repository has no daemon or tracker tickets yet.
-  if (!game.githubOwner && !game.githubRepo)
+  if (!game.githubOwner && !game.githubRepo) {
+    logIncomplete(deps.log, game.id, activeJob ? { repo: 'unlinked' } : {});
     return c.json({ workers: [], daemonUnavailable: Boolean(activeJob), trackerStale: false, ...history });
-  if (!repo || !game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_scope_unavailable');
+  }
+  if (!repo || !game.slug || !deps.registry.trackerTickets) {
+    logIncomplete(deps.log, game.id, { repo: 'ticket_scope_unavailable' });
+    throw new HttpError(503, 'ticket_scope_unavailable');
+  }
   const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
   // Fail closed if the tracker is unavailable: a shared daemon may contain another game's tickets.
-  const snapshot = await deps.registry.trackerTickets(repo, 'open');
+  const snapshot = await deps.registry.trackerTickets(repo, 'open').catch((error: unknown) => {
+    logIncomplete(deps.log, game.id, { tracker: sourceError(error) });
+    throw error;
+  });
   const tickets = snapshot.tickets.filter((ticket) => belongsToGame(ticket, scope));
   if (!snapshot.stale)
     retainReviewTickets(
@@ -72,7 +81,7 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
     .aiurClientForGame(game.id)
     .then((client) => listWorkers(client))
     .catch((error: unknown) => {
-      daemonError = error instanceof HttpError ? error.code : error instanceof Error ? error.name : 'unknown';
+      daemonError = sourceError(error);
       daemonUnavailable = !(
         error instanceof HttpError &&
         error.code === 'daemon_not_found' &&
@@ -100,14 +109,11 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
     }
   } else if (lookupIds.size) lookupUnavailable = true;
   // The creator only sees fewer builds; the log names the source that failed.
-  if (daemonUnavailable || lookupUnavailable || snapshot.stale)
-    deps.log({
-      event: 'game_workers_incomplete',
-      gameId: game.id,
-      ...(daemonUnavailable ? { daemon: daemonError } : {}),
-      ...(lookupUnavailable ? { lookup: lookupIds.size } : {}),
-      ...(snapshot.stale ? { tracker: 'stale' } : {}),
-    });
+  logIncomplete(deps.log, game.id, {
+    ...(daemonUnavailable ? { daemon: daemonError } : {}),
+    ...(lookupUnavailable ? { lookup: lookupIds.size } : {}),
+    ...(snapshot.stale ? { tracker: 'stale' } : {}),
+  });
   const byTicket = new Map(
     workers
       .filter((worker) => allowed.has(worker.ticket))

@@ -62,6 +62,10 @@ it("logs which source left a game's build list incomplete", async () => {
   const broken = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
   expect(await broken.json()).toMatchObject({ daemonUnavailable: true });
   expect(log).toHaveBeenCalledWith({ event: 'game_workers_incomplete', gameId: game, daemon: 'daemon_unreachable' });
+  // The app polls every 5 seconds: a lasting failure is one line, not one per poll.
+  log.mockClear();
+  await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+  expect(log).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'game_workers_incomplete' }));
 
   deps.registry.trackerTickets = async () => ({ stale: true, tickets: [ticket] });
   deps.aiurClientForGame = async () =>
@@ -71,7 +75,21 @@ it("logs which source left a game's build list incomplete", async () => {
   await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
   expect(log).toHaveBeenCalledWith({ event: 'game_workers_incomplete', gameId: game, tracker: 'stale' });
 
+  deps.registry.trackerTickets = async () => ({ stale: false, tickets: [] });
+  deps.aiurClientForGame = async () =>
+    ({
+      state: async () => ({ running: [{ issue_identifier: '13', state: 'in-progress' }] }),
+      progress: async () => ({ progress: { status: 'unknown' } }),
+    }) as unknown as Awaited<ReturnType<typeof deps.aiurClientForGame>>;
+  deps.registry.trackerTicket = async () => {
+    throw new Error('Ticket lookup failed (502)');
+  };
+  log.mockClear();
+  await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
+  expect(log).toHaveBeenCalledWith({ event: 'game_workers_incomplete', gameId: game, lookup: 1 });
+
   deps.registry.trackerTickets = async () => ({ stale: false, tickets: [ticket] });
+  deps.registry.trackerTicket = async () => ticket;
   log.mockClear();
   const healthy = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
   expect(await healthy.json()).toMatchObject({ daemonUnavailable: false, trackerStale: false });

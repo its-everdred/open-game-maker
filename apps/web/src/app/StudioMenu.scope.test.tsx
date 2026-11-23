@@ -5,11 +5,13 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 import { GameMenuProvider } from './GameMenu';
 import { StudioMenu } from './StudioMenu';
+import { pushUpdate, setUpdateOwner } from '../lib/notify/slice';
 
 const games = [
   { id: 'g_helm', title: 'Dusk Helm', ownerId: 'u_kevin' },
   { id: 'g_blobs', title: 'Blobs', ownerId: 'u_kevin' },
 ];
+const workerState = vi.hoisted(() => ({ error: false }));
 const command = (game_id: string, title: string) => ({
   game_id,
   game_title: game_id,
@@ -34,7 +36,7 @@ vi.mock('../features/worker-builds/useWorkers', () => ({
       state: 'in-progress',
     })),
     feeds: [],
-    error: false,
+    error: workerState.error,
     loading: false,
   }),
 }));
@@ -75,7 +77,11 @@ vi.mock('../lib/sound', () => ({
   status: () => 'on',
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setUpdateOwner(undefined);
+  workerState.error = false;
+});
 
 function openBuilds(path: string) {
   render(
@@ -91,8 +97,10 @@ function openBuilds(path: string) {
   const menu = screen.queryByRole('button', { name: 'Menu' });
   if (menu) fireEvent.click(menu);
   const hammer = screen.getByRole('button', { name: /builds? running/ });
+  const label = hammer.getAttribute('aria-label');
+  const badge = hammer.textContent;
   fireEvent.click(hammer);
-  return { hammer, panel: screen.getByRole('region', { name: 'Builds' }) };
+  return { hammer, label, badge, panel: screen.getByRole('region', { name: 'Builds' }) };
 }
 
 // Kevin (#1296): in Dusk Helm's editor the Builds panel listed Blobs, goblin-cellar and core review tickets, with a
@@ -114,4 +122,18 @@ it('keeps every game and the core in the app-wide view', () => {
   expect(within(panel).getByText('g_blobs build')).toBeTruthy();
   fireEvent.click(within(panel).getByRole('button', { name: '3 need review' }));
   expect(within(panel).getByText('Review the published blobs build')).toBeTruthy();
+});
+
+it("counts only the edited game's updates, and never shows the creator a failed source", () => {
+  setUpdateOwner('u_kevin');
+  pushUpdate('Your build is ready — Blobs', 'g_blobs');
+  pushUpdate('Your build is ready — Dusk Helm', 'g_helm');
+  workerState.error = true;
+  const { label, badge, panel } = openBuilds('/g/g_helm?mode=edit');
+  expect(within(panel).getByText('Your build is ready — Dusk Helm')).toBeTruthy();
+  expect(within(panel).queryByText('Your build is ready — Blobs')).toBeNull();
+  expect(within(panel).queryByRole('alert')).toBeNull();
+  // One review, one running build and one unread update about this game.
+  expect(label).toBe('1 build running, 1 new update');
+  expect(badge).toBe('3');
 });

@@ -32,7 +32,7 @@ function showReview(message: MessageEvent<string>, kind: 'review.reminder' | 're
       seenReminders.delete(id as string),
     );
   }
-  pushUpdate(updateText(message));
+  pushUpdate(updateText(message), updateGame(message));
   for (const listener of listeners.keys()) listener(kind, message);
 }
 
@@ -85,7 +85,7 @@ function open(): void {
         showReview(message, name);
         return;
       }
-      pushUpdate(updateText(message));
+      pushUpdate(updateText(message), updateGame(message));
       for (const listener of listeners.keys()) listener(name, message);
     });
   }
@@ -120,4 +120,13 @@ function updateText(event: MessageEvent<string>): string {
     // Plain text payload.
   }
   return event.data;
+}
+
+function updateGame(event: MessageEvent<string>): string | undefined {
+  try {
+    const gameId = (JSON.parse(event.data) as { data?: { gameId?: unknown } }).data?.gameId;
+    return typeof gameId === 'string' ? gameId : undefined;
+  } catch {
+    return undefined;
+  }
 }

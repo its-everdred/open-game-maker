@@ -42,7 +42,7 @@ import {
   useUnreadReplies,
 } from '../features/executor-thread/thread';
 import { signOut } from '../lib/api/auth';
-import { readUpdates, useNotify } from '../lib/notify/slice';
+import { readUpdates, scopedUpdates, useNotify } from '../lib/notify/slice';
 import { useSession } from '../lib/api/session';
 import { getVolume, onChange, setMuted, setVolume, status } from '../lib/sound';
 import { useAdminMe } from '../routes/admin/api';
@@ -92,8 +92,6 @@ export function StudioMenu() {
   const decisions = useCreatorCommands(creatorId);
   const sound = useSyncExternalStore(onChange, status);
   const [volume, setLocalVolume] = useState(getVolume);
-  const unreadUpdates = useNotify((state) => (state.updateOwner === creatorId ? state.unreadUpdates : 0));
-  const hasUpdates = useNotify((state) => state.updateOwner === creatorId && state.updates.length > 0);
   const [announcement, setAnnouncement] = useState('');
   const [buildClock, setBuildClock] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
@@ -111,6 +109,8 @@ export function StudioMenu() {
   const isGameView = Boolean(game || isShowcase);
   const hasStudioHeader = Boolean(matchPath('/all', location.pathname) || matchPath('/new', location.pathname));
   const gameId = game?.params.gameId;
+  const unreadUpdates = useNotify((state) => scopedUpdates(state, creatorId, gameId).unread);
+  const hasUpdates = useNotify((state) => scopedUpdates(state, creatorId, gameId).updates.length > 0);
   const ownedGames = isShowcase ? [] : builds.games.filter((item) => item.ownerId === creatorId);
   // In a game, builds, reviews and Commands are that game's only; the core's and other games' stay on the library.
   const trackedGames = gameId === undefined ? ownedGames : ownedGames.filter((item) => item.id === gameId);
@@ -521,6 +521,7 @@ export function StudioMenu() {
       <BuildPanel
         key={creatorId ?? 'signed-out'}
         creatorId={creatorId}
+        gameId={gameId}
         workers={workers}
         reviews={reviews}
         commands={reviewCommands}
