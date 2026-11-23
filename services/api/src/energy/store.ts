@@ -2,6 +2,8 @@ import type { EnergyLimits, EnergyPreference } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
 import { eq } from 'drizzle-orm';
 
+import { EDITABLE_CAPS, emptyCaps, type CapsUpdate, type EditableCapId, type EnergyCaps } from './resources.js';
+
 const INSTANCE = 'instance';
 
 export function readLimits(db: Db): EnergyLimits {
@@ -46,4 +48,26 @@ export function writePreference(db: Db, userId: string, preference: EnergyPrefer
     .values({ userId, ...values })
     .onConflictDoUpdate({ target: schema.energyPreferences.userId, set: values })
     .run();
+}
+
+export function readCaps(db: Db): EnergyCaps {
+  const caps = emptyCaps();
+  for (const row of db.select().from(schema.energyCaps).all()) {
+    if ((EDITABLE_CAPS as readonly string[]).includes(row.id)) caps[row.id as EditableCapId] = row.limit;
+  }
+  return caps;
+}
+
+// Only the caps named in the update change; the rest keep their value.
+export function writeCaps(db: Db, update: CapsUpdate, now: Date): void {
+  const updatedAt = now.toISOString();
+  db.transaction((tx) => {
+    for (const [id, limit] of Object.entries(update)) {
+      if (limit === undefined) continue;
+      tx.insert(schema.energyCaps)
+        .values({ id, limit, updatedAt })
+        .onConflictDoUpdate({ target: schema.energyCaps.id, set: { limit, updatedAt } })
+        .run();
+    }
+  });
 }

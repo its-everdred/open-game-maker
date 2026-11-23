@@ -1,20 +1,30 @@
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 
-import { EnergyLimits, EnergyPreferenceUpdate } from '@ogm/contracts';
+import { EnergyCapsUpdate, EnergyLimits, EnergyPreferenceUpdate } from '@ogm/contracts';
 import { authorize } from '@ogm/policy';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
+import { readHistory } from './samples.js';
 import { readEnergySnapshot } from './source.js';
-import { readPreference, writeLimits, writePreference } from './store.js';
+import { readPreference, writeCaps, writeLimits, writePreference } from './store.js';
 import { adminView, playerView } from './view.js';
 
 function snapshot(c: Context<ApiBindings>) {
   const { db, config, registry } = c.get('deps');
-  return readEnergySnapshot({ db, zone: config.resetZoneDefault, readings: registry.energyReadings }, new Date());
+  return readEnergySnapshot(
+    { db, zone: config.resetZoneDefault, readings: registry.energyReadings, netlifyLog: registry.energyNetlifyLog },
+    new Date(),
+  );
+}
+
+async function admin(c: Context<ApiBindings>, userId: string) {
+  const { db } = c.get('deps');
+  const now = new Date();
+  return adminView(await snapshot(c), readPreference(db, userId), readHistory(db, now));
 }
 
 // Energy limits are instance-wide, so only a platform admin (no family scope) may read costs or set them.
@@ -38,14 +48,21 @@ const routes = new Hono<ApiBindings>()
   })
   .get('/admin', async (c) => {
     const actor = platformAdmin(c);
-    return c.json(adminView(await snapshot(c), readPreference(c.get('deps').db, actor.userId)));
+    return c.json(await admin(c, actor.userId));
   })
   .put('/admin/limits', async (c) => {
     const actor = platformAdmin(c);
     const limits = await parseBody(c, EnergyLimits);
     const { db } = c.get('deps');
     writeLimits(db, limits, new Date());
-    return c.json(adminView(await snapshot(c), readPreference(db, actor.userId)));
+    return c.json(await admin(c, actor.userId));
+  })
+  // OGM's own caps only: an aiur cap or provider window id fails validation (aiur owns those).
+  .put('/admin/caps', async (c) => {
+    const actor = platformAdmin(c);
+    const caps = await parseBody(c, EnergyCapsUpdate);
+    writeCaps(c.get('deps').db, caps, new Date());
+    return c.json(await admin(c, actor.userId));
   });
 
 export default routes;

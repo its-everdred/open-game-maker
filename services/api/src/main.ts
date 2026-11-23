@@ -137,6 +137,7 @@ deps.registry.energyReadings = providerReadings({
   falLedger: env.OGM_FAL_LEDGER,
   falCapUsd: FAL_CAP_USD,
 });
+deps.registry.energyNetlifyLog = env.OGM_NETLIFY_DEPLOY_LOG;
 deps.registry.aiurClientFor = async (slug) =>
   slug === 'core' ? deps.registry.coreAiurClient : daemonDirectory.clientForSlug(slug);
 if (env.AIUR_API_URL && env.AIUR_API_TOKEN) {

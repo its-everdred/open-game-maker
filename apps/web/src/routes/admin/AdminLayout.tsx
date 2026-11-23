@@ -13,6 +13,7 @@ const links = [
   ['invites', 'Invites'],
   ['users', 'Users'],
   ['budgets', 'Budgets'],
+  ['energy', 'Energy'],
   ['builds', 'Builds'],
   ['intake', 'Intake'],
 ] as const;

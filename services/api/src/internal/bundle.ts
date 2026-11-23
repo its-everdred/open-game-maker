@@ -108,7 +108,12 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
           .get()?.creatorId;
         const energy = playerView(
           await readEnergySnapshot(
-            { db: deps.db, zone: deps.config.resetZoneDefault, readings: deps.registry.energyReadings },
+            {
+              db: deps.db,
+              zone: deps.config.resetZoneDefault,
+              readings: deps.registry.energyReadings,
+              netlifyLog: deps.registry.energyNetlifyLog,
+            },
             new Date(),
           ),
           creatorId === undefined ? 'balanced' : readPreference(deps.db, creatorId),

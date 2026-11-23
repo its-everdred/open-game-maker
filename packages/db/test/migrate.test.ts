@@ -70,6 +70,7 @@ describe('migrate', () => {
         '20261120131223_prototype_review_content.sql',
         '20261120140217_prototype_review_sweep_state.sql',
         '20261120220454_game_drafts.sql',
+        '20261123020745_energy_admin.sql',
       ],
     });
     expect(migrate({ sqlite })).toEqual({ applied: [] });
@@ -126,6 +127,7 @@ describe('migrate', () => {
       'migration:20261120131223_prototype_review_content.sql',
       'migration:20261120140217_prototype_review_sweep_state.sql',
       'migration:20261120220454_game_drafts.sql',
+      'migration:20261123020745_energy_admin.sql',
     ]);
     sqlite.close();
   });

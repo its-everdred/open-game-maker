@@ -1,5 +1,6 @@
 import type { EnergyAdminView, EnergyLevel, EnergyPreference, EnergyView, EnergyWindowName } from '@ogm/contracts';
 
+import { bindingConstraint, subscriptionEstimates } from './resources.js';
 import type { EnergySnapshot } from './source.js';
 
 const WINDOWS: readonly EnergyWindowName[] = ['day', 'week', 'month'];
@@ -58,12 +59,20 @@ export function playerView(snapshot: EnergySnapshot, preference: EnergyPreferenc
   };
 }
 
-export function adminView(snapshot: EnergySnapshot, preference: EnergyPreference): EnergyAdminView {
+export function adminView(
+  snapshot: EnergySnapshot,
+  preference: EnergyPreference,
+  history: EnergyAdminView['history'] = [],
+): EnergyAdminView {
   return {
     ...playerView(snapshot, preference),
     limits: snapshot.limits,
     usage: snapshot.usage,
+    pool: { binding: bindingConstraint(snapshot.resources) },
     resources: snapshot.resources,
+    caps: snapshot.caps,
+    history,
+    subscriptions: subscriptionEstimates(snapshot.resources, snapshot.capValues),
   };
 }
 
