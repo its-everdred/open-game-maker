@@ -64,28 +64,172 @@
   },
   "resources": [
     {
-      "label": "Builds",
-      "provider": "aiur",
-      "kind": "metered",
-      "spentMicroUsd": 12000000,
-      "remainingMicroUsd": null,
-      "resetsAt": null,
+      "id": "instance/day",
+      "label": "Today",
+      "provider": "ogm",
+      "account": null,
+      "kind": "cap",
+      "serves": ["coding"],
+      "unit": "usd",
+      "used": 3.2,
+      "limit": 4,
+      "left": 0.8,
+      "range": null,
       "basis": "estimate",
-      "usedPercent": null,
-      "observedAt": null,
-      "stale": false
+      "resetsAt": "2026-11-09T00:00:00Z",
+      "observedAt": "2026-11-22T22:10:00.000Z",
+      "ageMs": 0,
+      "freshness": "fresh",
+      "origin": "admin",
+      "editable": true,
+      "state": "limited"
     },
     {
+      "id": "claude/seven_day",
+      "label": "Claude",
+      "provider": "claude",
+      "account": null,
+      "kind": "subscription_window",
+      "serves": ["coding"],
+      "unit": "percent",
+      "used": 53,
+      "limit": 100,
+      "left": 47,
+      "range": null,
+      "basis": "reported",
+      "resetsAt": "2026-11-27T09:00:00.000Z",
+      "observedAt": "2026-11-22T22:07:20.000Z",
+      "ageMs": 160000,
+      "freshness": "fresh",
+      "origin": "aiur.usage",
+      "editable": false,
+      "state": "available"
+    },
+    {
+      "id": "codex/primary",
+      "label": "Codex",
+      "provider": "codex",
+      "account": null,
+      "kind": "subscription_window",
+      "serves": ["coding"],
+      "unit": "percent",
+      "used": null,
+      "limit": 100,
+      "left": null,
+      "range": null,
+      "basis": "unknown",
+      "resetsAt": "2026-11-25T16:28:48.000Z",
+      "observedAt": "2026-11-22T05:07:24.131Z",
+      "ageMs": 61955869,
+      "freshness": "stale",
+      "origin": "aiur.usage",
+      "editable": false,
+      "state": "unknown"
+    },
+    {
+      "id": "fal/ledger",
       "label": "fal",
       "provider": "fal",
-      "kind": "metered",
-      "spentMicroUsd": 0,
-      "remainingMicroUsd": 9000000,
-      "resetsAt": null,
+      "account": null,
+      "kind": "metered_spend",
+      "serves": ["images"],
+      "unit": "usd",
+      "used": 1.8,
+      "limit": 9,
+      "left": 7.2,
+      "range": null,
       "basis": "estimate",
-      "usedPercent": 0,
+      "resetsAt": null,
       "observedAt": "2026-11-22T22:10:00.000Z",
-      "stale": false
+      "ageMs": 0,
+      "freshness": "fresh",
+      "origin": "ogm.ledger",
+      "editable": false,
+      "state": "available"
+    },
+    {
+      "id": "netlify/credits",
+      "label": "Netlify",
+      "provider": "netlify",
+      "account": null,
+      "kind": "quota",
+      "serves": ["deploy"],
+      "unit": "credits",
+      "used": 30,
+      "limit": 300,
+      "left": 270,
+      "range": null,
+      "basis": "estimate",
+      "resetsAt": "2026-12-01T00:00:00Z",
+      "observedAt": "2026-11-22T22:10:00.000Z",
+      "ageMs": 0,
+      "freshness": "fresh",
+      "origin": "ogm.ledger",
+      "editable": true,
+      "state": "available"
+    }
+  ],
+  "pool": {
+    "binding": {
+      "id": "instance/day",
+      "label": "Today",
+      "leftPercent": 20,
+      "resetsAt": "2026-11-09T00:00:00Z",
+      "freshness": "fresh"
+    }
+  },
+  "caps": [
+    {
+      "id": "fal/stop",
+      "label": "fal stop",
+      "unit": "usd",
+      "limit": 9,
+      "editable": false,
+      "origin": "ogm.ledger",
+      "layer": "OGM_FAL_STOP_USD"
+    },
+    {
+      "id": "netlify/credits",
+      "label": "Netlify credits a month",
+      "unit": "credits",
+      "limit": 300,
+      "editable": true,
+      "origin": "admin",
+      "layer": null
+    }
+  ],
+  "history": [
+    {
+      "id": "claude/seven_day",
+      "points": [
+        {
+          "at": "2026-11-22T21:00:00.000Z",
+          "left": 50,
+          "low": null,
+          "high": null,
+          "basis": "reported"
+        },
+        {
+          "at": "2026-11-22T22:00:00.000Z",
+          "left": null,
+          "low": null,
+          "high": null,
+          "basis": "unknown"
+        }
+      ]
+    }
+  ],
+  "subscriptions": [
+    {
+      "id": "claude/plan",
+      "label": "Claude",
+      "planUsdPerMonth": 200,
+      "weeklyUsd": 46.15,
+      "usedUsd": {
+        "low": 22.01,
+        "high": 26.91
+      },
+      "basis": "estimate"
     }
   ]
 }

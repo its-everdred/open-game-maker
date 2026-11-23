@@ -1,8 +1,13 @@
 """Score one rendered rig/motion cell against the pack sheet: score.py metrics on the rendered rows, the loop phase that
 best matches the pack, and foot slide (#1202 rig spike).
 
-Usage: score_cell.py <cell_dir> <pack_sheet.png> [--rows 1,2] [--loop] [--finish]
+Usage: score_cell.py <cell_dir> <pack_sheet.png> [--rows 1,2] [--loop] [--finish] [--skin-ref <pack Idle sheet>]
+                     [--pixel N [--smooth]]
 --finish runs gpu_bake_finish.py on <cell_dir>/raw_*.png first (colour pass against the pack sheet) -> <cell_dir>/out.
+With --skin-ref (a base body) the pack colour match is skipped and finish_base.py matches only the skin to that sheet;
+the sheet before that pass is kept as out/sheet_finish.png. --pixel N then runs pixel_finish.py (N colours over the
+whole sheet, --smooth for the 3x3 median first); the sheet before it is kept as out/sheet_colour.png. With --cloth N
+the cell's mask_<row>_<col>.png frames (render_motion.py mask=1) give the cloth its own N colours.
 A walk is a loop with an arbitrary first frame, so with --loop every cyclic shift of the frames is scored and the best
 motion correlation is kept (its shift is reported); an attack is scored as rendered.
 Foot slide: a foot is in contact on frames where its sole is within 1 px of its lowest height; each contact step
@@ -91,6 +96,23 @@ def foot_slide(feet, rows, loop):
     return {'mean_px': round(float(np.mean(vals)), 2) if vals else None, 'rows': per_row}
 
 
+def cloth_sheet(cell_dir, shape, cell=128):
+    """The cloth mask at sheet size: each mask_<row>_<col>.png box-downsampled into its cell, as gpu_bake_finish places
+    raw_<row>_<col>.png. A cell is cloth where the mask is mostly white over visible pixels."""
+    masks = sorted(cell_dir.glob('mask_*_*.png'))
+    if {p.stem[5:] for p in masks} != {p.stem[4:] for p in cell_dir.glob('raw_*_*.png')}:
+        raise SystemExit(f'{cell_dir}: --cloth needs one mask_<row>_<col>.png per raw frame (render_motion.py mask=1)')
+    out = np.zeros(shape, bool)
+    for p in masks:
+        r, c = map(int, p.stem.split('_')[1:])
+        m = np.asarray(Image.open(p).convert('RGBA'), dtype=float) / 255
+        f = m.shape[0] // cell
+        white = (m[..., :3].mean(-1) * m[..., 3]).reshape(cell, f, cell, f).mean((1, 3))
+        cover = m[..., 3].reshape(cell, f, cell, f).mean((1, 3))
+        out[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell] = white > 0.5 * np.maximum(cover, 1e-6)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('cell_dir', type=Path)
@@ -98,12 +120,33 @@ def main():
     ap.add_argument('--rows', default='1,2')
     ap.add_argument('--loop', action='store_true')
     ap.add_argument('--finish', action='store_true')
+    ap.add_argument('--skin-ref')
+    ap.add_argument('--pixel', type=int, help='pack-style pixel finish: colours for everything but the cloth (pick B: 8, with --cloth 6)')
+    ap.add_argument('--smooth', action='store_true', help='with --pixel: 3x3 Lab median before the palette')
+    ap.add_argument('--cloth', type=int, help='with --pixel: colours for the cloth, from the mask frames')
     a = ap.parse_args()
+    if a.skin_ref and not a.finish:
+        ap.error('--skin-ref is part of the finish pass: add --finish')
+    if (a.pixel or a.smooth or a.cloth) and not (a.finish and a.pixel):
+        ap.error('--pixel is part of the finish pass: add --finish (and --pixel N for --smooth or --cloth)')
     rows = [int(r) for r in a.rows.split(',')]
     out = a.cell_dir / 'out'
     if a.finish:
+        ref = [] if a.skin_ref else ['--colour-ref', a.pack_sheet]
         subprocess.run([sys.executable, str(HERE.parent / 'gpu_bake_finish.py'), str(a.cell_dir), str(out),
-                        '--cell', '128', '--colour-ref', a.pack_sheet], check=True, stdout=subprocess.DEVNULL)
+                        '--cell', '128', *ref], check=True, stdout=subprocess.DEVNULL)
+        if a.skin_ref:
+            import finish_base
+            (out / 'sheet.png').replace(out / 'sheet_finish.png')
+            sheet, _ = finish_base.base_pass(finish_base.sm.load(out / 'sheet_finish.png'), finish_base.sm.load(a.skin_ref))
+            Image.fromarray(sheet).save(out / 'sheet.png')
+        if a.pixel:
+            from pixel_finish import pixel_finish
+            (out / 'sheet.png').replace(out / 'sheet_colour.png')
+            colour = np.asarray(Image.open(out / 'sheet_colour.png').convert('RGBA'))
+            cloth = cloth_sheet(a.cell_dir, colour.shape[:2]) if a.cloth else None
+            sheet = pixel_finish(colour, a.pixel, a.smooth, cloth=cloth, cloth_colours=a.cloth or 6)
+            Image.fromarray(sheet).save(out / 'sheet.png')
     tmp = a.cell_dir / '_score'
     tmp.mkdir(exist_ok=True)
     Image.fromarray(rows_sheet(a.pack_sheet, rows)).save(tmp / 'pack.png')

@@ -132,6 +132,12 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
     doc: '~/.local/share/ogm/fal-ledger.json (host-wide fal ledger, also read by fal3d.py)',
   },
   {
+    name: 'OGM_NETLIFY_DEPLOY_LOG',
+    unit: 'api',
+    kind: 'path',
+    doc: '~/.local/share/ogm/netlify-deploys.log (one line per production deploy; Energy counts Netlify credits)',
+  },
+  {
     name: 'OGM_VOICE_ENV_FILE',
     unit: 'api',
     kind: 'path',

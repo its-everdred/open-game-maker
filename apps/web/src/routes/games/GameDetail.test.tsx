@@ -52,7 +52,7 @@ const goblin: GameSummary = {
 };
 
 function detail(game: GameSummary, props: Partial<Parameters<typeof GameDetail>[0]> = {}) {
-  return render(<GameDetail game={game} canOpen onPlay={vi.fn()} onEdit={vi.fn()} onClose={vi.fn()} {...props} />);
+  return render(<GameDetail game={game} onPlay={vi.fn()} onEdit={vi.fn()} onClose={vi.fn()} {...props} />);
 }
 
 // Element tags and classes only; repeated siblings (one chip per tag, one cell per stat) collapse to one,
@@ -74,7 +74,7 @@ describe('game detail', () => {
     }
     render(
       <>
-        <GameDetail game={blobs} canOpen onPlay={vi.fn()} onEdit={vi.fn()} onClose={onClose} />
+        <GameDetail game={blobs} onPlay={vi.fn()} onEdit={vi.fn()} onClose={onClose} />
         <PressEscape />
       </>,
     );

@@ -47,6 +47,11 @@ export const apiEnvSpec = {
   OGM_VAPID_KEY_FILE: { kind: 'path', default: join(homedir(), '.config', 'ogm', 'env', 'ogm-api.vapid.json') },
   // The host-wide fal ledger that skills/gm-sprite-forge/scripts/fal3d.py books every call in (#1217).
   OGM_FAL_LEDGER: { kind: 'path', default: join(homedir(), '.local', 'share', 'ogm', 'fal-ledger.json') },
+  // One line per production Netlify deploy, appended by apps/web/tools/deploy.sh; Energy counts its credits.
+  OGM_NETLIFY_DEPLOY_LOG: {
+    kind: 'path',
+    default: join(homedir(), '.local', 'share', 'ogm', 'netlify-deploys.log'),
+  },
   // The voice host's env file; Energy reads its ElevenLabs key to show the character quota.
   OGM_VOICE_ENV_FILE: { kind: 'path', default: join(homedir(), '.config', 'ogm', 'env', 'voice-host.env') },
   OGM_VAPID_SUBJECT: { kind: 'string' },

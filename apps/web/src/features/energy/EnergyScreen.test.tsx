@@ -1,13 +1,14 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { EnergyAdminView, EnergyView } from '@ogm/contracts/browser';
+import type { EnergyView } from '@ogm/contracts/browser';
 
 import { queryClient } from '../../app/query';
 import { energyRefusalText } from './api';
-import { EnergyScreen, parseLimits } from './EnergyScreen';
+import { parseLimits } from './EnergyAdmin';
+import { EnergyScreen } from './EnergyScreen';
 
 const baseView: EnergyView = {
   level: 'healthy',
@@ -22,37 +23,6 @@ const baseView: EnergyView = {
     { service: 'images', usedPercent: null },
   ],
   sources: [],
-};
-const adminView: EnergyAdminView = {
-  ...baseView,
-  limits: { day: 4_000_000, week: null, month: null, voice: null, images: null },
-  usage: { day: 1_000_000, week: 1_000_000, month: 1_000_000, voice: null, images: null },
-  resources: [
-    {
-      label: 'Builds',
-      provider: 'aiur',
-      kind: 'metered',
-      spentMicroUsd: 1_000_000,
-      remainingMicroUsd: null,
-      resetsAt: null,
-      basis: 'estimate',
-      usedPercent: null,
-      observedAt: null,
-      stale: false,
-    },
-    {
-      label: 'fal',
-      provider: 'fal',
-      kind: 'metered',
-      spentMicroUsd: 1_800_000,
-      remainingMicroUsd: 7_200_000,
-      resetsAt: null,
-      basis: 'estimate',
-      usedPercent: 20,
-      observedAt: '2026-11-22T22:10:00.000Z',
-      stale: false,
-    },
-  ],
 };
 // Readings as the NUC reported them on 2026-11-22: Claude fresh, Codex stale, ElevenLabs fresh.
 const sources: EnergyView['sources'] = [
@@ -90,10 +60,7 @@ function serve(role: 'admin' | 'none', view: EnergyView = baseView) {
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ method: init.method ?? 'GET', path, body });
     if (path === '/me') return Response.json({ platformRole: role });
-    if (path === '/energy/admin')
-      return role === 'admin' ? Response.json(adminView) : new Response(null, { status: 403 });
     if (path === '/energy/preference') return Response.json({ ...view, preference: body.preference });
-    if (path === '/energy/admin/limits') return Response.json({ ...adminView, limits: body });
     return Response.json(view);
   });
   vi.stubGlobal('fetch', fetch);
@@ -139,25 +106,13 @@ describe('EnergyScreen', () => {
     expect(calls).toContainEqual({ method: 'PUT', path: '/energy/preference', body: { preference: 'save' } });
   });
 
-  it('lets an admin set overlapping window and service limits and see real costs and providers', async () => {
+  // The limits form and costs moved to the admin dashboard (/admin/energy); settings shows an admin the player view.
+  it('keeps limits and dollars off the settings screen, even for an admin', async () => {
     const calls = serve('admin');
-    const form = await screen.findByRole('form', { name: 'Energy limits' });
-    expect(within(form).getByLabelText(/Today/)).toHaveValue('4');
-    fireEvent.change(within(form).getByLabelText(/This week/), { target: { value: '20' } });
-    fireEvent.change(within(form).getByLabelText(/Images/), { target: { value: '2.5' } });
-    fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
-    await waitFor(() =>
-      expect(calls).toContainEqual({
-        method: 'PUT',
-        path: '/energy/admin/limits',
-        body: { day: 4_000_000, week: 20_000_000, month: null, voice: null, images: 2_500_000 },
-      }),
-    );
-    const row = within(screen.getByRole('table', { name: 'Energy resources' })).getAllByRole('row')[1]!;
-    expect(row).toHaveTextContent(/Builds\s*aiur\s*metered\s*\$1\.00\s*Unknown\s*estimate/);
-    const fal = within(screen.getByRole('table', { name: 'Energy resources' })).getAllByRole('row')[2]!;
-    expect(fal).toHaveTextContent(/fal\s*fal\s*metered\s*\$1\.80\s*\$7\.20\s*estimate/);
-    expect(document.body.textContent).not.toMatch(/billed/i);
+    await screen.findByRole('heading', { name: 'Energy: Healthy' });
+    expect(screen.queryByRole('form', { name: 'Energy limits' })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('$');
+    expect(calls.map(({ path }) => path)).not.toContain('/energy/admin');
   });
 });
 

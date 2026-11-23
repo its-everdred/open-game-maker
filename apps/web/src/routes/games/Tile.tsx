@@ -59,7 +59,7 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
               className="game-logo"
               src={game.logoUrl}
               image={game.logoImage}
-              sizes="(max-width: 600px) 55vw, 320px"
+              sizes="(max-width: 600px) 80vw, 560px"
             />
           )}
           <span className="game-tile-meta">
@@ -119,7 +119,7 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
             className="game-logo"
             src={game.logoUrl}
             image={game.logoImage}
-            sizes="(max-width: 600px) 55vw, 320px"
+            sizes="(max-width: 600px) 80vw, 560px"
           />
         )}
         <span className="game-tile-meta">

@@ -20,6 +20,8 @@ export type ProviderReading = {
   capMicroUsd: number | null;
   // The player-facing service this reading stands for, if any.
   service?: 'voice';
+  // A quota's raw count, for admins (ElevenLabs characters).
+  amount?: { unit: 'characters'; used: number; limit: number };
 };
 
 export interface ProviderReadings {
@@ -100,7 +102,7 @@ const unknownReading = (fields: Pick<ProviderReading, 'id' | 'label' | 'provider
 });
 
 function unknownAiur(provider: string, label: string): ProviderReading {
-  return unknownReading({ id: provider, label, provider, kind: 'subscription' });
+  return unknownReading({ id: provider, label, provider, kind: 'subscription_window' });
 }
 
 type Json = Record<string, unknown>;
@@ -134,7 +136,7 @@ export function aiurReadings(provider: string, label: string, body: unknown): Pr
       id: `${provider}:${key}`,
       label: limits.length === 1 ? label : `${label} ${str(window.name) ?? key}`,
       provider,
-      kind: 'subscription',
+      kind: 'subscription_window',
       usedPercent: known ? used : null,
       resetsAt: iso(window.resets_at),
       observedAt,
@@ -152,7 +154,7 @@ const MAX_USD = 1_000_000;
 // fal3d.py books each call at its listed price before sending it, so the total is an estimate. No ledger file
 // means nothing has been booked yet: 0 of the cap, not unknown.
 export function falReading(path: string, defaultCapUsd: number, now: Date): ProviderReading {
-  const base = { id: 'fal', label: 'fal', provider: 'fal', kind: 'metered' as const };
+  const base = { id: 'fal', label: 'fal', provider: 'fal', kind: 'metered_spend' as const };
   let ledger: unknown;
   try {
     ledger = JSON.parse(readFileSync(path, 'utf8'));
@@ -188,7 +190,7 @@ async function readElevenLabs(
   key: string | null,
   getJson: (url: string, headers: Record<string, string>) => Promise<unknown>,
 ): Promise<ProviderReading> {
-  const base = { id: 'elevenlabs', label: 'ElevenLabs', provider: 'elevenlabs', kind: 'subscription' as const };
+  const base = { id: 'elevenlabs', label: 'ElevenLabs', provider: 'elevenlabs', kind: 'quota' as const };
   if (key === null) return { ...unknownReading(base), service: 'voice' };
   const observedAt = new Date().toISOString();
   return getJson('https://api.elevenlabs.io/v1/user/subscription', { 'xi-api-key': key }).then(
@@ -198,7 +200,7 @@ async function readElevenLabs(
 }
 
 export function elevenLabsReading(body: unknown, observedAt: string): ProviderReading {
-  const base = { id: 'elevenlabs', label: 'ElevenLabs', provider: 'elevenlabs', kind: 'subscription' as const };
+  const base = { id: 'elevenlabs', label: 'ElevenLabs', provider: 'elevenlabs', kind: 'quota' as const };
   if (!isObject(body)) return unknownReading(base);
   const { character_count: used, character_limit: limit, next_character_count_reset_unix: reset } = body;
   if (typeof used !== 'number' || typeof limit !== 'number' || limit <= 0 || used < 0) return unknownReading(base);
@@ -211,6 +213,7 @@ export function elevenLabsReading(body: unknown, observedAt: string): ProviderRe
     basis: 'reported',
     spentMicroUsd: null,
     capMicroUsd: null,
+    amount: { unit: 'characters', used, limit },
   };
 }
 

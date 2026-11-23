@@ -210,8 +210,16 @@ if [[ "$DRY_RUN" == true ]]; then
   exit 0
 fi
 
+# Energy counts production deploys as Netlify credits (#1219). Prepared before deploying, and a failed append after a
+# successful deploy only warns, so it never prompts a second (paid) deploy.
+DEPLOY_LOG="${OGM_NETLIFY_DEPLOY_LOG:-$HOME/.local/share/ogm/netlify-deploys.log}"
+mkdir -p "$(dirname "$DEPLOY_LOG")"
+
 timed upload netlify deploy --prod --no-build --filter @ogm/web --dir "$DEPLOY_DIR" \
   --site "$(<"$ROOT/apps/web/.netlify-site-id")"
+
+date -u +%Y-%m-%dT%H:%M:%SZ >>"$DEPLOY_LOG" ||
+  printf 'deploy: succeeded, but could not record it in %s\n' "$DEPLOY_LOG" >&2
 total uploaded
 # Post-deploy QA: the payload is live, so a failed load check wakes the Executor instead of holding the upload back.
 timed load-check load_check || report_attention 'the load check on the uploaded payload failed (see the deploy log)'

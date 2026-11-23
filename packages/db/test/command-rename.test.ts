@@ -54,6 +54,7 @@ describe('command rename migration', () => {
       '20261120131223_prototype_review_content.sql',
       '20261120140217_prototype_review_sweep_state.sql',
       '20261120220454_game_drafts.sql',
+      '20261123020745_energy_admin.sql',
     ]);
 
     expect(sqlite.prepare('SELECT decision_id, version, status FROM commands').all()).toEqual([

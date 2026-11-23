@@ -81,7 +81,7 @@ export function LoadingLayer({
             className="game-loading-logo"
             src={game.logoUrl}
             image={game.logoImage}
-            sizes="(max-width: 600px) 70vw, 360px"
+            sizes="(max-width: 600px) 80vw, 560px"
             priority
           />
         ) : null}

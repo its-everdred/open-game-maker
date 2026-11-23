@@ -124,6 +124,8 @@ export interface Registry {
   issueStateWriter: IssueStateWriter | null;
   // Provider readings for Energy (#1217); null leaves them out (tests, or no host to read).
   energyReadings: import('../energy/providers.js').ProviderReadings | null;
+  // The production deploy log `deploy.sh` appends to (#1219); null leaves Netlify unknown.
+  energyNetlifyLog: string | null;
 }
 
 export function createRegistry(): Registry {
@@ -148,6 +150,7 @@ export function createRegistry(): Registry {
     ticketConversation: null,
     issueStateWriter: null,
     energyReadings: null,
+    energyNetlifyLog: null,
   };
 }
 

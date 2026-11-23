@@ -85,7 +85,7 @@ model kenney-nature-kit nature ground_grass tree_pineTallA tree_pineRoundC tree_
 
 # the title scene: the archived castle town source (build it first: apps/web/title-town/tools/build.sh, then tools/variants.mjs)
 TC="$ROOT/apps/web/title-town"; rm -rf "$HERE/town"; mkdir -p "$HERE/town/models"
-cp "$TC/index.html" "$TC/city.js" "$TC/rampage.js" "$TC/earthbound.js" "$TC/fx.js" "$HERE/town/"; cp -r "$TC/vendor" "$TC/fx-variants" "$HERE/town/"
+cp "$TC/index.html" "$TC/city.js" "$TC/rampage.js" "$TC/earthbound.js" "$TC/fx.js" "$TC/crowd-path.js" "$HERE/town/"; cp -r "$TC/vendor" "$TC/fx-variants" "$HERE/town/"
 cp -r "$TC/models/castle" "$TC/models/minidungeon" "$TC/models/monsters" "$TC/models/fx" "$TC/models/sounds" "$HERE/town/models/"
 # the scenes' sprites (Ness, burnt Ness, the bat swing, the saucers; run tools/ness_sprite.py, tools/ufo_sprite.py, tools/sounds.sh first)
 mkdir -p "$HERE/town/models/sprites/variants" "$HERE/town/models/sprites/ufo"
@@ -101,5 +101,5 @@ for v in m["variants"]: shutil.copy(src / (v["name"] + ".glb"), dst)
 # the baked files (apps/web/title-town/tools/bake.mjs, tools/poster.mjs) and one bundled script in place of the module tree
 mkdir -p "$HERE/town/models/bake"; cp "$TC/models/bake/"*.bin "$TC/models/bake/"*.gz "$TC/models/bake/"*.webp "$TC/models/bake/"*.jpg "$HERE/town/models/bake/"   # baked terrain, trees, model pack, posters and their stills
 node "$TC/tools/bundle.mjs" "$HERE/town" && sed -i 's#<script type="module" src="city.js"></script>#<script type="module" src="city.bundle.js"></script>#' "$HERE/town/index.html"
-rm -rf "$HERE/town/vendor/pixelfx" "$HERE/town/fx-variants" "$HERE/town/"{city,rampage,earthbound,fx}.js; find "$HERE/town/vendor/three" -name "*.js" -delete
+rm -rf "$HERE/town/vendor/pixelfx" "$HERE/town/fx-variants" "$HERE/town/"{city,rampage,earthbound,fx,crowd-path}.js; find "$HERE/town/vendor/three" -name "*.js" -delete
 echo "built $HERE (publish index.html with every other file under it)"

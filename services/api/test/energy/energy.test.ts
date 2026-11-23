@@ -26,19 +26,13 @@ describe('local resource-policy source', () => {
   it('sums the build ledger per calendar window and leaves voice and images unknown', () => {
     const snapshot = energySource({ db: worked().db, zone: ZONE }).snapshot(NOW);
     expect(snapshot.usage).toEqual({ day: 3_000_000, week: 3_000_000, month: 3_000_000, voice: null, images: null });
-    expect(snapshot.resources).toEqual([
-      {
-        label: 'Builds',
-        provider: 'aiur',
-        kind: 'metered',
-        spentMicroUsd: 3_000_000,
-        remainingMicroUsd: null,
-        resetsAt: null,
-        basis: 'estimate',
-        usedPercent: null,
-        observedAt: null,
-        stale: false,
-      },
+    // The build ledger shows as the three instance caps (none set), then fal's balance, which needs a key we lack.
+    expect(snapshot.resources.map(({ id, used, limit, basis }) => [id, used, limit, basis])).toEqual([
+      ['instance/day', 3, null, 'estimate'],
+      ['instance/week', 3, null, 'estimate'],
+      ['instance/month', 3, null, 'estimate'],
+      ['fal/balance', null, null, 'unknown'],
+      ['netlify/credits', null, null, 'unknown'],
     ]);
   });
 

@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import type {
   EnergyAdminView,
+  EnergyCapsUpdate,
   EnergyLimits,
   EnergyPreference,
   EnergyView,
@@ -24,11 +25,10 @@ export function useEnergy(enabled = true) {
   });
 }
 
-export function useEnergyAdmin(enabled: boolean) {
+export function useEnergyAdmin() {
   return useQuery({
     queryKey: energyKeys.admin(),
     queryFn: () => api<EnergyAdminView>('/energy/admin'),
-    enabled,
     retry: false,
   });
 }
@@ -51,6 +51,13 @@ export function useSaveLimits() {
       queryClient.setQueryData(energyKeys.admin(), view);
       return queryClient.invalidateQueries({ queryKey: energyKeys.view(), exact: true });
     },
+  });
+}
+
+export function useSaveCaps() {
+  return useMutation({
+    mutationFn: (caps: EnergyCapsUpdate) => api<EnergyAdminView>('/energy/admin/caps', { method: 'PUT', json: caps }),
+    onSuccess: (view) => queryClient.setQueryData(energyKeys.admin(), view),
   });
 }
 
