@@ -8,8 +8,9 @@ import { Ambient } from './Ambient';
 import { GameTrailer } from './GameTrailer';
 import { splatMask } from './splatMask';
 import showcaseRecords from './showcase-data.json';
-import { gameTags, genreIcon, type GameSummary, type JobView } from './types';
+import { gameGenres, gameTags, genreIcon, type GameSummary, type JobView } from './types';
 import { jobLabel } from './Tile';
+import { STATIC_STEPS } from '../new/options';
 
 // Every game's trailer sits in Goblin Cellar's splatter frame.
 const FRAME_SEED = 'goblin-cellar';
@@ -20,6 +21,9 @@ type DetailStats = { played?: string; rating?: number; version?: string; plays?:
 const curatedColors = new Map(
   showcaseRecords.flatMap((record) => record.displayTags.map((tag) => [tag.key, tag.color] as const)),
 );
+
+const genreKeys = new Set(STATIC_STEPS.genre.options.map(({ id }) => id));
+const playModeKeys = new Set(['coop', 'versus', 'online', 'bots', 'pass']);
 
 const tagPalette = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'purple'].map((name) => `var(--${name}-b)`);
 
@@ -41,18 +45,29 @@ export function detailOf(game: GameSummary): { description?: string; tags: Detai
   const curated = game.showcase;
   const publishedTags = gameTags(game);
   const showcaseOnly = game.id.startsWith('showcase:');
+  const genres = new Set(gameGenres(game).map((name) => name.trim().toLowerCase()));
+  // Solo and multiplayer lead, then genre, then the other play modes, then style; a tag whose icon is already
+  // shown is dropped (#1287).
+  const rank = ({ key, label }: DetailTag) =>
+    key === 'solo'
+      ? 0
+      : key === 'party'
+        ? 1
+        : genreKeys.has(key) || genres.has(label.trim().toLowerCase())
+          ? 2
+          : playModeKeys.has(key)
+            ? 3
+            : 4;
   const ordered = (tags: DetailTag[]) =>
-    [...tags].sort((a, b) => {
-      const rank = (label: string) =>
-        label.trim().toLowerCase() === 'solo' ? 0 : label.trim().toLowerCase() === 'multiplayer' ? 1 : 2;
-      return rank(a.label) - rank(b.label);
-    });
+    [...tags]
+      .sort((a, b) => rank(a) - rank(b))
+      .filter((tag, index, all) => all.findIndex(({ key }) => key === tag.key) === index);
   return {
     description: game.tagline ?? curated?.tagline,
     tags: ordered(
       game.tags !== undefined || !curated
         ? publishedTags.map((name) => {
-            const key = name.trim().toLowerCase() === 'multiplayer' ? 'party' : genreIcon(name);
+            const key = genreIcon(name);
             const label = name === name.toLowerCase() ? name.charAt(0).toUpperCase() + name.slice(1) : name;
             return { key, label, color: tagColor(key) };
           })

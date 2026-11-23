@@ -134,6 +134,39 @@
   }
 }
 
+/* Portrait phones compact the spotlight so the other games' tiles start on the first screen (ticket 1287). */
+@media (orientation: portrait) and (max-width: 600px) {
+  .games-grid:has(.is-selected) > .is-selected {
+    order: -1;
+  }
+
+  .games-spotlight {
+    gap: 8px;
+    padding-bottom: 12px;
+  }
+
+  .games-spotlight-copy {
+    gap: 8px;
+  }
+
+  .games-spotlight h1 {
+    font-size: 24px;
+  }
+
+  .games-tagline {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 14px;
+    line-height: 20px;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .games-detail-stats {
+    padding: 8px 0;
+  }
+}
+
 @media (orientation: landscape) and (max-width: 1200px) {
   .games-grid:has(.is-selected) {
     grid-template-columns: repeat(var(--game-count), minmax(180px, 1fr));

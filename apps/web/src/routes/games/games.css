@@ -610,22 +610,27 @@
   opacity: 1;
 }
 
+/* One row only: tags past the first row fall into zero-height rows and are clipped (ticket 1287). */
 .games-detail-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 64px);
+  grid-auto-rows: 0;
+  grid-template-rows: auto;
+  gap: 0 12px;
   margin: 0;
   padding: 0;
+  overflow: hidden;
   list-style: none;
 }
 .games-detail-tags li {
   display: grid;
+  align-content: start;
   justify-items: center;
   gap: 8px;
-  min-width: 64px;
   color: var(--text-muted);
   font: 700 12px/16px var(--body);
   text-align: center;
+  overflow-wrap: anywhere;
 }
 .games-detail-tags li > span {
   display: grid;
@@ -666,10 +671,10 @@
 }
 @media (max-width: 600px) {
   .games-detail-tags {
-    gap: 8px 4px;
+    grid-template-columns: repeat(auto-fill, 60px);
+    column-gap: 4px;
   }
   .games-detail-tags li {
-    min-width: 60px;
     font-size: 10px;
   }
   .games-detail-tags li > span {

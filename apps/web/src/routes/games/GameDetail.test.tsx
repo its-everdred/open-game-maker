@@ -153,7 +153,7 @@ describe('game detail', () => {
     detail(blobs);
     expect(screen.getByText('Match colour blobs and drop blocks in a forest duel.')).toBeVisible();
     const tags = screen.getByRole('list', { name: 'Tags' });
-    expect([...tags.querySelectorAll('li')].map((item) => item.textContent)).toEqual(['Versus', 'Cozy', 'Puzzle']);
+    expect([...tags.querySelectorAll('li')].map((item) => item.textContent)).toEqual(['Puzzle', 'Versus', 'Cozy']);
     expect(tags.querySelectorAll('svg')).toHaveLength(3);
     expect(screen.getByText('v2.1.0')).toBeVisible();
     expect(screen.getByText('31.4k')).toBeVisible();
@@ -172,12 +172,54 @@ describe('game detail', () => {
     expect(tags[1]?.key).toBe('party');
   });
 
+  it('gives every tag on a card its own icon, genre before style (#1287)', () => {
+    // Kevin on RestoreBound: four tags shared the generic sparkle. Each published game's list must stay distinct.
+    const published: Pick<GameSummary, 'slug' | 'tags' | 'choices'>[] = [
+      {
+        slug: 'restorebound',
+        tags: ['Pixel art', 'Turn-based', 'Story', 'Single player'],
+        choices: { genre: ['RPG', 'Adventure'] },
+      },
+      { slug: 'dusk-helm', tags: undefined, choices: { genre: ['rpg', 'roguelike', 'adventure'] } },
+      { slug: 'blobs', tags: ['Versus', 'Cozy', 'Solo', 'Multiplayer'], choices: undefined },
+      {
+        slug: 'odd',
+        tags: ['Zany', 'Wacky', 'solo', 'Single-player', 'singleplayer', 'Narrative', 'Story'],
+        choices: undefined,
+      },
+    ];
+    for (const game of published) {
+      const keys = detailOf({ ...blobs, ...game }).tags.map(({ key }) => key);
+      expect(new Set(keys).size, `${game.slug}: ${keys.join(', ')}`).toBe(keys.length);
+    }
+    const restorebound = detailOf({ ...blobs, ...published[0] }).tags;
+    expect(restorebound.map(({ label, key }) => `${label}:${key}`)).toEqual([
+      'Single player:solo',
+      'RPG:rpg',
+      'Adventure:adventure',
+      'Pixel art:pixel',
+      'Turn-based:turns',
+      'Story:story',
+    ]);
+  });
+
+  it('keeps genre ahead of other play modes and style on curated cards', () => {
+    // Little Fronts has nine curated tags; a phone row shows five, so its genre must not fall behind Versus/Online.
+    const fronts = mergeShowcase([]).find(({ title }) => title === 'Little Fronts')!;
+    const keys = detailOf(fronts).tags.map(({ key }) => key);
+    expect(keys.slice(0, 5)).toEqual(['solo', 'strategy', 'battle', 'versus', 'online']);
+    for (const card of mergeShowcase([])) {
+      const cardKeys = detailOf(card).tags.map(({ key }) => key);
+      expect(new Set(cardKeys).size, `${card.title}: ${cardKeys.join(', ')}`).toBe(cardKeys.length);
+    }
+  });
+
   it('colours a tag with no curated colour from the shared palette tokens', () => {
     // Chrome colours live only in tokens.css, so an unknown tag must reuse a token, never a literal.
-    const [tag] = detailOf({ ...blobs, tags: ['Zany'] }).tags;
+    const [tag] = detailOf({ ...blobs, slug: 'other', tags: ['Zany'], choices: undefined }).tags;
     expect(tag!.key).toBe('other');
     expect(tag!.color).toMatch(/^var\(--(?:red|orange|yellow|green|aqua|blue|purple)-b\)$/);
-    expect(detailOf({ ...blobs, tags: ['Zany'] }).tags[0]!.color).toBe(tag!.color);
+    expect(detailOf({ ...blobs, slug: 'other', tags: ['Zany'], choices: undefined }).tags[0]!.color).toBe(tag!.color);
   });
 
   it('hides only the rows a game has no data for', () => {
