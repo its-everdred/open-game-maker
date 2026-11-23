@@ -19,31 +19,31 @@ type EditWorkspaceProps = {
   chat: ReactNode;
   editor?: ReactNode;
   editing?: boolean;
-  /** Agent replies so far; a rise while the chat is closed marks the bubble unread. */
-  replies?: number;
+  /** When the agent last replied (epoch ms); a newer reply while the chat is closed marks the bubble unread. */
+  lastReply?: number;
 };
 
 /** A drag down this far on the sheet's handle closes the chat. */
 const SWIPE_CLOSE = 48;
-/* The bubble's column at the right edge: its 16px inset plus its 50px width. */
-const BUBBLE_COLUMN = 66;
-
 /**
  * How far the host's touch controls rise from the bottom of the game in the bubble's column, so the bubble sits above
  * them. The host lays them out at fixed sizes (packages/host overlay.ts) and hides their layer on non-touch screens.
  */
-function useTouchControlsRise() {
+function useTouchControlsRise(editing: boolean) {
   const gameRef = useRef<HTMLDivElement>(null);
+  const bubbleRef = useRef<HTMLButtonElement>(null);
   const [rise, setRise] = useState(0);
   useEffect(() => {
     const game = gameRef.current;
     if (!game) return;
     const measure = () => {
       const box = game.getBoundingClientRect();
+      /* The bubble's own column, so a notch inset that moves it inward moves the column too. */
+      const bubble = bubbleRef.current?.getBoundingClientRect();
       let top = box.bottom;
-      for (const control of game.querySelectorAll('[data-action], [data-stick]')) {
+      for (const control of bubble ? game.querySelectorAll('[data-action], [data-stick]') : []) {
         const rect = control.getBoundingClientRect();
-        if (rect.height > 0 && rect.right > box.right - BUBBLE_COLUMN) top = Math.min(top, rect.top);
+        if (rect.height > 0 && rect.right > bubble!.left && rect.left < bubble!.right) top = Math.min(top, rect.top);
       }
       setRise(Math.max(0, Math.round(box.bottom - top)));
     };
@@ -57,21 +57,20 @@ function useTouchControlsRise() {
       mutations.disconnect();
       resize?.disconnect();
     };
-  }, []);
-  return { gameRef, rise };
+  }, [editing]);
+  return { gameRef, bubbleRef, rise };
 }
 
 /** The game fills the page; the chat waits behind a bubble and opens as a sheet over the bottom. */
-export function EditWorkspace({ game, chat, editor, editing = true, replies = 0 }: EditWorkspaceProps) {
+export function EditWorkspace({ game, chat, editor, editing = true, lastReply = 0 }: EditWorkspaceProps) {
   const [open, setOpen] = useState(false);
-  const [seen, setSeen] = useState(replies);
-  const { gameRef, rise } = useTouchControlsRise();
+  const [seen, setSeen] = useState(lastReply);
+  const { gameRef, bubbleRef, rise } = useTouchControlsRise(editing);
   const swipeFrom = useRef<number | undefined>(undefined);
   useEffect(() => {
-    /* A new conversation restarts the count. */
-    if (open || replies < seen) setSeen(replies);
-  }, [open, replies, seen]);
-  const unread = !open && replies > seen;
+    if (open) setSeen(lastReply);
+  }, [open, lastReply]);
+  const unread = !open && lastReply > seen;
   return (
     <div
       className={editing ? 'edit-workspace' : 'edit-workspace is-playing'}
@@ -87,6 +86,8 @@ export function EditWorkspace({ game, chat, editor, editing = true, replies = 0 
             aria-hidden="true"
             onPointerDown={(event) => {
               swipeFrom.current = event.clientY;
+              /* Keep the release when the finger or mouse leaves the thin handle. */
+              event.currentTarget.setPointerCapture?.(event.pointerId);
             }}
             onPointerUp={(event) => {
               if (swipeFrom.current !== undefined && event.clientY - swipeFrom.current >= SWIPE_CLOSE) setOpen(false);
@@ -101,6 +102,7 @@ export function EditWorkspace({ game, chat, editor, editing = true, replies = 0 
       )}
       {editing && (
         <button
+          ref={bubbleRef}
           className="edit-workspace-chat-bubble"
           type="button"
           aria-label={unread ? 'Chat, new reply' : 'Chat'}
@@ -133,12 +135,20 @@ export function GameEditWorkspace({
   conversation: ComponentProps<typeof EditConversation>;
   editing: boolean;
 }) {
-  /* Only replies after the page opened count: a reconnect replays the job's earlier messages. */
+  /*
+   * Only replies after the page opened count: the stream replays the job's earlier messages. The time only moves
+   * forward, so the replay after a return from play mode doesn't mark read replies as new.
+   */
   const [openedAt] = useState(() => Date.now());
-  const [replies, setReplies] = useState(0);
-  const countReplies = useCallback(
-    (_jobId: string, messages: StreamedChatMessage[]) =>
-      setReplies(messages.filter(({ actor, at }) => actor === 'agent' && Date.parse(at) >= openedAt).length),
+  const [lastReply, setLastReply] = useState(0);
+  const noteReplies = useCallback(
+    (_jobId: string, messages: StreamedChatMessage[]) => {
+      const newest = Math.max(
+        0,
+        ...messages.filter(({ actor }) => actor === 'agent').map(({ at }) => Date.parse(at) || 0),
+      );
+      if (newest >= openedAt) setLastReply((last) => Math.max(last, newest));
+    },
     [openedAt],
   );
   return (
@@ -146,8 +156,8 @@ export function GameEditWorkspace({
       game={game}
       editor={editor}
       editing={editing}
-      replies={replies}
-      chat={<EditConversation {...conversation} onMessages={countReplies} />}
+      lastReply={lastReply}
+      chat={<EditConversation {...conversation} onMessages={noteReplies} />}
     />
   );
 }
