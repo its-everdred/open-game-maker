@@ -506,6 +506,25 @@ a deploy that touches a path in `ops/voice-paths` (the list CI's voice host job 
 appends a `qa-voice-e2e failed` line to the attention file when it
 fails. Run `ops/bin/ogm-voice-host build` and `restart` before it when the voice host changed.
 
+## Check paid APIs stay off during gameplay
+
+`ops/bin/ogm-qa-paid-apis` proves on prod that a played game cannot spend on a paid provider while the admin setting
+"Allow paid APIs during gameplay" is off. As the QA creator (`qa.env`, from `ops/bin/ogm-qa-session`) and with the games
+origin as `Origin`, it posts to `/api/v1/voice/token`, `/api/v1/voice/dictation-token` and the QA game's
+`/narration/render`, and each must answer 403 `paid_apis_off_during_gameplay`. It then uploads a preview whose script
+calls `api.openai.com`, with the QA game's daemon hook secret (another linked game's when the QA game has none), and it must
+answer 422 `paid_integration`. It makes no paid call and installs nothing: each request is one the route rejects right after its gate (an empty body,
+no narration lines, an invalid cache plan in the preview), so a broken gate answers 400, 503 or 422 `cache_plan_invalid`
+and the check fails. With the setting on it sends nothing and passes.
+
+`ogm-qa-review-hook` runs it after every deploy, logs to `~/.local/state/ogm/qa/paid-apis/<sha>.log`, and appends a
+`qa-paid-apis failed` line to the attention file when a request is not refused. It ends with `exit=<n> qa-paid-apis`
+(0 refused, 1 not refused, 64 missing configuration).
+
+Nothing else on the host can reach a paid provider from a game: the games origin's CSP allows `connect-src 'self'`
+only, the voice host opens a provider session only for a token from the two gated routes above, and its narration
+endpoint listens on its internal port, which no ingress exposes, behind the internal secret.
+
 ## Prove the instance monorepo flow
 
 Creator games live in the repository named by `OGM_INSTANCE_REPO`: `games/<slug>/` per game and
