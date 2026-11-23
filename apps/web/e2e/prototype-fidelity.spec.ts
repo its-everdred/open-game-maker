@@ -174,7 +174,9 @@ test('keeps the editor preview usable on a landscape phone', async ({ browser, p
   try {
     await prepareEditor(page, reference);
     const stage = await page.locator('.game-stage').boundingBox();
-    expect(stage!.height).toBeGreaterThan(245);
+    /* The turned phone previews the wide game (#1269), filling the game column (60% of the width, #1199). */
+    expect(stage!.width).toBeGreaterThan(844 * 0.59);
+    expect(stage!.width / stage!.height).toBeCloseTo(844 / 390, 1);
   } finally {
     await reference.context().close();
   }
