@@ -147,6 +147,9 @@ def main():
         shape = np.asarray(Image.open(out / 'sheet.png')).shape[:2]
         cloth, weapon = mask_sheets(a.cell_dir, shape) if a.cloth else (None, None)
         weapon = weapon if a.weapon else None
+        if weapon is not None and not weapon.any():
+            print(f'{a.cell_dir.name}: --weapon but no weapon in the masks (rendered before the weapon was red?): '
+                  'delete mask_*.png and --rescore', file=sys.stderr)
         if a.skin_ref:
             import finish_base
             (out / 'sheet.png').replace(out / 'sheet_finish.png')

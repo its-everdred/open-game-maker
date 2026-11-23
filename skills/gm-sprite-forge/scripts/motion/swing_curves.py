@@ -22,6 +22,7 @@ spec.pop('rotz', None)  # measure in the body's own frame (facing -Y)
 bpy.ops.wm.read_factory_settings(use_empty=True)
 flips = {}
 mo = spec['motion']
+mo.setdefault('kind', 'own')
 src_path = mo['path'] if mo['kind'] == 'copy' else spec['rigged']['path'] if mo['kind'] == 'own' else None
 name = mo.get('action') or spec['rigged'].get('action')
 if src_path and name:

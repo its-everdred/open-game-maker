@@ -195,6 +195,8 @@ def setup(spec, n):
         import handpose
         w = spec.get('weapon') or {}
         roll = w.get('roll', weapon_roll(rig, w['bone']) if w else 0.0)
+        if w:  # render_motion would measure it again after the cell's turn below: the mesh must take this one
+            w['roll'] = roll
         axis = (Matrix.Rotation(math.radians(roll), 3, 'Y') @ Matrix.Rotation(math.radians(w.get('pitch', 0)), 3, 'Z')
                 @ Vector((1, 0, 0)))
         zs = [(ob.matrix_world @ v.co).z for v in ob.data.vertices]

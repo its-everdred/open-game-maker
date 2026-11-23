@@ -8,7 +8,8 @@ up, for a body facing -Y (so right is -X). Per key (fields left out carry over f
   torso    [turn right, lean forward, lean right] degrees, spread over the spine bones, on top of the pelvis
   head     [turn right, lean forward] degrees on top of the torso
   arm_r, fore_r, arm_l, fore_l   upper arm and forearm directions, in the torso's frame (they turn with it)
-  axe      direction of the right hand's weapon, in the torso's frame; the wrist is straight along the forearm
+  axe      direction of the right hand's weapon, in the torso's frame; the wrist is straight along the forearm, so
+           the haft is squared to it (a weapon `pitch` then tips it that many degrees toward the fingers)
   foot_l, foot_r   [r, f, u] metres from the rest ankle: the stance. A leg reaches its ankle by a two-bone solve
            (knee toward the front), so a held stance does not slide while the hips crouch and lunge.
 
@@ -49,7 +50,11 @@ def aim(R, rest_dir, d):
 def frame(d, a, y_local, w_local):
     """The rotation taking bone-local y onto d and the weapon axis w onto a (as near as a stays square to d)."""
     def basis(y, w):
-        w = (w - y * w.dot(y)).normalized()
+        w = w - y * w.dot(y)
+        if w.length < 1e-3:
+            raise SystemExit(f'pose: the weapon axis {tuple(round(x, 2) for x in a)} lies along the forearm: key it '
+                             'across the fist')
+        w = w.normalized()
         return Matrix((y, w, y.cross(w))).transposed()
     return basis(d.normalized(), a.normalized()) @ basis(y_local.normalized(), w_local.normalized()).inverted()
 
