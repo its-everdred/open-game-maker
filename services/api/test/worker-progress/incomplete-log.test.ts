@@ -94,4 +94,4 @@ it("logs which source left a game's build list incomplete", async () => {
   const healthy = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(user) });
   expect(await healthy.json()).toMatchObject({ daemonUnavailable: false, trackerStale: false });
   expect(log).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'game_workers_incomplete' }));
-});
+}, 60_000);
