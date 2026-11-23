@@ -9,6 +9,13 @@ import { createGame, type GameSave, type LevelDesign } from './game.js';
 import { createScene, type SceneHandle } from './scene.js';
 import { attachScenery } from './scenery.js';
 
+/* The games host's offline cache worker. It registers from the bundle: the host's CSP refuses inline scripts. */
+try {
+  navigator.serviceWorker?.register('/game-cache.js', { scope: '/g/' }).catch(() => undefined);
+} catch {
+  /* no service worker support */
+}
+
 declare const __GM_BUILD__: 'draft' | 'test' | 'published';
 
 function installStandaloneHost(): () => void {

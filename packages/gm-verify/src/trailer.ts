@@ -66,7 +66,7 @@ export async function captureTrailer(options: {
       timedOut = true;
       void browser?.close().catch(() => {});
     }, timeoutMs);
-    server = await serveStatic(options.serveDir);
+    server = await serveStatic(options.serveDir, { game: true });
     browser = await launch(options.software, options.software);
     if (timedOut) throw new Error(`trailer timed out after ${timeoutMs} ms`);
     let audible = false;

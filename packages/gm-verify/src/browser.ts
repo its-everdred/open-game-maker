@@ -8,7 +8,10 @@ import {
   type Page,
 } from 'playwright';
 
+import { gameHeaders } from '@ogm/contracts';
+
 import { ConsoleCollector } from './console.js';
+import { watchCspViolations } from './csp.js';
 import { HookDriver } from './hooks.js';
 import { SOFTWARE_RENDERER, type ViewportName } from './report.js';
 
@@ -107,7 +110,10 @@ async function routeGameToLocal(context: BrowserContext, app: AppFrame & { local
       const response = await fetch(local);
       await route.fulfill({
         status: response.status,
-        headers: { 'content-type': response.headers.get('content-type') ?? 'application/octet-stream' },
+        headers: {
+          ...gameHeaders(appOrigin),
+          'content-type': response.headers.get('content-type') ?? 'application/octet-stream',
+        },
         body: Buffer.from(await response.arrayBuffer()),
       });
     },
@@ -194,6 +200,22 @@ export async function openGame(browser: Browser, url: string, options: OpenGameO
     /* A service worker would answer game requests before the local-build route sees them. */
     ...(app?.localUrl ? { serviceWorkers: 'block' as const } : {}),
   });
+  const collector = options.console ?? new ConsoleCollector();
+  let failEarly: (error: Error) => void = () => {};
+  const early = new Promise<never>((_, reject) => {
+    failEarly = reject;
+  });
+  early.catch(() => {});
+  let ready = false;
+  /* The games host's CSP blocks what a player's browser blocks; a capture that hides it proves nothing. */
+  await watchCspViolations(
+    context,
+    (text) => {
+      collector.add('error', text);
+      if (!ready) failEarly(new Error(`page failed before ready: ${text}`));
+    },
+    app ? new URL(app.url).origin : undefined,
+  );
   if (options.trailerAudio) {
     await context.addInitScript(() => {
       (window as unknown as { __gmTrailerAudio: unknown }).__gmTrailerAudio = {
@@ -209,13 +231,6 @@ export async function openGame(browser: Browser, url: string, options: OpenGameO
   }
   const page = await context.newPage();
   if (options.trailerAudio) await page.clock.install();
-  const collector = options.console ?? new ConsoleCollector();
-  let failEarly: (error: Error) => void = () => {};
-  const early = new Promise<never>((_, reject) => {
-    failEarly = reject;
-  });
-  early.catch(() => {});
-  let ready = false;
   page.on('pageerror', (error) => {
     collector.add('error', error.message);
     if (!ready) failEarly(new Error(`page failed before ready: ${error.message}`));

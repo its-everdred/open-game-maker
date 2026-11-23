@@ -49,3 +49,4 @@ export * from './media-meta.js';
 export * from './decision-inventory.js';
 export * from './image-slots.js';
 export * from './scene.js';
+export * from './game-headers.js';

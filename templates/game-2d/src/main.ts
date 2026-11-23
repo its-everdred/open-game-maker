@@ -5,6 +5,13 @@ import { defaultInputMapping } from '@gm/sdk/camera';
 import { connectPhaserLifecycle, game, getGameContext } from './game.js';
 import { installStandaloneHost } from './standalone.js';
 
+/* The games host's offline cache worker. It registers from the bundle: the host's CSP refuses inline scripts. */
+try {
+  navigator.serviceWorker?.register('/game-cache.js', { scope: '/g/' }).catch(() => undefined);
+} catch {
+  /* no service worker support */
+}
+
 declare const __GM_BUILD__: BuildKind;
 
 const requestedBuild = new URLSearchParams(location.search).get('build');

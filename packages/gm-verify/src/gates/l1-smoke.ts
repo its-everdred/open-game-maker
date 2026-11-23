@@ -315,7 +315,7 @@ export async function runL1(root: string, options: RunL1Options = {}): Promise<G
     let url = options.url;
     if (url && !isLoopbackUrl(url)) throw new Error('unavailable: URL is not loopback');
     if (!url) {
-      server = await watchdog.wait(serveStatic(resolve(root, options.serveDir ?? 'dist')), (late) => {
+      server = await watchdog.wait(serveStatic(resolve(root, options.serveDir ?? 'dist'), { game: true }), (late) => {
         void late.close();
       });
       url = server.url;

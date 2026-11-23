@@ -21,11 +21,6 @@
   </head>
   <body>
     <canvas id="game" data-gm-play-area></canvas>
-    <script>
-      try {
-        navigator.serviceWorker?.register('/game-cache.js', { scope: '/g/' }).catch(() => undefined);
-      } catch {}
-    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

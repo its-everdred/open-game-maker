@@ -39,7 +39,7 @@ export async function checkBoot(
         checks: [{ id: 'boot', ok: report.verdict === 'pass', ...(report.error ? { detail: report.error } : {}) }],
       };
     }
-    const server = await verify.serveStatic(resolve(ctx.cwd, dist));
+    const server = await verify.serveStatic(resolve(ctx.cwd, dist), { game: true });
     try {
       return await verify.runBoot({
         url: server.url,

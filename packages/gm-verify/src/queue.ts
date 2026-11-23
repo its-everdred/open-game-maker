@@ -216,7 +216,7 @@ async function capture(root: string, dir: string, staging: string, options: Proc
   }
   if (!inside(root, serveDir) || !statSync(serveDir).isDirectory())
     return fail(`serveDir ${request.serveDir} is not a directory inside the workspace`, request);
-  const server = await serveStatic(serveDir);
+  const server = await serveStatic(serveDir, { game: true });
   try {
     if (request.args.boot) {
       const selected = request.args.viewport;
