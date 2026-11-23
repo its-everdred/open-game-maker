@@ -34,6 +34,10 @@ PY
 cat > "$scratch/gm" << 'GM'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$OGM_TEST_CALLS"
+if [[ $2 == frame-check ]]; then
+  [[ -n ${OGM_TEST_FRAME_FAIL:-} ]] && { printf 'fail https://bare.example: refused: frame-ancestors\n'; exit 1; }
+  exit 0
+fi
 game=$3 out=$6
 [[ $game == "${OGM_TEST_SILENT:-}" ]] && exit 3
 # A flaky game fails its first play only, as a loaded host can.
@@ -136,5 +140,38 @@ assert_eq 64 "$rc" 'a missing database is bad usage'
 assert_eq 70 "$crash" 'a crash exits 70'
 assert_grep 'exit=70 qa-game-play' "$scratch/out"
 [[ ! -s $attention ]] || fail 'a crash wrote an attention line'
+
+# Every app domain frames the first game's build in WebKit before any play (#1297); a refused frame fails and wakes
+# the Executor, and --frames-only (web deploys) plays nothing.
+mkdir -p "$scratch/env"
+printf 'OGM_PUBLIC_APP_ORIGIN=https://app.example\nOGM_APP_ALIAS_ORIGINS="https://bare.example https://old.example"\n' \
+  > "$scratch/env/web.env"
+printf 'OGM_GAMES_ORIGIN=https://games.example/\n' > "$scratch/env/api.env"
+: > "$scratch/calls"
+"$check" --db "$db" --repo "$stack" --game ok > "$scratch/out"
+frame='qa frame-check https://games.example/g/g_ok/build_new/ --app https://app.example --app https://bare.example --app https://old.example'
+assert_eq "$frame
+qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/build_new" "$(cat "$scratch/calls")" \
+  'the frame check opens every app domain on the played build, then the game plays'
+assert_grep 'frames ok build_new: ok on https://app.example https://bare.example https://old.example' "$scratch/out"
+
+: > "$scratch/calls"
+: > "$attention"
+set +e
+OGM_TEST_FRAME_FAIL=1 "$check" --db "$db" --repo "$stack" --frames-only --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a refused frame fails'
+assert_eq "${frame/g_ok\/build_new/g_bad/build_bad}" "$(sed -n 1p "$scratch/calls")" 'without --game the first game with a tested build is framed'
+assert_eq 2 "$(wc -l < "$scratch/calls")" '--frames-only plays nothing; a failing frame check runs once more'
+assert_grep 'qa-frame-check failed: frames bad build_bad: fail https://bare.example: refused: frame-ancestors' "$attention"
+
+rm "$scratch/env/api.env"
+set +e
+"$check" --db "$db" --repo "$stack" --frames-only > "$scratch/out"
+rc=$?
+set -e
+assert_eq 64 "$rc" '--frames-only with nothing to frame is bad configuration, never a pass'
+assert_grep 'frames: not checked' "$scratch/out"
 
 echo 'qa-game-play: ok'

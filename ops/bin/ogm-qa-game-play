@@ -7,13 +7,19 @@ production shell at 390x844 with the QA session, the bridge handshake and first 
 one input that must change the frame. One game at a time; each play is capped at 170 s (`--timeout`). A game that
 fails is played once more and fails only if both plays fail: a loaded host can miss one boot, a broken game misses both.
 
+First, every app domain (OGM_PUBLIC_APP_ORIGIN and OGM_APP_ALIAS_ORIGINS in web.env, else OGM_APP_ORIGIN in api.env)
+frames the first game's build in WebKit (`gm qa frame-check`, #1297): a domain the games host's frame-ancestors does
+not allow showed Try again in every game on an iPhone. A failing frame check is run once more, like a play.
+
 usage: ogm-qa-game-play [--db <ogm.sqlite3>] [--game <slug> [--build <id>]] [--repo <checkout>] [--attention <file>]
-  --game       play only this game (the publish hook passes the game it published)
-  --build      play this build of that game instead of its latest tested one (the build just published)
-  --attention  append one line per failing game: its failures, bridge trace, play-check.json and stills
-Stills and play-check.json land in <repo>/assets-local/review/app/play-check/<build>/. Prints one line per game and
-`exit=<n> qa-game-play`. exit 0 every game played; 1 a game failed (its attention line is written); 64 bad usage;
-70 the check itself crashed (no per-game line).
+                        [--frames-only]
+  --game         play only this game (the publish hook passes the game it published)
+  --build        play this build of that game instead of its latest tested one (the build just published)
+  --attention    append one line per failing game: its failures, bridge trace, play-check.json and stills
+  --frames-only  run only the frame check (web deploys)
+Stills and play-check.json land in <repo>/assets-local/review/app/play-check/<build>/. Prints one line per game, a `frames` line, and
+`exit=<n> qa-game-play`. exit 0 every game played; 1 a game or the frame check failed (its attention line is written);
+64 bad usage; 70 the check itself crashed (no per-game line).
 """
 
 import json
@@ -79,7 +85,27 @@ def play(gm, repo, game_id, build_id, out):
     return report
 
 
+def app_origins(env_dir, api):
+    """The app domains a player can open: the public app origin first, then every alias that redirects to it."""
+    web = env_file(os.path.join(env_dir, 'web.env'))
+    canonical = (web.get('OGM_PUBLIC_APP_ORIGIN') or api.get('OGM_APP_ORIGIN') or '').rstrip('/')
+    aliases = [origin.rstrip('/') for origin in web.get('OGM_APP_ALIAS_ORIGINS', '').split()]
+    return [canonical, *aliases] if canonical else []
+
+
+def frame_check(gm, repo, frame_url, apps):
+    command = [*gm, 'qa', 'frame-check', frame_url, *[part for app in apps for part in ('--app', app)]]
+    try:
+        run = subprocess.run(command, cwd=repo, capture_output=True, text=True, timeout=300)
+        code, output = run.returncode, (run.stdout + run.stderr).strip()
+    except subprocess.TimeoutExpired:
+        code, output = 124, 'timed out after 300 s'
+    return code, output
+
+
 def main(argv):
+    frames_only = '--frames-only' in argv
+    argv = [arg for arg in argv if arg != '--frames-only']
     args = dict(zip(argv[::2], argv[1::2]))
     if len(argv) % 2 or set(args) - {'--db', '--game', '--build', '--repo', '--attention'}:
         print(__doc__.split('\n\n')[1], file=sys.stderr)
@@ -88,7 +114,8 @@ def main(argv):
         print('ogm-qa-game-play: --build needs a build id and --game', file=sys.stderr)
         return 64
     repo = args.get('--repo') or os.path.dirname(os.path.dirname(HERE))
-    api = env_file(os.path.join(os.environ.get('OGM_ENV_DIR', os.path.expanduser('~/.config/ogm/env')), 'api.env'))
+    env_dir = os.environ.get('OGM_ENV_DIR', os.path.expanduser('~/.config/ogm/env'))
+    api = env_file(os.path.join(env_dir, 'api.env'))
     db = args.get('--db') or os.path.join(api.get('OGM_DATA_DIR', ''), 'ogm.sqlite3')
     if not os.path.exists(db):
         print('ogm-qa-game-play: no database', file=sys.stderr)
@@ -116,6 +143,31 @@ def main(argv):
                 return 64
             rows = [(rows[0][0], rows[0][1], args['--build'])]
     failed = 0
+    framed = next((row for row in rows if row[2]), None)
+    apps = app_origins(env_dir, api)
+    games = api.get('OGM_GAMES_ORIGIN', '').rstrip('/')
+    if not (framed and apps and games):
+        print('frames: not checked (no tested build, app origin or OGM_GAMES_ORIGIN)')
+        if frames_only:
+            return 64
+    else:
+        frame_url = f'{games}/g/{framed[0]}/{framed[2]}/'
+        code, output = frame_check(gm, repo, frame_url, apps)
+        if code != 0:
+            print(f'frames {framed[1]} {framed[2]}: first check failed ({clean(output)}), checking again')
+            code, output = frame_check(gm, repo, frame_url, apps)
+        if code == 0:
+            print(f'frames {framed[1]} {framed[2]}: ok on {" ".join(apps)}')
+        else:
+            failed = 1
+            line = f'frames {framed[1]} {framed[2]}: {clean(output, 600)}'
+            print(line)
+            if attention:
+                stamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+                with open(attention, 'a') as handle:
+                    handle.write(f'{stamp} qa-frame-check failed: {line}\n')
+    if frames_only:
+        rows = []
     for game_id, slug, build_id in rows:
         if not build_id:
             print(f'{slug}: no tested build, not played')

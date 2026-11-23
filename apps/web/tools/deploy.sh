@@ -223,4 +223,8 @@ date -u +%Y-%m-%dT%H:%M:%SZ >>"$DEPLOY_LOG" ||
 total uploaded
 # Post-deploy QA: the payload is live, so a failed load check wakes the Executor instead of holding the upload back.
 timed load-check load_check || report_attention 'the load check on the uploaded payload failed (see the deploy log)'
+# Every app domain must frame a game in WebKit, as on an iPhone (#1297): an alias whose 301 is missing, or a games
+# host whose frame-ancestors lacks the app, shows Try again in every game.
+timed frame-check "$ROOT/ops/bin/ogm-qa-game-play" --frames-only --repo "$ROOT" ||
+  report_attention 'the frame check on the app domains failed (see the deploy log)'
 total done

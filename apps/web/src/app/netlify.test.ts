@@ -11,8 +11,13 @@ const publicFile = (name: string) => readFileSync(resolve(process.cwd(), 'public
 
 describe('Netlify static configuration', () => {
   it('places both backend proxies, built from the deploy-time origin, before the SPA fallback', () => {
-    expect(renderRedirects('https://api.example:8443', 'https://makeopen.games').split('\n').filter(Boolean)).toEqual([
+    expect(
+      renderRedirects('https://api.example:8443', 'https://makeopen.games', ['https://bare.example'])
+        .split('\n')
+        .filter(Boolean),
+    ).toEqual([
       'https://ogm2000.netlify.app/*  https://makeopen.games/:splat  301!',
+      'https://bare.example/*  https://makeopen.games/:splat  301!',
       '/api/*  https://api.example:8443/api/:splat  200',
       '/auth/*  https://api.example:8443/auth/:splat  200',
       '/proto  /proto/  301',
@@ -126,6 +131,17 @@ describe('Netlify static configuration', () => {
     expect(deploy).toContain('if [[ -z "$town_ready" ]]; then');
     expect(deploy).toContain('deploy: load check failed; refusing to deploy');
     expect(deploy).toContain('timed load-check load_check || report_attention');
+  });
+
+  // An app domain the games host would not frame showed Try again in every game on an iPhone (#1297).
+  it('frames a game on every app domain in WebKit after the upload', () => {
+    const deploy = readFileSync(resolve(process.cwd(), 'tools/deploy.sh'), 'utf8');
+
+    const upload = deploy.indexOf('timed upload netlify deploy');
+    const frames = deploy.indexOf('timed frame-check "$ROOT/ops/bin/ogm-qa-game-play" --frames-only --repo "$ROOT" ||');
+    expect(upload).toBeGreaterThan(-1);
+    expect(frames).toBeGreaterThan(upload);
+    expect(deploy.slice(frames)).toMatch(/^[^\n]*\|\|\n\s+report_attention/u);
   });
 
   it('gives the load check a configurable 240-second readiness window', () => {

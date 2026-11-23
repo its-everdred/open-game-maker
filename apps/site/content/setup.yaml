@@ -363,6 +363,7 @@ steps:
           # Write the Netlify site id to apps/web/.netlify-site-id.
           pnpm --filter @ogm/config exec ogm-env-init web
           # Set OGM_PUBLIC_APP_ORIGIN=<app-origin> in web.env; each instance uses its own subdomain or domain.
+          # List any other domain the site answers on in OGM_APP_ALIAS_ORIGINS in web.env; deploy.sh 301s each to the app origin.
           # OGM_INSTANCE_ALL_ASSETS=1 is the generated instance default; licensed files stay gitignored and are staged only for this deploy.
           # Set VITE_GAMES_ORIGIN=https://<tailnet-host>:10000 in web.env; deploy.sh bakes it in and refuses without it.
           # Set VITE_API_ORIGIN=https://<tailnet-host>:8443 in web.env; deploy.sh writes _redirects from it.

@@ -527,6 +527,12 @@ endpoint listens on its internal port, which no ingress exposes, behind the inte
 
 ## Check every game plays on prod
 
+Before any play, every app domain (`OGM_PUBLIC_APP_ORIGIN` and `OGM_APP_ALIAS_ORIGINS` in `web.env`) frames the first
+game's build in WebKit with `gm qa frame-check <frame url> --app <origin>...` (#1297). It fails when a domain does not
+load, the browser logs a refused frame (`frame-ancestors`, `frame-src`, `X-Frame-Options`) or the frame stays empty;
+a failure is checked once more, then appends one `qa-frame-check failed` line to the attention file and fails the run.
+`apps/web/tools/deploy.sh` runs `ogm-qa-game-play --frames-only` after every upload.
+
 `ops/bin/ogm-qa-game-play` plays each published game's latest tested build the way a player on a phone reaches it
 (#1272). For each game it runs `gm qa play-check <game id> <build id>`: production's app shell at 390×844, signed in as
 the QA creator (`qa.env`), waits for the bridge handshake and the game's `load.frame`, takes the game's first tap path
