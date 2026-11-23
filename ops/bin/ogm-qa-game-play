@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""OGM post-deploy game play check (#1272): play every published game's latest tested build in the production app shell.
+
+ogm-qa-game-boot only proves a game's files return 200; on 2026-11-22 every game still showed "Try again" for a day
+(#1252, #1266, #1267). For each game with a tested build (QA games excluded), this runs `gm qa play-check`: the
+production shell at 390x844 with the QA session, the bridge handshake and first frame, the game's first tap path, and
+one input that must change the frame. One game at a time; each play is capped at 170 s (`--timeout`).
+
+usage: ogm-qa-game-play [--db <ogm.sqlite3>] [--game <slug>] [--repo <checkout>] [--attention <file>]
+  --game       play only this game (the publish hook passes the game it published)
+  --attention  append one line per failing game: its failures, bridge trace, play-check.json and stills
+Stills and play-check.json land in <repo>/assets-local/review/app/play-check/<build>/. Prints one line per game and
+`exit=<n> qa-game-play`. exit 0 every game played; 1 a game failed; 64 bad usage.
+"""
+
+import json
+import os
+import shlex
+import sqlite3
+import subprocess
+import sys
+from datetime import datetime, timezone
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def env_file(path):
+    values = {}
+    try:
+        with open(path) as handle:
+            for line in handle:
+                if '=' in line and not line.lstrip().startswith('#'):
+                    key, value = line.split('=', 1)
+                    values[key.strip()] = value.strip().strip('"')
+    except FileNotFoundError:
+        pass
+    return values
+
+
+def trace_line(report):
+    """The bridge messages the shell received, in order, repeats folded: hello>ready>load.progress x65>load.frame."""
+    seen = [entry for entry in report.get('observation', {}).get('trace', []) if entry.get('dir') in ('in', 'window')]
+    parts = [entry['t'] + (f" x{entry['n']}" if entry.get('n', 1) > 1 else '') for entry in seen[-12:]]
+    return '>'.join(parts) or 'no bridge messages'
+
+
+def play(gm, repo, game_id, build_id, out):
+    os.makedirs(out, exist_ok=True)
+    report_path = os.path.join(out, 'play-check.json')
+    if os.path.exists(report_path):
+        os.remove(report_path)
+    # The command's own deadline covers the play; this one also covers waiting for the capture slot.
+    command = [*gm, 'qa', 'play-check', game_id, build_id, '--out', out]
+    try:
+        run = subprocess.run(command, cwd=repo, capture_output=True, text=True, timeout=900)
+        code, stderr = run.returncode, run.stderr
+    except subprocess.TimeoutExpired:
+        code, stderr = 124, 'timed out after 900 s'
+    try:
+        with open(report_path) as handle:
+            report = json.load(handle)
+    except (FileNotFoundError, json.JSONDecodeError):
+        report = {'failures': [f'gm qa play-check exited {code} without a report: {stderr.strip()[-300:]}']}
+    if code != 0 and not report.get('failures'):
+        report['failures'] = [f'gm qa play-check exited {code}: {stderr.strip()[-300:]}']
+    return report
+
+
+def main(argv):
+    args = dict(zip(argv[::2], argv[1::2]))
+    if len(argv) % 2 or set(args) - {'--db', '--game', '--repo', '--attention'}:
+        print(__doc__.split('\n\n')[1], file=sys.stderr)
+        return 64
+    repo = args.get('--repo') or os.path.dirname(os.path.dirname(HERE))
+    api = env_file(os.path.join(os.environ.get('OGM_ENV_DIR', os.path.expanduser('~/.config/ogm/env')), 'api.env'))
+    db = args.get('--db') or os.path.join(api.get('OGM_DATA_DIR', ''), 'ogm.sqlite3')
+    if not os.path.exists(db):
+        print('ogm-qa-game-play: no database', file=sys.stderr)
+        return 64
+    gm = shlex.split(os.environ.get('OGM_QA_GM') or f'node {repo}/packages/gm-cli/dist/index.js')
+    attention = args.get('--attention') or os.environ.get('OGM_QA_ATTENTION')
+    with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as conn:
+        rows = conn.execute(
+            """select g.id, g.slug, (select b.id from builds b where b.game_id = g.id and b.status = 'tested'
+                                      order by b.created_at desc limit 1)
+               from games g where g.delisted_at is null and g.slug not like 'qa-%' order by g.slug"""
+        ).fetchall()
+    if args.get('--game'):
+        rows = [row for row in rows if row[1] == args['--game']]
+        if not rows:
+            print(f"ogm-qa-game-play: no published game {args['--game']}", file=sys.stderr)
+            return 64
+    failed = 0
+    for game_id, slug, build_id in rows:
+        if not build_id:
+            continue
+        out = os.path.join(repo, 'assets-local', 'review', 'app', 'play-check', build_id)
+        report = play(gm, repo, game_id, build_id, out)
+        failures = report.get('failures') or []
+        if not failures:
+            print(f'{slug} {build_id}: ok')
+            continue
+        failed = 1
+        line = f"{slug} {build_id}: {'; '.join(failures)}; trace {trace_line(report)}; stills {out}"
+        print(line)
+        if attention:
+            stamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+            with open(attention, 'a') as handle:
+                handle.write(f'{stamp} qa-game-play failed: {line}\n')
+    print(f'exit={failed} qa-game-play')
+    return failed
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

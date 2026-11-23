@@ -2,6 +2,8 @@
 # OGM QA review hook: after a deploy, run the prod review E2E (`gm qa review-e2e`) when the deploy touched the review
 # screens or the review API, and the prod voice E2E (`gm qa voice-e2e`, #879) when it touched a voice path, and wake the
 # Executor when a run fails. New Game runs for template, games API or commit-service changes and on the daily timer.
+# Deploys that touch a player's boot path (the shell, the bridge, the SDK, the games host, publishing) also play every
+# published game in the production shell (ops/bin/ogm-qa-game-play, #1272); a game publish plays that game.
 # Every run also checks that paid APIs stay refused to games while the admin setting is off (ops/bin/ogm-qa-paid-apis).
 # The host's auto-update calls it right after a successful deploy with the commits it
 # deployed from and to.
@@ -147,6 +149,15 @@ if ((${#game_publish[@]})); then
     [[ -n $attention ]] && printf '%s qa-game-boot failed after publishing %s (exit %s): %s\n' "$(date -u +%FT%TZ)" "$slug" "$boot_rc" "$boot_log" >> "$attention"
   fi
   printf 'exit=%s qa-game-boot\n' "$boot_rc"
+  # Serving files is not playing (#1272: three stacked causes kept every game on "Try again" for a day): play the
+  # published game in the production shell to a first frame and one input. Its own lines carry the trace and stills.
+  play_log=$log_dir/$build_id.play.log
+  play=(${OGM_QA_GAME_PLAY:-$repo/ops/bin/ogm-qa-game-play} --game "$slug" --repo "$repo")
+  [[ -z $attention ]] || play+=(--attention "$attention")
+  "${play[@]}" > "$play_log" 2>&1
+  play_rc=$?
+  ((play_rc == 0)) || worst=1
+  printf 'exit=%s qa-game-play\n' "$play_rc"
   exit "$worst"
 fi
 
@@ -165,6 +176,10 @@ new_game='^(templates/game-[^/]+/|packages/game-repo-template/|services/api/src/
 if ((daily)) || grep -qE "$new_game" <<< "$changed"; then runs+=(new-game); fi
 games_cache='^(services/games-host/|services/api/src/(games|builds)/|apps/web/src/routes/games/)'
 grep -qE "$games_cache" <<< "$changed" && runs+=(games-cache game-boot)
+# What a player's boot runs through: the shell, the bridge and its contract, the SDK, the games host, publishing.
+game_play='^(apps/web/(src/(routes/game|features/(editor|room))/|index\.html|vite\.config|package\.json)'
+game_play+='|packages/(contracts|host|iframe-bridge|sdk)/|services/games-host/|services/api/src/(games|builds)/)'
+grep -qE "$game_play" <<< "$changed" && runs+=(game-play)
 # Free and fast, and the gate can regress from any path: it runs on every deploy (#1221).
 runs+=(paid-apis)
 
@@ -179,6 +194,7 @@ for kind in "${runs[@]}"; do
   name=qa-$kind-e2e
   [[ $kind == games-cache ]] && name=qa-games-cache
   [[ $kind == game-boot ]] && name=qa-game-boot
+  [[ $kind == game-play ]] && name=qa-game-play
   [[ $kind == paid-apis ]] && name=qa-paid-apis
   stills=qa-e2e
   [[ $kind == voice ]] && stills=voice-e2e
@@ -186,6 +202,7 @@ for kind in "${runs[@]}"; do
   logs=$qa_root/$kind-e2e
   [[ $kind == games-cache ]] && logs=$qa_root/games-cache
   [[ $kind == game-boot ]] && logs=$qa_root/game-boot
+  [[ $kind == game-play ]] && logs=$qa_root/game-play
   [[ $kind == paid-apis ]] && logs=$qa_root/paid-apis
   mkdir -p "$logs"
   log=$logs/$sha.log
@@ -199,6 +216,10 @@ for kind in "${runs[@]}"; do
   if ((rc == 0)); then
     if [[ $kind == paid-apis ]]; then
       timeout --kill-after=30 "$limit" ${OGM_QA_PAID_APIS:-$repo/ops/bin/ogm-qa-paid-apis} >> "$log" 2>&1
+    elif [[ $kind == game-play ]]; then
+      play=(${OGM_QA_GAME_PLAY:-$repo/ops/bin/ogm-qa-game-play} --repo "$repo")
+      [[ -z $attention ]] || play+=(--attention "$attention")
+      timeout --kill-after=30 "$limit" "${play[@]}" >> "$log" 2>&1
     elif [[ $kind == game-boot ]]; then
       timeout --kill-after=30 "$limit" ${OGM_QA_GAME_BOOT:-$repo/ops/bin/ogm-qa-game-boot} >> "$log" 2>&1
     elif [[ $kind == games-cache ]]; then
@@ -210,7 +231,8 @@ for kind in "${runs[@]}"; do
   fi
   if ((rc != 0)); then
     worst=1
-    [[ -n $attention ]] && printf '%s %s failed on %s (exit %s): %s\n' "$(date -u +%FT%TZ)" "$name" "$sha" "$rc" "$log" >> "$attention"
+    # A game that failed to play wrote its own line, with its trace and stills (exit 1); anything else did not.
+    [[ -n $attention ]] && ! [[ $kind == game-play && $rc == 1 && $session_rc == 0 ]] && printf '%s %s failed on %s (exit %s): %s\n' "$(date -u +%FT%TZ)" "$name" "$sha" "$rc" "$log" >> "$attention"
   fi
   grep -E "^exit=[0-9]+ $name\$" "$log" | tail -n 1 || printf 'exit=%s %s\n' "$rc" "$name"
   # Without a session every run would fail the same way: wake the Executor once.

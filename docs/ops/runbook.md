@@ -525,6 +525,27 @@ Nothing else on the host can reach a paid provider from a game: the games origin
 only, the voice host opens a provider session only for a token from the two gated routes above, and its narration
 endpoint listens on its internal port, which no ingress exposes, behind the internal secret.
 
+## Check every game plays on prod
+
+`ops/bin/ogm-qa-game-play` plays each published game's latest tested build the way a player on a phone reaches it
+(#1272). For each game it runs `gm qa play-check <game id> <build id>`: production's app shell at 390×844, signed in as
+the QA creator (`qa.env`), waits for the bridge handshake and the game's `load.frame`, takes the game's first tap path
+from its hosted `manifest.json` (the first mode's `tap`, else `playArea.tap`), and makes one input: a drag on the
+host's move stick, else a key bound to `move.right`, else a swipe. It fails when the bridge is not ready, the shell
+shows Try again, no first frame arrives, a tap never appears, the frame is blank, or the input changes the frame no
+more than waiting does. One game plays at a time, in the capture slot, and each play is capped at 170 s.
+
+The QA account cannot read another family's private game, so the check answers that game's own API routes from its
+published build (`design/design.json`) and absorbs its writes; the shell, auth, the rest of the API and the games host
+are production's. Stills (`play.png`, `ingame.png`, `input.png`, `end.png`) and `play-check.json` (verdict, bridge
+trace, page errors) land in `assets-local/review/app/play-check/<build>/`.
+
+`ogm-qa-review-hook` plays the published game after every publish, and every game after a deploy that touches the boot
+path (`apps/web/src/{routes/game,features/editor,features/room}/`, `apps/web` build files,
+`packages/{contracts,host,iframe-bridge,sdk}/`, `services/games-host/`, `services/api/src/{games,builds}/`). A game that
+fails appends one `qa-game-play failed` line to the attention file with its failures, the bridge messages it got and
+its stills folder, and fails the hook. Replay a build against an older shell with `--web-dist <web build>`.
+
 ## Prove the instance monorepo flow
 
 Creator games live in the repository named by `OGM_INSTANCE_REPO`: `games/<slug>/` per game and
