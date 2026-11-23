@@ -144,6 +144,50 @@ it('measures the column where the bubble really sits, so a notch inset that move
   );
 });
 
+it('rises above the map maker library sheet too, and again when the sheet opens taller', async () => {
+  let sheetHeight = 170;
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    if (this.classList.contains('edit-workspace-game')) return rect(0, 844, 390, 844);
+    if (this.classList.contains('edit-workspace-chat-bubble')) return rect(390 - 66, 844 - 16, 50);
+    if (this.dataset.bubbleClear) return rect(390 - sheetHeight, 844, sheetHeight, 844);
+    return rect(0, 0, 0, 0);
+  });
+  const { container, rerender } = render(
+    <EditWorkspace game={<section data-bubble-clear="closed" />} chat={<div />} />,
+  );
+  const workspace = container.querySelector<HTMLElement>('.edit-workspace')!;
+  expect(workspace.style.getPropertyValue('--edit-chat-rise')).toBe('170px');
+
+  /* Opening the sheet changes only its attribute; the bubble must follow it up. */
+  sheetHeight = 300;
+  rerender(<EditWorkspace game={<section data-bubble-clear="open" />} chat={<div />} />);
+  await act(async () => {});
+  expect(workspace.style.getPropertyValue('--edit-chat-rise')).toBe('300px');
+});
+
+it("ignores changes inside the library sheet, so scrolling its grid never forces the page's layout", async () => {
+  const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => rect(0, 0, 0, 0));
+  const { container } = render(
+    <EditWorkspace
+      game={
+        <section data-bubble-clear="open">
+          <div className="grid" />
+        </section>
+      }
+      chat={<div />}
+    />,
+  );
+  await act(async () => {});
+  spy.mockClear();
+  container.querySelector('.grid')!.append(document.createElement('button'));
+  await act(async () => {});
+  expect(spy).not.toHaveBeenCalled();
+
+  container.querySelector('section')!.setAttribute('data-bubble-clear', 'closed');
+  await act(async () => {});
+  expect(spy).toHaveBeenCalled();
+});
+
 // Kevin (#1295): the badge means a new agent reply, so the job's replayed history and the creator's own lines never set it.
 it('counts only agent replies from after the page opened, and not a replay after returning from play', () => {
   const now = Date.now();

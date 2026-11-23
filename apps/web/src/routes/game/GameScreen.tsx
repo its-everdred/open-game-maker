@@ -25,6 +25,7 @@ import {
 } from '../../features/editor/api';
 import { EditorChrome } from '../../features/editor/EditorChrome';
 import { SceneStrip } from '../../features/editor/scenes/SceneStrip';
+import { AssetLibrary } from '../../features/editor/library/AssetLibrary';
 import { fallbackEditRequest, previewEditRequest } from '../../features/editor/fallback-request';
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
 import { changeInstanceCount } from '../../features/editor/instanceCount';
@@ -739,6 +740,7 @@ export function GameScreen() {
       )}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
+        {mode === 'edit' && !mapOpen && !frameState.manifest?.palette?.items.length && <AssetLibrary gameId={gameId} />}
         {mode === 'edit' && openScene ? <MapEditor gameId={gameId} scene={openScene} onOpen={setMapOpen} /> : null}
         {mode === 'play' && frameController !== undefined ? (
           <DiagnosticsOverlay

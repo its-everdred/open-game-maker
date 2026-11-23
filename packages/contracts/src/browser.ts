@@ -32,3 +32,4 @@ export * from './game-links.js';
 export * from './energy.js';
 export * from './review-drafts.js';
 export * from './scene.js';
+export * from './editor-library.js';

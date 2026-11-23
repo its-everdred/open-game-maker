@@ -28,6 +28,7 @@ const SWIPE_CLOSE = 48;
 /**
  * How far the host's touch controls rise from the bottom of the game in the bubble's column, so the bubble sits above
  * them. The host lays them out at fixed sizes (packages/host overlay.ts) and hides their layer on non-touch screens.
+ * Editor panels over the game (the map maker's library) mark themselves `data-bubble-clear` and count the same way.
  */
 function useTouchControlsRise(editing: boolean) {
   const gameRef = useRef<HTMLDivElement>(null);
@@ -41,7 +42,7 @@ function useTouchControlsRise(editing: boolean) {
       /* The bubble's own column, so a notch inset that moves it inward moves the column too. */
       const bubble = bubbleRef.current?.getBoundingClientRect();
       let top = box.bottom;
-      for (const control of bubble ? game.querySelectorAll('[data-action], [data-stick]') : []) {
+      for (const control of bubble ? game.querySelectorAll('[data-action], [data-stick], [data-bubble-clear]') : []) {
         const rect = control.getBoundingClientRect();
         if (rect.height > 0 && rect.right > bubble!.left && rect.left < bubble!.right) top = Math.min(top, rect.top);
       }
@@ -49,8 +50,20 @@ function useTouchControlsRise(editing: boolean) {
     };
     measure();
     /* Controls appear when the game loads, change with its inputs and hide after keyboard or pad input. */
-    const mutations = new MutationObserver(measure);
-    mutations.observe(game, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden'] });
+    /* A panel's own contents (the library's scrolling grid) never move it; only its open/closed attribute does. */
+    const mutations = new MutationObserver((records) => {
+      const inside = (record: MutationRecord) =>
+        record.target instanceof Element &&
+        record.target.closest('[data-bubble-clear]') !== null &&
+        record.attributeName !== 'data-bubble-clear';
+      if (!records.every(inside)) measure();
+    });
+    mutations.observe(game, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['hidden', 'data-bubble-clear'],
+    });
     const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
     resize?.observe(game);
     return () => {
