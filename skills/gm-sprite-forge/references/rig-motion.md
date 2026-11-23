@@ -28,6 +28,8 @@ worn gear that bends with the body is not built yet.
 | `scripts/motion/strip.py` | `gm py --` | Quick zoomed strip for looking: `strip.py <cell_dir> <out.png> [rows=1,2] [zoom=3] [ref=<pack sheet>]` |
 | `scripts/motion/fit_accuracy.py` | Blender | Landmark error against rigged characters; exits 1 if any case fails |
 | `scripts/motion/rigged.py`, `sampling.py` | Blender module / plain | A body that arrives rigged (#1282): its own clip or a plain copy retarget, sampled evenly or on key poses |
+| `scripts/motion/handpose.py`, `posekey.py` | Blender module / plain | Hand-keyed key poses on a rigged body (`kind: pose`), eased over every sheet frame |
+| `scripts/motion/swing_curves.py`, `swing_chart.py` | Blender / `gm py --` | The swinging arm per frame (rotation step, swing angle, reversals) and its chart |
 | `scripts/motion/pose_overlay.py` | `gm py --` | Frame-by-frame silhouettes over the pack clip (pack red, ours cyan) with per-frame IoU |
 
 Blender 4.3 needs the `gm py setup` environment's NumPy and SciPy (the glTF importer needs NumPy too). Use a wrapper
@@ -114,8 +116,10 @@ loop, none for an attack, in pixels at the pack cell.
   pack Archer QuickShot) and `step`.
 - `stance` (top level, or in a cell's `motion` to override it for that cell): a name in `retarget.STANCES`.
 - `weapon` (per cell or top level): `{"path": glb, "bone": "hand.R", "length": 0.3, "grip": 0.25, "spin": 0, "roll": 0}`
-  puts a separate weapon mesh on a hand bone, its long axis across the fist. `spin` turns it about that axis, `roll`
-  about the hand bone (a bow needs `"roll": 90` to stand upright). Shape keys are dropped (the KayKit bow's `Draw` key
+  puts a separate weapon mesh on a hand bone, its long axis across the fist. `spin` turns it about that axis, `pitch`
+  tips its head toward the fingers, `roll` turns it about the hand bone (a bow needs `"roll": 90` to stand upright).
+  The Warrior's walk axe hangs down and out like the pack Walk's at `"pitch": 45` and the rig's auto roll plus 40
+  (Kevin, 2026-11-23: the forward-pointing axe sat "too high"). Shape keys are dropped (the KayKit bow's `Draw` key
   otherwise kept it in its import pose).
 
 Run from the repository root:
@@ -220,6 +224,45 @@ OGM_FAL_LEDGER=<costs.json> OGM_FAL_STOP_USD=<cap> gm py -- skills/gm-sprite-for
 Check every cell frame by frame against the pack clip: `gm py -- skills/gm-sprite-forge/scripts/motion/pose_overlay.py
 <out.png> <pack sheet> <cell_dir> ... [--rows 1,2] [--zoom 3]` lays each frame's silhouette over the pack's (pack red,
 ours cyan, both white) and writes the per-frame IoU to `<out>.json`.
+
+## Hand-keyed attacks (#1282 round 2)
+
+Kevin (2026-11-23) on every round-1 attack: they "glitch back and forth instead of being a large swing with follow
+through". What caused it, measured on the swinging arm (world rotation per sheet frame and the hand's swing about the
+shoulder):
+
+- **Not quaternion sign flips in the sources:** the Quaternius clip has no keys on flipped hemispheres. The plain copy
+  did key consecutive frames on opposite hemispheres; with constant keys that changes nothing on screen, but every
+  keyed quaternion now takes the previous key's side (`sampling.compatible`), so no interpolation can spin the long way.
+- **A strike drawn in one frame.** Even sampling of a 30 fps clip on 15 frames put the arm's 150-200 degree strike
+  between two sheet frames: the axe pops from overhead to the ground with nothing between.
+- **Replayed poses.** Key-pose stepping replayed the wind-up for the pack's second swing, so the axe snapped strike,
+  wind-up, strike; the Quaternius clip's own recovery also lifts the hand back up through the front.
+
+So an attack is hand-keyed as **one continuous arc**: `motion.kind: pose` on a rigged body (no mocap, no retarget). Key
+poses sit on the sheet's own frames (`t` 0-14) and every frame between two keys is drawn from them with the segment's
+easing (`in` into the strike, `out` into the wind-up and the follow-through, `io` for the draw and the recovery), so
+the axe passes through every frame, one way. Write the full pose at key 0; later keys name only what changes.
+
+```json
+"motion": {"kind": "pose", "bones": {"hips": "mixamorig:Hips", "spine": ["mixamorig:Spine", "mixamorig:Spine1", "mixamorig:Spine2"], "...": "..."},
+           "keys": [{"t": 0, "pelvis": 10, "torso": [5, 15, 0], "hips": [0, 0, -0.07], "foot_l": [-0.06, 0.16, 0],
+                     "foot_r": [0.06, -0.14, 0], "arm_r": [0.3, 0.45, -0.85], "fore_r": [0.1, 0.85, -0.45],
+                     "axe": [-0.5, 0.6, -0.6], "arm_l": [-0.35, 0.2, -0.9], "fore_l": [-0.2, 0.6, -0.75]},
+                    {"t": 4, "ease": "out", "torso": [35, -14, -10], "arm_r": [0.25, -0.3, 0.9], "...": "..."}]},
+"rotz": -45
+```
+
+- Directions are `[right, forward, up]` in the body's frame; arms and the axe turn with the torso. `axe` sets the
+  hand so the weapon points that way, wrist straight along the forearm. `pelvis`, `torso` ([turn right, lean
+  forward, lean right]) and `head` are degrees; `hips` and `foot_*` are metres for a 1.8 m body. The feet hold the
+  stance and the legs reach them by a two-bone solve (knees forward), so a crouch or lunge does not slide them.
+- `bones` maps every role (`handpose.ROLES`) to the rig's bones. A cell's `rotz` turns the keyed body afterwards:
+  the pack's Attack1 faces 45 degrees right of its row (`-45`).
+- Two opposite directions in neighbouring keys fail: add a key between them to say which way round the swing goes.
+- Block the arc in `workbench` and look at a 3x strip beside the pack before Cycles. The S camera looks down the
+  forward axis: a strike or follow-through pointed forward is foreshortened and hides in front of the body. Swing it
+  out to the side (as the pack's wide sweeps), with straight elbows through the strike.
 
 ## Files stay local
 
