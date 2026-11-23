@@ -101,8 +101,10 @@ loop, none for an attack, in pixels at the pack cell.
   `elbow` ([min, max] degrees); attack `keys` (`chop`, `combo`, `cast` for the pack Wizard CastSpell, `bow` for the
   pack Archer QuickShot) and `step`.
 - `stance` (top level, or in a cell's `motion` to override it for that cell): a name in `retarget.STANCES`.
-- `weapon` (per cell or top level): `{"path": glb, "bone": "hand.R", "length": 0.3, "grip": 0.25, "spin": 0}` puts a
-  separate weapon mesh on a hand bone.
+- `weapon` (per cell or top level): `{"path": glb, "bone": "hand.R", "length": 0.3, "grip": 0.25, "spin": 0, "roll": 0}`
+  puts a separate weapon mesh on a hand bone, its long axis across the fist. `spin` turns it about that axis, `roll`
+  about the hand bone (a bow needs `"roll": 90` to stand upright). Shape keys are dropped (the KayKit bow's `Draw` key
+  otherwise kept it in its import pose).
 
 Run from the repository root:
 

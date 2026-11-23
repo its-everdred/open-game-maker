@@ -223,3 +223,42 @@ class SeamAndFootLockTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+SHAPE_KEYS = '''
+import sys, json
+sys.path.insert(0, sys.argv[-2])
+import bpy
+import numpy as np
+import fit_rig
+bpy.ops.wm.read_factory_settings(use_empty=True)
+bpy.ops.mesh.primitive_cube_add(size=1)
+bar = bpy.context.object
+bar.scale = (0.2, 3.0, 0.5)  # long along Y, like the KayKit bow
+bar.shape_key_add(name='Basis')
+bar.shape_key_add(name='Draw').value = 0.0
+ob, _ = fit_rig.prepare([bar], 90.0)  # turn 90 degrees and scale to 1.8 high
+ev = ob.evaluated_get(bpy.context.evaluated_depsgraph_get()).to_mesh()
+drawn = np.array([v.co for v in ev.vertices])
+want = fit_rig.verts(ob)
+json.dump({'drawn': (drawn.max(0) - drawn.min(0)).tolist(), 'measured': (want.max(0) - want.min(0)).tolist()},
+          open(sys.argv[-1], 'w'))
+'''
+
+
+@unittest.skipUnless(shutil.which('blender'), 'needs Blender 4.3')
+class ShapeKeyTest(unittest.TestCase):
+    def test_a_shape_keyed_mesh_renders_as_prepared(self):
+        # Mesh.transform skips shape keys, and a shape-keyed mesh renders from its keys: the KayKit bow ignored every
+        # turn, scale and grip and was drawn flat across the hand (#1202). What renders must be what prepare measured.
+        with tempfile.TemporaryDirectory() as t:
+            script, out = Path(t) / 'keys.py', Path(t) / 'out.json'
+            script.write_text(SHAPE_KEYS)
+            subprocess.run(['blender', '-b', '--factory-startup', '--python-use-system-env', '--python-exit-code', '1',
+                            '--python', str(script), '--', str(ROOT / 'scripts/motion'), str(out)],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           env=os.environ | {'PYTHONPATH': os.environ.get('OGM_FORGE_SITE', '')})
+            r = json.loads(out.read_text())
+            np.testing.assert_allclose(r['drawn'], r['measured'], atol=1e-4)
+            self.assertAlmostEqual(r['measured'][2], 1.8, places=4)
+            self.assertGreater(r['measured'][0], r['measured'][1])  # the long axis turned from Y to X
