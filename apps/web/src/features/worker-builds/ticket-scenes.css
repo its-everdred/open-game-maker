@@ -1,4 +1,4 @@
-/* Scene links on a review card and a ticket's detail (#1212): one tap opens the scene in the map maker. */
+/* Scene links on a review card and a ticket's detail (issue 1212): one tap opens the scene in the map maker. */
 .ticket-scenes {
   display: flex;
   flex-wrap: wrap;
