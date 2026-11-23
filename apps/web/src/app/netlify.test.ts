@@ -49,8 +49,8 @@ describe('Netlify static configuration', () => {
   it('keeps load evidence outside the temporary deploy payload', () => {
     const deploy = readFileSync(resolve(process.cwd(), 'tools/deploy.sh'), 'utf8');
 
-    expect(deploy).toContain('RECORD_DIR="$(mktemp -d)"');
-    expect(deploy).not.toContain('RECORD_DIR="$DEPLOY_DIR');
+    expect(deploy).toContain('record_dir="$(mktemp -d)"');
+    expect(deploy).not.toContain('record_dir="$DEPLOY_DIR');
     expect(deploy).not.toContain('>"$DEPLOY_DIR/preview.log"');
   });
 
@@ -72,20 +72,26 @@ describe('Netlify static configuration', () => {
     expect(deploy).toContain('"$DEPLOY_DIR/proto/sw.js"');
   });
 
+  // The prototype builds in the background beside the web build (#1264); both read the title assets, and staging
+  // must wait for the prototype to finish.
   it('rebuilds ignored title assets before the web and prototype payloads', () => {
     const deploy = readFileSync(resolve(process.cwd(), 'tools/deploy.sh'), 'utf8');
 
-    const titleBuild = deploy.indexOf('title-town/tools/build.sh');
-    const titleSounds = deploy.indexOf('title-town/tools/sounds.sh');
-    const publicTown = deploy.indexOf('apps/web/tools/town.sh');
-    const webBuild = deploy.indexOf('--filter @ogm/web build');
+    const titleBuild = deploy.indexOf('"$TC/tools/build.sh"');
+    const titleSounds = deploy.indexOf('"$TC/tools/sounds.sh"');
     const prototypeBuild = deploy.indexOf('prototypes/studio-v0/tools/build.sh');
+    const publicTown = deploy.indexOf('bash "$ROOT/apps/web/tools/town.sh"');
+    const webBuild = deploy.indexOf('exec vite build');
+    const prototypeWait = deploy.indexOf('wait "$PROTO_PID" ||');
+    const stage = deploy.indexOf('tools/stage-prototype.mjs');
 
     expect(titleBuild).toBeGreaterThan(-1);
     expect(titleSounds).toBeGreaterThan(titleBuild);
+    expect(prototypeBuild).toBeGreaterThan(titleSounds);
     expect(publicTown).toBeGreaterThan(titleSounds);
     expect(webBuild).toBeGreaterThan(publicTown);
-    expect(prototypeBuild).toBeGreaterThan(webBuild);
+    expect(prototypeWait).toBeGreaterThan(webBuild);
+    expect(stage).toBeGreaterThan(prototypeWait);
     expect(deploy).toContain('OGM_INSTANCE_ALL_ASSETS');
     expect(deploy).toContain('bash "$ROOT/apps/web/tools/town.sh" "${ASSET_FILTER_ARGS[@]}"');
     expect(deploy).toContain('"$DEPLOY_DIR/proto" "${ASSET_FILTER_ARGS[@]}"');
@@ -112,19 +118,20 @@ describe('Netlify static configuration', () => {
     }
   });
 
-  it('refuses a deploy whose load check never reports town-ready', () => {
+  // A dry run is the gate before an upload; a real deploy checks the live payload afterwards and asks for attention.
+  it('fails the load check when town-ready never arrives', () => {
     const deploy = readFileSync(resolve(process.cwd(), 'tools/deploy.sh'), 'utf8');
 
-    expect(deploy).toContain(`grep ' msg town-ready$' "$LOAD_LOG"`);
-    expect(deploy).toContain('if [[ -z "$TOWN_READY" ]]; then');
-    expect(deploy).toContain('deploy: load check did not report town-ready; refusing to deploy');
+    expect(deploy).toContain(`grep ' msg town-ready$' "$load_log"`);
+    expect(deploy).toContain('if [[ -z "$town_ready" ]]; then');
+    expect(deploy).toContain('deploy: load check failed; refusing to deploy');
+    expect(deploy).toContain('timed load-check load_check || report_attention');
   });
 
   it('gives the load check a configurable 240-second readiness window', () => {
     const deploy = readFileSync(resolve(process.cwd(), 'tools/deploy.sh'), 'utf8');
 
-    expect(deploy).toContain('LOAD_SECONDS="${OGM_DEPLOY_LOAD_SECONDS:-240}"');
-    expect(deploy).toContain('"$RECORD_DIR" http://127.0.0.1:43171/ "$LOAD_SECONDS"');
+    expect(deploy).toContain('"$record_dir" http://127.0.0.1:43171/ "${OGM_DEPLOY_LOAD_SECONDS:-240}"');
   });
 
   it('bundles the copied timeline in the public town payload', () => {
