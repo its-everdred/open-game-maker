@@ -671,6 +671,74 @@ describe('game frame adapter', () => {
     controller.dispose();
   });
 
+  /* Blobs compiles its shaders after its last progress report; under load that took over 20 s and "Try again" covered a
+     game that then drew its first frame (#1260). A stall is silence, so the game reporting again clears it. */
+  it('clears a stall when the game reports again and reveals the frame', async () => {
+    vi.useFakeTimers();
+    let opts: GameFrameOptions | undefined;
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 0, doc: {} as DesignDoc },
+      create: (options) => {
+        opts = options;
+        return {
+          bridge: { dropped: 0 },
+          on: vi.fn(() => vi.fn()),
+          setMode: vi.fn(),
+          setSettings: vi.fn(),
+          send: vi.fn(),
+          dispose: vi.fn(),
+        };
+      },
+    });
+    opts?.onReady?.(manifest, []);
+    opts?.onLoad?.({ t: 'load.progress', payload: { phase: 'ready', loaded: 950, total: 1000, cachedBytes: 0 } });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(controller.state()).toMatchObject({ bridgeState: 'error', errorCode: 'load-stalled' });
+    opts?.onLoad?.({ t: 'load.frame', payload: {} });
+    opts?.onLoad?.({
+      t: 'load.done',
+      payload: { ms: 1, fetchedBytes: 1, cachedBytes: 0, fetchedFiles: 1, cachedFiles: 0, persisted: false },
+    });
+    expect(controller.state()).toMatchObject({ bridgeState: 'ready', firstFrame: true, load: { done: true } });
+    expect(controller.state().errorCode).toBeUndefined();
+    controller.dispose();
+  });
+
+  it('keeps a bridge failure up when the game reports again', async () => {
+    let opts: GameFrameOptions | undefined;
+    const controller = mountGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'http://127.0.0.1:10001',
+      gameId: 'game',
+      buildId: 'build',
+      mode: 'play',
+      design: { rev: 0, doc: {} as DesignDoc },
+      create: (options) => {
+        opts = options;
+        return {
+          bridge: { dropped: 0 },
+          on: vi.fn(() => vi.fn()),
+          setMode: vi.fn(),
+          setSettings: vi.fn(),
+          send: vi.fn(),
+          dispose: vi.fn(),
+        };
+      },
+    });
+    opts?.onReady?.(manifest, []);
+    opts?.onError?.({ code: 'boot_failed', message: 'boom' } as Parameters<
+      NonNullable<GameFrameOptions['onError']>
+    >[0]);
+    opts?.onLoad?.({ t: 'load.frame', payload: {} });
+    expect(controller.state()).toMatchObject({ bridgeState: 'error', errorCode: 'boot_failed' });
+    controller.dispose();
+  });
+
   it.each([false, true])('times out missing first frame after ready (assets complete: %s)', async (complete) => {
     vi.useFakeTimers();
     let opts: GameFrameOptions | undefined;
