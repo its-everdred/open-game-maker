@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""OGM post-deploy paid-API check (#1221): while "Allow paid APIs during gameplay" is off, prod refuses a game's paid calls.
+
+Three requests carrying the games origin, as the QA creator, must get 403 `paid_apis_off_during_gameplay`: POST
+/api/v1/voice/token, /api/v1/voice/dictation-token and /api/v1/games/<QA game>/narration/render. A preview whose script
+names a paid provider host, uploaded with a game daemon's hook secret, must get 422 `paid_integration`.
+
+The check never makes a paid call. Every request body is one the route would reject after its paid-API gate (an empty
+target, no narration lines), so a broken gate answers 400 or 503 and still dispatches nothing. With the setting on it
+checks nothing: each request would then be allowed.
+
+usage: ogm-qa-paid-apis [--api <url>] [--db <ogm.sqlite3>]
+  defaults: http://127.0.0.1:$OGM_API_PORT and $OGM_DATA_DIR/ogm.sqlite3 from $OGM_ENV_DIR/api.env (~/.config/ogm/env);
+  the QA session from qa.env (ops/bin/ogm-qa-session); hook secrets from ~/.config/ogm/daemons/<slug>/hook-secret.
+Prints one line per request and `exit=<n> qa-paid-apis`. exit 0 all refused (or the setting is on); 1 a request was
+not refused; 64 bad usage or missing configuration.
+"""
+
+import io
+import json
+import os
+import sqlite3
+import sys
+import tarfile
+import urllib.error
+import urllib.request
+
+REFUSED = 'paid_apis_off_during_gameplay'
+# Above any real ticket number, so a broken gate's preview never replaces a real one.
+TICKET = '999999999999'
+CALLS_PAID = b'fetch("https://api.openai.com/v1/chat/completions", { method: "POST" });\n'
+
+
+def env_file(path):
+    values = {}
+    try:
+        with open(path) as handle:
+            for line in handle:
+                if '=' in line and not line.lstrip().startswith('#'):
+                    key, value = line.split('=', 1)
+                    values[key.strip()] = value.strip().strip('"')
+    except FileNotFoundError:
+        pass
+    return values
+
+
+def post(url, headers, body):
+    request = urllib.request.Request(url, data=body, headers=headers, method='POST')
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.status, response.read()
+    except urllib.error.HTTPError as error:
+        return error.code, error.read()
+    except (urllib.error.URLError, TimeoutError) as error:
+        return f'error {error}', b''
+
+
+def code_of(body):
+    try:
+        error = json.loads(body).get('error')
+    except (ValueError, AttributeError):
+        return None
+    return error.get('code') if isinstance(error, dict) else error
+
+
+def preview_archive():
+    """A preview that passes every check before the paid-host scan, with a script that names a paid provider."""
+    files = {
+        'index.html': b'<!doctype html><script src="./assets/main.js"></script><title>QA paid APIs</title>\n',
+        'assets/main.js': CALLS_PAID,
+        'manifest.json': json.dumps({
+            'id': 'qa-paid-apis', 'sdk': '^1.0.0', 'title': 'QA paid APIs', 'inputs': {'actions': {}},
+            'presentation': {'orientation': 'any', 'minLogical': {'w': 320, 'h': 180}, 'fit': 'responsive'},
+            'view': 'topdown', 'dimension': '2d', 'capabilities': [], 'palette': {'categories': [], 'items': []},
+            'tools': [], 'gizmos': {}, 'saves': False, 'controls': [], 'overrides': {'aliases': {}, 'retired': []},
+        }).encode(),
+        'design/design.json': json.dumps({'schemaVersion': 1, 'globals': {}, 'entities': {}}).encode(),
+        'credits.json': json.dumps({'version': 1, 'packs': []}).encode(),
+    }
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode='w:gz', format=tarfile.USTAR_FORMAT) as archive:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            info.mode = 0o644
+            archive.addfile(info, io.BytesIO(data))
+    return buffer.getvalue()
+
+
+def daemon_secret(conn, qa_game):
+    """The QA game's daemon first, else any game daemon whose hook secret this user can read."""
+    rows = conn.execute(
+        'select d.slug, g.id from game_daemons d left join games g on g.slug = d.slug order by d.slug'
+    ).fetchall()
+    rows.sort(key=lambda row: (row[1] != qa_game, not row[0].startswith('qa'), row[0]))
+    for slug, _ in rows:
+        try:
+            with open(os.path.expanduser(f'~/.config/ogm/daemons/{slug}/hook-secret')) as handle:
+                secret = handle.read().strip()
+        except OSError:
+            continue
+        if secret:
+            return slug, secret
+    return None, None
+
+
+def main(argv):
+    args = dict(zip(argv[::2], argv[1::2]))
+    if len(argv) % 2 or set(args) - {'--api', '--db'}:
+        print(__doc__.split('\n\n')[3], file=sys.stderr)
+        return 64
+    env_dir = os.environ.get('OGM_ENV_DIR', os.path.expanduser('~/.config/ogm/env'))
+    api_env = env_file(os.path.join(env_dir, 'api.env'))
+    qa = env_file(os.path.join(env_dir, 'qa.env'))
+    port = api_env.get('OGM_API_PORT', '')
+    api = (args.get('--api') or (f'http://127.0.0.1:{port}' if port else '')).rstrip('/')
+    db = args.get('--db') or os.path.join(api_env.get('OGM_DATA_DIR', ''), 'ogm.sqlite3')
+    games = api_env.get('OGM_GAMES_ORIGIN', '').rstrip('/')
+    cookie = qa.get('OGM_QA_SESSION_COOKIE_NAME'), qa.get('OGM_QA_SESSION_COOKIE')
+    qa_game = qa.get('OGM_QA_GAME_ID', '')
+    missing = [name for name, value in [
+        ('an API URL', api), ('OGM_GAMES_ORIGIN', games), ('the database', os.path.exists(db) and db),
+        ('the QA session (run ops/bin/ogm-qa-session)', all(cookie) and qa_game),
+    ] if not value]
+    if missing:
+        print(f'ogm-qa-paid-apis: missing {", ".join(missing)}', file=sys.stderr)
+        return 64
+
+    with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as conn:
+        setting = conn.execute("select value from app_meta where key = 'gameplay.paid_apis'").fetchone()
+        slug, secret = daemon_secret(conn, qa_game)
+    if setting and setting[0] == 'on':
+        print('paid APIs during gameplay are on: nothing to refuse')
+        print('exit=0 qa-paid-apis')
+        return 0
+
+    as_game = {'origin': games, 'cookie': f'{cookie[0]}={cookie[1]}', 'content-type': 'application/json'}
+    checks = [
+        ('voice token', f'{api}/api/v1/voice/token', as_game, b'{}', 403, REFUSED),
+        ('dictation token', f'{api}/api/v1/voice/dictation-token', as_game, b'{}', 403, REFUSED),
+        ('narration', f'{api}/api/v1/games/{qa_game}/narration/render', as_game, b'{"lines":[]}', 403, REFUSED),
+    ]
+    if slug:
+        upload = {'authorization': f'Bearer {secret}', 'x-gm-sha': '0' * 40, 'content-type': 'application/gzip'}
+        url = f'{api}/internal/games/{slug}/previews/{TICKET}'
+        checks.append((f'preview on {slug}', url, upload, preview_archive(), 422, 'paid_integration'))
+    failed = 0
+    for name, url, headers, body, want_status, want_code in checks:
+        status, answer = post(url, headers, body)
+        code = code_of(answer)
+        ok = status == want_status and code == want_code
+        print(f'{name}: {"refused" if ok else "NOT REFUSED"} ({status} {code})')
+        failed |= not ok
+    if not slug:
+        print('preview: no game daemon with a readable hook secret')
+        failed = 1
+    print(f'exit={int(failed)} qa-paid-apis')
+    return int(failed)
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

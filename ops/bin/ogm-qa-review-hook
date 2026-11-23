@@ -2,6 +2,7 @@
 # OGM QA review hook: after a deploy, run the prod review E2E (`gm qa review-e2e`) when the deploy touched the review
 # screens or the review API, and the prod voice E2E (`gm qa voice-e2e`, #879) when it touched a voice path, and wake the
 # Executor when a run fails. New Game runs for template, games API or commit-service changes and on the daily timer.
+# Every run also checks that paid APIs stay refused to games while the admin setting is off (ops/bin/ogm-qa-paid-apis).
 # The host's auto-update calls it right after a successful deploy with the commits it
 # deployed from and to.
 #
@@ -164,10 +165,8 @@ new_game='^(templates/game-[^/]+/|packages/game-repo-template/|services/api/src/
 if ((daily)) || grep -qE "$new_game" <<< "$changed"; then runs+=(new-game); fi
 games_cache='^(services/games-host/|services/api/src/(games|builds)/|apps/web/src/routes/games/)'
 grep -qE "$games_cache" <<< "$changed" && runs+=(games-cache game-boot)
-if ((${#runs[@]} == 0)); then
-  printf 'ogm-qa-review-hook: no review or voice change or new-game change in %s..%s\n' "$have" "$want"
-  exit 0
-fi
+# Free and fast, and the gate can regress from any path: it runs on every deploy (#1221).
+runs+=(paid-apis)
 
 sha=$(git -C "$repo" rev-parse --short=12 "$want")
 gm=${OGM_QA_GM:-node $repo/packages/gm-cli/dist/index.js}
@@ -180,12 +179,14 @@ for kind in "${runs[@]}"; do
   name=qa-$kind-e2e
   [[ $kind == games-cache ]] && name=qa-games-cache
   [[ $kind == game-boot ]] && name=qa-game-boot
+  [[ $kind == paid-apis ]] && name=qa-paid-apis
   stills=qa-e2e
   [[ $kind == voice ]] && stills=voice-e2e
   [[ $kind == new-game ]] && stills=new-game-e2e
   logs=$qa_root/$kind-e2e
   [[ $kind == games-cache ]] && logs=$qa_root/games-cache
   [[ $kind == game-boot ]] && logs=$qa_root/game-boot
+  [[ $kind == paid-apis ]] && logs=$qa_root/paid-apis
   mkdir -p "$logs"
   log=$logs/$sha.log
   : > "$log"
@@ -196,7 +197,9 @@ for kind in "${runs[@]}"; do
   fi
   rc=$session_rc
   if ((rc == 0)); then
-    if [[ $kind == game-boot ]]; then
+    if [[ $kind == paid-apis ]]; then
+      timeout --kill-after=30 "$limit" ${OGM_QA_PAID_APIS:-$repo/ops/bin/ogm-qa-paid-apis} >> "$log" 2>&1
+    elif [[ $kind == game-boot ]]; then
       timeout --kill-after=30 "$limit" ${OGM_QA_GAME_BOOT:-$repo/ops/bin/ogm-qa-game-boot} >> "$log" 2>&1
     elif [[ $kind == games-cache ]]; then
       (cd "$repo" && timeout --kill-after=30 "$limit" $gm qa games-cache --game blobs --json) >> "$log" 2>&1
