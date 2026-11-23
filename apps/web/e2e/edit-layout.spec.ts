@@ -7,29 +7,33 @@ type Box = { x: number; y: number; width: number; height: number };
 
 test.use({ serviceWorkers: 'block', reducedMotion: 'reduce' });
 
-// Kevin's phone (#1199): the controls covered each other and the frame, and a fixed 50/50 split
-// left a cream band under a wide frame. Each control must stay tappable and the frame must meet the chat.
-// #1269: no orientation buttons; the frame takes the window's shape, so turning the phone turns the game.
+// Kevin's phone (#1199): the controls covered each other and the frame. #1269: no orientation buttons.
+// #1295: the preview fills the page under the top bar at every shape, and the chat waits behind a bottom-right bubble.
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 844, height: 390 },
+  { width: 820, height: 1180 },
+  { width: 1180, height: 820 },
 ]) {
-  test(`edit page frame follows the window and clears the controls at ${viewport.width}x${viewport.height}`, async ({
+  test(`edit preview fills the page and the chat opens from its bubble at ${viewport.width}x${viewport.height}`, async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'the test sets its own viewport');
     await page.setViewportSize(viewport);
     await openEditor(page);
     await expect(page.getByRole('group', { name: 'Game orientation' })).toHaveCount(0);
-    await expect
-      .poll(async () => ratio(await box(page, '.game-stage')))
-      .toBeCloseTo(viewport.width / viewport.height, 1);
+    await expect(page.locator('.edit-workspace-chat')).toBeHidden();
+
+    const frame = await box(page, '.game-stage');
+    expect(frame.width, 'preview width').toBeGreaterThanOrEqual(viewport.width - 1);
+    expect(frame.y + frame.height, 'preview reaches the bottom').toBeGreaterThanOrEqual(viewport.height - 1);
+    expect(frame.y, 'preview starts under the top bar').toBeLessThanOrEqual(100);
 
     const parts = {
       play: await box(page, '.editor-play-button'),
       menu: await box(page, '.studio-menu-button'),
       editor: await box(page, 'summary[aria-label="Game editor"]'),
-      frame: await box(page, '.game-stage'),
+      chat: await box(page, '.edit-workspace-chat-bubble'),
     };
     const names = Object.keys(parts) as (keyof typeof parts)[];
     for (const [i, a] of names.entries()) {
@@ -37,17 +41,29 @@ for (const viewport of [
         expect(intersects(parts[a], parts[b]), `${a} overlaps ${b}`).toBe(false);
       }
     }
-
-    const frame = parts.frame;
-    const chat = await box(page, '.edit-workspace-chat');
-    const gap = viewport.width < viewport.height ? chat.y - (frame.y + frame.height) : frame.x - (chat.x + chat.width);
-    expect(gap, 'gap between game frame and chat').toBeGreaterThanOrEqual(0);
-    expect(gap, 'gap between game frame and chat').toBeLessThanOrEqual(8);
-
-    await testInfo.attach(`edit-${viewport.width}x${viewport.height}`, {
+    expect(parts.chat.x + parts.chat.width, 'bubble at the right').toBeGreaterThan(viewport.width - 80);
+    expect(parts.chat.y + parts.chat.height, 'bubble at the bottom').toBeGreaterThan(viewport.height - 80);
+    await testInfo.attach(`edit-closed-${viewport.width}x${viewport.height}`, {
       body: await page.screenshot(),
       contentType: 'image/png',
     });
+
+    await page.getByRole('button', { name: 'Chat' }).click();
+    const sheet = await box(page, '.edit-workspace-chat');
+    await expect(page.locator('.edit-workspace-chat aiur-composer')).toBeVisible();
+    expect(sheet.y + sheet.height, 'sheet sits on the bottom').toBeGreaterThanOrEqual(viewport.height - 1);
+    await expect(page.locator('.edit-workspace-chat-bubble')).toHaveAttribute('aria-expanded', 'true');
+    const openBubble = await box(page, '.edit-workspace-chat-bubble');
+    expect(intersects(sheet, openBubble), 'bubble clear of the sheet').toBe(false);
+    for (const name of ['play', 'menu', 'editor'] as const) {
+      expect(intersects(openBubble, parts[name]), `open bubble overlaps ${name}`).toBe(false);
+    }
+    await testInfo.attach(`edit-open-${viewport.width}x${viewport.height}`, {
+      body: await page.screenshot(),
+      contentType: 'image/png',
+    });
+    await page.getByRole('button', { name: 'Chat' }).click();
+    await expect(page.locator('.edit-workspace-chat')).toBeHidden();
   });
 }
 
@@ -55,9 +71,10 @@ test('turning the phone turns the edit preview', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'the test sets its own viewport');
   await page.setViewportSize({ width: 390, height: 844 });
   await openEditor(page);
-  await expect.poll(async () => ratio(await box(page, '.game-stage'))).toBeCloseTo(390 / 844, 1);
+  const portrait = await box(page, '.game-stage');
+  expect(ratio(portrait)).toBeLessThan(1);
   await page.setViewportSize({ width: 844, height: 390 });
-  await expect.poll(async () => ratio(await box(page, '.game-stage'))).toBeCloseTo(844 / 390, 1);
+  await expect.poll(async () => ratio(await box(page, '.game-stage'))).toBeGreaterThan(1);
 });
 
 async function openEditor(page: Page) {

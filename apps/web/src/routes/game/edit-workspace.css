@@ -1,22 +1,19 @@
-/* The game area is as big as its frame needs (capped at 60%); the chat takes the rest. */
+/* The game fills the page under the top bar; the chat opens over its bottom from a bubble. */
 .edit-workspace {
   --edit-bar: calc(var(--safe-t) + 70px);
   /* Space the fixed play and menu buttons take from the right edge. */
   --edit-fixed-controls: calc(max(76px, var(--safe-r) + 60px) + 58px);
-  /* The editor toggle shares the strip with them. */
-  --edit-controls-width: calc(var(--edit-fixed-controls) + 60px);
+  --edit-bubble-gap: 16px;
+  /* The highest the bubble may sit: its bottom edge, from the page bottom, with the bubble still under the top bar. */
+  --edit-bubble-ceiling: calc(100cqh - var(--edit-bar) - 58px);
+  --edit-chat-sheet: min(70cqh, var(--edit-bubble-ceiling) - 12px, 560px);
   position: relative;
   display: grid;
-  grid-template-columns:
-    minmax(0, 1fr)
-    clamp(var(--edit-controls-width), (100cqh - var(--edit-bar)) * var(--edit-frame-aspect), 60cqw);
-  grid-template-rows: minmax(0, 1fr);
-  grid-template-areas: 'chat game';
+  grid-template: 'game' minmax(0, 1fr) / minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   width: 100%;
   height: 100%;
-  gap: 4px;
 }
 
 .edit-workspace-game {
@@ -32,12 +29,85 @@
 }
 
 .edit-workspace-chat {
-  grid-area: chat;
+  position: absolute;
+  z-index: 4;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 480px);
+  height: var(--edit-chat-sheet);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  border-radius: 20px 20px 0 0;
+  background: var(--surface-card);
+  box-shadow: var(--pop-sm);
 }
 
+.edit-workspace-chat[hidden] {
+  display: none;
+}
+
+.edit-workspace-chat-handle {
+  flex: none;
+  height: 22px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.edit-workspace-chat-handle::before {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 4px;
+  margin: 9px auto 0;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+/* Lifted above the host's touch controls in its column (EditWorkspace measures them), or above the open sheet. */
+.edit-workspace-chat-bubble {
+  position: absolute;
+  z-index: 5;
+  right: calc(var(--safe-r) + var(--edit-bubble-gap));
+  bottom: min(var(--safe-b) + var(--edit-bubble-gap) + var(--edit-chat-rise, 0px), var(--edit-bubble-ceiling));
+  display: grid;
+  width: 50px;
+  height: 50px;
+  padding: 13px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--green-b);
+  background-image: var(--button-sheen);
+  color: var(--dark);
+  box-shadow: var(--pop-sm);
+}
+
+.edit-workspace-chat-bubble[aria-expanded='true'] {
+  bottom: calc(var(--edit-chat-sheet) + 12px);
+}
+
+.edit-workspace-chat-bubble .icon,
+.edit-workspace-chat-bubble svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
+.edit-workspace-chat-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--green-b);
+  border-radius: 50%;
+  background: var(--red);
+}
+
+/* Not positioned: the editor's chrome anchors to the workspace, not to this button. */
 .edit-workspace-editor {
   grid-area: game;
   z-index: 2;
@@ -73,21 +143,6 @@
   color: var(--text);
 }
 
-@media (orientation: portrait) {
-  .edit-workspace {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: min(var(--edit-bar) + 100cqw / (var(--edit-frame-aspect)), 60cqh) minmax(0, 1fr);
-    grid-template-areas: 'game' 'chat';
-  }
-}
-
-/* Side by side, the frame sits against the chat. */
-@media (orientation: landscape) {
-  .edit-workspace .game-stage-area {
-    align-items: flex-start;
-  }
-}
-
 .game-screen.is-editing:has(.edit-workspace) {
   display: block;
   padding: 0;
@@ -101,9 +156,9 @@
 
 .edit-workspace-chat .build-chat-chat {
   display: flex;
+  flex: 1;
   flex-direction: column;
   width: 100%;
-  height: 100%;
   min-height: 0;
   background: var(--surface-card);
   color: var(--text);

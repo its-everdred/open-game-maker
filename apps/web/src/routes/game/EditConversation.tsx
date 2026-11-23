@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Job, VoiceTarget } from '@ogm/contracts';
 import { Chat } from '../../features/build-chat/Chat';
+import type { StreamedChatMessage } from '../../features/build-chat/stream';
 import { useSession } from '../../lib/api/session';
 
 export function EditConversation({
@@ -12,6 +13,7 @@ export function EditConversation({
   completedJobId,
   onAdmitted,
   reading,
+  onMessages,
 }: {
   gameId: string;
   branchId: string;
@@ -21,6 +23,7 @@ export function EditConversation({
   completedJobId?: string;
   onAdmitted(id: string): void;
   reading: 'inline' | 'stacked';
+  onMessages?(jobId: string, messages: StreamedChatMessage[]): void;
 }) {
   const { data: session } = useSession();
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
@@ -53,6 +56,7 @@ export function EditConversation({
       heading={false}
       onBack={() => {}}
       onAdmitted={onAdmitted}
+      onMessages={onMessages}
       useAiurComposer
       composerReading={reading}
       dictationTarget={dictationTarget}

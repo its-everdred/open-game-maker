@@ -787,10 +787,11 @@
   height: var(--edit-bar);
 }
 
+/* The preview fills the rest of the page, so the game lays out for the space it really has. */
 .game-stage-area[data-edit-frame] .game-stage {
-  flex: none;
-  width: min(100cqw, (100cqh - var(--edit-bar)) * var(--edit-frame-aspect));
-  aspect-ratio: var(--edit-frame-aspect);
+  flex: 1;
+  width: 100%;
+  min-height: 0;
 }
 
 .game-screen.is-playing .game-stage-area .game-stage {

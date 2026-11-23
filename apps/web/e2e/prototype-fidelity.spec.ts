@@ -174,9 +174,9 @@ test('keeps the editor preview usable on a landscape phone', async ({ browser, p
   try {
     await prepareEditor(page, reference);
     const stage = await page.locator('.game-stage').boundingBox();
-    /* The turned phone previews the wide game (#1269), filling the game column (60% of the width, #1199). */
-    expect(stage!.width).toBeGreaterThan(844 * 0.59);
-    expect(stage!.width / stage!.height).toBeCloseTo(844 / 390, 1);
+    /* The turned phone previews the wide game across the whole page under the top bar (#1295). */
+    expect(stage!.width).toBeGreaterThanOrEqual(843);
+    expect(stage!.y + stage!.height).toBeGreaterThanOrEqual(389);
   } finally {
     await reference.context().close();
   }
@@ -408,18 +408,13 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
   }
   await expect(app.locator('.edit-workspace')).toBeVisible();
   await expect(reference.locator('#editor')).toBeVisible();
-  const stage = await app.locator('.game-stage-area').boundingBox();
-  const chat = await app.locator('.edit-workspace-chat').boundingBox();
-  expect(stage).not.toBeNull();
-  expect(chat).not.toBeNull();
-  if (app.viewportSize()!.width < app.viewportSize()!.height) {
-    expect(chat!.y).toBeGreaterThanOrEqual(stage!.y + stage!.height);
-  } else {
-    expect(chat!.x + chat!.width).toBeLessThanOrEqual(stage!.x);
-  }
+  /* The chat waits behind its bubble (#1295), so the preview fills the page. */
+  await expect(app.locator('.edit-workspace-chat')).toBeHidden();
+  await expect(app.getByRole('button', { name: 'Chat' })).toBeVisible();
   const frame = await app.locator('.game-stage').boundingBox();
   const viewport = app.viewportSize()!;
-  expect(frame!.width / frame!.height).toBeCloseTo(viewport.width / viewport.height, 1);
+  expect(frame!.width).toBeGreaterThanOrEqual(viewport.width - 1);
+  expect(frame!.y + frame!.height).toBeGreaterThanOrEqual(viewport.height - 1);
   return { app: [app.locator('.game-stage')], reference: [reference.locator('#stage')] };
 }
 
