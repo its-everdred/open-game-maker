@@ -11,8 +11,6 @@ Declare the game's vocabulary in `manifest.inputs.actions` before wiring control
 `axis` for one dimension, and `stick` for two dimensions. Name intent (`jump`, `move`, `interact`), never a key or
 device (`space`, `leftStick`). Import `ActionFrame` from `@ogm/contracts`; gameplay reads only its declared values
 and never polls DOM keyboard, pointer, touch, or gamepad APIs. `input.rawKey` is for host hotkeys, not mechanics.
-Menus are not gameplay: open them with `createMenu` from `@gm/sdk/menu` (see gm-ui-hud), and declare the button a
-menu should confirm with first and the one that goes back third, matching the host's A and B.
 
 Read `ActionFrame.playerIndex` and update that player's state only. Treat `ActionFrame.source` as provenance for
 hints or telemetry, never as a reason to change the mechanic. Network and local frames follow the same action map.
@@ -50,6 +48,16 @@ Never claim universal device support. Say which devices and viewports a journey 
 The host owns gamepad discovery, standard mapping, connection changes, and rebinding. The host owns the touch overlay,
 including safe areas and 64 px primary targets. Games declare actions and normally leave touch buttons to the host; existing games with their own controls
 set `inputs.touch` to `self`. Games do not remember device bindings. Keyboard fallback and per-player device assignment are host settings.
+
+## Menus
+
+Menus are not gameplay. Build each menu (title, class select, dialogs, won and lost) as DOM buttons, open it with
+`createMenu({ root, onBack })` from `@gm/sdk/menu`, and dispose the menu on close. The on-screen stick, a keyboard
+(arrows, Enter or Space, Escape), any gamepad (D-pad or left stick, A, B) and touch then move focus and press;
+on-screen A is the first declared button and B the third, so declare confirm and back in those slots. Mark the main
+action `data-gm-primary` so A on the title starts the game, and style `[data-gm-focus]` in the game's UI kit (the
+SDK's plain outline shows until you do). Newer menus take input until disposed; none react while the host's pause
+dialog is open. Never hand-roll menu key or pad handling; a gm-qa journey step pressing on-screen A checks it.
 
 ## Verify
 
