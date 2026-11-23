@@ -1,10 +1,15 @@
 // Icons: Phosphor duotone (MIT, phosphoricons.com), inlined from prototypes/studio-v0/icons.js plus close, paperclip, carets
 // and send. The line icons (menu circles: volume, bug, energy, build, decisions, credits, sign out, admin, game actions)
-// are drawn here.
+// and the duotone tag icons for pixel art, turn-based and story are drawn here.
 // They draw in currentColor; the soft fill is the duotone layer.
 const svg = (body: string) => `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">${body}</svg>`;
 const line = (body: string) =>
   `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
+
+const duo = (fill: string, body: string) =>
+  svg(
+    `<path d="${fill}" opacity="0.2"/><g fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">${body}</g>`,
+  );
 
 export const ICONS: Record<string, string> = {
   menu: line('<path d="M40 72h176M40 128h176M40 184h176"/>'),
@@ -169,6 +174,18 @@ export const ICONS: Record<string, string> = {
   ),
   haunted: svg(
     '<path d="M216,120v96l-29.33-24-29.34,24L128,192,98.67,216,69.33,192,40,216V120a88,88,0,0,1,176,0Z" opacity="0.2"/><path d="M112,116a12,12,0,1,1-12-12A12,12,0,0,1,112,116Zm44-12a12,12,0,1,0,12,12A12,12,0,0,0,156,104Zm68,16v96a8,8,0,0,1-13.07,6.19l-24.26-19.85L162.4,222.19a8,8,0,0,1-10.13,0L128,202.34l-24.27,19.85a8,8,0,0,1-10.13,0L69.33,202.34,45.07,222.19A8,8,0,0,1,32,216V120a96,96,0,0,1,192,0Zm-16,0a80,80,0,0,0-160,0v79.12l16.27-13.31a8,8,0,0,1,10.13,0l24.27,19.85,24.26-19.85a8,8,0,0,1,10.14,0l24.26,19.85,24.27-19.85a8,8,0,0,1,10.13,0L208,199.12Z"/>',
+  ),
+  pixel: duo(
+    'M40 40h176v176H40Z',
+    '<rect x="40" y="40" width="176" height="176" rx="12"/><path d="M84 40v176M128 40v176M172 40v176M40 84h176M40 128h176M40 172h176"/>',
+  ),
+  turns: duo(
+    'M88 216c0-32 40-44 40-64 0 20 40 32 40 64Z',
+    '<path d="M64 32h128M64 224h128M80 32c0 56 48 64 48 96s-48 40-48 96M176 32c0 56-48 64-48 96s48 40 48 96"/>',
+  ),
+  story: duo(
+    'M128 72c-24-20-56-24-96-24v136c40 0 72 4 96 24 24-20 56-24 96-24V48c-40 0-72 4-96 24Z',
+    '<path d="M128 72c-24-20-56-24-96-24v136c40 0 72 4 96 24 24-20 56-24 96-24V48c-40 0-72 4-96 24ZM128 72v136"/>',
   ),
   solo: svg(
     '<path d="M192,96a64,64,0,1,1-64-64A64,64,0,0,1,192,96Z" opacity="0.2"/><path d="M230.92,212c-15.23-26.33-38.7-45.21-66.09-54.16a72,72,0,1,0-73.66,0C63.78,166.78,40.31,185.66,25.08,212a8,8,0,1,0,13.85,8c18.84-32.56,52.14-52,89.07-52s70.23,19.44,89.07,52a8,8,0,1,0,13.85-8ZM72,96a56,56,0,1,1,56,56A56.06,56.06,0,0,1,72,96Z"/>',

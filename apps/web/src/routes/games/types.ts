@@ -68,8 +68,22 @@ export function gameUpdatedAt(game: GameSummary): string {
   return game.updatedAt ?? game.createdAt;
 }
 
+// Manifest tags are free text; these spellings name an icon the set already has.
+const TAG_ICONS: Record<string, string> = {
+  'pixel art': 'pixel',
+  'turn based': 'turns',
+  narrative: 'story',
+  'single player': 'solo',
+  singleplayer: 'solo',
+  multiplayer: 'party',
+};
+
 /** Genre labels can come from creators; unknown labels use the existing generic icon. */
 export function genreIcon(name: string): string {
-  const key = name.trim().toLowerCase();
+  const key = name
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, ' ');
+  if (Object.hasOwn(TAG_ICONS, key)) return TAG_ICONS[key]!;
   return Object.hasOwn(ICONS, key) ? key : 'other';
 }
