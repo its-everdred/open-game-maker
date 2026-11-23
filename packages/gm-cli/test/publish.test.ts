@@ -124,7 +124,7 @@ beforeAll(async () => {
   chmodSync(join(bin, 'pnpm'), 0o755);
   writeFileSync(
     join(bin, 'gh'),
-    '#!/usr/bin/env bash\nif [[ ${GH_FAIL_PR:-} == "${3:-}" ]]; then exit 1; fi\nif [[ ${GH_NONE_PR:-} == "${3:-}" ]]; then printf "%s\\n" "Prototype review: none"; exit 0; fi\nprintf "%s\\n" "Closes #42" "## Prototype review" "**Works now:** walk around" "**Known limitations:** no attack yet" "**Weigh in on:** enemies-first, loot-drop, town-shop"\n',
+    '#!/usr/bin/env bash\nif [[ ${GH_FAIL_PR:-} == "${3:-}" ]]; then exit 1; fi\nif [[ ${GH_NONE_PR:-} == "${3:-}" ]]; then printf "%s\\n" "Prototype review: none"; exit 0; fi\nprintf "%s\\n" "Closes #42" "## Prototype review" "**Works now:** walk around" "**Known limitations:** no attack yet" "**Weigh in on:** enemies-first, loot-drop, town-shop"\nif [[ -n ${GH_PLAY:-} ]]; then printf "Play: %s\\n" "$GH_PLAY"; fi\n',
   );
   chmodSync(join(bin, 'gh'), 0o755);
 
@@ -251,6 +251,7 @@ describe('gm publish', () => {
       limitations: ['no attack yet'],
       decisionIds: ['loot-drop', 'enemies-first', 'town-shop'],
       clipStatus: 'unchecked',
+      media: [{ kind: 'build', ref: 'build_publish' }],
     });
     expect(ReviewSubmission.safeParse(JSON.parse(review.body.toString())).success).toBe(true);
     // The production build: relative base, published mode, the asset library, and never the operator's token.
@@ -283,6 +284,20 @@ describe('gm publish', () => {
     expect(run.code).toBe(0);
     expect(run.err).toEqual([]);
     expect(readFileSync(join(cache, 'sentinel'), 'utf8')).toBe('reusable cache');
+  });
+
+  /* #1281: the published review card plays the slice the merged PR reviewed, so its scenario rides on the build. */
+  it('carries the merged review Play link scenario onto the published build', async () => {
+    git(origin, 'switch', '-q', 'main');
+    git(origin, 'commit', '--allow-empty', '-qm', 'wave three slice (#44)');
+    remoteSha = git(origin, 'rev-parse', 'HEAD');
+    uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_slice","buildId":"build_slice"}' };
+    const play = 'https://app.example/g/g_blobs?mode=edit&build=build_pr&scenario=endless%2Fwave-3';
+    const run = await publish(['blobs', '--api', api], { env: { OGM_INTERNAL_TOKEN: TOKEN, GH_PLAY: play } });
+    expect(run.code).toBe(0);
+    const review = JSON.parse(requests.find((r) => r.url.endsWith('/prototype-reviews'))!.body.toString());
+    expect(review.media[0]).toEqual({ kind: 'build', ref: 'build_slice', scenario: 'endless/wave-3' });
+    expect(ReviewSubmission.safeParse(review).success).toBe(true);
   });
 
   it('posts fallback content and reports an attention when a merged PR body cannot be read', async () => {

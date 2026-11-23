@@ -122,6 +122,17 @@ export async function openShell(browser: Browser, options: ShellOptions): Promis
       { timeout: 30_000 },
     );
     if ((await state.jsonValue()) !== 'ready') throw new Error('game bridge did not become ready');
+    if (options.scenario) {
+      /* An undeclared name boots the game from its title, so a capture of it would pass while showing the wrong moment. */
+      const declared = await page.evaluate(
+        () =>
+          (window as unknown as { __ogmHost?: { game?: { scenarios?: string[] } } }).__ogmHost?.game?.scenarios ?? [],
+      );
+      if (!declared.includes(options.scenario))
+        throw new Error(
+          `scenario "${options.scenario}" is not declared by this build (declared: ${declared.join(', ') || 'none'})`,
+        );
+    }
     console.error(`shell capture: game ready at ${size}`);
     return { context, page, errors };
   } catch (error) {

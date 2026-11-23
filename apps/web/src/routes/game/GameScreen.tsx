@@ -87,6 +87,8 @@ type GameTestState = {
   selection: string[];
   dropped: number;
   readOnly: boolean;
+  /** The scenarios the running build declares (#1281); `gm look shell --scenario` checks its name against them. */
+  scenarios: readonly string[];
 };
 
 type TestHost = OgmHost & { game?: GameTestState };
@@ -526,6 +528,7 @@ export function GameScreen() {
     selection: sessionView?.selection ?? [],
     dropped: frameState.dropped,
     readOnly: sessionView?.readOnly ?? false,
+    scenarios: frameState.manifest?.scenarios ?? [],
   };
   const testStateRef = useRef(testState);
   testStateRef.current = testState;
@@ -729,7 +732,9 @@ export function GameScreen() {
 
   const gameStage = (
     <div className="game-stage-area" data-edit-frame={mode === 'edit' ? '' : undefined}>
-      {mode === 'edit' && <SceneStrip gameId={gameId} scenarios={frameState.manifest?.scenarios} />}
+      {mode === 'edit' && (
+        <SceneStrip gameId={gameId} build={runningBuildId} scenarios={frameState.manifest?.scenarios} />
+      )}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
         {mode === 'play' && frameController !== undefined ? (

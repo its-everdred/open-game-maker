@@ -157,4 +157,18 @@ describe('declared scenarios', () => {
     );
     expect(screen.getByRole('button', { name: 'Goo chain, changed by an agent' })).toBeVisible();
   });
+
+  it('keeps a build’s scenarios while it reloads, and drops them for another build', async () => {
+    const strip = (build: string, scenarios?: string[]) => (
+      <MemoryRouter initialEntries={['/g/blobs?mode=edit']}>
+        <SceneStrip gameId="blobs" build={build} scenarios={scenarios} />
+      </MemoryRouter>
+    );
+    const { rerender } = render(strip('b1', ['goo-chain']));
+    await act(async () => {});
+    rerender(strip('b1'));
+    expect(screen.getByRole('button', { name: 'Goo chain, changed by an agent' })).toBeVisible();
+    rerender(strip('b2'));
+    expect(screen.queryByRole('button', { name: 'Goo chain, changed by an agent' })).toBeNull();
+  });
 });

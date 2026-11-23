@@ -49,7 +49,7 @@ export function captureScratch(cwd: string, base = tmpdir()): { path: string; lo
 export const command: GmCommand = {
   name: 'look shell',
   summary: 'capture a local game in the real app shell with mocked sign-in',
-  usage: "--dist <game dist> --out <directory> [--scenario <name> | --tap 'Play>Endless'] [--edit] [--mp4]",
+  usage: "--dist <game dist> --out <directory> [--scenario <name>] [--tap 'Play>Endless'] [--edit] [--mp4]",
   flags: {
     dist: { type: 'string', help: 'built game directory' },
     out: { type: 'string', help: 'output directory' },
@@ -82,7 +82,8 @@ export const command: GmCommand = {
       throw new UsageError('invalid play-area limits', 'gm help look shell');
     const scenario = typeof flags.scenario === 'string' ? flags.scenario : '';
     if (scenario && !SCENARIO_NAME.test(scenario)) throw new UsageError('invalid scenario name', 'gm help look shell');
-    const tap = flags.tap ?? (config === false ? undefined : config.tap);
+    /* A scenario starts past the title, so the configured journey from the title would tap the wrong screen. */
+    const tap = flags.tap ?? (scenario || config === false ? undefined : config.tap);
     const taps = typeof tap === 'string' ? tap.split('>').map((text) => text.trim()) : [];
     if (taps.some((text) => !text)) throw new UsageError('empty tap target', 'gm help look shell');
     const dist = resolve(ctx.cwd, flags.dist);

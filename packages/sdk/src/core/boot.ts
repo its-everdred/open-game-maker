@@ -11,7 +11,7 @@ import { createNetController } from '../net/index.js';
 import { createSaveMachine, type SaveMachine } from '../saves/machine.js';
 import { createSaveThumbnailCache } from '../saves/thumbnail.js';
 import { installQa } from './qa.js';
-import { startScenario } from './scenarios.js';
+import { declaredScenarios, startScenario } from './scenarios.js';
 import { dispatchTest } from '../test/dispatch.js';
 import { SdkHooks } from '../test/hooks.js';
 
@@ -57,7 +57,7 @@ function readyManifest<D, S>(
   instance: GameInstance<D, S>,
   inScenario: boolean,
 ): GameManifest {
-  const names = Object.keys(module.scenarios ?? {});
+  const names = declaredScenarios(module);
   const manifest: GameManifest = names.length ? { ...module.manifest, scenarios: names } : module.manifest;
   /* A scenario run is a slice, not the player's game: the host neither restores nor keeps its saves. */
   if (inScenario) return { ...manifest, saves: false, manualSaveSlots: false };

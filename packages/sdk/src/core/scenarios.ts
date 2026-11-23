@@ -10,6 +10,24 @@ export function scenarioSeed(name: string): number {
   return hash >>> 0;
 }
 
+/** The most scenarios a ready manifest lists (`gameManifestSchema.scenarios`). */
+const MAX_LISTED = 64;
+
+/**
+ * The scenario names a build reports in its ready manifest. A name the host would reject is left out and logged, or the
+ * whole ready message fails validation and the game never connects.
+ */
+export function declaredScenarios<D, S>(module: GameModule<D, S>): string[] {
+  const names = Object.keys(module.scenarios ?? {});
+  const valid = names.filter((name) => SCENARIO_NAME.test(name)).slice(0, MAX_LISTED);
+  const dropped = names.filter((name) => !valid.includes(name));
+  if (dropped.length)
+    console.error(
+      `scenarios not listed (names are lowercase a-z0-9_-, one optional '/', at most ${MAX_LISTED}): ${dropped.join(', ')}`,
+    );
+  return valid;
+}
+
 /**
  * The declared scenario `?scenario=` names, or undefined. A name the game does not declare is left to the game, which
  * may still read its own query (games written before `GameModule.scenarios`).

@@ -1,4 +1,5 @@
 import type { Envelope, HostToGame } from '@ogm/contracts';
+import { gameToHostSchema } from '@ogm/contracts/bridge';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { boot } from './boot.js';
@@ -76,6 +77,30 @@ describe('boot scenarios', () => {
     expect(manifest).toMatchObject({ saves: true, scenarios: ['wave-3'] });
     runtime.host.events.emit('checkpoint', { reason: 'test' });
     expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ t: 'save.write' }));
+    runtime.dispose();
+  });
+});
+
+/* A key the host's manifest schema rejects would fail the whole ready message, and the game would never connect. */
+describe('declared scenario names', () => {
+  it('lists only names the host accepts and still connects', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    window.history.replaceState(null, '', '/');
+    const { module } = createCounterGame();
+    const start = () => ({ saveSchemaVersion: 1, data: { counter: 0, entities: {}, players: [] } });
+    module.scenarios = { 'wave-3': start, bossFight: start };
+    bridge.send.mockReset();
+    const pending = boot(module, { hostOrigin: 'https://app.test', headless: true });
+    await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+    bridge.onMessage!(hello);
+    const runtime = await pending;
+    const ready = bridge.send.mock.calls
+      .map(([envelope]) => envelope as Envelope<string, unknown>)
+      .find((envelope) => envelope.t === 'ready')!;
+    expect(gameToHostSchema.safeParse(ready).success).toBe(true);
+    expect(ready.payload).toMatchObject({ manifest: { scenarios: ['wave-3'] } });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('bossFight'));
+    error.mockRestore();
     runtime.dispose();
   });
 });

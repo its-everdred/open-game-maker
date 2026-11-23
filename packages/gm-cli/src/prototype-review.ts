@@ -67,7 +67,8 @@ export function mergePrototypeReviews(reviews: readonly string[]): PrototypeRevi
     };
   }
   const visible = parsed.filter((item) => item.disposition === 'review');
-  const scenario = [...visible].reverse().find((item) => item.scenario)?.scenario;
+  /* The latest review's slice only: an older one may not exist in this build, and the latest may have dropped it. */
+  const scenario = visible.at(-1)?.scenario;
   return {
     disposition: parsed.some((item) => item.disposition === 'missing') ? 'missing' : 'review',
     works: [...new Set(visible.flatMap((item) => item.works))],

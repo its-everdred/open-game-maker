@@ -32,13 +32,13 @@ describe('prototype review summaries', () => {
   /* The published review embeds the slice the merged PRs reviewed, so it plays in place (#1281). */
   it('carries the latest Play link scenario into the merged review', () => {
     const review = (play: string) => `## Prototype review\nPlay: ${play}   Clip: clip.mp4\n**Works now:** walk`;
+    const older = review('https://app.example/g/g_1?mode=edit&build=b1&scenario=town%2Flantern-dusk');
+    const latest = review('https://app.example/g/g_1?mode=edit&build=b2&scenario=goo-wave-3');
+    expect(mergePrototypeReviews([older, latest]).scenario).toBe('goo-wave-3');
+    /* An older PR's slice is never published onto a build whose latest review names none. */
     expect(
-      mergePrototypeReviews([
-        review('https://app.example/g/g_1?mode=edit&build=b1&scenario=town%2Flantern-dusk'),
-        review('https://app.example/g/g_1?mode=edit&build=b2&scenario=goo-wave-3'),
-        review('https://app.example/g/g_1?mode=edit&build=b3'),
-      ]).scenario,
-    ).toBe('goo-wave-3');
+      mergePrototypeReviews([older, review('https://app.example/g/g_1?mode=edit&build=b3')]).scenario,
+    ).toBeUndefined();
     expect(parsePrototypeReview(review('https://app.example/g/g_1?build=b1&scenario=../x')).scenario).toBeUndefined();
   });
 
