@@ -187,9 +187,10 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
           updatedAt: at,
         })
         .run();
-      // The edit chat's first message becomes the job (its plan and its ticket body), so it is also the conversation's
-      // first message: stored with the job, already delivered by the ticket (#1270).
-      if (request.idempotencyKey?.startsWith('edit:') || request.idempotencyKey?.startsWith('voice-edit:')) {
+      // The typed edit chat's first message becomes the job (its plan and its ticket body), so it is also the
+      // conversation's first message: stored with the job, already delivered by the ticket (#1270). A voice edit's
+      // opening turn is stored in full by the voice transcript, so it gets no row here.
+      if (request.idempotencyKey?.startsWith('edit:')) {
         insertChatRow(deps.sqlite, {
           jobId: id,
           at,
