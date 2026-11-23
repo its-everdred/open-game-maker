@@ -40,7 +40,8 @@ export function SceneStrip({
     if (scenarios?.length) setDeclared({ build, names: scenarios });
   }, [build, scenarios]);
   const scenes = [...loaded, ...scenarioCards(declared.build === build ? declared.names : [], loaded)];
-  const [shown, setShown] = useState(true);
+  /** The chips start hidden behind the map button (Kevin, #1191). */
+  const [shown, setShown] = useState(false);
   const strip = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let current = true;
