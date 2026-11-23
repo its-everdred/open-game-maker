@@ -382,7 +382,8 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
           try {
             link.apply(envelope.payload.doc, envelope.payload.weather);
           } catch (error) {
-            send('error', { code: 'apply_failed', message: String(error) }, envelope.id);
+            /* The scene keeps the document it had: an editor slip, not a broken game. */
+            send('error', { code: 'hd2d_rejected', message: String(error) }, envelope.id);
           }
           return;
         }

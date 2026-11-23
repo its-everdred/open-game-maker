@@ -102,6 +102,8 @@ describe('Hd2dPanel', () => {
     fireEvent.click([...gate.querySelectorAll('button')].find((button) => button.textContent === 'Rain')!);
     nextFrame();
     expect(apply.mock.lastCall![0].lighting.shafts.when.weather).toEqual(['clear', 'rain']);
+    /* Still raining: the game has not reported the new weather yet, and the edit must not switch it back. */
+    expect(apply.mock.lastCall![1]).toBe('rain');
   });
 
   it('switches cloud shadows on with a default look and off again', () => {
@@ -119,15 +121,15 @@ describe('Hd2dPanel', () => {
   });
 
   // Save keeps what Kevin tuned; after it, Reset returns to the saved look, not the one the scene booted with.
-  it('saves the tuned document and makes it the look Reset returns to', () => {
+  it('saves the tuned document and makes it the look Reset returns to', async () => {
     const apply = vi.fn();
-    const onSave = vi.fn(() => true);
+    const onSave = vi.fn(async () => true);
     render(<Hd2dPanel report={{ doc: scene() }} apply={apply} onSave={onSave} />);
     fireEvent.click(screen.getByRole('button', { name: 'Lighting' }));
     expect(screen.getByRole('button', { name: 'Save lighting' })).toHaveProperty('disabled', true);
     fireEvent.change(slider('Beams'), { target: { value: '9' } });
     nextFrame();
-    fireEvent.click(screen.getByRole('button', { name: 'Save lighting' }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save lighting' })));
     expect(onSave).toHaveBeenCalledOnce();
     expect((onSave.mock.calls[0] as unknown as [Hd2dDoc])[0].lighting.shafts!.count).toBe(9);
     expect(screen.getByRole('button', { name: 'Save lighting' })).toHaveProperty('disabled', true);
@@ -139,11 +141,25 @@ describe('Hd2dPanel', () => {
     expect(apply.mock.lastCall![0].lighting.shafts.count).toBe(9);
   });
 
-  it('keeps Save available when the save could not be sent', () => {
-    render(<Hd2dPanel report={{ doc: scene() }} apply={vi.fn()} onSave={() => false} />);
+  it('keeps Save available when the save could not be sent', async () => {
+    render(<Hd2dPanel report={{ doc: scene() }} apply={vi.fn()} onSave={async () => false} />);
     fireEvent.click(screen.getByRole('button', { name: 'Lighting' }));
     fireEvent.change(slider('Beams'), { target: { value: '9' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save lighting' }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save lighting' })));
     expect(screen.getByRole('button', { name: 'Save lighting' })).toHaveProperty('disabled', false);
+  });
+
+  // After a save the agent rebuilds and the frame remounts: the new game reports the saved look, which the panel sent.
+  it('comes back after the game remounts with a document it sent before', () => {
+    const apply = vi.fn();
+    const { rerender } = render(<Hd2dPanel report={{ doc: scene() }} apply={apply} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Lighting' }));
+    fireEvent.change(slider('Beams'), { target: { value: '9' } });
+    nextFrame();
+    const saved = apply.mock.lastCall![0];
+    rerender(<Hd2dPanel apply={apply} />);
+    rerender(<Hd2dPanel report={{ doc: saved }} apply={apply} />);
+    expect(slider('Beams')).toHaveProperty('value', '9');
+    expect(screen.getByRole('button', { name: 'Reset lighting' })).toHaveProperty('disabled', true);
   });
 });

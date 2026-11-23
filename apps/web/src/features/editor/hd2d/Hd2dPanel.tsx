@@ -37,7 +37,7 @@ export function Hd2dPanel({
   report?: Hd2dReport;
   apply?: (doc: Hd2dDoc, weather?: string) => void;
   /** Keeps the tuned document; `false` when it could not be sent, so Reset still returns to the last kept look. */
-  onSave?: (doc: Hd2dDoc) => boolean;
+  onSave?: (doc: Hd2dDoc) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>('shafts');
@@ -55,6 +55,8 @@ export function Hd2dPanel({
     const doc = report?.doc as Hd2dDoc | null | undefined;
     setWeather(report?.weather);
     if (!doc) {
+      /* The game went away (a rebuild, another scenario): whatever it reports next is a fresh scene. */
+      recent.current = [];
       setDraft(undefined);
       setKept(undefined);
       return;
@@ -79,6 +81,8 @@ export function Hd2dPanel({
   /* One send per frame however fast a slider moves; the last value always goes. */
   const push = (doc: Hd2dDoc, preview = weather) => {
     setDraft(doc);
+    /* A previewed weather holds for the next edits, before the game's report confirms it. */
+    setWeather(preview);
     queued.current = { doc, weather: preview };
     if (frame.current !== undefined) return;
     frame.current = requestAnimationFrame(() => {
@@ -140,7 +144,8 @@ export function Hd2dPanel({
               aria-label="Save lighting"
               disabled={kept !== undefined && sameDoc(kept, draft)}
               onClick={() => {
-                if (onSave(draft)) setKept(draft);
+                const saved = draft;
+                void onSave(saved).then((sent) => sent && setKept(saved));
               }}
             >
               <Icon name="check" />

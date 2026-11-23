@@ -121,6 +121,14 @@ describe('HD-2D controls', () => {
     });
   });
 
+  // three.js lights are in world units: a radius of 2 must not jump to the pixel scale's minimum of 10.
+  it('ranges a light reach in the scene units', () => {
+    const doc = field();
+    doc.lighting.lights![0]!.radius = 2;
+    expect(control(doc, 'light-0-radius')).toMatchObject({ min: 0.1, max: 9.9, value: 2 });
+    expect(control(field(), 'light-0-radius')).toMatchObject({ min: 10, max: 1000, value: 260 });
+  });
+
   it('treats the same fields in another key order as the same document', () => {
     expect(sameDoc({ a: 1, b: { c: 2, d: [1, 2] } }, { b: { d: [1, 2], c: 2 }, a: 1 })).toBe(true);
     expect(sameDoc({ a: 1, b: [1, 2] }, { a: 1, b: [2, 1] })).toBe(false);

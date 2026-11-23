@@ -97,7 +97,7 @@ describe('boot HD-2D link', () => {
     const hd2d = fakeHd2d({ doc: { version: 1 } });
     const runtime = await start();
     bridge.onMessage!(message('hd2d.apply', { doc: 'bad' }));
-    expect(sent('error').at(-1)).toMatchObject({ payload: { code: 'apply_failed' }, replyTo: `host-${id}` });
+    expect(sent('error').at(-1)).toMatchObject({ payload: { code: 'hd2d_rejected' }, replyTo: `host-${id}` });
     hd2d.unlink();
     bridge.onMessage!(message('hd2d.apply', { doc: { version: 1 } }));
     expect(sent('error').at(-1)).toMatchObject({ payload: { code: 'unsupported' }, replyTo: `host-${id}` });

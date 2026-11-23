@@ -296,23 +296,33 @@ export function GameScreen() {
     mode,
   ]);
   const submitEditRequest = useCallback(
-    (request: CreateJobRequest) => {
+    /** `onDone` hears whether the job was admitted. */
+    (request: CreateJobRequest, onDone?: (sent: boolean) => void) => {
       if (request.branchId !== 'main') {
         pushToast('Changes to this version stay in the preview.');
+        onDone?.(false);
         return;
       }
-      if (fallbackInFlight.current) return;
+      if (fallbackInFlight.current) {
+        onDone?.(false);
+        return;
+      }
       fallbackInFlight.current = true;
       void admitJob(request)
         .then((result) => {
           if (result.kind === 'refused') {
             pushToast(energyRefusalText(result.window) ?? 'The build could not be started.');
+            onDone?.(false);
             return;
           }
+          onDone?.(true);
           void queryClient.invalidateQueries({ queryKey: gameJobsQueryKey(gameId) });
           void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
         })
-        .catch(() => pushToast('The build could not be started.'))
+        .catch(() => {
+          pushToast('The build could not be started.');
+          onDone?.(false);
+        })
         .finally(() => {
           fallbackInFlight.current = false;
         });
@@ -333,21 +343,22 @@ export function GameScreen() {
     [gameId, jobBranch, submitEditRequest],
   );
   const saveLighting = useCallback(
-    (doc: Hd2dDoc) => {
-      let request: CreateJobRequest;
-      try {
-        request = hd2dSaveRequest(
-          { gameId, branchId: jobBranch },
-          { scene: searchParams.get('scene') ?? scenario ?? undefined, doc },
-          `edit:${crypto.randomUUID()}`,
-        );
-      } catch {
-        pushToast('This lighting is too large to save.');
-        return false;
-      }
-      submitEditRequest(request);
-      return request.branchId === 'main';
-    },
+    (doc: Hd2dDoc) =>
+      new Promise<boolean>((resolve) => {
+        let request: CreateJobRequest;
+        try {
+          request = hd2dSaveRequest(
+            { gameId, branchId: jobBranch },
+            { scene: searchParams.get('scene') ?? scenario ?? undefined, doc },
+            `edit:${crypto.randomUUID()}`,
+          );
+        } catch {
+          pushToast('This lighting is too large to save.');
+          resolve(false);
+          return;
+        }
+        submitEditRequest(request, resolve);
+      }),
     [gameId, jobBranch, scenario, searchParams, submitEditRequest],
   );
   const requestFallbackPlacement = useCallback(

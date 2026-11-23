@@ -197,7 +197,8 @@ export function lightSliders(doc: Hd2dDoc): Slider[] {
       slider(
         `light-${index}-radius`,
         `${name} reach`,
-        [10, 1000, 10],
+        /* Lights are in the scene's units: Phaser pixels, or three.js world units for a small radius. */
+        light.radius < 10 ? [0.1, 9.9, 0.1] : [10, 1000, 10],
         light.radius,
         at((target, value) => void (target.radius = value)),
       ),

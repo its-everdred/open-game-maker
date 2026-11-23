@@ -111,6 +111,8 @@ export function createHd2d(target: Hd2dTarget, config: Hd2dSceneConfig, options:
     'three' in target ? { three: target.three } : { phaser: { scene: target.phaser.scene } };
   const core = createLighting(lightingTarget, scene.lighting, { quality, seed });
   let conditions: SkyConditions = {};
+  /* The editor sees the document as set, not a gust the game sent through `setWind`. */
+  let authored = scene;
   /* The editor shows the weather the game set, so the facade keeps track of it. */
   const lighting: Lighting = {
     ...core,
@@ -154,11 +156,11 @@ export function createHd2d(target: Hd2dTarget, config: Hd2dSceneConfig, options:
         ...scene,
         particles: { ...scene.particles, wind: { direction: [...direction], strength, seed: windSeed } },
       };
-      link.changed();
     },
     applyScene(next) {
       const previous = scene;
       scene = parseHd2dScene(next);
+      authored = scene;
       lighting.apply(scene.lighting);
       // A renamed, late-spawned or respawned hero rebinds focus; the same document re-applied repairs a stale one.
       if (findHero(scene.focus.hero) !== boundHero) {
@@ -190,7 +192,7 @@ export function createHd2d(target: Hd2dTarget, config: Hd2dSceneConfig, options:
     },
   };
   const link = linkHd2d({
-    state: () => ({ doc: scene, ...conditions }),
+    state: () => ({ doc: authored, ...conditions }),
     apply(doc, weather) {
       hd2d.applyScene(parseHd2dScene(doc));
       if (weather !== undefined && weather !== conditions.weather) lighting.setConditions({ ...conditions, weather });

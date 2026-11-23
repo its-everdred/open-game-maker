@@ -323,8 +323,8 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       onSaveWrite: options.onSaveWrite,
       onEvent: options.onEvent,
       onError: (failure) => {
-        /* The game declined an optional command (a camera mode, selection) and keeps running. */
-        if (failure.code === 'unsupported') return;
+        /* The game declined an optional command (a camera mode, selection) or an HD-2D edit, and keeps running. */
+        if (failure.code === 'unsupported' || failure.code === 'hd2d_rejected') return;
         /*
          * Only a `save.restore` dispatch answers `save_unsupported`, so this is a Load the build cannot read, not a
          * broken frame: report it to the pause dialog and leave the game running.

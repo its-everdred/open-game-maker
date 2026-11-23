@@ -40,7 +40,7 @@ function mount() {
   });
   options?.onReady?.({ id: 'blobs', title: 'Blobs', inputs: { actions: {} } } as GameManifest, []);
   const report = (payload: object) => listeners.get('hd2d.scene')?.(payload as never);
-  return { controller, frame, states, stops, report };
+  return { controller, frame, states, stops, report, options: options! };
 }
 
 // The lighting panel seeds itself from what the game really renders, so the report has to reach the page's state.
@@ -66,4 +66,11 @@ it('stops listening when the game exits', () => {
   const published = states.length;
   report({ doc: null });
   expect(states).toHaveLength(published);
+});
+
+// A document the game refuses leaves it running its old one: a slider slip must not show a broken game.
+it('keeps the game running when it rejects an HD-2D edit', () => {
+  const { controller, options } = mount();
+  options.onError?.({ code: 'hd2d_rejected', message: 'invalid HD-2D scene' } as never);
+  expect(controller.state().bridgeState).toBe('ready');
 });

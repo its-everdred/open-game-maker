@@ -192,6 +192,14 @@ describe('createHd2d', () => {
     expect(linkedHd2d()).toBeUndefined();
   });
 
+  // A gust the game sends is not Kevin's document: reporting it would reset his panel mid-drag.
+  it('reports the document as set, not a wind gust the game sent', () => {
+    const hd2d = createHd2d(threeTarget().target, HD2D_FOREST_DEFAULTS);
+    hd2d.setWind({ strength: 3 });
+    expect(linkedHd2d()!.state().doc).toEqual(HD2D_FOREST_DEFAULTS);
+    hd2d.dispose();
+  });
+
   it('leaves the newer scene linked when an older one shuts down after it', () => {
     const older = createHd2d(threeTarget().target, HD2D_FOREST_DEFAULTS);
     const newer = createHd2d(threeTarget().target, {
