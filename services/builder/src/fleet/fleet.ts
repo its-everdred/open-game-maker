@@ -87,6 +87,9 @@ export function createFleet(deps: FleetDeps) {
   }
 
   const isStale = (row: DaemonRow) => row.status === 'starting' && !starting.has(row.slug);
+  // An operator-registered daemon (`gm games register`) runs from its own checkout under its own unit; the fleet only
+  // renders, starts and stops the daemons it made under its own directory.
+  const isRegistered = (row: DaemonRow) => row.checkoutPath !== daemonPaths(env.home, row.slug).dir;
 
   function clientFor(row: DaemonRow, token: string): AiurClient {
     return createAiurClient({ baseUrl: `http://127.0.0.1:${row.port}`, token }, deps.fetch);
@@ -133,6 +136,13 @@ export function createFleet(deps: FleetDeps) {
     const existing = await store.bySlug(slug);
     if (existing) return existing.repo === repo ? existing : store.update(slug, { repo });
     const rows = await store.list();
+    // A game registered into a repository whose daemon is already registered shares that daemon and has no row of its
+    // own; a new row here would put a second, empty daemon beside it and re-point the game at it (#1270).
+    const registered = rows.filter((row) => row.repo === repo && isRegistered(row));
+    if (registered.length > 1) {
+      throw new Error(`${repo} has ${registered.length} registered daemons; cannot choose one for ${slug}`);
+    }
+    if (registered[0]) return registered[0];
     const paths = daemonPaths(env.home, slug);
     const row: DaemonRow = {
       slug,
@@ -256,6 +266,14 @@ export function createFleet(deps: FleetDeps) {
 
   async function claim(key: DaemonKey, kind: JobKind): Promise<Claim> {
     let row = await rowFor(key);
+    if (isRegistered(row)) {
+      return {
+        done: {
+          status: 'stopped',
+          reasons: [`${key.slug} uses the registered daemon ${row.slug} (${row.unit}), which the fleet does not run`],
+        },
+      };
+    }
     if (isStale(row)) row = await setStatus(row, 'stopped');
     const shape = jobShape(kind, await activeJobs(row.slug));
 
@@ -307,6 +325,7 @@ export function createFleet(deps: FleetDeps) {
     prepareDaemonDir(key: DaemonKey, kind: JobKind): Promise<void> {
       return locked(async () => {
         const row = await rowFor(key);
+        if (isRegistered(row)) return;
         const rendered = await render(row, kind, await store.list());
         await writeDaemonSecrets(rendered.paths, env, rendered.input.codexHome as string);
       });

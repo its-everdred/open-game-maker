@@ -216,6 +216,28 @@ describe('ensureDaemon', () => {
     },
   );
 
+  // #1270: Dusk Helm shares the operator-registered open-games daemon. A job for it once inserted a second row and
+  // an empty daemon directory, which re-pointed every lookup for the game away from its real checkout.
+  it('never provisions a daemon for a game that shares its repository’s registered daemon', async () => {
+    const home = await tempHome();
+    const checkout = join(home, 'games/open-games');
+    const shared = liveRow(1, 'running', { slug: 'blobs', repo: 'owner/open-games', checkoutPath: checkout });
+    const store = memoryStore([shared]);
+    const { fleet, runner } = buildFleet(home, { store, preflight: okPreflight });
+
+    await expect(fleet.ensureDaemon({ slug: 'dusk-helm', repo: 'owner/open-games' }, 'feature')).resolves.toEqual({
+      status: 'stopped',
+      reasons: [`dusk-helm uses the registered daemon blobs (${shared.unit}), which the fleet does not run`],
+    });
+    await fleet.prepareDaemonDir({ slug: 'dusk-helm', repo: 'owner/open-games' }, 'feature');
+
+    expect([...store.rows.keys()]).toEqual(['blobs']);
+    expect(store.rows.get('blobs')).toMatchObject({ checkoutPath: checkout, status: 'running' });
+    await expect(lstat(join(home, '.local/share/ogm/daemons/dusk-helm'))).rejects.toThrow(/ENOENT/);
+    await expect(lstat(join(home, '.local/share/ogm/daemons/blobs'))).rejects.toThrow(/ENOENT/);
+    expect(runner.calls).toEqual([]);
+  });
+
   it('refuses a fifth daemon with waiting_capacity while four are live, without touching systemd', async () => {
     const home = await tempHome();
     const store = memoryStore([liveRow(1), liveRow(2, 'idle'), liveRow(3), liveRow(4)]);
