@@ -80,6 +80,24 @@ function checkout() {
           added: '2026-11-01',
           meta: { sprite: { drawn_view: 'iso', facings: { E: 'Chest A1_E.png', N: 'Chest A1_N.png' } } },
         },
+        {
+          id: GROUND,
+          path: 'ground.png',
+          source: 'vendored',
+          sha256: 'c'.repeat(64),
+          license: 'fixture',
+          rights: { uses: [], audience: 'private', redistribution: 'in-build', attribution: null },
+          added: '2026-11-01',
+        },
+        {
+          id: 't3:dusk-helm/sprites/unused',
+          path: 'unused.png',
+          source: 'vendored',
+          sha256: 'd'.repeat(64),
+          license: 'fixture',
+          rights: { uses: [], audience: 'private', redistribution: 'in-build', attribution: null },
+          added: '2026-11-01',
+        },
       ],
     }),
   );
@@ -145,7 +163,9 @@ describe('shared scene store', () => {
     const open = (await opened.json()) as { rev: number; doc: SceneDoc; author: string; sprites: unknown };
     // The first open starts the shared store from the repository's copy, history included.
     expect(open).toMatchObject({ rev: 1, author: 'agent:1208', doc: cave() });
+    // A game-made floor drawn once is drawn from its own file; a locked image the scene does not use is not offered.
     expect(open.sprites).toEqual({
+      [GROUND]: { facings: { E: `/api/v1/games/${ids.game}/scenery/assets/1/${'c'.repeat(64)}/ground.png` } },
       [CHEST]: {
         facings: {
           E: `/api/v1/games/${ids.game}/scenery/assets/0/${'a'.repeat(64)}/Chest%20A1_E.png`,

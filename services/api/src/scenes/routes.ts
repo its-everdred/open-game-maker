@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { SceneDocSchema, SceneIdSchema, type AssetsLock } from '@ogm/contracts';
+import { SceneDocSchema, SceneIdSchema, type AssetsLock, type SceneDoc } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { InvalidSceneError, SceneBaseUnavailableError } from '@ogm/design-log';
 
@@ -37,22 +37,39 @@ export async function sharedScene(
   return files ? seedScene(db, game.id, files, new Date()) : undefined;
 }
 
-/** Facing images of the game's locked iso sprites, served by the scenery asset route; the map maker draws with them. */
-export function spriteUrls(gameId: string, lock: AssetsLock): Record<string, { facings: Record<string, string> }> {
+/**
+ * Facing images of the game's locked iso sprites, served by the scenery asset route; the map maker draws with them. A
+ * piece the scene uses that was drawn once (a game-made image with no facings) is drawn from its own file.
+ */
+export function spriteUrls(
+  gameId: string,
+  lock: AssetsLock,
+  used: ReadonlySet<string> = new Set(),
+): Record<string, { facings: Record<string, string> }> {
   const sprites: Record<string, { facings: Record<string, string> }> = {};
+  const url = (index: number, sha256: string, path: string) =>
+    `${prefix}/games/${encodeURIComponent(gameId)}/scenery/assets/${index}/${sha256}/${path.split('/').map(encodeURIComponent).join('/')}`;
   lock.assets.forEach((entry, index) => {
     const sprite = entry.meta?.sprite;
-    if (sprite?.drawn_view !== 'iso' || !sprite.facings) return;
     const facings: Record<string, string> = {};
-    for (const [facing, path] of Object.entries(sprite.facings)) {
-      if (typeof path !== 'string') continue;
-      const encoded = path.split('/').map(encodeURIComponent).join('/');
-      facings[facing] =
-        `${prefix}/games/${encodeURIComponent(gameId)}/scenery/assets/${index}/${entry.sha256}/${encoded}`;
+    if (sprite?.drawn_view === 'iso' && sprite.facings) {
+      for (const [facing, path] of Object.entries(sprite.facings)) {
+        if (typeof path === 'string') facings[facing] = url(index, entry.sha256, path);
+      }
+    } else if (used.has(entry.id) && entry.path.toLowerCase().endsWith('.png')) {
+      facings.E = url(index, entry.sha256, entry.path);
     }
     if (Object.keys(facings).length > 0) sprites[entry.id] = { facings };
   });
   return sprites;
+}
+
+/** Every asset a scene draws. */
+function usedAssets(doc: SceneDoc): Set<string> {
+  return new Set([
+    ...Object.values(doc.layers).flatMap((layer) => Object.values(layer.tiles ?? {}).map((tile) => tile.asset)),
+    ...Object.values(doc.objects).map((object) => object.asset),
+  ]);
 }
 
 const SaveSchema = z.strictObject({
@@ -72,7 +89,11 @@ export default new Hono<ApiBindings>()
     let sprites: ReturnType<typeof spriteUrls> = {};
     if (target) {
       try {
-        sprites = spriteUrls(c.req.param('gameId'), (await readGameLock(target.checkout, target.path)).lock);
+        sprites = spriteUrls(
+          c.req.param('gameId'),
+          (await readGameLock(target.checkout, target.path)).lock,
+          usedAssets(store.head.doc),
+        );
       } catch {
         /* A game with no readable lock opens with no pictures; its tiles still show as outlines. */
       }

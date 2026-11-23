@@ -55,6 +55,7 @@ import {
 } from '../../features/editor/transactions';
 import { api } from '../../lib/api/client';
 import { pushToast } from '../../lib/notify/slice';
+import { MapEditor } from '../../features/editor/map/MapEditor';
 import { DiagnosticsOverlay } from '../../net/diagnostics/DiagnosticsOverlay';
 import { RoomLayer } from '../../features/room/RoomLayer';
 import { useRoomRuntime } from '../../features/room/useRoomRuntime';
@@ -728,6 +729,9 @@ export function GameScreen() {
     },
   });
 
+  /** A scene document opened from the scene chips; the map maker covers the game while it is open (#1209). */
+  const openScene = searchParams.get('scene');
+  const [mapOpen, setMapOpen] = useState(false);
   const gameStage = (
     <div className="game-stage-area" data-edit-frame={mode === 'edit' ? '' : undefined}>
       {mode === 'edit' && (
@@ -735,6 +739,7 @@ export function GameScreen() {
       )}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
+        {mode === 'edit' && openScene ? <MapEditor gameId={gameId} scene={openScene} onOpen={setMapOpen} /> : null}
         {mode === 'play' && frameController !== undefined ? (
           <DiagnosticsOverlay
             enabled={searchParams.get('net') === '1'}
@@ -995,7 +1000,8 @@ export function GameScreen() {
         }}
         editor={editorChrome}
       />
-      {frameState.bridgeState === 'error' || designLoadFailed ? (
+      {/* The map maker edits the scene document, not the running build: a game that failed to load waits behind it. */}
+      {(frameState.bridgeState === 'error' || designLoadFailed) && !(mode === 'edit' && mapOpen) ? (
         <div className="screen-error" role="alert">
           <button
             className="tap-primary"
