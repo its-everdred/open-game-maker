@@ -35,12 +35,12 @@ const BOOT_MS = 110_000;
 export const command: GmCommand = {
   name: 'qa play-check',
   summary: 'play a published build in the production app shell at 390x844: first frame, tap path, one input',
-  usage: '<game id> <build id> --out <dir> [--web-dist <dir>] [--cpu-throttle <n>] [--timeout 170]',
+  usage: '<game id> <build id> --out <dir> [--web-dist <dir>] [--stall <seconds>] [--timeout 170]',
   example: 'qa play-check g_123 build_456 --out assets-local/review/app/play-check/blobs',
   flags: {
     out: { type: 'string', help: 'stills and play-check.json' },
     'web-dist': { type: 'string', help: "serve the shell from this web build instead of production's (replays)" },
-    'cpu-throttle': { type: 'number', default: 1, help: 'slow the page CPU n times, as a slower phone (replays)' },
+    stall: { type: 'number', default: 0, help: "hold the game's load reports this long, as a busy phone (replays)" },
     timeout: { type: 'number', default: 170, help: 'total timeout in seconds' },
   },
   async run(ctx, args, flags) {
@@ -51,9 +51,9 @@ export const command: GmCommand = {
     if (typeof flags.out !== 'string') throw new UsageError('--out is required', 'gm help qa play-check');
     const timeout = flags.timeout as number;
     if (!Number.isFinite(timeout) || timeout <= 0) throw new UsageError('invalid timeout', 'gm help qa play-check');
-    const throttle = flags['cpu-throttle'] as number;
-    if (!Number.isFinite(throttle) || throttle < 1 || throttle > 20)
-      throw new UsageError('--cpu-throttle must be between 1 and 20', 'gm help qa play-check');
+    const stall = flags.stall as number;
+    if (!Number.isFinite(stall) || stall < 0 || stall > 60)
+      throw new UsageError('--stall must be between 0 and 60 seconds', 'gm help qa play-check');
     const webDist = typeof flags['web-dist'] === 'string' ? resolve(ctx.cwd, flags['web-dist']) : undefined;
     if (webDist && !existsSync(join(webDist, 'index.html')))
       throw new UsageError('--web-dist has no index.html', 'gm help qa play-check');
@@ -144,10 +144,8 @@ export const command: GmCommand = {
         serviceWorkers: 'block',
       });
       await context.addCookies([{ name: qa.OGM_QA_SESSION_COOKIE_NAME, value: qa.OGM_QA_SESSION_COOKIE, url: app }]);
-      await context.addInitScript(installPlayTrace);
+      await context.addInitScript(installPlayTrace, stall * 1000);
       const page = await context.newPage();
-      if (throttle > 1)
-        await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: throttle });
       page.on('pageerror', (error) => errors.push(`pageerror: ${error.message.slice(0, 300)}`));
       const prefix = `/api/v1/games/${gameId}`;
       const title = manifest.title ?? gameId;

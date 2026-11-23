@@ -171,26 +171,29 @@ export async function changedShare(before: Buffer, after: Buffer): Promise<numbe
  * Runs in the shell page before its scripts: records the bridge's message types in both directions (the bridge talks
  * over a MessagePort; the game's hello arrives on the window). Other ports (React's scheduler) carry no `t` and are
  * skipped. Self-contained: Playwright serializes it into the page.
+ *
+ * `stallMs` (replays only) holds the game's load reports after its first one for that long, then delivers them in
+ * order: the silence Blobs leaves while it compiles shaders on a loaded phone (#1267), on demand.
  */
-export function installPlayTrace(): void {
+export function installPlayTrace(stallMs = 0): void {
   const host = window as unknown as { __playTrace?: PlayTraceEntry[] };
   const trace: PlayTraceEntry[] = (host.__playTrace = []);
   const start = performance.now();
-  const note = (dir: PlayTraceEntry['dir'], data: unknown) => {
+  const note = (dir: PlayTraceEntry['dir'], data: unknown): string | undefined => {
     let type: unknown;
     try {
       type = (typeof data === 'string' ? (JSON.parse(data) as { t?: unknown }) : (data as { t?: unknown } | null))?.t;
     } catch {
-      return;
+      return undefined;
     }
-    if (typeof type !== 'string') return;
+    if (typeof type !== 'string') return undefined;
     const last = trace[trace.length - 1];
-    if (last && last.dir === dir && last.t === type) {
-      last.n += 1;
-      return;
-    }
-    if (trace.length < 300) trace.push({ ms: Math.round(performance.now() - start), dir, t: type, n: 1 });
+    if (last && last.dir === dir && last.t === type) last.n += 1;
+    else if (trace.length < 300) trace.push({ ms: Math.round(performance.now() - start), dir, t: type, n: 1 });
+    return type;
   };
+  let stallUntil: number | undefined;
+  const held: (() => unknown)[] = [];
   const post = MessagePort.prototype.postMessage;
   MessagePort.prototype.postMessage = function (this: MessagePort, ...args: Parameters<MessagePort['postMessage']>) {
     note('out', args[0]);
@@ -207,8 +210,22 @@ export function installPlayTrace(): void {
         this,
         typeof handler === 'function'
           ? function (this: MessagePort, event: MessageEvent) {
-              note('in', event.data);
-              return (handler as (event: MessageEvent) => unknown).call(this, event);
+              const type = note('in', event.data);
+              const deliver = () => (handler as (event: MessageEvent) => unknown).call(this, event);
+              if (stallMs > 0 && type?.startsWith('load.')) {
+                // The first report arms the shell's stall timer; the silence starts after it.
+                if (stallUntil === undefined) {
+                  stallUntil = performance.now() + stallMs;
+                  return deliver();
+                }
+                if (held.length || performance.now() < stallUntil) {
+                  if (!held.length)
+                    setTimeout(() => held.splice(0).forEach((release) => release()), stallUntil - performance.now());
+                  held.push(deliver);
+                  return undefined;
+                }
+              }
+              return deliver();
             }
           : handler,
       );
