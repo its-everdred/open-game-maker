@@ -4,7 +4,7 @@ beats (wind-up, strike, recovery) land and which do not.
 
 Usage: pose_overlay.py <out.png> <pack_sheet.png> <cell_dir> ... [--rows 1,2] [--zoom 3]
 Each cell row is labelled with its name and mean IoU; a loop's frames start at its scored phase (scores.json).
-Writes <out.png> and <out>.json (per-frame IoU per cell and row).
+Writes <out.png> and <out>.json (per-frame IoU per cell path and row).
 """
 import argparse
 import json
@@ -46,13 +46,15 @@ def main():
     z, cell, label_w = a.zoom, CROP[2] - CROP[0], 260
     f = font(13)
     lines, report = [], {}
+    if len({str(c) for c in a.cells}) != len(a.cells):
+        ap.error('a cell is listed twice')
     for c in a.cells:
         shift = json.loads((c / 'scores.json').read_text()).get('phase_shift', 0)
-        report[c.name] = {}
+        report[str(c)] = {}
         for r in rows:
             ims, ious = overlay([im.crop(CROP) for im in frames(a.pack, r)],
                                 [im.crop(CROP) for im in frames(c / 'out/sheet.png', r, shift)])
-            report[c.name][str(r)] = ious
+            report[str(c)][str(r)] = ious
             lines.append((f'{c.name} row {r}', f'mean IoU {np.mean(ious):.2f}', ims, ious))
     W, H = label_w + 15 * cell * z, len(lines) * (cell * z + 18)
     sheet = Image.new('RGB', (W, H), BG)

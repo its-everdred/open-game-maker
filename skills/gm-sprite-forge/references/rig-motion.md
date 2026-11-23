@@ -1,7 +1,8 @@
 # Rig and motion (hero Stage 2, #1202)
 
 How a TRELLIS character mesh becomes an animated sprite sheet judged against the pack's own animation. Everything runs
-locally on the CPU, costs nothing and sends nothing to a cloud service.
+locally on the CPU, costs nothing and sends nothing to a cloud service, except a vendor rig (see Rigged bodies), which
+is a paid fal call the creator approves first and which uploads only our own mesh, never a pack file.
 
 **Gate.** Animation waits behind an approved static sprite (SKILL.md). The one exception is the #1202 ticket's: the
 tooling may be built and debugged on an existing mesh as a test subject, with no creator review of the result. Only an
@@ -105,7 +106,7 @@ loop, none for an attack, in pixels at the pack cell.
   `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`, `mask_s`, `mask_v` (`mask=1` is added
   for you when `pixel.cloth` is set). Use the pack class's Stage 1 values
   for `height_px` and `origin_row` (Warrior 43 and 88).
-- `motion`: `kind` is `kaykit`, `bvh`, `handkey` or `none`. `loop` defaults to true for a walk and false for an attack.
+- `motion`: `kind` is `kaykit`, `bvh`, `handkey` or `none` (`own` and `copy` for a rigged cell, below). `loop` defaults to true for a walk and false for an attack.
   `foot_ik` defaults to true (false copies rotations only). `frames: [f0, f1]` overrides the automatic cut. For an
   attack BVH, `seconds` (1.1) and `fps` (30; CMU is 120) size the window.
 - Hand-keyed `params`: walk `stride`, `lift`, `bob`, `sway` (fractions of leg length), `yaw`, `lean`, `arm` (degrees),
@@ -137,7 +138,8 @@ when `pixel.cloth` needs them and the cell lacks them. It refuses a cell whose m
 
 ## Rigged bodies (#1282 bake-off)
 
-A cell with `rigged` skips steps 1-5: the body arrives rigged (a vendor rig such as Meshy or Hyper3D, or a library
+A cell with `rigged` skips steps 1-5 (the top-level `mesh` and `pack` are still required; `recipe.json` names the
+rigged file as the cell's mesh): the body arrives rigged (a vendor rig such as Meshy or Hyper3D, or a library
 character such as the Quaternius mannequin) and nothing of ours touches the motion but the sampling.
 
 ```json
@@ -148,14 +150,18 @@ character such as the Quaternius mannequin) and nothing of ours touches the moti
  "weapon": {"path": "<axe>.gltf", "bone": "mixamorig:RightHand", "length": 0.75}}
 ```
 
+- `action` is the action's name, or a part of it that only one action contains (importers add `_Armature`); an
+  ambiguous or missing name fails. `colour` (linear RGB) paints an untextured library mannequin flat so the skin pass
+  has skin to match.
 - `kind: own` plays the file's action as delivered. `kind: copy` (with `path`, `action` or `frames`, `map`: target
   bone -> source bone, `src_hips`) is the plain retarget: each mapped bone takes its source bone's world rotation away
   from the source rest pose, applied to the target's rest bone first turned to point where the source rest bone
   points (a T-pose clip drives an A-pose body), and the hips take the source travel scaled by hip height. No stance,
   no foot lock, no IK. `in_place` removes a clip's straight-line travel and keeps its sway.
 - The body is turned to face -Y from its feet (heel to toe), the source of a copy from its first posed frame. The
-  weapon's roll is set so it points forward out of the fist at rest, and its `length` (sized for a 1.8 m body) is
-  scaled to the rig's height (Hyper3D's rig comes back about 1 m tall).
+  weapon's roll is set so it points forward out of the fist at rest (unless the cell gives `roll`), and its `length`
+  (sized for a 1.8 m body) is always scaled to the rig's height (Hyper3D's rig comes back about 1 m tall). A rigged
+  cell does not inherit the top-level `rotz`.
 - `sample`: `even` spreads the sheet's 15 frames over the clip (a loop leaves out its closing frame); `keys` holds
   key poses (`keys` source frames, `holds` sheet frames each, summing to 15) on the pack clip's beats, and may replay
   poses (a one-swing clip swung twice for the pack's two-swing Attack1); `times` gives every frame outright.
@@ -167,7 +173,17 @@ at $0.40 a call, not the model pages' $0.32 and $0.20; book the higher. Meshy (`
 `height_meters`, `enable_animation` with one `animation_action_id`) returns the rig, a walk, a run and the one library
 clip as GLB and FBX in about a minute; one clip per call. Hyper3D's `animation_urls` must already be on its own rig
 (it does not retarget them): our Quaternius and Bandai FBX clips were rejected with a 422, and its stock presets need
-ids from a catalog only a billed call reaches, so the rig alone was taken and played through `kind: copy`.
+ids from a catalog only a billed call reaches, so the rig alone was taken and played through `kind: copy`. Run one
+through the ledger, uploading only our own base-body mesh:
+
+```sh
+OGM_FAL_LEDGER=<costs.json> OGM_FAL_STOP_USD=<cap> gm py -- skills/gm-sprite-forge/scripts/fal3d.py run fal-ai/meshy/rigging \
+  <out>/gen 0.80 model_url=@<base body>.glb skeleton_template=mixamo height_meters=1.8 enable_animation=true animation_action_id=92
+```
+
+Check every cell frame by frame against the pack clip: `gm py -- skills/gm-sprite-forge/scripts/motion/pose_overlay.py
+<out.png> <pack sheet> <cell_dir> ... [--rows 1,2] [--zoom 3]` lays each frame's silhouette over the pack's (pack red,
+ours cyan, both white) and writes the per-frame IoU to `<out>.json`.
 
 ## Files stay local
 

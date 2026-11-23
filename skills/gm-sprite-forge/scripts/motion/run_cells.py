@@ -6,8 +6,9 @@ cells.json: {"mesh": glb, "rotz": deg, "pack": {"walk": sheet.png, "attack": she
              "pixel": {"colours": 8, "cloth": 6, "smooth": true} (pack-style pixel finish after the colour pass;
                        "cloth" renders a cloth mask and gives the undergarments their own colours),
              "render": {key: value, ...}, "cells": [{"name", "clip": "walk"|"attack", "motion": {...}, "weapon": {...}}]}
-A cell with "rigged" (rigged.py: a body that arrives rigged) skips the fit; its "model", "cost_usd" and "rotz" override
-the top level's for its recipe.
+A cell with "rigged" (rigged.py: a body that arrives rigged) skips the fit and faces itself from its feet (its own
+"rotz", default 0, turns it further); its "model", "cost_usd" and "licence" override the top level's for its recipe.
+The top-level "mesh" is still required.
 Each cell gets <out_root>/<name>/ with raw frames, out/sheet.png and scores.json; a summary table is printed.
 --rescore keeps each cell's render and runs only the finish and scoring again (a new colour or pixel finish).
 """
@@ -44,7 +45,7 @@ def write_recipe(d, spec, c, scores):
            'cost_usd': c.get('cost_usd', spec.get('cost_usd', 0.0)),
            'skill': 'gm-sprite-forge (motion/)', 'arm': c.get('arm', 'A: Rigify metarig fit + bone heat'),
            'motion': {k: v for k, v in mo.items() if k != 'path'} | ({'source': Path(mo['path']).name} if 'path' in mo else {}),
-           'motion_licence': lic, 'mesh': Path(spec['mesh']).name, 'skin': fit['skin'], 'retarget': fit['motion'],
+           'motion_licence': lic, 'mesh': Path((c.get('rigged') or {}).get('path') or spec['mesh']).name, 'skin': fit['skin'], 'retarget': fit['motion'],
            'finish': spec.get('finish', 'pack'), 'pixel': spec.get('pixel'), 'blender': render['blender'], 'engine': render['engine'], 'render_minutes': render['render_minutes'],
            'scores': {k: v for k, v in scores.items() if k != 'foot_slide'} | {'foot_slide_px': scores['foot_slide']['mean_px']}}
     (d / 'recipe.json').write_text(json.dumps(rec, indent=1, default=str))
@@ -79,7 +80,7 @@ def main():
         if only and c['name'] not in only:
             continue
         d = a.out / c['name']
-        cell = {'mesh': spec['mesh'], 'rotz': c.get('rotz', spec.get('rotz', 0)),
+        cell = {'mesh': spec['mesh'], 'rotz': c.get('rotz', 0 if c.get('rigged') else spec.get('rotz', 0)),
                 'motion': {'stance': spec.get('stance')} | c['motion'] | {'clip': c['clip']},
                 'weapon': c.get('weapon', spec.get('weapon')), 'rig_cache': str(a.out / 'rig_cache.blend')}
         if c.get('rigged'):

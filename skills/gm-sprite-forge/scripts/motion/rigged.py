@@ -35,12 +35,14 @@ def _import(path):
     return [o for o in bpy.data.objects if o not in before]
 
 
-def _action(name_part, owner=None):
-    acts = [a for a in bpy.data.actions if name_part in a.name]
-    if owner is not None and owner.animation_data and owner.animation_data.action in acts:
-        return owner.animation_data.action
-    if not acts:
-        raise SystemExit(f'no action matching {name_part!r}: {[a.name for a in bpy.data.actions]}')
+def _action(name_part):
+    """The action named `name_part`, or the only one whose name contains it (importers add suffixes such as
+    `_Armature`); an ambiguous or missing name fails rather than render another clip."""
+    names = [a.name for a in bpy.data.actions]
+    exact = [a for a in bpy.data.actions if a.name == name_part]
+    acts = exact or [a for a in bpy.data.actions if name_part in a.name]
+    if len(acts) != 1:
+        raise SystemExit(f'{"no" if not acts else "more than one"} action matching {name_part!r}: {names}')
     return acts[0]
 
 
@@ -68,7 +70,7 @@ def load(path, action=None, colour=None):
                 b.inputs['Base Color'].default_value = (*colour, 1)
     rig.animation_data_create()
     if action:
-        rig.animation_data.action = _action(action, rig)
+        rig.animation_data.action = _action(action)
     return ob, rig
 
 
@@ -178,7 +180,7 @@ def setup(spec, n):
                 bpy.data.objects.remove(o)
         src.animation_data_create()
         if mo.get('action'):
-            src.animation_data.action = _action(mo['action'], src)
+            src.animation_data.action = _action(mo['action'])
         src.rotation_mode = 'XYZ'
         act = src.animation_data.action
         f0, f1 = mo.get('frames') or act.frame_range

@@ -82,6 +82,32 @@ turn = rigged.facing_turn(o, {'L': ['footL', 'toeL'], 'R': ['footR', 'toeR']})
 json.dump({'turn_deg': math.degrees(turn)}, open(out, 'w'))
 '''
 
+WEAPON = '''
+import sys, json, math
+import bpy
+from mathutils import Vector, Matrix
+sys.path.insert(0, sys.argv[sys.argv.index('--') + 1])
+import rigged
+out = sys.argv[sys.argv.index('--') + 2]
+bpy.ops.wm.read_factory_settings(use_empty=True)
+a = bpy.data.armatures.new('a'); rig = bpy.data.objects.new('a', a)
+bpy.context.scene.collection.objects.link(rig); bpy.context.view_layer.objects.active = rig
+bpy.ops.object.mode_set(mode='EDIT')
+h = a.edit_bones.new('hand'); h.head, h.tail = (0.5, 0, 1.0), (0.5, 0, 0.9)   # a hand hanging down
+h.roll = math.radians(70)                                                     # an arbitrary vendor roll
+bpy.ops.object.mode_set(mode='OBJECT')
+rig.scale = (0.5, 0.5, 0.5)                                                   # a rig at half scale
+bpy.ops.mesh.primitive_cube_add(size=1)
+body = bpy.context.active_object
+body.scale = (0.3, 0.3, 2.0)                                                  # 2 m tall before the rig's scale
+body.parent = rig
+bpy.context.view_layer.update()
+roll = rigged.weapon_roll(rig, 'hand')
+R = (rig.matrix_world @ a.bones['hand'].matrix_local).to_3x3().normalized()
+axis = R @ (Matrix.Rotation(math.radians(roll), 3, 'Y') @ Vector((1, 0, 0)))
+json.dump({'axis': list(axis.normalized()), 'length': rigged.weapon_length(rig, body, 0.75)}, open(out, 'w'))
+'''
+
 
 def run_blender(script):
     with tempfile.TemporaryDirectory() as t:
@@ -109,6 +135,17 @@ class FacingTest(unittest.TestCase):
     def test_a_body_facing_plus_x_is_turned_to_minus_y(self):
         turn = run_blender(FACING)['turn_deg'] % 360
         self.assertAlmostEqual(turn, 270, delta=1)  # +X turned by -90 (= 270) degrees faces -Y
+
+
+
+@unittest.skipUnless(shutil.which('blender'), 'needs Blender 4.3')
+class WeaponTest(unittest.TestCase):
+    def test_a_vendor_hand_holds_the_weapon_forward_at_body_scale(self):
+        got = run_blender(WEAPON)
+        self.assertLess(got['axis'][1], -0.999, got)  # the haft points forward (-Y) whatever the hand's roll
+        # 0.75 is sized for a 1.8 m body: a 1 m body (2 m mesh in a half-scale rig) gets 0.75 / 1.8 of a metre,
+        # which is 2 * 0.75 / 1.8 in the rig's own units
+        self.assertAlmostEqual(got['length'], 0.75 * 1.0 / 1.8 / 0.5, places=3)
 
 
 if __name__ == '__main__':

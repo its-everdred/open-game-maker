@@ -1,4 +1,4 @@
-"""Review matrix for the #1202 rig/motion spike and the #1282 bake-off (4 arms x 2 samplings, plus a second attack source): the pack's own animation in column 1, then each rig/motion cell.
+"""Review matrix for rig/motion cells (#1202, #1282): the pack's own animation in column 1, then each rig/motion cell.
 
 Usage: matrix_media.py <out_dir> <pack_sheet.png> <title> <cell_dir> ... [--rows 1,2] [--fps 15] [--loops 4]
 Each cell_dir holds out/sheet.png, scores.json (score_cell.py) and recipe.json (kind, model, cost, skill, arm,

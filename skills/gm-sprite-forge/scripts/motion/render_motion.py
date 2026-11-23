@@ -251,9 +251,10 @@ def main():
     else:
         ob, rig, lm, rep = fitted(SPEC)
     matte(ob)
-    if SPEC.get('rigged') and SPEC.get('weapon') and 'roll' not in SPEC['weapon']:
+    if SPEC.get('rigged') and SPEC.get('weapon'):  # a vendor rig's hand roll and scale are its own
         bpy.context.view_layer.update()
-        SPEC['weapon']['roll'] = rigged.weapon_roll(rig, SPEC['weapon']['bone'])
+        if 'roll' not in SPEC['weapon']:
+            SPEC['weapon']['roll'] = rigged.weapon_roll(rig, SPEC['weapon']['bone'])
         rig.data.pose_position = 'REST'
         bpy.context.view_layer.update()
         SPEC['weapon']['length'] = rigged.weapon_length(rig, ob, SPEC['weapon'].get('length', 0.3))
