@@ -1,0 +1,220 @@
+/* The map maker's library sheet over the bottom of the game (approved browse sheet, direction A, ticket 1191). */
+.asset-library-layer {
+  display: contents;
+}
+
+.asset-library {
+  /* Dark glass, as in the approved mock; the edit page's light theme remaps --ink and --paper-2. */
+  --ink: var(--cream);
+  --muted: var(--scene-chip-ink);
+  --paper-2: var(--scene-chip-fill);
+  --rule: var(--scene-chip-rule);
+  position: absolute;
+  z-index: 4;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 10px 12px calc(12px + var(--safe-b));
+  border: 1px solid var(--rule);
+  border-bottom: 0;
+  border-radius: 26px 26px 0 0;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--night) 82%, transparent);
+  box-shadow: var(--pop);
+  -webkit-backdrop-filter: var(--glass);
+  backdrop-filter: var(--glass);
+}
+
+.asset-library.is-open {
+  height: min(60%, 640px);
+}
+
+.asset-library-handle {
+  flex: none;
+  width: 64px;
+  height: 18px;
+  margin: -6px auto -4px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.asset-library-handle::before {
+  content: '';
+  display: block;
+  width: 44px;
+  height: 5px;
+  margin: 0 auto;
+  border-radius: 3px;
+  background: var(--rule);
+}
+
+.asset-library-search {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--muted);
+}
+
+.asset-library-search .icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+}
+
+.asset-library-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.asset-library-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.asset-library-count {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.asset-library-chips {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.asset-library-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.asset-library-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.asset-library-chip .icon {
+  display: grid;
+  width: 18px;
+  height: 18px;
+}
+
+/* Packs and sizes are outlined, family words filled, as in the approved mock. */
+.asset-library-chip.is-pack,
+.asset-library-chip.is-size {
+  background: none;
+  outline: 1px solid var(--rule);
+  outline-offset: -1px;
+}
+
+.asset-library-chip[aria-pressed='true'] {
+  background: var(--yellow-b);
+  color: var(--night);
+  outline: 0;
+}
+
+.asset-library-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.asset-library-item {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.asset-library-picture {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--paper-2);
+}
+
+.asset-library-picture img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.asset-library-item[aria-pressed='true'] .asset-library-picture {
+  outline: 3px solid var(--yellow-b);
+  outline-offset: -3px;
+  background: color-mix(in srgb, var(--yellow-b) 18%, transparent);
+}
+
+.asset-library-label {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* While a piece is armed, the next tap on the game places it. */
+.asset-library-target {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: crosshair;
+}
+
+.asset-library-ghost {
+  position: fixed;
+  z-index: 20;
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  pointer-events: none;
+  transform: translate(-50%, -100%) rotate(-6deg);
+  filter: drop-shadow(0 10px 14px var(--shadow-color));
+}
