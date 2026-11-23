@@ -93,9 +93,49 @@ describe('scene documents for the editor scene strip', () => {
     /* The writer skips blank lines, so a blank line before the head revision doesn't move the head's author. */
     writeScene(game, 'spaced', 2, [revision(1, 'agent:1208'), '', revision(2, 'kevin')]);
     expect(await listSceneDocs(root, 'games/fixture')).toEqual([
-      { id: 'cave', rev: 1, author: 'agent:1208', updatedAt: '2026-11-01T00:00:00.000Z' },
-      { id: 'graveyard', rev: 2, author: 'kevin', updatedAt: '2026-11-02T00:00:00.000Z' },
-      { id: 'spaced', rev: 2, author: 'kevin', updatedAt: '2026-11-02T00:00:00.000Z' },
+      {
+        id: 'cave',
+        rev: 1,
+        author: 'agent:1208',
+        updatedAt: '2026-11-01T00:00:00.000Z',
+        ticket: '1208',
+        agents: { '1208': 1 },
+      },
+      {
+        id: 'graveyard',
+        rev: 2,
+        author: 'kevin',
+        updatedAt: '2026-11-02T00:00:00.000Z',
+        ticket: '1208',
+        agents: { '1208': 1 },
+      },
+      {
+        id: 'spaced',
+        rev: 2,
+        author: 'kevin',
+        updatedAt: '2026-11-02T00:00:00.000Z',
+        ticket: '1208',
+        agents: { '1208': 1 },
+      },
+    ]);
+  });
+
+  it('keeps the ticket that started a scene and the latest revision each agent ticket wrote', async () => {
+    const { root, game } = fixture();
+    /* Started by #1208, edited by Kevin, then twice by #1212: the strip credits #1208 as the origin even though
+       another ticket wrote the head, and #1212's review card opens rev 4, its own latest push. */
+    writeScene(game, 'cave', 4, [
+      revision(1, 'agent:1208'),
+      revision(2, 'kevin'),
+      revision(3, 'agent:1212'),
+      revision(4, 'agent:1212'),
+    ]);
+    /* A scene Kevin started has no originating ticket, but an agent that pushed to it still finds it. */
+    writeScene(game, 'yard', 2, [revision(1, 'kevin'), revision(2, 'agent:1212')]);
+    const listed = await listSceneDocs(root, 'games/fixture');
+    expect(listed.map(({ id, ticket, agents }) => ({ id, ticket, agents }))).toEqual([
+      { id: 'cave', ticket: '1208', agents: { '1208': 1, '1212': 4 } },
+      { id: 'yard', ticket: undefined, agents: { '1212': 2 } },
     ]);
   });
 });
@@ -236,7 +276,7 @@ describe('no-build scenery source', () => {
     const scenes = await app.request(scenesUrl, { headers: asUser(ids.creator) });
     expect(scenes.status).toBe(200);
     expect(await scenes.json()).toEqual({
-      scenes: [{ id: 'graveyard', rev: 1, author: 'kevin', updatedAt: '2026-11-01T00:00:00.000Z' }],
+      scenes: [{ id: 'graveyard', rev: 1, author: 'kevin', updatedAt: '2026-11-01T00:00:00.000Z', agents: {} }],
     });
     const url = `/api/v1/games/${ids.game}/scenery/source`;
     expect((await app.request(url)).status).toBe(401);

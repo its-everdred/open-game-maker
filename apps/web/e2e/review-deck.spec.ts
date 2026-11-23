@@ -205,6 +205,20 @@ test('judges the 6-card voice deck and answers once every card has a vote', asyn
   await expect(page.locator('.review-deck-progress')).toHaveText('1 of 6');
 });
 
+// An agent's pushed scene opens from its review on a phone (#1212): the link lands in the map maker on that scene, at
+// the revision this ticket wrote.
+test('links the scene the ticket pushed to the map maker', async ({ page }, testInfo) => {
+  await installAuthRoutes(page, { signedIn: true });
+  await installReviewApi(page, { scenes: true });
+  await page.goto(`/blobs/review/${imageCommand().review_number!}`);
+
+  const scene = page.getByRole('link', { name: 'Edit Goblin cave' });
+  await expect(scene).toBeVisible();
+  await expect(scene).toHaveAttribute('href', `/g/${gameId}?mode=edit&scene=goblin-cave&rev=3`);
+  await expect(page.getByRole('link', { name: 'Edit Graveyard' })).toHaveCount(0);
+  await capture(page, testInfo, 'review-scene-link');
+});
+
 // Kevin (#597): an optional voice button inside the decision that never covers the media or the options.
 test('offers voice about the decision without covering the cards or the options', async ({ page }, testInfo) => {
   testInfo.setTimeout(120_000);
@@ -422,7 +436,8 @@ const voiceTokenTargets: Array<Record<string, unknown>> = [];
 
 // `voice` gives the Commands' job to the signed-in creator and a configured voice host, so the decision offers voice.
 // `dropAnswered` takes an answered Command off the open list, so Change has to reopen it from the screen.
-type ReviewApiOptions = { voice?: boolean; dropAnswered?: boolean };
+// `scenes` lists one scene ticket 570's agent pushed and one only another ticket wrote.
+type ReviewApiOptions = { voice?: boolean; dropAnswered?: boolean; scenes?: boolean };
 
 async function installReviewApi(page: Page, options: ReviewApiOptions = {}) {
   const commands = [voiceCommand(), imageCommand(), longCommand()];
@@ -485,6 +500,15 @@ async function installReviewApi(page: Page, options: ReviewApiOptions = {}) {
       });
     }
     if (path.endsWith('/commands/budget')) return json(route, { used: 0, max: 3 });
+    if (options.scenes && path === `/api/v1/games/${gameId}/editor/scenes`) {
+      const at = '2026-11-23T00:00:00.000Z';
+      return json(route, {
+        scenes: [
+          { id: 'goblin-cave', rev: 4, author: 'kevin', updatedAt: at, ticket: '570', agents: { '570': 3 } },
+          { id: 'graveyard', rev: 1, author: 'agent:9', updatedAt: at, ticket: '9', agents: { '9': 1 } },
+        ],
+      });
+    }
     return json(route, { error: 'not_mocked', path }, 404);
   });
   await page.route('**/media.example.test/voices/*.wav', (route) =>

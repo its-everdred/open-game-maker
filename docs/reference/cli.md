@@ -215,7 +215,10 @@ scene that doesn't exist yet. A scene on an older schema version is upgraded on 
 `migration` revision. `gm scene push <game> <scene> [--label <what changed>]` saves the edited `doc` as a revision by
 `agent:<ticket>`. A push from an older `baseRev` is rebased onto the latest one. If it would change anything Kevin
 edited, the whole push is refused with one line per conflict and nothing is saved: pull again and redo the rest.
-`--json` prints `{ ok, rev, rebased, saved }`, or `{ ok: false, conflicts, hint }` on a refusal (exit 1).
+A saved push also prints the link that opens the scene in the map maker at that revision
+(`/<game>/edit?scene=<scene>&rev=<n>`, on `OGM_APP_ORIGIN` when set; the app resolves the game's slug to its editor page) for the agent's update to Kevin. The
+scene's chip on the ticket's review card and ticket detail opens the same link.
+`--json` prints `{ ok, rev, rebased, saved, link }`, or `{ ok: false, conflicts, hint }` on a refusal (exit 1).
 Inside a game daemon (`OGM_INTERNAL_URL` and `OGM_HOOK_SECRET_FILE` set), both go through the API's shared scene
 store, where the map maker saves Kevin's edits: pull reads it (starting it from the game folder's copy the first time),
 push commits there, and both then rewrite `scenes/<scene>.scene.json` and its log to match, ready to commit.

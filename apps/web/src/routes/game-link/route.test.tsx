@@ -222,6 +222,15 @@ describe('short game links', () => {
 
     expect(await screen.findByText('/g/g_blobs?chat=j_1&mode=play')).toBeVisible();
   });
+
+  // The link `gm scene push` prints (#1212): agents know the game by its slug, but the editor page needs its id.
+  it('opens the scene an agent pushed from /<slug>/edit, healing an old slug', async () => {
+    serve([]);
+
+    renderAt('/old-blobs/edit?scene=goblin-cave&rev=3');
+
+    expect(await screen.findByText('/g/g_blobs?scene=goblin-cave&rev=3&mode=edit')).toBeVisible();
+  });
 });
 
 describe('the old review link', () => {

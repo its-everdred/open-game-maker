@@ -57,6 +57,12 @@ vi.mock('../../features/commands-inbox/decision-voice', () => ({
     return <button aria-label="End voice" type="button" />;
   },
 }));
+// The scene links are covered in CommandReviewCard.test.tsx; here they only name the game and ticket they read.
+vi.mock('../../features/worker-builds/TicketScenes', () => ({
+  TicketScenes: ({ gameId, ticket }: { gameId: string; ticket: string }) => (
+    <nav aria-label={`Scenes of ${gameId} ticket ${ticket}`} />
+  ),
+}));
 vi.mock('../../features/commands-inbox/ReviewDeck', () => ({
   ReviewDeck: ({ onAnswered }: { onAnswered(): void }) => (
     <button onClick={onAnswered} type="button">
@@ -87,6 +93,12 @@ function renderScreen() {
 
 describe('the decision screen with voice', () => {
   // Kevin (#597): the voice agent is briefed on this decision, so the call names it.
+  // The review page is a way into the map maker (#1212): the scenes this decision's ticket pushed open from here.
+  it("offers the scenes the decision's ticket pushed", () => {
+    renderScreen();
+    expect(screen.getByRole('navigation', { name: 'Scenes of g_1 ticket 57' })).toBeInTheDocument();
+  });
+
   it('opens voice about this decision', () => {
     renderScreen();
     expect(voice.targets).toEqual([expect.objectContaining({ job_id: 'j_1', ticket: '57', command_id: 'd_1' })]);
