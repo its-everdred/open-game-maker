@@ -203,7 +203,8 @@ base bodies, not on those meshes:
   clip: on the base-body dry run it raised the Ranger's hand-keyed walk from 0.43 to 0.53 but lowered the Wizard's
   from 0.37 to 0.21, because the pack Wizard walks with its casting arm raised ahead. Give such a clip its own layer
   in the cell's `motion` (`"stance": "ssi-wizard-walk"`).
-- Base bodies set `"finish": "base"` with `pack.idle`. The attack is scored against the class's own clip: Warrior
+- Base bodies set `"finish": "base"` with `pack.idle`, and `"pixel": {"colours": 8, "cloth": 6, "smooth": true}`:
+  Kevin's finish "B" (hero-finish1-warrior) carries to every hero cell and every later rung. The attack is scored against the class's own clip: Warrior
   Attack1 (`chop`), Wizard CastSpell (`cast`), Ranger QuickShot (`bow`).
 - The class weapon goes in `weapon` on the hand bone, never fused into the body. With nothing fused, the fit's
   weapon cut-off does nothing. Size it to the pack clip, not the default: the Warrior's KayKit `axe_1handed` needs
@@ -213,3 +214,10 @@ Dry run (2026-11-22, unapproved base bodies, workbench, debug only): the fit lan
 the joints of all six bodies (`landmarks.png`), with no tearing at sprite scale. Hand-keyed walks score 0.32-0.58 with
 0.15-0.38 px foot slide; KayKit `Walking_C` scores 0.29-0.66 with about 1 px slide and reads as a lunging high-knee
 gait on every body.
+
+## Creator verdict on the round (2026-11-23)
+
+Kevin rejected every cell of the round: hand-keyed, KayKit, Bandai and CMU, walks and attacks, on all six bodies
+("none move like humans at all"). No rig or motion source in this step is approved, and its correlation and foot-slide
+scores did not predict his verdict. Do not post another round from these tools; the next step is the dedicated
+rigging and animation bake-off in #1282, which waits on his approval. The static base bodies and finish B stay approved.
