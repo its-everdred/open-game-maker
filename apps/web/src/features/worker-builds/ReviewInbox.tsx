@@ -450,6 +450,7 @@ export function ReviewInbox({
               onAnswered={done}
               swipe
               onPendingChange={setSending}
+              onPlay={onClose}
             />
             {current.round.buildId &&
               current.round.track !== 'prototype-publish' &&

@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page, type Route, type TestInfo } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { openReviewDeck, openReviewItem } from '../../../packages/gm-cli/src/qa-review-checks';
@@ -10,6 +11,11 @@ import { installAuthRoutes } from './fixtures/auth-routes';
 // phone and leaves a still in the run for docs/review-parity.md.
 const gameId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e81';
 const FIXTURES = resolve(import.meta.dirname, '../../../packages/gm-cli/qa/review-e2e');
+// eslint-disable-next-line no-restricted-properties
+const gamesOrigin = `http://127.0.0.1:${process.env.OGM_WEB_BRIDGE_PORT ?? '10001'}`;
+const bridgeDesign = JSON.parse(
+  readFileSync(resolve(import.meta.dirname, 'fixtures/bridge-game/design/design.json'), 'utf8'),
+) as unknown;
 
 const meta = (kind: string, extra: Record<string, unknown> = {}) => ({
   kind,
@@ -168,7 +174,7 @@ const prototypeRound = () => ({
   question: 'Moon gate prototype',
   track: 'prototype-publish',
   buildId: 'b_proto',
-  playUrl: 'https://play.example.test/moon-gate',
+  playUrl: `https://app.example.test/g/${gameId}?mode=edit&build=b_proto`,
   clipStatus: 'captured',
   works: ['The gate opens at full moon', 'Phone controls'],
   limitations: ['No sound yet'],
@@ -385,7 +391,7 @@ test('a prototype card shows the play link, the clip, works now, limitations and
   const card = dialog.getByRole('region', { name: 'Review for ticket 215' });
   await expect(card.getByRole('link', { name: 'Play this build' })).toHaveAttribute(
     'href',
-    'https://play.example.test/moon-gate',
+    `/g/${gameId}?mode=edit&build=b_proto`,
   );
   await expect
     .poll(() => card.locator('video').evaluate((element: HTMLVideoElement) => element.currentTime))
@@ -399,6 +405,44 @@ test('a prototype card shows the play link, the clip, works now, limitations and
   await expect(dialog.getByText('No media; asking the agent…')).toHaveCount(0);
   await capture(page, testInfo, 'parity-prototype');
   expect(api.roundAnswers).toEqual([]);
+});
+
+// #1278: from the home-screen app, a build link left for the browser on the games host. It opens the game's editor.
+test("Play this build opens that build in the game's editor without leaving the home-screen app", async ({
+  page,
+  context,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'standalone', { value: true });
+    const matchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query: string) =>
+      query.includes('display-mode: standalone')
+        ? ({ ...matchMedia(query), matches: true, media: query } as MediaQueryList)
+        : matchMedia(query);
+  });
+  await install(page);
+  const frames: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().startsWith(gamesOrigin)) frames.push(request.url());
+  });
+  const dialog = await openReviewDeck(page, 20_000, 'Moon gate prototype');
+  const card = dialog.getByRole('region', { name: 'Review for ticket 215' });
+  const appOrigin = new URL(page.url()).origin;
+  await card.getByRole('link', { name: 'Play this build' }).tap();
+  await expect(page).toHaveURL(`${appOrigin}/g/${gameId}?mode=edit&build=b_proto`);
+  await expect(page.getByRole('dialog', { name: 'Needs Review' })).toHaveCount(0);
+  expect(context.pages()).toHaveLength(1);
+  await expect(page.locator('.game-screen.is-editing')).toBeVisible();
+  /* The reviewed build boots in the editor's preview, not the branch head. */
+  await expect.poll(() => frames.find((url) => url.includes(`/g/${gameId}/b_proto/`))).toBeTruthy();
+  expect(frames.some((url) => url.includes('/b_head/'))).toBe(false);
+  await expect(page.locator('.game-frame iframe')).toHaveAttribute('src', new RegExp(`/g/${gameId}/b_proto/`));
+  await capture(page, testInfo, 'build-link-editor');
+  /* The bridge fixture never reports its load done, so its cover stays up; this still hides it to show the frame. */
+  const path = testInfo.outputPath('build-link-editor-frame.png');
+  await page.screenshot({ path, style: '.game-loading-layer { display: none !important; }' });
+  await testInfo.attach('build-link-editor-frame', { path, contentType: 'image/png' });
 });
 
 // Back to the Builds rows and into another card, the way Kevin moves between sources.
@@ -481,6 +525,19 @@ async function install(page: Page): Promise<Api> {
       return json(route, { status: 'answered' });
     }
     if (path === `/api/v1/games/${gameId}/previews`) return json(route, { previews: [] });
+    /* The game's editor page, where a build link lands: the branch head is another build than the reviewed one. */
+    if (path === `/api/v1/games/${gameId}`)
+      return json(route, {
+        id: gameId,
+        familyId: 'family-1',
+        ownerId: 'u1',
+        title: 'Moon Vault',
+        visibility: 'private',
+      });
+    if (path === `/api/v1/games/${gameId}/branches/main/design`)
+      return json(route, { rev: 3, buildId: 'b_head', doc: bridgeDesign });
+    if (path === `/api/v1/games/${gameId}/builds/b_proto/design`)
+      return json(route, { rev: 0, buildId: 'b_proto', doc: bridgeDesign });
     if (path === '/api/v1/notifications/stream') {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
     }

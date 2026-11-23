@@ -8,6 +8,7 @@ import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
 import { authorizedGame } from '../games/authorize.js';
+import { editorBuildUrl } from '../games/editor-url.js';
 import { reviewMediaUrl } from '../blobs/review-url.js';
 import { currentPreview, listPreviews } from '../previews/store.js';
 import { answerRound, getRound, latestPublishedPrototypeRound, latestRoundForTicket } from './store.js';
@@ -91,7 +92,7 @@ export default new Hono<ApiBindings>()
           sourceTickets: JSON.parse(round.sourceTickets) as string[],
           playUrl:
             round.track === 'prototype-publish' && media.find((item) => item.kind === 'build') && game.slug
-              ? `${deps.config.gamesOrigin.replace(/\/$/u, '')}/g/${encodeURIComponent(game.id)}/${encodeURIComponent(media.find((item) => item.kind === 'build')!.ref)}/`
+              ? editorBuildUrl(deps.config.appOrigin, game.id, media.find((item) => item.kind === 'build')!.ref)
               : null,
           media: items,
           postedAt: round.postedAt,

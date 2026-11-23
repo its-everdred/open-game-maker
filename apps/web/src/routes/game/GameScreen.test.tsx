@@ -26,6 +26,7 @@ type MockMountOptions = {
 const editorApi = vi.hoisted(() => ({
   NO_BUILD_ID: 'build_00000000000000000000000000',
   acquireLease: vi.fn(),
+  getBuildDesign: vi.fn(),
   getDesignSnapshot: vi.fn(),
   getGame: vi.fn(),
   getFallbackPalette: vi.fn(),
@@ -315,6 +316,45 @@ describe('GameScreen', () => {
     renderGame('/g/game?mode=edit');
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
     expect(host.mountGameFrame.mock.calls.at(-1)?.[0]).not.toHaveProperty('params');
+  });
+  it("plays a linked build with that build's own design, not the branch head, and keeps its scenario", async () => {
+    const reviewed = { rev: 0, buildId: 'build_reviewed', doc: { schemaVersion: 1, globals: { g: 1 }, entities: {} } };
+    editorApi.getBuildDesign.mockResolvedValue(reviewed);
+    renderGame('/g/game?mode=edit&build=build_reviewed&scenario=combat-chain');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    expect(editorApi.getBuildDesign).toHaveBeenCalledWith('game', 'build_reviewed');
+    expect(host.mountGameFrame).toHaveBeenCalledTimes(1);
+    expect(host.mountGameFrame.mock.calls[0]?.[0]).toMatchObject({
+      buildId: 'build_reviewed',
+      design: reviewed,
+      params: { scenario: 'combat-chain' },
+    });
+  });
+  it('keeps a linked build read-only: no branch lease, and the head design never replaces it', async () => {
+    const reviewed = { rev: 0, buildId: 'build_reviewed', doc: { schemaVersion: 1, globals: { g: 1 }, entities: {} } };
+    editorApi.getBuildDesign.mockResolvedValue(reviewed);
+    renderGame('/g/game?mode=edit&build=build_reviewed');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(editorApi.acquireLease).not.toHaveBeenCalled();
+    for (const [, doc] of host.controller.applyDesign.mock.calls) expect(doc).toEqual(reviewed.doc);
+    expect(host.mountGameFrame).toHaveBeenCalledTimes(1);
+  });
+  it('plays the branch head without another request when the link names the head build', async () => {
+    renderGame('/g/game?mode=edit&build=build');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    expect(editorApi.getBuildDesign).not.toHaveBeenCalled();
+    expect(host.mountGameFrame.mock.calls.at(-1)?.[0]).toMatchObject({ buildId: 'build' });
+  });
+  it('shows the frame error when a linked build cannot be read', async () => {
+    editorApi.getBuildDesign.mockRejectedValue(new Error('build_not_found'));
+    renderGame('/g/game?mode=edit&build=build_gone');
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(editorApi.getBuildDesign).toHaveBeenCalledTimes(2));
+    /* Never the branch head in its place: the creator asked for that build. */
+    expect(host.mountGameFrame).not.toHaveBeenCalled();
   });
   it('passes the ready manifest button theme to the play menu', async () => {
     renderGame();
