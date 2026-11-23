@@ -14,9 +14,21 @@ case "${1:-}" in
   *) printf 'usage: %s [--dry-run]\n' "$0" >&2; exit 2 ;;
 esac
 
+# shellcheck source=deploy-lib.sh
+source "$ROOT/apps/web/tools/deploy-lib.sh"
+DEPLOY_STARTED="$(date +%s)"
 DEPLOY_DIR="$(mktemp -d)"
 PREVIEW_PID=''
+PROTO_PID=''
+PROTO_LOG=''
 cleanup() {
+  # Let a background prototype build finish so a retry never runs two builds over the same trees.
+  if [[ -n "$PROTO_PID" ]]; then
+    wait "$PROTO_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$PROTO_LOG" ]]; then
+    rm -f -- "$PROTO_LOG"
+  fi
   if [[ -n "$PREVIEW_PID" ]]; then
     kill "$PREVIEW_PID" 2>/dev/null || true
     wait "$PREVIEW_PID" 2>/dev/null || true
@@ -67,18 +79,50 @@ require_directory "$ROOT/apps/web/title-town/models/variants"
 require_directory "$ROOT/apps/web/title-town/models/candidates"
 require_directory "$ROOT/apps/web/title-town/models/mdungeon"
 
-if [[ ! -d "$ROOT/apps/web/title-town/vendor" ]]; then
-  bash "$ROOT/apps/web/title-town/tools/build.sh"
+TC="$ROOT/apps/web/title-town"
+PACKS="$ROOT/assets-local/packs"
+# Step results keyed by their inputs; delete this directory to force every step.
+CACHE="$ROOT/node_modules/.cache/ogm-deploy"
+if [[ ! -d "$TC/vendor" ]]; then
+  timed title-town-vendor bash "$TC/tools/build.sh"
 fi
-if [[ ! -d "$ROOT/apps/web/title-town/models/sounds" ]]; then
-  bash "$ROOT/apps/web/title-town/tools/sounds.sh"
+if [[ ! -d "$TC/models/sounds" ]]; then
+  timed title-town-sounds bash "$TC/tools/sounds.sh"
 fi
-bash "$ROOT/apps/web/tools/town.sh" "${ASSET_FILTER_ARGS[@]}"
 
-VITE_GAMES_ORIGIN="$GAMES_ORIGIN" VITE_INSTANCE_LOGO_URL="$INSTANCE_LOGO_URL" \
-  pnpm --dir "$ROOT" --filter @ogm/web build
-# The archived prototype's generated art/, demo/, and town/ payload is gitignored.
-bash "$ROOT/prototypes/studio-v0/tools/build.sh"
+# The archived prototype's generated art/, demo/, and town/ payload is gitignored. Nothing in the web build reads it,
+# so it builds alongside the web build.
+PROTO_LOG="$(mktemp)"
+PROTO_KEY="$(inputs_key "$ROOT/prototypes/studio-v0/tools" "$ROOT/prototypes/ui-v0/site" "$TC" --shallow "$PACKS")"
+cached "$CACHE" prototype "$PROTO_KEY" \
+  "$ROOT/prototypes/studio-v0/art" "$ROOT/prototypes/studio-v0/demo" "$ROOT/prototypes/studio-v0/town" -- \
+  bash "$ROOT/prototypes/studio-v0/tools/build.sh" >"$PROTO_LOG" 2>&1 &
+PROTO_PID=$!
+
+TOWN_KEY="$(inputs_key "${ASSET_FILTER_ARGS[@]}" "$ROOT/apps/web/tools/town.sh" "$TC" \
+  "$ROOT/prototypes/ui-v0/site/assets/img/logo.png" --shallow "$PACKS")"
+cached "$CACHE" town "$TOWN_KEY" "$ROOT/apps/web/public/town" "$ROOT/apps/web/public/art" -- \
+  bash "$ROOT/apps/web/tools/town.sh" "${ASSET_FILTER_ARGS[@]}"
+
+timed web-deps pnpm --dir "$ROOT/apps/web" run build:deps
+if ci_typechecked "$ROOT"; then
+  printf '%s\n' 'deploy step: typecheck skipped, CI typechecked this commit'
+else
+  mkdir -p "$CACHE"
+  timed typecheck pnpm --dir "$ROOT/apps/web" exec tsc --noEmit --incremental --tsBuildInfoFile "$CACHE/web.tsbuildinfo"
+fi
+timed web-build env VITE_GAMES_ORIGIN="$GAMES_ORIGIN" VITE_INSTANCE_LOGO_URL="$INSTANCE_LOGO_URL" \
+  pnpm --dir "$ROOT/apps/web" exec vite build
+
+PROTO_STATUS=0
+wait "$PROTO_PID" || PROTO_STATUS=$?
+PROTO_PID=''
+cat "$PROTO_LOG"
+if ((PROTO_STATUS != 0)); then
+  exit "$PROTO_STATUS"
+fi
+
+STAGE_STARTED="$(date +%s)"
 cp -R "$ROOT/apps/web/dist/." "$DEPLOY_DIR/"
 node "$ROOT/apps/web/tools/stage-prototype.mjs" \
   "$ROOT/prototypes/studio-v0" "$ROOT/prototypes/ui-v0/site" "$DEPLOY_DIR/proto" "${ASSET_FILTER_ARGS[@]}"
@@ -103,50 +147,72 @@ if [[ "$DRY_RUN" == true ]]; then
   printf '%s\n' 'prototype payload:'
   find "$DEPLOY_DIR/proto" -type f -printf 'proto/%P\n' | LC_ALL=C sort
 fi
+printf 'deploy step: stage %ds\n' $(($(date +%s) - STAGE_STARTED))
 
-RECORD_DIR="$(mktemp -d)"
-PREVIEW_LOG="$RECORD_DIR/preview.log"
-LOAD_LOG="$RECORD_DIR/loadrec.log"
-LOAD_SECONDS="${OGM_DEPLOY_LOAD_SECONDS:-240}"
-pnpm --dir "$ROOT/apps/web" exec vite preview \
-  --host 127.0.0.1 --port 43171 --outDir "$DEPLOY_DIR" \
-  >"$PREVIEW_LOG" 2>&1 &
-PREVIEW_PID=$!
-for _attempt in {1..40}; do
-  if curl --fail --silent --output /dev/null http://127.0.0.1:43171/; then
-    break
+# Serve the staged payload and record a throttled phone visit until the title town reports ready. Runs with errexit
+# off (it is called in a condition), so every failure returns explicitly.
+load_check() {
+  local record_dir preview_log load_log video sheet town_ready
+  record_dir="$(mktemp -d)" || return 1
+  preview_log="$record_dir/preview.log"
+  load_log="$record_dir/loadrec.log"
+  # The bin shim execs node, so PREVIEW_PID is the server itself and cleanup stops it.
+  "$ROOT/apps/web/node_modules/.bin/vite" preview "$ROOT/apps/web" \
+    --host 127.0.0.1 --port 43171 --strictPort --outDir "$DEPLOY_DIR" \
+    >"$preview_log" 2>&1 &
+  PREVIEW_PID=$!
+  for _attempt in {1..40}; do
+    if curl --fail --silent --output /dev/null http://127.0.0.1:43171/; then
+      break
+    fi
+    sleep 0.25
+  done
+  if ! curl --fail --silent --output /dev/null http://127.0.0.1:43171/; then
+    sed -n '1,120p' "$preview_log" >&2
+    return 1
   fi
-  sleep 0.25
-done
-if ! curl --fail --silent --output /dev/null http://127.0.0.1:43171/; then
-  sed -n '1,120p' "$PREVIEW_LOG" >&2
-  exit 1
-fi
 
-node "$ROOT/apps/web/tools/loadrec.mjs" \
-  "$RECORD_DIR" http://127.0.0.1:43171/ "$LOAD_SECONDS" >"$LOAD_LOG"
-sed -n '1,160p' "$LOAD_LOG"
+  if ! node "$ROOT/apps/web/tools/loadrec.mjs" \
+    "$record_dir" http://127.0.0.1:43171/ "${OGM_DEPLOY_LOAD_SECONDS:-240}" >"$load_log"; then
+    sed -n '1,160p' "$load_log"
+    return 1
+  fi
+  sed -n '1,160p' "$load_log"
 
-VIDEO="$(find "$RECORD_DIR" -maxdepth 1 -type f -name '*.webm' | head -n 1)"
-if [[ -z "$VIDEO" ]]; then
-  printf '%s\n' 'load recording did not produce a video' >&2
-  exit 1
-fi
-SHEET="$RECORD_DIR/sheet.png"
-ffmpeg -loglevel error -ss 0 -t 3 -i "$VIDEO" \
-  -vf 'fps=12.5,scale=156:-2,tile=10x4' -frames:v 1 "$SHEET"
+  video="$(find "$record_dir" -maxdepth 1 -type f -name '*.webm' | head -n 1)"
+  if [[ -z "$video" ]]; then
+    printf '%s\n' 'load recording did not produce a video' >&2
+    return 1
+  fi
+  sheet="$record_dir/sheet.png"
+  ffmpeg -loglevel error -ss 0 -t 3 -i "$video" \
+    -vf 'fps=12.5,scale=156:-2,tile=10x4' -frames:v 1 "$sheet" || return 1
 
-TOWN_READY="$(grep ' msg town-ready$' "$LOAD_LOG" | tail -n 1 || true)"
-printf 'contact sheet: %s\n' "$SHEET"
-if [[ -z "$TOWN_READY" ]]; then
-  printf '%s\n' 'deploy: load check did not report town-ready; refusing to deploy' >&2
-  exit 1
-fi
-printf 'town-ready: %s\n' "$TOWN_READY"
+  town_ready="$(grep ' msg town-ready$' "$load_log" | tail -n 1)"
+  printf 'contact sheet: %s\n' "$sheet"
+  if [[ -z "$town_ready" ]]; then
+    printf '%s\n' 'deploy: load check did not report town-ready' >&2
+    return 1
+  fi
+  printf 'town-ready: %s\n' "$town_ready"
+}
+
+total() {
+  printf 'deploy step: %s after %ds\n' "$1" $(($(date +%s) - DEPLOY_STARTED))
+}
 
 if [[ "$DRY_RUN" == true ]]; then
+  if ! timed load-check load_check; then
+    printf '%s\n' 'deploy: load check failed; refusing to deploy' >&2
+    exit 1
+  fi
+  total done
   exit 0
 fi
 
-netlify deploy --prod --no-build --filter @ogm/web --dir "$DEPLOY_DIR" \
+timed upload netlify deploy --prod --no-build --filter @ogm/web --dir "$DEPLOY_DIR" \
   --site "$(<"$ROOT/apps/web/.netlify-site-id")"
+total uploaded
+# Post-deploy QA: the payload is live, so a failed load check wakes the Executor instead of holding the upload back.
+timed load-check load_check || report_attention 'the load check on the uploaded payload failed (see the deploy log)'
+total done
