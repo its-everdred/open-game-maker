@@ -65,18 +65,6 @@ describe('game contract', () => {
     expect(gameManifestSchema.safeParse(withTag('x'.repeat(33))).success).toBe(false);
     expect(gameJson(withTag('x'.repeat(33)))).toBe(false);
   });
-  it('validates the optional play menu appearance', () => {
-    const themed = { ...manifest(), playMenuButton: { colour: '#e02020', icon: 'pause' } };
-    expect(gameManifestSchema.parse(themed).playMenuButton).toEqual(themed.playMenuButton);
-    expect(gameJson(themed)).toBe(true);
-    for (const playMenuButton of [
-      { colour: 'red; background: url(x)', icon: 'pause' },
-      { colour: '#e02020', icon: 'stop' },
-    ]) {
-      expect(gameManifestSchema.safeParse({ ...manifest(), playMenuButton }).success).toBe(false);
-      expect(gameJson({ ...manifest(), playMenuButton })).toBe(false);
-    }
-  });
   it('lists playable modes with a tap path each, so the playtest can reach every one', () => {
     const modes = [
       { id: 'blobs', label: 'Blobs', tap: 'Play>Endless>Blobs>Play' },

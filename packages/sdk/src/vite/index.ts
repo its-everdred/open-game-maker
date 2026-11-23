@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { sceneryToDesign } from '../scenery/design.js';
 import { paintedSceneryControls } from '../scenery/painted-controls.js';
+import { assertNoGameMenu, type BundleFile } from './shell-menu.js';
 
 import {
   AssetsLockSchema,
@@ -124,7 +125,10 @@ export function gmBuildArtifacts(options: {
   const gameRoot = dirname(resolve(options.designDir));
   return {
     name: 'gm-build-artifacts',
-    generateBundle(this: EmitContext) {
+    /* After Vite emits the page, so the menu check also reads index.html. */
+    enforce: 'post' as const,
+    generateBundle(this: EmitContext, _output?: unknown, bundle: Record<string, BundleFile> = {}) {
+      assertNoGameMenu(options.manifest, bundle);
       const manifest = gameManifestSchema.parse(options.manifest);
       let design = foldDesignFiles(options.designDir);
       const lockFile = options.assetsLockFile ?? join(gameRoot, 'assets.lock.json');

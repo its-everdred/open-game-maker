@@ -677,7 +677,6 @@ export function GameScreen() {
               },
             ],
             extras: gameExtraElements('topbar', extraProps),
-            button: frameState.manifest?.playMenuButton,
             hideButton: hidesHostPause(mode, frameState),
           }
         : {
@@ -697,7 +696,6 @@ export function GameScreen() {
     [
       askForChange,
       extraProps,
-      frameState.manifest?.playMenuButton,
       frameState.bridgeState,
       frameState.hostPauseVisible,
       leaveRoom,

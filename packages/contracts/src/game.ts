@@ -252,10 +252,6 @@ export const gameManifestSchema = z.looseObject({
     .optional(),
   /** The scenarios the build declares (`GameModule.scenarios`); the SDK fills them in its `ready` handshake. */
   scenarios: z.array(scenarioNameSchema).max(64).optional(),
-  /** Appearance of the shell menu button while playing this game. */
-  playMenuButton: z
-    .looseObject({ colour: z.string().regex(/^#[0-9a-fA-F]{6}$/u), icon: z.enum(['pause', 'menu']) })
-    .optional(),
   saves: z.boolean(),
   /** Enables player-selected manual save slots in addition to the automatic save. */
   manualSaveSlots: z.boolean().optional(),
