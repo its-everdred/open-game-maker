@@ -6,8 +6,9 @@ import { sceneEditorPath, sceneTitle } from '../editor/scenes/scene-source';
 import './ticket-scenes.css';
 
 /**
- * The scenes a ticket's agent pushed (#1212), each opening the map maker at the latest revision that agent wrote. A
- * push lands in the shared scene store at once, so a read every 30 s shows it within a minute.
+ * The scenes a ticket's agent pushed (#1212), each opening the map maker on that scene; the link names the latest
+ * revision the agent wrote, and the editor opens the head, which holds it. A push lands in the shared scene store at
+ * once, so a read every 30 s shows it within a minute.
  */
 export function TicketScenes({ gameId, ticket }: { gameId: string; ticket: string }) {
   const scenes = useQuery({

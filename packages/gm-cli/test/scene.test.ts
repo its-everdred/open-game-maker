@@ -64,7 +64,7 @@ async function startScene(cwd: string): Promise<void> {
 describe('scene editor link', () => {
   it('opens on the app origin when one is set, so the link works from a phone', () => {
     expect(editorLink('https://app.example/', 'dusk-helm', 'goblin-cave', 4)).toBe(
-      'https://app.example/g/dusk-helm?mode=edit&scene=goblin-cave&rev=4',
+      'https://app.example/dusk-helm/edit?scene=goblin-cave&rev=4',
     );
   });
 });
@@ -158,7 +158,7 @@ describe('gm scene pull / push', () => {
     expect(result.code).toBe(0);
     expect(result.out.join('\n')).toContain('rebased');
     // The agent pastes this into its update; it opens the editor on the revision just pushed (#1212).
-    expect(result.out).toContain('open in the editor: /g/dusk-helm?mode=edit&scene=graveyard&rev=3');
+    expect(result.out).toContain('open in the editor: /dusk-helm/edit?scene=graveyard&rev=3');
     // The working copy is now the head, so the next agent turn starts from Kevin's edit.
     expect(readCopy(cwd).doc.objects['tree-1']!.pose).toEqual({ x: 9, y: 9 });
     expect(readCopy(cwd).doc.objects['grave-1']).toBeDefined();

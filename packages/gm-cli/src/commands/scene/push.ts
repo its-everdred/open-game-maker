@@ -103,8 +103,11 @@ export const command: GmCommand = {
   },
 };
 
-/** The map maker opened on this scene (#1212), for the agent's update to Kevin; a path when no app origin is set. */
+/**
+ * The map maker opened on this scene (#1212), for the agent's update to Kevin; a path when no app origin is set. The
+ * game's short link (`/<slug>/edit`) resolves the slug the workspace knows to the game id the editor page needs.
+ */
 export function editorLink(origin: string | undefined, game: string, scene: string, rev: number): string {
-  const query = new URLSearchParams({ mode: 'edit', scene, rev: String(rev) });
-  return `${(origin ?? '').replace(/\/$/, '')}/g/${encodeURIComponent(game)}?${query}`;
+  const query = new URLSearchParams({ scene, rev: String(rev) });
+  return `${(origin ?? '').replace(/\/$/, '')}/${encodeURIComponent(game)}/edit?${query}`;
 }
