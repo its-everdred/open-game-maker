@@ -6,6 +6,7 @@ interface BrowserHost {
   ready: GameManifest[];
   relays: unknown[];
   errors: unknown[];
+  loads: string[];
   forge(): void;
 }
 
@@ -18,6 +19,7 @@ declare global {
 const ready: GameManifest[] = [];
 const relays: unknown[] = [];
 const errors: unknown[] = [];
+const loads: string[] = [];
 const template = new URLSearchParams(location.search).get('template');
 const game =
   template === 'game-2d' || template === 'game-3d'
@@ -33,6 +35,12 @@ const game =
         gameId: template === 'menu' ? 'menu-game' : 'fixture',
         mode: 'play' as const,
       };
+/** The menu game's title layout and first-frame hold, passed through from this page's query. */
+function menuParams(): Record<string, string> {
+  const query = new URLSearchParams(location.search);
+  return Object.fromEntries(['controls', 'hold'].flatMap((key) => (query.has(key) ? [[key, query.get(key)!]] : [])));
+}
+
 const frame = createGameFrame({
   container: document.querySelector<HTMLElement>('#game')!,
   gamesOrigin: 'http://127.0.0.1:4174',
@@ -42,6 +50,7 @@ const frame = createGameFrame({
   mode: game.mode,
   playerIndex: 0,
   capabilities: [],
+  ...(template === 'menu' ? { params: menuParams() } : {}),
   // The menu game keeps the host's default pad layout, the one its menus read.
   inputMapping:
     template === 'menu' ? undefined : { touch: 'stick', gamepad: { move: 'leftStick', jump: 'a', use: 'x' } },
@@ -49,6 +58,7 @@ const frame = createGameFrame({
   onReady: (manifest) => ready.push(manifest),
   onAudioRelay: (payload) => relays.push(payload),
   onError: (failure) => errors.push(failure),
+  onLoad: (event) => loads.push(event.t),
 });
 
 window.__host = {
@@ -56,6 +66,7 @@ window.__host = {
   ready,
   relays,
   errors,
+  loads,
   forge: () => {
     const iframe = document.createElement('iframe');
     iframe.hidden = true;

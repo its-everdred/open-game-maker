@@ -59,6 +59,8 @@ const bridge = openGameBridge({
       };
       const parsed = gameToHostSchema.parse(ready);
       bridge.send(parsed);
+      /* Its canvas is up from the start; a published game gets this from the games host's frame observer. */
+      bridge.send(gameToHostSchema.parse({ v: 1, id: 'frame-1', t: 'load.frame', payload: {} }));
     }
     if (message.t === 'input.frame') window.__frames.push(message.payload);
   },

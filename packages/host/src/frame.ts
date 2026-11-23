@@ -124,9 +124,15 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
       return;
     if (typeof event.data !== 'object' || event.data === null || event.data.type !== 'ogm.frame.ready.v2') return;
     if (sdkSignalsFrame === undefined) pendingObservedFrame = true;
-    else if (!sdkSignalsFrame) options.onLoad?.({ t: 'load.frame', payload: {} });
+    else if (!sdkSignalsFrame) firstFrame();
   };
   window.addEventListener('message', observeFirstFrame);
+
+  /* The controls wait for the game's first frame, so they never cover its loading screen. */
+  const firstFrame = () => {
+    overlay.setLoading(false);
+    options.onLoad?.({ t: 'load.frame', payload: {} });
+  };
 
   let disposed = false;
   const dispose = () => {
@@ -176,6 +182,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     playerIndex: options.playerIndex,
     onFrame: (frame) => bridge.send('input.frame', frame),
   });
+  overlay.setLoading(true);
   const gamepads = new GamepadPoller({ onActivity: (at) => overlay.noteGamepadInput(at) });
   gamepads.onFrame((frame) => bridge.send('input.frame', frame));
   const viewport = new ViewportTracker({
@@ -187,7 +194,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
 
   bridge.on('ready', ({ manifest, marks, firstFrameSignal, startupHold }) => {
     sdkSignalsFrame = firstFrameSignal === true;
-    if (!sdkSignalsFrame && pendingObservedFrame) options.onLoad?.({ t: 'load.frame', payload: {} });
+    if (!sdkSignalsFrame && pendingObservedFrame) firstFrame();
     gamepads.setMapping(options.inputMapping?.gamepad, manifest.inputs.actions);
     const sticks = Object.values(manifest.inputs.actions).filter((kind) => kind === 'stick').length;
     const touch =
@@ -201,7 +208,11 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   bridge.on('save.write', (payload) => options.onSaveWrite?.(payload));
   bridge.on('event', ({ kind, payload }) => options.onEvent?.(kind, payload));
   bridge.on('load.progress', (payload) => options.onLoad?.({ t: 'load.progress', payload }));
-  bridge.on('load.frame', (payload) => options.onLoad?.({ t: 'load.frame', payload }));
+  bridge.on('load.frame', (payload) => {
+    overlay.setLoading(false);
+    options.onLoad?.({ t: 'load.frame', payload });
+  });
+  bridge.on('host.controls', ({ layout }) => overlay.setLayout(layout));
   bridge.on('load.done', (payload) => options.onLoad?.({ t: 'load.done', payload }));
   bridge.on('audio.relay', (payload) => options.onAudioRelay?.(payload));
   bridge.on('input.rawKey', ({ code, down }) => {

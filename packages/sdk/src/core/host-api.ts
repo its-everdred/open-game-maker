@@ -65,6 +65,10 @@ export class SdkHostApi implements HostApi {
     },
   };
 
+  readonly controls: NonNullable<HostApi['controls']> = {
+    set: ({ layout }) => this.send('host.controls', { layout }),
+  };
+
   readonly test: HostApi['test'] = {
     register: (hooks) => {
       this.hooks = hooks;
