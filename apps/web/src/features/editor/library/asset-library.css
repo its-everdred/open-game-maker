@@ -166,16 +166,18 @@
 }
 
 .asset-library-picture {
-  display: grid;
-  place-items: center;
+  position: relative;
+  display: block;
   overflow: hidden;
   border-radius: 14px;
   background: var(--paper-2);
 }
 
 .asset-library-picture img {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 8%;
+  width: 84%;
+  height: 84%;
   object-fit: contain;
   image-rendering: pixelated;
 }

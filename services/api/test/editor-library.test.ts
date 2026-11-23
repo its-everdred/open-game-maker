@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { schema } from '@ogm/db';
@@ -189,6 +190,27 @@ describe('map maker asset library', () => {
     expect((await app.request(thumbUrl('t1:other/tiles/tree@1'), { headers })).status).toBe(404);
     expect((await app.request(thumbUrl('t1:rural/tiles/escape@1'), { headers })).status).toBe(404);
     expect((await app.request(thumbUrl('private/previews/fence.webp'), { headers })).status).toBe(404);
+  });
+
+  it('cuts a piece out of its transparent canvas, so a wall drawn in one corner fills its tile', async () => {
+    const { checkout, assets } = fixture();
+    /* A 128x256 iso tile whose only drawing is a 20x30 piece near the bottom left. */
+    const piece = await sharp({ create: { width: 20, height: 30, channels: 4, background: '#806040' } })
+      .png()
+      .toBuffer();
+    const tile = await sharp({
+      create: { width: 128, height: 256, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .composite([{ input: piece, left: 4, top: 200 }])
+      .png()
+      .toBuffer();
+    writeFileSync(join(assets, 'private', 'previews', 'fence.webp'), tile);
+    const app = appWith(checkout, assets);
+
+    const thumb = await app.request(thumbUrl('t1:rural/tiles/fence-a1@1'), { headers: asUser(ids.creator) });
+    expect(thumb.status).toBe(200);
+    const meta = await sharp(Buffer.from(await thumb.arrayBuffer())).metadata();
+    expect([meta.format, meta.width, meta.height]).toEqual(['webp', 20, 30]);
   });
 
   it('reports the library unavailable when the host has no asset library', async () => {

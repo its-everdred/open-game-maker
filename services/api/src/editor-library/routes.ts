@@ -3,6 +3,7 @@ import { extname } from 'node:path';
 
 import { eq } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
+import sharp from 'sharp';
 
 import { editorLibrary, loadIndex, packOf } from '@ogm/asset-cards';
 import { loadEnv } from '@ogm/config';
@@ -18,10 +19,10 @@ export const prefix = '/api/v1';
 
 const CACHE_MS = 5 * 60_000;
 const MAX_THUMB_BYTES = 1024 * 1024;
-const THUMB_MIME = new Map([
-  ['.png', 'image/png'],
-  ['.webp', 'image/webp'],
-]);
+const THUMB_SOURCES = new Set(['.png', '.webp']);
+/** Thumbnails are cut to the piece and fit in this square; the sheet scales them up pixelated. */
+const THUMB_PX = 192;
+const THUMB_CACHE = 4000;
 
 type Built = { library: EditorLibrary; thumbs: Map<string, string> };
 
@@ -31,6 +32,7 @@ type Built = { library: EditorLibrary; thumbs: Map<string, string> };
  */
 export function editorLibraryRoutes(assetsRoot?: string): Hono<ApiBindings> {
   const cache = new Map<string, { at: number; entry: Promise<Built> }>();
+  const pictures = new Map<string, Promise<Buffer>>();
 
   async function libraryFor(c: Context<ApiBindings>): Promise<Built> {
     const game = authorizedGame(c, 'game.edit');
@@ -77,21 +79,47 @@ export function editorLibraryRoutes(assetsRoot?: string): Hono<ApiBindings> {
     .get('/games/:gameId/editor/library/thumb', async (c) => {
       const { thumbs } = await libraryFor(c);
       const path = thumbs.get(c.req.query('card') ?? '');
-      const mime = path ? THUMB_MIME.get(extname(path).toLowerCase()) : undefined;
-      if (!path || !mime || !assetsRoot) throw new HttpError(404, 'not_found');
+      if (!path || !THUMB_SOURCES.has(extname(path).toLowerCase()) || !assetsRoot)
+        throw new HttpError(404, 'not_found');
+      let picture = pictures.get(path);
+      if (!picture) {
+        picture = readThumb(assetsRoot, path);
+        pictures.set(path, picture);
+        picture.catch(() => pictures.delete(path));
+        if (pictures.size > THUMB_CACHE) pictures.delete(pictures.keys().next().value!);
+      }
       let bytes: Buffer;
       try {
-        const file = await contained(assetsRoot, path);
-        if ((await stat(file)).size > MAX_THUMB_BYTES) throw new Error('thumbnail too large');
-        bytes = await readFile(file);
+        bytes = await picture;
       } catch {
         throw new HttpError(404, 'not_found');
       }
       return c.body(new Uint8Array(bytes), 200, {
-        'Content-Type': mime,
+        'Content-Type': 'image/webp',
         'Cache-Control': 'private, max-age=86400',
       });
     });
+}
+
+/**
+ * A pack piece sits in a corner of a large transparent canvas (an iso wall fills a strip of a 128x256 tile), so the
+ * thumbnail is cut to its opaque pixels and fit in a small square, kept pixel-sharp.
+ */
+async function readThumb(assetsRoot: string, path: string): Promise<Buffer> {
+  const file = await contained(assetsRoot, path);
+  if ((await stat(file)).size > MAX_THUMB_BYTES) throw new Error('thumbnail too large');
+  const bytes = await readFile(file);
+  const fit = (image: ReturnType<typeof sharp>) =>
+    image
+      .resize(THUMB_PX, THUMB_PX, { fit: 'inside', kernel: 'nearest', withoutEnlargement: true })
+      .webp({ lossless: true })
+      .toBuffer();
+  try {
+    return await fit(sharp(bytes).trim({ threshold: 1 }));
+  } catch {
+    /* A fully transparent or unreadable picture has nothing to trim: send it fitted, or as it is. */
+    return fit(sharp(bytes)).catch(() => bytes);
+  }
 }
 
 /** `gm.lock.json` names the game's style set; a game without one offers only the packs it already uses. */
