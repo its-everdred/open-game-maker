@@ -148,6 +148,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y;
+  contain: strict;
 }
 
 .asset-library-item {
@@ -160,6 +161,7 @@
   background: none;
   color: var(--muted);
   touch-action: pan-y;
+  contain: layout paint style;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;

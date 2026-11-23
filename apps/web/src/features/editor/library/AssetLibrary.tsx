@@ -255,7 +255,8 @@ function LibraryGrid({
       ref={scroller}
       className="asset-library-grid"
       onScroll={(event) => {
-        const top = event.currentTarget.scrollTop;
+        /* Re-render only when another row comes into view, not on every scrolled pixel. */
+        const top = rowHeight > 0 ? Math.floor(event.currentTarget.scrollTop / rowHeight) * rowHeight : 0;
         setView((current) => (current.top === top ? current : { ...current, top }));
       }}
     >
