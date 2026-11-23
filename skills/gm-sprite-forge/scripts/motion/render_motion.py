@@ -5,7 +5,7 @@ mask=1 also renders mask_<row>_<col>.png (white where the base-colour texture is
 undergarments) through the same camera and frames, for the pixel finish's cloth ramp; mask_only=1 renders only those.
 spec: {"mesh": glb, "rotz": deg, "motion": {"kind": "kaykit"|"bvh"|"handkey"|"none", "path", "action",
        "frames": [f0, f1] | "auto", "loop": true, "foot_ik": true, "clip": "walk"|"attack"},
-       "weapon": {"path": glb, "bone": "hand.R", "length": 0.3, "spin": deg}}
+       "weapon": {"path": glb, "bone": "hand.R", "length": 0.3, "spin": deg, "roll": deg}}
 keys: rows=1,2 (sheet rows E=0 SE=1 S=2 ...)  frames=15  cell=128  height_px=43  origin_row=88  engine=cycles|workbench
       samples=32 supersample=1 threads=6
 Camera, light and scale match gpu_bake_rig.py: orthographic, 60 deg from vertical, yaw 45; the rig's rest pose in the

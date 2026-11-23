@@ -13,7 +13,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts/motion'))
-from score_cell import best_shift, foot_slide  # noqa: E402
+from score_cell import best_shift, cloth_sheet, foot_slide  # noqa: E402
 
 CELL = 128
 PX_PER_UNIT = CELL / (2 * 2 ** 0.5)
@@ -221,10 +221,6 @@ class SeamAndFootLockTest(unittest.TestCase):
         self.assertEqual(len(set(round(x, 9) for x in run)), 1)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 SHAPE_KEYS = '''
 import sys, json
 sys.path.insert(0, sys.argv[-2])
@@ -262,3 +258,25 @@ class ShapeKeyTest(unittest.TestCase):
             np.testing.assert_allclose(r['drawn'], r['measured'], atol=1e-4)
             self.assertAlmostEqual(r['measured'][2], 1.8, places=4)
             self.assertGreater(r['measured'][0], r['measured'][1])  # the long axis turned from Y to X
+
+
+class ClothSheetTest(unittest.TestCase):
+    def test_masks_land_on_their_own_frames(self):
+        # The pixel finish gives cloth its own colours; a mask on the wrong frame would paint skin as underwear.
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            Image.new('RGBA', (256, 256)).save(d / 'raw_1_2.png')  # supersampled 2x, as a Cycles cell
+            m = np.zeros((256, 256, 4), np.uint8)
+            m[40:200, 40:200] = (0, 0, 0, 255)  # the body: skin renders black
+            m[64:128, 64:128] = (255, 255, 255, 255)  # the briefs render white
+            Image.fromarray(m).save(d / 'mask_1_2.png')
+            cloth = cloth_sheet(d, (8 * 128, 15 * 128))
+            self.assertTrue(cloth[128 + 32:128 + 64, 2 * 128 + 32:2 * 128 + 64].all())
+            self.assertEqual(cloth.sum(), 32 * 32)  # nothing else: not the skin, not another frame
+            (d / 'mask_1_2.png').rename(d / 'mask_2_2.png')  # a mask for a frame that was not rendered
+            with self.assertRaises(SystemExit):
+                cloth_sheet(d, (8 * 128, 15 * 128))
+
+
+if __name__ == '__main__':
+    unittest.main()

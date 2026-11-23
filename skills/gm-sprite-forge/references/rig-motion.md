@@ -93,14 +93,15 @@ loop, none for an attack, in pixels at the pack cell.
   it, and the pass fails if either sheet has no skin pixels. The sheet before that pass is kept as
   `out/sheet_finish.png`. Without `finish`, the whole sheet is matched to the clip's pack sheet.
 - `pixel`: `{"colours": 8, "cloth": 6, "smooth": true}` runs `scripts/pixel_finish.py` after the colour pass: one
-  palette over the whole sheet (the same colours in every frame), a 3x3 median first with `smooth`. This is Kevin's
+  palette over the whole sheet, `colours` for everything but the cloth and `cloth` for the cloth (14 in all) (the same colours in every frame), a 3x3 median first with `smooth`. This is Kevin's
   pick "B" (hero-finish1-warrior, 2026-11-22: fewer shades, less detail, as the pack). `cloth` renders a cloth mask
   per frame (`mask_<row>_<col>.png`: white where the base-colour texture is pale and unsaturated) and gives the
   undergarments their own colours: on one palette they merge into pale skin. The sheet before it is kept as
   `out/sheet_colour.png`. `render` keys `mask_s` and `mask_v` (0.16, 0.5) set the cloth thresholds; stricter ones
   lose the briefs.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,
-  `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`. Use the pack class's Stage 1 values
+  `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`, `mask_s`, `mask_v` (`mask=1` is added
+  for you when `pixel.cloth` is set). Use the pack class's Stage 1 values
   for `height_px` and `origin_row` (Warrior 43 and 88).
 - `motion`: `kind` is `kaykit`, `bvh`, `handkey` or `none`. `loop` defaults to true for a walk and false for an attack.
   `foot_ik` defaults to true (false copies rotations only). `frames: [f0, f1]` overrides the automatic cut. For an
@@ -119,6 +120,7 @@ Run from the repository root:
 ```sh
 gm py -- skills/gm-sprite-forge/scripts/motion/run_cells.py cells.json <out> --engine workbench   # fast scoring pass
 gm py -- skills/gm-sprite-forge/scripts/motion/run_cells.py cells.json <out> --engine cycles --only A-handkey-walk
+gm py -- skills/gm-sprite-forge/scripts/motion/run_cells.py cells.json <out> --rescore   # new finish/pixel, same renders
 gm py -- skills/gm-sprite-forge/scripts/motion/matrix_media.py <media> <pack Walk sheet> "Walk" <out>/A-handkey-walk ...
 <blender wrapper> --python skills/gm-sprite-forge/scripts/motion/fit_accuracy.py -- fitacc.json 43 <rigged.fbx[:mesh]> ...
 ```
@@ -127,7 +129,8 @@ Each cell directory gets `raw_<row>_<col>.png`, `out/sheet.png`, `scores.json`, 
 motion licence), `fit.json`, `feet.json`, `landmarks.png` (first fit only) and `render.log`; `<out>/summary.txt` lists
 the batch and `run_cells.py` exits 1 if any cell failed. A rerun clears a cell's old results first. `--rescore` keeps
 the renders and runs the finish and scoring again (after a new `finish` or `pixel`), rendering only the cloth masks
-when `pixel.cloth` needs them and the cell has none.
+when `pixel.cloth` needs them and the cell lacks them. It refuses a cell whose mesh, motion, stance or weapon in
+`cells.json` changed since its render: render that cell again.
 `matrix_media.py` reads `out/sheet.png`, `scores.json` and `recipe.json` from each cell directory.
 
 ## Files stay local

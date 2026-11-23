@@ -100,7 +100,7 @@ def cloth_sheet(cell_dir, shape, cell=128):
     """The cloth mask at sheet size: each mask_<row>_<col>.png box-downsampled into its cell, as gpu_bake_finish places
     raw_<row>_<col>.png. A cell is cloth where the mask is mostly white over visible pixels."""
     masks = sorted(cell_dir.glob('mask_*_*.png'))
-    if len(masks) != len(list(cell_dir.glob('raw_*_*.png'))):
+    if {p.stem[5:] for p in masks} != {p.stem[4:] for p in cell_dir.glob('raw_*_*.png')}:
         raise SystemExit(f'{cell_dir}: --cloth needs one mask_<row>_<col>.png per raw frame (render_motion.py mask=1)')
     out = np.zeros(shape, bool)
     for p in masks:
@@ -121,7 +121,7 @@ def main():
     ap.add_argument('--loop', action='store_true')
     ap.add_argument('--finish', action='store_true')
     ap.add_argument('--skin-ref')
-    ap.add_argument('--pixel', type=int, help='pack-style pixel finish: this many colours (Kevin picked 14)')
+    ap.add_argument('--pixel', type=int, help='pack-style pixel finish: colours for everything but the cloth (pick B: 8, with --cloth 6)')
     ap.add_argument('--smooth', action='store_true', help='with --pixel: 3x3 Lab median before the palette')
     ap.add_argument('--cloth', type=int, help='with --pixel: colours for the cloth, from the mask frames')
     a = ap.parse_args()

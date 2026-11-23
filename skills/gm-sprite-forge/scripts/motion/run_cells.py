@@ -47,6 +47,18 @@ def write_recipe(d, spec, c, scores):
     (d / 'recipe.json').write_text(json.dumps(rec, indent=1, default=str))
 
 
+def blender(spec, d, keys, log):
+    """One render_motion.py run for cell directory d; True when it succeeded."""
+    with open(d / log, 'w') as out:
+        return subprocess.run([spec['blender'], '--python', str(HERE / 'render_motion.py'), '--', str(d),
+                               str(d / 'spec.json'), *keys], stdout=out, stderr=subprocess.STDOUT).returncode == 0
+
+
+def inputs(cell):
+    """What a render depends on: everything in a cell spec but where its rig cache lives."""
+    return {k: v for k, v in cell.items() if k != 'rig_cache'}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('cells', type=Path)
@@ -64,38 +76,38 @@ def main():
         if only and c['name'] not in only:
             continue
         d = a.out / c['name']
-        if a.rescore and not (d / 'render.json').is_file():
-            rows.append((c['name'], 'rescore failed: no render'))
-            print(c['name'], 'rescore failed: no render', flush=True)
-            continue
+        cell = {'mesh': spec['mesh'], 'rotz': spec.get('rotz', 0),
+                'motion': {'stance': spec.get('stance')} | c['motion'] | {'clip': c['clip']},
+                'weapon': c.get('weapon', spec.get('weapon')), 'rig_cache': str(a.out / 'rig_cache.blend')}
+        if a.rescore:  # the recipe and masks must describe the frames on disk, not a since-edited cells.json
+            why = 'no render' if not (d / 'render.json').is_file() else \
+                'cells.json changed since the render: render it again' if \
+                inputs(json.loads((d / 'spec.json').read_text())) != inputs(json.loads(json.dumps(cell))) else None
+            if why:
+                rows.append((c['name'], f'rescore failed: {why}'))
+                print(c['name'], f'rescore failed: {why}', flush=True)
+                continue
         d.mkdir(parents=True, exist_ok=True)
         rendered = () if a.rescore else ('feet.json', 'fit.json', 'render.json')
         for stale in ('out', 'scores.json', 'recipe.json') + rendered:
             p = d / stale  # a failed rerun must not leave the previous run's results looking current
             shutil.rmtree(p) if p.is_dir() else p.unlink(missing_ok=True)
         if not a.rescore:
-            cell = {'mesh': spec['mesh'], 'rotz': spec.get('rotz', 0),
-                    'motion': {'stance': spec.get('stance')} | c['motion'] | {'clip': c['clip']},
-                    'weapon': c.get('weapon', spec.get('weapon')), 'rig_cache': str(a.out / 'rig_cache.blend')}
             (d / 'spec.json').write_text(json.dumps(cell, indent=1))
             keys = [f'{k}={v}' for k, v in (spec.get('render', {}) | {'engine': a.engine}).items()]
             if (spec.get('pixel') or {}).get('cloth'):
                 keys.append('mask=1')
             if a.engine == 'workbench':
                 keys.append('supersample=2')
-            log = open(d / 'render.log', 'w')
-            r = subprocess.run([spec['blender'], '--python', str(HERE / 'render_motion.py'), '--', str(d), str(d / 'spec.json'),
-                                *keys], stdout=log, stderr=subprocess.STDOUT)
-            if r.returncode:
+            if not blender(spec, d, keys, 'render.log'):
                 rows.append((c['name'], 'render failed: see render.log'))
                 print(c['name'], 'render failed', flush=True)
                 continue
-        elif (spec.get('pixel') or {}).get('cloth') and not any(d.glob('mask_*_*.png')):  # masks only, same render
-            keys = [f'{k}={v}' for k, v in (spec.get('render', {}) | {'engine': 'cycles'}).items()] + ['mask_only=1']
-            with open(d / 'mask.log', 'w') as log:
-                r = subprocess.run([spec['blender'], '--python', str(HERE / 'render_motion.py'), '--', str(d),
-                                    str(d / 'spec.json'), *keys], stdout=log, stderr=subprocess.STDOUT)
-            if r.returncode:
+        elif (spec.get('pixel') or {}).get('cloth') and \
+                len(list(d.glob('mask_*_*.png'))) != len(list(d.glob('raw_*_*.png'))):  # masks only, as rendered
+            params = json.loads((d / 'render.json').read_text())['params']
+            keys = [f'{k}={v}' for k, v in params.items() if not k.startswith('mask')] + ['mask_only=1']
+            if not blender(spec, d, keys, 'mask.log'):
                 rows.append((c['name'], 'mask render failed: see mask.log'))
                 print(c['name'], 'mask render failed', flush=True)
                 continue
