@@ -8,6 +8,8 @@
   --edit-bubble-ceiling: calc(100cqh - var(--edit-bar) - 58px);
   --edit-chat-sheet: min(70cqh, var(--edit-bubble-ceiling) - 12px, 560px);
   position: relative;
+  display: grid;
+  grid-template: 'game' minmax(0, 1fr) / minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   width: 100%;
@@ -15,9 +17,8 @@
 }
 
 .edit-workspace-game {
+  grid-area: game;
   position: relative;
-  width: 100%;
-  height: 100%;
   min-width: 0;
   min-height: 0;
 }
@@ -106,11 +107,14 @@
   background: var(--red);
 }
 
+/* Not positioned: the editor's chrome anchors to the workspace, not to this button. */
 .edit-workspace-editor {
-  position: absolute;
+  grid-area: game;
   z-index: 2;
-  top: calc(var(--safe-t) + 15px);
-  right: var(--edit-fixed-controls);
+  justify-self: end;
+  align-self: start;
+  margin-top: calc(var(--safe-t) + 15px);
+  margin-right: var(--edit-fixed-controls);
   max-width: 100%;
   max-height: 100%;
 }
