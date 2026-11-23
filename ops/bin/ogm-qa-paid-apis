@@ -3,7 +3,9 @@
 
 Three requests carrying the games origin, as the QA creator, must get 403 `paid_apis_off_during_gameplay`: POST
 /api/v1/voice/token, /api/v1/voice/dictation-token and /api/v1/games/<QA game>/narration/render. A preview whose script
-names a paid provider host, uploaded with a game daemon's hook secret, must get 422 `paid_integration`.
+names a paid provider host, uploaded with a game daemon's hook secret, must get 422 `paid_integration`. When no
+game daemon holds a hook secret (#1309), the upload route rejects every caller before the scan, so the preview is
+reported unreachable and does not fail the check.
 
 The check never makes a paid call and never installs anything. Every request is one the route rejects right after its
 paid-API gate (an empty target, no narration lines, an invalid cache plan in the preview), so a broken gate answers 400,
@@ -96,6 +98,23 @@ def preview_archive():
     return buffer.getvalue()
 
 
+def read_secret(slug):
+    """The daemon's hook secret: '' when it has none (no file or an empty one), None when it exists but is unreadable."""
+    try:
+        with open(os.path.expanduser(f'~/.config/ogm/daemons/{slug}/hook-secret')) as handle:
+            return handle.read().strip()
+    except FileNotFoundError:
+        return ''
+    except OSError:
+        return None
+
+
+def any_daemon_secret(conn):
+    """Whether any game daemon holds a hook secret, as the upload route's lookup reads them. An unreadable one counts, so
+    the check fails rather than call the route unreachable."""
+    return any(read_secret(slug) != '' for (slug,) in conn.execute('select slug from game_daemons'))
+
+
 def daemon_secret(conn, qa_game):
     """The QA game's daemon first, else any game daemon whose hook secret this user can read. Only daemons whose game is
     linked to the daemon's repository, as the upload route requires."""
@@ -105,11 +124,7 @@ def daemon_secret(conn, qa_game):
     ).fetchall()
     rows.sort(key=lambda row: (row[1] != qa_game, not row[0].startswith('qa'), row[0]))
     for slug, _ in rows:
-        try:
-            with open(os.path.expanduser(f'~/.config/ogm/daemons/{slug}/hook-secret')) as handle:
-                secret = handle.read().strip()
-        except OSError:
-            continue
+        secret = read_secret(slug)
         if secret:
             return slug, secret
     return None, None
@@ -140,6 +155,7 @@ def main(argv):
     with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as conn:
         setting = conn.execute("select value from app_meta where key = 'gameplay.paid_apis'").fetchone()
         slug, secret = daemon_secret(conn, qa_game)
+        unreachable = not any_daemon_secret(conn)
     if setting and setting[0] == 'on':
         print('paid APIs during gameplay are on: nothing to refuse')
         print('exit=0 qa-paid-apis')
@@ -158,7 +174,9 @@ def main(argv):
         ok = status == want_status and code == want_code
         print(f'{name}: {"refused" if ok else "NOT REFUSED"} ({status} {code})')
         failed |= not ok
-    if not slug:
+    if unreachable:
+        print('preview: unreachable (no daemon holds a hook secret, so no upload can reach the paid-host scan)')
+    elif not slug:
         print('preview: no game daemon with a readable hook secret')
         failed = 1
     print(f'exit={int(failed)} qa-paid-apis')
