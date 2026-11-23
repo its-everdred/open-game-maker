@@ -6,6 +6,7 @@ import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson } from '../../context.js';
 import {
   changedShare,
+  expectsHostStick,
   firstTapPath,
   frameStddev,
   gameApiAnswer,
@@ -106,6 +107,7 @@ export const command: GmCommand = {
       idleChange: null,
       inputChange: null,
       input: null,
+      expectsStick: manifest ? expectsHostStick(manifest) : false,
     };
     if (!manifest || !doc) {
       observation.bridgeState = 'not started: the build serves no manifest.json or design/design.json';

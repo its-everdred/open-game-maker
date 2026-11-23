@@ -6,6 +6,7 @@ export type PlayManifest = {
   modes?: { tap?: string }[];
   playArea?: false | { tap?: string };
   controlBindings?: Record<string, string>;
+  inputs?: { actions?: Record<string, string>; touch?: string };
 };
 
 /** One bridge message type seen by the shell; repeats of the same type in a row fold into `n`. */
@@ -30,6 +31,8 @@ export type PlayObservation = {
   idleChange: number | null;
   inputChange: number | null;
   input: PlayInput | null;
+  /** The host should draw a move stick (a `move` stick the game does not draw itself): a swipe then means it is gone. */
+  expectsStick: boolean;
   /** Why the check stopped before it finished (its deadline, a browser crash). */
   stopped?: string;
 };
@@ -50,6 +53,11 @@ export function firstTapPath(manifest: PlayManifest): string[] {
         .map((text) => text.trim())
         .filter(Boolean)
     : [];
+}
+
+/** The game declares a `move` stick and leaves touch controls to the host, so the host must draw that stick. */
+export function expectsHostStick(manifest: PlayManifest): boolean {
+  return manifest.inputs?.actions?.move === 'stick' && manifest.inputs.touch !== 'self';
 }
 
 /** The key bound to a move, rightward first: one step of the player when the host draws no stick. */
@@ -118,9 +126,9 @@ export function judgePlay(observation: PlayObservation): PlayVerdict {
   if (observation.inputChange !== null && observation.idleChange !== null) {
     const measured = `idle ${share(observation.idleChange)}, input ${share(observation.inputChange)}`;
     const moved = observation.inputChange - observation.idleChange >= MIN_INPUT_CHANGE;
-    // No stick and no move key: the swipe is a guess at the game's controls, so a still frame is not proof it broke.
-    if (!moved && observation.input === 'swipe')
-      unchecked.push(`the game declares no move input and a swipe changed nothing (${measured})`);
+    // Without a host stick or a move key the swipe is a guess at the game's controls: a still frame is not proof it broke.
+    if (!moved && observation.input === 'swipe' && !observation.expectsStick)
+      unchecked.push(`no host stick or move key to try, and a swipe changed nothing (${measured})`);
     else if (!moved) failures.push(`one ${observation.input ?? 'input'} did not change the frame (${measured})`);
   } else if (!failures.length) failures.push('no input was tried');
   return { failures, unchecked };

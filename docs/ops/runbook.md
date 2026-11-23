@@ -533,8 +533,9 @@ the QA creator (`qa.env`), waits for the bridge handshake and the game's `load.f
 from its hosted `manifest.json` (the first mode's `tap`, else `playArea.tap`), and makes one input: a drag on the
 host's move stick, else a key bound to `move.right`, else a swipe. It fails when the bridge is not ready, the shell
 shows Try again, no first frame arrives, a tap never appears, the frame is blank, or the input changes the frame no
-more than waiting does; a swipe on a game that declares no move input is reported as unchecked instead. One game
-plays at a time, in the capture slot, and each play is capped at 170 s.
+more than waiting does. A swipe that moves nothing is reported as unchecked instead, unless the host should have drawn
+the game's move stick (a `move` stick without `touch: "self"`). One game plays at a time, in the capture slot, and
+each play is capped at 170 s.
 
 The QA account cannot read another family's private game, so the check answers that game's own API routes from its
 published build (`design/design.json`) and absorbs its writes; the shell, auth, the rest of the API and the games host

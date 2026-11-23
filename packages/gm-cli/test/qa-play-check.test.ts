@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   changedShare,
+  expectsHostStick,
   firstTapPath,
   frameStddev,
   gameApiAnswer,
@@ -32,6 +33,7 @@ function played(overrides: Partial<PlayObservation> = {}): PlayObservation {
     idleChange: 0.001,
     inputChange: 0.22,
     input: 'stick',
+    expectsStick: true,
     ...overrides,
   };
 }
@@ -100,12 +102,16 @@ describe('qa play-check verdict', () => {
 
   /* A new requirement degrades gracefully: a game with no stick and no move key gets a reported line, not a failure. */
   it('reports a swipe that moved nothing as unchecked, while a stick or key that moves nothing fails', () => {
-    expect(judgePlay(played({ input: 'swipe', idleChange: 0, inputChange: 0 }))).toEqual({
+    expect(judgePlay(played({ input: 'swipe', expectsStick: false, idleChange: 0, inputChange: 0 }))).toEqual({
       failures: [],
-      unchecked: ['the game declares no move input and a swipe changed nothing (idle 0%, input 0%)'],
+      unchecked: ['no host stick or move key to try, and a swipe changed nothing (idle 0%, input 0%)'],
     });
     expect(judgePlay(played({ input: 'stick', idleChange: 0, inputChange: 0.011 })).failures).toEqual([
       'one stick did not change the frame (idle 0%, input 1%)',
+    ]);
+    // The host should have drawn this game's stick; falling back to a swipe means the stick is gone, so it fails.
+    expect(judgePlay(played({ input: 'swipe', idleChange: 0, inputChange: 0 })).failures).toEqual([
+      'one swipe did not change the frame (idle 0%, input 0%)',
     ]);
   });
 
@@ -138,6 +144,13 @@ describe('qa play-check manifest', () => {
       'Play',
     ]);
     expect(firstTapPath({ playArea: false })).toEqual([]);
+  });
+
+  /* Restorebound declares a move stick but draws its own touch controls: no host stick is owed to it. */
+  it('expects a host stick only for a move stick the game does not draw itself', () => {
+    expect(expectsHostStick({ inputs: { actions: { move: 'stick' } } })).toBe(true);
+    expect(expectsHostStick({ inputs: { actions: { move: 'stick' }, touch: 'self' } })).toBe(false);
+    expect(expectsHostStick({ inputs: { actions: { confirm: 'button' } } })).toBe(false);
   });
 
   it('presses the key bound to moving right, else any move', () => {

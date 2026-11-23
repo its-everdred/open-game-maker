@@ -85,6 +85,11 @@ set +e
 rc=$?
 set -e
 assert_eq 64 "$rc" "another game's build is refused"
+set +e
+"$check" --db "$db" --repo "$stack" --game ok --build '' > /dev/null 2>&1
+rc=$?
+set -e
+assert_eq 64 "$rc" 'an empty build id is refused, never replaced by the latest build'
 
 # A play that dies before writing its report fails; it never passes for lack of evidence.
 set +e

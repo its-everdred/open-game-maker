@@ -83,8 +83,8 @@ def main(argv):
     if len(argv) % 2 or set(args) - {'--db', '--game', '--build', '--repo', '--attention'}:
         print(__doc__.split('\n\n')[1], file=sys.stderr)
         return 64
-    if '--build' in args and '--game' not in args:
-        print('ogm-qa-game-play: --build needs --game', file=sys.stderr)
+    if '--build' in args and ('--game' not in args or not args['--build']):
+        print('ogm-qa-game-play: --build needs a build id and --game', file=sys.stderr)
         return 64
     repo = args.get('--repo') or os.path.dirname(os.path.dirname(HERE))
     api = env_file(os.path.join(os.environ.get('OGM_ENV_DIR', os.path.expanduser('~/.config/ogm/env')), 'api.env'))
