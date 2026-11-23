@@ -22,6 +22,7 @@ worn gear that bends with the body is not built yet.
 | `scripts/motion/render_motion.py` | Blender | One cell: fit (or reuse the cached fit), skin, motion, render S and SE, write `feet.json` |
 | `scripts/motion/fit_rig.py`, `retarget.py`, `handkey.py` | Blender (modules) | Reached through `render_motion.py`; not commands |
 | `scripts/motion/score_cell.py` | `gm py --` | Finish frames, `score.py` metrics, loop phase, foot slide -> `scores.json` |
+| `scripts/pixel_finish.py` | `gm py --` | Pack-style pixel finish (few colours, cloth on its own ramp); `score_cell.py` runs it for `pixel` |
 | `scripts/motion/matrix_media.py` | `gm py --` (needs ffmpeg with libx264) | Review matrix: pack column plus at most 6 cells, GIF + MP4, 1x and 4x |
 | `scripts/motion/strip.py` | `gm py --` | Quick zoomed strip for looking: `strip.py <cell_dir> <out.png> [rows=1,2] [zoom=3] [ref=<pack sheet>]` |
 | `scripts/motion/fit_accuracy.py` | Blender | Landmark error against rigged characters; exits 1 if any case fails |
@@ -91,6 +92,13 @@ loop, none for an attack, in pixels at the pack cell.
   skin and erased underwear (Kevin, 2026-11-22). `pack.idle` is required: `run_cells.py` refuses to start without
   it, and the pass fails if either sheet has no skin pixels. The sheet before that pass is kept as
   `out/sheet_finish.png`. Without `finish`, the whole sheet is matched to the clip's pack sheet.
+- `pixel`: `{"colours": 8, "cloth": 6, "smooth": true}` runs `scripts/pixel_finish.py` after the colour pass: one
+  palette over the whole sheet (the same colours in every frame), a 3x3 median first with `smooth`. This is Kevin's
+  pick "B" (hero-finish1-warrior, 2026-11-22: fewer shades, less detail, as the pack). `cloth` renders a cloth mask
+  per frame (`mask_<row>_<col>.png`: white where the base-colour texture is pale and unsaturated) and gives the
+  undergarments their own colours: on one palette they merge into pale skin. The sheet before it is kept as
+  `out/sheet_colour.png`. `render` keys `mask_s` and `mask_v` (0.16, 0.5) set the cloth thresholds; stricter ones
+  lose the briefs.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,
   `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`. Use the pack class's Stage 1 values
   for `height_px` and `origin_row` (Warrior 43 and 88).
@@ -117,7 +125,9 @@ gm py -- skills/gm-sprite-forge/scripts/motion/matrix_media.py <media> <pack Wal
 
 Each cell directory gets `raw_<row>_<col>.png`, `out/sheet.png`, `scores.json`, `recipe.json` (`ai_generated: true`,
 motion licence), `fit.json`, `feet.json`, `landmarks.png` (first fit only) and `render.log`; `<out>/summary.txt` lists
-the batch and `run_cells.py` exits 1 if any cell failed. A rerun clears a cell's old results first.
+the batch and `run_cells.py` exits 1 if any cell failed. A rerun clears a cell's old results first. `--rescore` keeps
+the renders and runs the finish and scoring again (after a new `finish` or `pixel`), rendering only the cloth masks
+when `pixel.cloth` needs them and the cell has none.
 `matrix_media.py` reads `out/sheet.png`, `scores.json` and `recipe.json` from each cell directory.
 
 ## Files stay local

@@ -1,10 +1,13 @@
 """Render and score a list of rig/motion cells one Blender at a time (#1202 rig spike).
 
-Usage: run_cells.py <cells.json> <out_root> [--engine workbench|cycles] [--only name,...]
+Usage: run_cells.py <cells.json> <out_root> [--engine workbench|cycles] [--only name,...] [--rescore]
 cells.json: {"mesh": glb, "rotz": deg, "pack": {"walk": sheet.png, "attack": sheet.png, "idle": sheet.png}, "blender": wrapper,
              "finish": "base" (a base body: skin-only colour pass against pack.idle; default: pack colour match),
+             "pixel": {"colours": 8, "cloth": 6, "smooth": true} (pack-style pixel finish after the colour pass;
+                       "cloth" renders a cloth mask and gives the undergarments their own colours),
              "render": {key: value, ...}, "cells": [{"name", "clip": "walk"|"attack", "motion": {...}, "weapon": {...}}]}
 Each cell gets <out_root>/<name>/ with raw frames, out/sheet.png and scores.json; a summary table is printed.
+--rescore keeps each cell's render and runs only the finish and scoring again (a new colour or pixel finish).
 """
 import argparse
 import json
@@ -39,7 +42,7 @@ def write_recipe(d, spec, c, scores):
            'skill': 'gm-sprite-forge (motion/)', 'arm': c.get('arm', 'A: Rigify metarig fit + bone heat'),
            'motion': {k: v for k, v in mo.items() if k != 'path'} | ({'source': Path(mo['path']).name} if 'path' in mo else {}),
            'motion_licence': lic, 'mesh': Path(spec['mesh']).name, 'skin': fit['skin'], 'retarget': fit['motion'],
-           'finish': spec.get('finish', 'pack'), 'blender': render['blender'], 'engine': render['engine'], 'render_minutes': render['render_minutes'],
+           'finish': spec.get('finish', 'pack'), 'pixel': spec.get('pixel'), 'blender': render['blender'], 'engine': render['engine'], 'render_minutes': render['render_minutes'],
            'scores': {k: v for k, v in scores.items() if k != 'foot_slide'} | {'foot_slide_px': scores['foot_slide']['mean_px']}}
     (d / 'recipe.json').write_text(json.dumps(rec, indent=1, default=str))
 
@@ -50,6 +53,7 @@ def main():
     ap.add_argument('out', type=Path)
     ap.add_argument('--engine', default='workbench')
     ap.add_argument('--only')
+    ap.add_argument('--rescore', action='store_true', help='keep the renders; finish and score again')
     a = ap.parse_args()
     spec = json.loads(a.cells.read_text())
     only = set(a.only.split(',')) if a.only else None
@@ -60,28 +64,49 @@ def main():
         if only and c['name'] not in only:
             continue
         d = a.out / c['name']
+        if a.rescore and not (d / 'render.json').is_file():
+            rows.append((c['name'], 'rescore failed: no render'))
+            print(c['name'], 'rescore failed: no render', flush=True)
+            continue
         d.mkdir(parents=True, exist_ok=True)
-        for stale in ('out', 'scores.json', 'recipe.json', 'feet.json', 'fit.json', 'render.json'):
+        rendered = () if a.rescore else ('feet.json', 'fit.json', 'render.json')
+        for stale in ('out', 'scores.json', 'recipe.json') + rendered:
             p = d / stale  # a failed rerun must not leave the previous run's results looking current
             shutil.rmtree(p) if p.is_dir() else p.unlink(missing_ok=True)
-        cell = {'mesh': spec['mesh'], 'rotz': spec.get('rotz', 0),
-                'motion': {'stance': spec.get('stance')} | c['motion'] | {'clip': c['clip']},
-                'weapon': c.get('weapon', spec.get('weapon')), 'rig_cache': str(a.out / 'rig_cache.blend')}
-        (d / 'spec.json').write_text(json.dumps(cell, indent=1))
-        keys = [f'{k}={v}' for k, v in (spec.get('render', {}) | {'engine': a.engine}).items()]
-        if a.engine == 'workbench':
-            keys.append('supersample=2')
-        log = open(d / 'render.log', 'w')
-        r = subprocess.run([spec['blender'], '--python', str(HERE / 'render_motion.py'), '--', str(d), str(d / 'spec.json'),
-                            *keys], stdout=log, stderr=subprocess.STDOUT)
-        if r.returncode:
-            rows.append((c['name'], 'render failed: see render.log'))
-            print(c['name'], 'render failed', flush=True)
-            continue
+        if not a.rescore:
+            cell = {'mesh': spec['mesh'], 'rotz': spec.get('rotz', 0),
+                    'motion': {'stance': spec.get('stance')} | c['motion'] | {'clip': c['clip']},
+                    'weapon': c.get('weapon', spec.get('weapon')), 'rig_cache': str(a.out / 'rig_cache.blend')}
+            (d / 'spec.json').write_text(json.dumps(cell, indent=1))
+            keys = [f'{k}={v}' for k, v in (spec.get('render', {}) | {'engine': a.engine}).items()]
+            if (spec.get('pixel') or {}).get('cloth'):
+                keys.append('mask=1')
+            if a.engine == 'workbench':
+                keys.append('supersample=2')
+            log = open(d / 'render.log', 'w')
+            r = subprocess.run([spec['blender'], '--python', str(HERE / 'render_motion.py'), '--', str(d), str(d / 'spec.json'),
+                                *keys], stdout=log, stderr=subprocess.STDOUT)
+            if r.returncode:
+                rows.append((c['name'], 'render failed: see render.log'))
+                print(c['name'], 'render failed', flush=True)
+                continue
+        elif (spec.get('pixel') or {}).get('cloth') and not any(d.glob('mask_*_*.png')):  # masks only, same render
+            keys = [f'{k}={v}' for k, v in (spec.get('render', {}) | {'engine': 'cycles'}).items()] + ['mask_only=1']
+            with open(d / 'mask.log', 'w') as log:
+                r = subprocess.run([spec['blender'], '--python', str(HERE / 'render_motion.py'), '--', str(d),
+                                    str(d / 'spec.json'), *keys], stdout=log, stderr=subprocess.STDOUT)
+            if r.returncode:
+                rows.append((c['name'], 'mask render failed: see mask.log'))
+                print(c['name'], 'mask render failed', flush=True)
+                continue
         loop = ['--loop'] if c['clip'] == 'walk' and c['motion'].get('loop', True) else []
         loop += ['--rows', str(spec.get('render', {}).get('rows', '1,2'))]  # score the rows that were rendered
         if spec.get('finish') == 'base':  # a base body: match the skin to the pack Idle, keep the undergarments white
             loop += ['--skin-ref', spec['pack']['idle']]
+        if spec.get('pixel'):
+            px = spec['pixel']
+            loop += ['--pixel', str(px['colours'])] + (['--smooth'] if px.get('smooth') else []) + \
+                (['--cloth', str(px['cloth'])] if px.get('cloth') else [])
         s = subprocess.run([sys.executable, '-I', str(HERE / 'score_cell.py'), str(d), spec['pack'][c['clip']], '--finish', *loop],
                            capture_output=True, text=True)
         if s.returncode:
