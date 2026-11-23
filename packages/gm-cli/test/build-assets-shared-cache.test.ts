@@ -104,11 +104,18 @@ describe('gm build assets shared host cache', () => {
     expect(entries(join(home, '.cache/ogm/assets'))).toHaveLength(1);
   });
 
-  it('falls back to the repo cache when the host cache cannot be created', async () => {
+  it('falls back to the repo cache only when the host cache cannot be created', async () => {
+    const hero = await png('#c45');
+    const writable = tempDir('gm-shared-cache-');
+    const shared = checkout({ hero });
+    await build(shared, { GM_ASSET_CACHE_DIR: writable });
+    expect(entries(writable)).toHaveLength(1);
+    expect(existsSync(join(shared, '.gm/cache/assets'))).toBe(false);
+
     const locked = tempDir('gm-locked-cache-');
     chmodSync(locked, 0o500);
     try {
-      const cwd = checkout({ hero: await png('#c45') });
+      const cwd = checkout({ hero });
       await build(cwd, { GM_ASSET_CACHE_DIR: join(locked, 'assets') });
       expect(entries(join(cwd, '.gm/cache/assets'))).toHaveLength(1);
     } finally {
@@ -118,7 +125,10 @@ describe('gm build assets shared host cache', () => {
 
   it('trims back to GM_ASSET_CACHE_MAX_MB after a build so the disk cannot fill', async () => {
     const cacheDir = tempDir('gm-shared-cache-');
-    await build(checkout({ hero: await png('#c45') }), { GM_ASSET_CACHE_DIR: cacheDir, GM_ASSET_CACHE_MAX_MB: '0' });
+    await build(checkout({ hero: await png('#c45') }), { GM_ASSET_CACHE_DIR: cacheDir });
+    expect(entries(cacheDir)).toHaveLength(1);
+
+    await build(checkout({ tree: await png('#3a5') }), { GM_ASSET_CACHE_DIR: cacheDir, GM_ASSET_CACHE_MAX_MB: '0' });
     expect(entries(cacheDir)).toEqual([]);
   });
 
