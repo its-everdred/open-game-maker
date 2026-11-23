@@ -763,13 +763,14 @@ export function GameScreen() {
 
   /** A scene document opened from the scene chips; the map maker covers the game while it is open (#1209). */
   const openScene = searchParams.get('scene');
+  /** The lighting panel edits the running game, so it hides while the map covers it. */
   const [mapOpen, setMapOpen] = useState(false);
   const gameStage = (
     <div className="game-stage-area" data-edit-frame={mode === 'edit' ? '' : undefined}>
       {mode === 'edit' && (
         <SceneStrip gameId={gameId} build={runningBuildId} scenarios={frameState.manifest?.scenarios} />
       )}
-      {mode === 'edit' && (
+      {mode === 'edit' && !mapOpen && (
         <Hd2dPanel report={frameState.hd2d} apply={frameController?.applyHd2d} onSave={saveLighting} />
       )}
       <div className="game-stage">

@@ -1,5 +1,7 @@
 import { expect, test, type Frame, type Page } from '@playwright/test';
 
+import { emptyScene } from '@ogm/design-log';
+
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installGameApi } from './support/mock-game-api';
 import { bridgeOrigin } from './support/visibility';
@@ -80,6 +82,28 @@ test('the lighting panel edits the running scene through the game frame', async 
   await expect(page.getByRole('slider', { name: 'Brightness' })).toHaveValue('0.3');
 });
 
+// The map maker covers the game while a scene document is open (#1209): lighting edits there would be unseen.
+test('the lighting panel hides while the map maker covers the game', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'the test sets its own viewport');
+  await page.setViewportSize({ width: 390, height: 844 });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const game = await openEditor(page, '&scene=goblin-cave', () =>
+    page.route('**/api/v1/games/game/editor/scenes/goblin-cave', async (route) => {
+      await held;
+      await route.fulfill({
+        json: { rev: 1, doc: emptyScene('game', 'goblin-cave', 'smallscaleint'), author: 'agent', sprites: {} },
+      });
+    }),
+  );
+  await game.evaluate((doc) => fixture().send('hd2d.scene', { doc, biome: 'forest', weather: 'clear' }), forest);
+  await expect(page.getByRole('button', { name: 'Lighting' })).toBeVisible();
+
+  release();
+  await expect(page.getByLabel('Map', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Lighting' })).toHaveCount(0);
+});
+
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 844, height: 390 },
@@ -121,7 +145,8 @@ for (const viewport of [
 /* Runs in the game frame. */
 declare function fixture(): Fixture;
 
-async function openEditor(page: Page): Promise<Frame> {
+/** `routes` go in after the defaults, so they answer first. */
+async function openEditor(page: Page, query = '', routes?: () => Promise<void>): Promise<Frame> {
   await installAuthRoutes(page, { signedIn: true });
   await installGameApi(page);
   await page.route('**/api/v1/me/commands**', (route) => route.fulfill({ json: { commands: [], sessions: [] } }));
@@ -132,7 +157,8 @@ async function openEditor(page: Page): Promise<Frame> {
   await page.route('**/api/v1/games/game/branches', (route) => route.fulfill({ json: { branches: [] } }));
   await page.route('**/api/v1/games', (route) => route.fulfill({ json: { games: [] } }));
   await page.route('**/api/v1/budget/status', (route) => route.fulfill({ json: { unitLabel: 'coins' } }));
-  await page.goto('/g/game?mode=edit&test', { waitUntil: 'domcontentloaded' });
+  await routes?.();
+  await page.goto(`/g/game?mode=edit&test${query}`, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('.edit-workspace')).toBeVisible();
   await expect
     .poll(
