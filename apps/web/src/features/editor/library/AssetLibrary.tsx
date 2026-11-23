@@ -55,6 +55,7 @@ export function AssetLibrary({
   const [armed, setArmed] = useState<string>();
   const [drag, setDrag] = useState<{ id: string; x: number; y: number }>();
   const sheet = useRef<HTMLElement>(null);
+  const targetPressed = useRef(false);
   const data = library.data;
   const shown = useMemo(() => (data ? filterLibrary(data, filter) : []), [data, filter]);
   const chips = useMemo(() => (data && filter.group ? finerChips(data, filter) : []), [data, filter]);
@@ -80,12 +81,18 @@ export function AssetLibrary({
 
   return (
     <div className="asset-library-layer">
-      {armedItem ? (
+      {armedItem && onPlace ? (
         <button
           className="asset-library-target"
           type="button"
           aria-label={`Place ${armedItem.label}`}
-          onClick={(event) => onPlace?.(armedItem.id, { clientX: event.clientX, clientY: event.clientY })}
+          /* Only a press that starts here places: the tap that armed the piece must not land as a place. */
+          onPointerDown={() => (targetPressed.current = true)}
+          onClick={(event) => {
+            if (!targetPressed.current && event.detail !== 0) return;
+            targetPressed.current = false;
+            onPlace(armedItem.id, { clientX: event.clientX, clientY: event.clientY });
+          }}
         />
       ) : null}
       <section
@@ -152,8 +159,9 @@ export function AssetLibrary({
             armed={armed}
             onArm={(id, touch) => {
               setArmed((current) => (current === id ? undefined : id));
+              targetPressed.current = false;
               /* On a phone the sheet covers the game: get it out of the way so the next tap can place. */
-              if (touch) setOpen(false);
+              if (touch && onPlace) setOpen(false);
             }}
             onDrag={setDrag}
             onDrop={(id, x, y) => {
@@ -208,6 +216,13 @@ function LibraryGrid({
   useEffect(() => {
     scroller.current?.scrollTo?.({ top: 0 });
   }, [items]);
+  /* A drag whose tile leaves the page (the list changed or the sheet closed) must not leave its ghost behind. */
+  useEffect(
+    () => () => {
+      if (press.current?.dragging) onDrag(undefined);
+    },
+    [onDrag],
+  );
 
   const columns = Math.min(8, Math.max(4, Math.floor(view.width / 140)));
   const tile = view.width > 0 ? (view.width - GAP * (columns - 1)) / columns : 0;

@@ -43,12 +43,13 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-async function renderLibrary(onPlace = vi.fn(), sheet = true) {
+/** `null`: the page has no editor to place into yet (no `onPlace`). */
+async function renderLibrary(onPlace: ReturnType<typeof vi.fn> | null = vi.fn(), sheet = true) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <div className="game-stage">
         <div className="game-frame" />
-        <AssetLibrary gameId="dusk-helm" onPlace={onPlace} />
+        <AssetLibrary gameId="dusk-helm" onPlace={onPlace ?? undefined} />
       </div>
     </QueryClientProvider>,
   );
@@ -94,8 +95,55 @@ describe('asset library', () => {
     fireEvent.pointerUp(item('Fence 3'), { pointerId: 1, pointerType: 'touch', button: 0 });
 
     expect(screen.getByRole('button', { name: 'Library' }).getAttribute('aria-expanded')).toBe('false');
-    fireEvent.click(screen.getByRole('button', { name: 'Place Fence 3' }), { clientX: 120, clientY: 200 });
+    const target = screen.getByRole('button', { name: 'Place Fence 3' });
+    /* The arming tap's own click lands on the new target; it must not place a piece where the tile was. */
+    fireEvent.click(target, { detail: 1, clientX: 60, clientY: 600 });
+    expect(onPlace).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(target, { pointerId: 2, pointerType: 'touch', button: 0 });
+    fireEvent.click(target, { detail: 1, clientX: 120, clientY: 200 });
     expect(onPlace).toHaveBeenCalledWith('t1:rural/tiles/fence-3@1', { clientX: 120, clientY: 200 });
+  });
+
+  it('disarms with Escape or a second tap on the piece', async () => {
+    await renderLibrary();
+    fireEvent.click(screen.getByRole('button', { name: 'Fences' }));
+    const tapPiece = () => {
+      fireEvent.pointerDown(item('Fence 3'), { pointerId: 1, pointerType: 'mouse', button: 0 });
+      fireEvent.pointerUp(item('Fence 3'), { pointerId: 1, pointerType: 'mouse', button: 0 });
+    };
+    tapPiece();
+    expect(screen.getByRole('button', { name: 'Place Fence 3' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('button', { name: 'Place Fence 3' })).toBeNull();
+
+    tapPiece();
+    tapPiece();
+    expect(screen.queryByRole('button', { name: 'Place Fence 3' })).toBeNull();
+  });
+
+  it('never covers the game with a place target while the page has no editor to place into', async () => {
+    await renderLibrary(null);
+    fireEvent.click(screen.getByRole('button', { name: 'Fences' }));
+    fireEvent.pointerDown(item('Fence 3'), { pointerId: 1, pointerType: 'touch', button: 0 });
+    fireEvent.pointerUp(item('Fence 3'), { pointerId: 1, pointerType: 'touch', button: 0 });
+
+    expect(item('Fence 3').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByRole('button', { name: /^Place / })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Library' }).getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('brings later rows into the page as the grid scrolls', async () => {
+    await renderLibrary();
+    fireEvent.click(screen.getByRole('button', { name: 'Fences' }));
+    const grid = document.querySelector<HTMLElement>('.asset-library-grid')!;
+    grid.scrollTop = 4000;
+    fireEvent.scroll(grid);
+
+    expect(screen.queryByRole('button', { name: 'Fence 0' })).toBeNull();
+    const shown = [...document.querySelectorAll('.asset-library-item')].map((node) => node.getAttribute('aria-label'));
+    expect(shown.length).toBeLessThan(60);
+    expect(shown.some((label) => Number(label!.split(' ')[1]) > 100)).toBe(true);
   });
 
   it('with a mouse, dragging a piece onto the game places it where it is let go, but not when let go on the sheet', async () => {
