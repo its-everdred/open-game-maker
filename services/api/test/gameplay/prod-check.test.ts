@@ -19,18 +19,19 @@ const CHECK = fileURLToPath(new URL('../../../../ops/bin/ogm-qa-paid-apis', impo
 const GAMES = 'https://games.example.test';
 const APP = 'https://app.example.test';
 
-// The preview archive the check uploads, built by the check itself.
-function checkArchive(): Buffer {
-  const script = `import runpy, sys; sys.stdout.buffer.write(runpy.run_path(sys.argv[1])['preview_archive']())`;
+// Run one of the check's own functions and read what it writes, so these tests cover what prod actually sends.
+function fromCheck(expression: string): Buffer {
+  const script = `import runpy, sys; m = runpy.run_path(sys.argv[1]); sys.stdout.buffer.write(${expression})`;
   return execFileSync('python3', ['-I', '-c', script, CHECK]);
 }
+const checkArchive = () => fromCheck("m['preview_archive']()");
 
 type App = Awaited<ReturnType<typeof seededApp>>['app'];
-const requests = [
-  ['/api/v1/voice/token', '{}'],
-  ['/api/v1/voice/dictation-token', '{}'],
-  [`/api/v1/games/${X.game}/narration/render`, '{"lines":[]}'],
-] as const;
+const requests = (
+  JSON.parse(
+    fromCheck("__import__('json').dumps([[p, b.decode()] for _, p, b in m['GATED']]).encode()").toString(),
+  ) as [string, string][]
+).map(([path, body]) => [path.replace('{game}', X.game), body] as const);
 
 function send(app: App, path: string, body: string, origin: string) {
   return app.request(path, {

@@ -115,6 +115,23 @@ rm "$HOME/.config/ogm/daemons/qa-review/hook-secret"
 run
 assert_grep 'preview on castle: refused (422 paid_integration)' "$scratch/out"
 
+# Without any game daemon secret it cannot prove the preview gate, so it fails rather than pass on three checks.
+rm "$HOME/.config/ogm/daemons/castle/hook-secret" "$HOME/.config/ogm/daemons/attic/hook-secret"
+set +e
+run
+rc=$?
+set -e
+assert_eq 1 "$rc" 'no daemon secret fails the check'
+assert_grep 'preview: no game daemon with a readable hook secret' "$scratch/out"
+
+# An API that does not answer fails every request.
+set +e
+"$check" --api "http://127.0.0.1:1" --db "$db" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'an unreachable API fails the check'
+assert_grep 'voice token: NOT REFUSED (error' "$scratch/out"
+
 # With paid APIs on, nothing would be refused: it sends nothing and says so.
 python3 -c "import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute(\"insert into app_meta values ('gameplay.paid_apis', 'on')\"); c.commit()" "$db"
 : > "$scratch/requests"

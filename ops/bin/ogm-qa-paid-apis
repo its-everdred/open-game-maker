@@ -30,6 +30,12 @@ REFUSED = 'paid_apis_off_during_gameplay'
 # Above any real ticket number, so a broken gate's preview never replaces a real one.
 TICKET = '999999999999'
 CALLS_PAID = b'fetch("https://api.openai.com/v1/chat/completions", { method: "POST" });\n'
+# (name, path, body) of each gated request; `{game}` is the QA game. Each body is refused right after the gate.
+GATED = [
+    ('voice token', '/api/v1/voice/token', b'{}'),
+    ('dictation token', '/api/v1/voice/dictation-token', b'{}'),
+    ('narration', '/api/v1/games/{game}/narration/render', b'{"lines":[]}'),
+]
 
 
 def env_file(path):
@@ -140,11 +146,7 @@ def main(argv):
         return 0
 
     as_game = {'origin': games, 'cookie': f'{cookie[0]}={cookie[1]}', 'content-type': 'application/json'}
-    checks = [
-        ('voice token', f'{api}/api/v1/voice/token', as_game, b'{}', 403, REFUSED),
-        ('dictation token', f'{api}/api/v1/voice/dictation-token', as_game, b'{}', 403, REFUSED),
-        ('narration', f'{api}/api/v1/games/{qa_game}/narration/render', as_game, b'{"lines":[]}', 403, REFUSED),
-    ]
+    checks = [(name, api + path.format(game=qa_game), as_game, body, 403, REFUSED) for name, path, body in GATED]
     if slug:
         upload = {'authorization': f'Bearer {secret}', 'x-gm-sha': '0' * 40, 'content-type': 'application/gzip'}
         url = f'{api}/internal/games/{slug}/previews/{TICKET}'
