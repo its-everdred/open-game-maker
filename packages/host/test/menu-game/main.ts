@@ -1,13 +1,19 @@
 import { boot } from '@gm/sdk/core';
 import { createMenu } from '@gm/sdk/menu';
-import type { GameManifest, GameModule } from '@ogm/contracts/game';
+import type { GameManifest, GameModule, HostApi } from '@ogm/contracts/game';
 import { z } from 'zod';
 
 declare global {
   interface Window {
     __started: boolean;
+    __drawFirstFrame: () => void;
   }
 }
+
+/* `controls` is the layout the title asks for (Dusk Helm's title wants none); `hold` delays the first frame. */
+const params = new URLSearchParams(location.search);
+const titleControls = params.get('controls') as 'none' | 'menu' | 'gameplay' | null;
+let host: HostApi | undefined;
 
 // Dusk Helm's action shape: one stick, then the buttons the host draws and binds to a pad's a, x, b.
 const manifest: GameManifest = {
@@ -30,7 +36,9 @@ const game: GameModule<Record<string, never>, Record<string, never>> = {
   manifest,
   designSchema: z.object({}),
   controls: [],
-  async mount() {
+  async mount(mounted) {
+    host = mounted;
+    if (titleControls) host.controls?.set({ layout: titleControls });
     return {
       pause() {},
       resume() {},
@@ -57,4 +65,8 @@ title.querySelector('#play')!.addEventListener('click', () => {
   window.__started = true;
   menu.dispose();
   title.hidden = true;
+  if (titleControls) host?.controls?.set({ layout: 'gameplay' });
 });
+/* A DOM title has no canvas for the games host to observe, so the game reports its first frame itself. */
+window.__drawFirstFrame = () => window.dispatchEvent(new Event('gm-frame-ready'));
+if (!params.has('hold')) window.__drawFirstFrame();

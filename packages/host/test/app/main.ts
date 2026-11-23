@@ -33,6 +33,12 @@ const game =
         gameId: template === 'menu' ? 'menu-game' : 'fixture',
         mode: 'play' as const,
       };
+/** The menu game's title layout and first-frame hold, passed through from this page's query. */
+function menuParams(): Record<string, string> {
+  const query = new URLSearchParams(location.search);
+  return Object.fromEntries(['controls', 'hold'].flatMap((key) => (query.has(key) ? [[key, query.get(key)!]] : [])));
+}
+
 const frame = createGameFrame({
   container: document.querySelector<HTMLElement>('#game')!,
   gamesOrigin: 'http://127.0.0.1:4174',
@@ -42,6 +48,7 @@ const frame = createGameFrame({
   mode: game.mode,
   playerIndex: 0,
   capabilities: [],
+  ...(template === 'menu' ? { params: menuParams() } : {}),
   // The menu game keeps the host's default pad layout, the one its menus read.
   inputMapping:
     template === 'menu' ? undefined : { touch: 'stick', gamepad: { move: 'leftStick', jump: 'a', use: 'x' } },
