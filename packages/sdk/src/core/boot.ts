@@ -376,8 +376,8 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
           );
           return;
         case 'input.frame':
-          // Paused means the host's own dialog has the controls; the game's menus must not react under it.
-          if (!active.clock.paused) deliverMenuFrame(envelope.payload as ActionFrame);
+          // Paused means the host's own dialog has the controls: game menus only note what is held.
+          deliverMenuFrame(envelope.payload as ActionFrame, !active.clock.paused);
           active.acceptHostFrame(envelope.payload as ActionFrame);
           return;
         case 'viewport':

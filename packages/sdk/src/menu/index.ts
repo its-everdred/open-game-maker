@@ -163,25 +163,35 @@ function pressed(value: ActionValue | undefined): boolean {
   return value === true || (typeof value === 'number' && value > STICK_THRESHOLD);
 }
 
-function onHostFrame(frame: ActionFrame, kinds: ActionKinds): void {
+function onHostFrame(frame: ActionFrame, kinds: ActionKinds, act: boolean): void {
   if (frame.source !== 'touch' && frame.source !== 'gamepad') return;
   // A focused frame reads its pads directly; the host's copy of the same press would land twice.
-  if (frame.source === 'gamepad' && document.hasFocus()) return;
+  if (frame.source === 'gamepad' && document.hasFocus()) act = false;
   const buttons = Object.keys(kinds).filter((action) => kinds[action] === 'button');
   const stick = Object.keys(kinds).find((action) => kinds[action] === 'stick');
   const vector = stick ? frame.actions[stick] : undefined;
-  apply(`${frame.source}:${frame.playerIndex}`, {
-    confirm: pressed(frame.actions[buttons[CONFIRM_BUTTON] ?? '']),
-    back: pressed(frame.actions[buttons[BACK_BUTTON] ?? '']),
-    direction: typeof vector === 'object' ? directionOf(vector.x, vector.y) : null,
-  });
+  apply(
+    `${frame.source}:${frame.playerIndex}`,
+    {
+      confirm: pressed(frame.actions[buttons[CONFIRM_BUTTON] ?? '']),
+      back: pressed(frame.actions[buttons[BACK_BUTTON] ?? '']),
+      direction: typeof vector === 'object' ? directionOf(vector.x, vector.y) : null,
+    },
+    act,
+  );
 }
 
 onMenuFrame(onHostFrame);
 
+let padsFocused = false;
+
 function pollPads(act: boolean): void {
   const getGamepads = stack.at(-1)?.options.getGamepads ?? (() => navigator.getGamepads?.() ?? []);
-  if (!document.hasFocus()) return;
+  const focused = document.hasFocus();
+  // Pads are unreadable without focus; the first read after gaining it only notes what is already held.
+  if (!padsFocused) act = false;
+  padsFocused = focused;
+  if (!focused) return;
   for (const pad of getGamepads()) {
     if (!pad?.connected) continue;
     const button = (index: number) => pad.buttons[index]?.pressed ?? false;
@@ -248,6 +258,7 @@ function install(): void {
   window.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('keyup', onKeyUp, true);
   // Pads are only read while a menu is open: take their held state first, so a held A does not press this menu.
+  padsFocused = false;
   pollPads(false);
   let running = true;
   const loop = () => {

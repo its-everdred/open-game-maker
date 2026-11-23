@@ -48,7 +48,12 @@ describe('boot menu input', () => {
     press(false);
     expect(resume).not.toHaveBeenCalled();
 
+    // A held through the host's dialog, still held after it closes, is not a new press.
+    press(true);
     bridge.onMessage!(message('lifecycle.resume', {}));
+    press(true);
+    expect(resume).not.toHaveBeenCalled();
+    press(false);
     press(true);
     expect(resume).toHaveBeenCalledOnce();
     menu.dispose();
