@@ -60,6 +60,9 @@ importers:
       '@gm/host':
         specifier: workspace:*
         version: link:../../packages/host
+      '@gm/pack-smallscaleint':
+        specifier: workspace:*
+        version: link:../../packages/pack-adapters/smallscaleint
       '@gm/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk

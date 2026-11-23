@@ -94,9 +94,12 @@ the game builds from and which the agent commits:
 agent edits its `doc` and runs `gm scene push <game> <scene>`, which commits as `agent:<ticket>` from the `cli` source,
 rebases, or prints the conflicts and exits non-zero. A push takes a lock file so two pushes cannot interleave.
 
-Not in this ticket: the editor (#1209) saving Kevin's edits. It calls the same `commitScene` with `author: kevin` and
-`source: editor`. When the editor needs the scene shared through the API instead of the game repo, a `scene_revisions`
-table implements the same head-and-log shape; the rules do not change.
+The map maker (#1209) saves Kevin's edits with the same `commitScene`, `author: kevin` and `source: editor`. An agent
+works in its own checkout, which the API never sees, so the shared copy lives in the API: `scene_heads` and
+`scene_revisions` hold the same head and log. The first open (or an agent's first pull) starts them from the game
+folder's files. Inside a daemon, `gm scene pull`/`push` read and commit there over the internal API, then rewrite the
+game folder's files to match, so the build and git keep carrying the scene. Without the API (a local run) they work on
+the files as before. The rules do not change.
 
 ## Why not extend design-log transactions
 

@@ -1,0 +1,202 @@
+/* The map maker over the game stage (ticket 1209, Kevin's direction A): undo/redo and save on top, a tool pill over the
+   piece tray at the bottom, and the selected piece's actions floating above it. */
+.map-editor {
+  position: absolute;
+  /* Over the game frame and its loading cover (11): the scene document, not the running build, is what Kevin edits. */
+  z-index: 12;
+  inset: 0;
+  overflow: hidden;
+  /* Dark glass over a dark map, as in the approved mock; the edit page's light theme remaps --ink. */
+  --ink: var(--cream);
+  --muted: var(--scene-chip-ink);
+  background: var(--map-backdrop);
+  color: var(--ink);
+  touch-action: none;
+}
+
+/* The scene chips stay above the map so another scene is one tap away. */
+.game-stage-area:has(.map-editor) :is(.scene-strip, .scene-strip-toggle) {
+  z-index: 13;
+}
+
+.map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.map-canvas canvas {
+  display: block;
+  touch-action: none;
+}
+
+.map-canvas-float {
+  position: absolute;
+  z-index: 1;
+  transform: translate(-50%, -100%);
+}
+
+.map-editor button {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--scene-chip-fill);
+  color: var(--ink);
+}
+
+.map-editor button:disabled {
+  opacity: 0.4;
+}
+
+.map-editor button .icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+}
+
+.map-pill,
+.map-selection {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--scene-chip-rule);
+  border-radius: 999px;
+  background: var(--map-glass);
+}
+
+.map-topbar {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--edit-bar, 56px) + 8px);
+  left: 50%;
+  display: flex;
+  gap: 12px;
+  transform: translateX(-50%);
+}
+
+.map-save:not(:disabled) {
+  background: var(--action-primary);
+  color: var(--action-primary-text);
+}
+
+.map-editor [aria-pressed='true'],
+.map-editor .map-tools [aria-pressed='true'] {
+  background: var(--yellow-b);
+  color: var(--dark);
+}
+
+.map-tray {
+  position: absolute;
+  z-index: 1;
+  right: 12px;
+  bottom: calc(var(--safe-b, 0px) + 12px);
+  left: 12px;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 12px;
+  border: 1px solid var(--scene-chip-rule);
+  border-radius: 24px;
+  background: var(--map-glass);
+}
+
+.map-groups,
+.map-items {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.map-groups button,
+.map-items button {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.map-groups button {
+  width: 52px;
+  height: 52px;
+}
+
+.map-items button {
+  width: 76px;
+  height: 76px;
+}
+
+.map-groups button[aria-selected='true'],
+.map-items button[aria-selected='true'] {
+  outline: 3px solid var(--yellow-b);
+  outline-offset: -3px;
+}
+
+/* A pack sprite is mostly clear padding around a ground diamond half its width: scale it up and sit the diamond on
+   the bottom edge, so the piece fills its button. */
+.map-groups img,
+.map-items img {
+  position: absolute;
+  bottom: -5%;
+  left: -30%;
+  width: 160%;
+  max-width: none;
+  pointer-events: none;
+}
+
+.map-layers {
+  display: grid;
+  width: 100%;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.map-layers button {
+  display: flex;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 0 14px;
+  border-radius: 12px;
+  font: inherit;
+}
+
+.map-layers button[aria-pressed='true'] {
+  background: var(--scene-chip-fill);
+  color: var(--ink);
+}
+
+.map-layers button[aria-pressed='false'] {
+  color: var(--muted);
+}
+
+/* Where the centred tray would reach the chat bubble in the bottom-right corner, it stops short of it. */
+@media (max-width: 1040px) {
+  .map-tray {
+    right: 76px;
+  }
+}
+
+/* Phone portrait: the tray wraps its pieces in rows, as in the approved mock. */
+@media (max-width: 600px) {
+  .map-items {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-rows: 76px;
+    max-height: 168px;
+    overflow-y: auto;
+  }
+
+  .map-items button {
+    width: 100%;
+    height: 76px;
+  }
+}

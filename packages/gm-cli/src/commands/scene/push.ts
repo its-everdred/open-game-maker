@@ -14,8 +14,10 @@ import {
   withSceneLock,
   workingCopyPath,
   writeRevision,
+  writeStore,
 } from '../../scene/store.js';
 import { ticketFor } from '../../ticket.js';
+import { sceneRemote } from '../../scene/remote.js';
 
 const workingCopySchema = z.strictObject({
   game: z.string(),
@@ -33,7 +35,8 @@ export const command: GmCommand = {
   async run(ctx, args, flags) {
     if (args.length !== 2) throw new UsageError('give a game and a scene', 'gm scene push dusk-helm graveyard');
     const ref = sceneRef(ctx.cwd, args[0]!, args[1]!);
-    const author = `agent:${await ticketFor(ctx)}`;
+    const ticket = await ticketFor(ctx);
+    const author = `agent:${ticket}`;
     const path = workingCopyPath(ref);
     let raw: unknown;
     try {
@@ -51,7 +54,18 @@ export const command: GmCommand = {
       throw new CommandError(`${path} is not ${ref.game}/${ref.scene}`);
     validateHd2d(copy.doc);
 
+    const label = typeof flags.label === 'string' ? flags.label : '';
+    const remote = sceneRemote(ctx, ticket, ref.scene);
     const result = await withSceneLock(ref, async () => {
+      if (remote) {
+        // The API applies the same commit rules on the shared store, then this checkout mirrors what it holds.
+        const pushed = await remote.push({ baseRev: copy.baseRev, doc: copy.doc, label });
+        if (pushed.ok) {
+          const shared = await remote.get();
+          if (shared) await writeStore(ref, shared);
+        }
+        return pushed;
+      }
       const now = new Date();
       const store = await persistMigration(ref, await readStore(ref, copy.doc.packAdapter), author, now);
       let commit: ReturnType<typeof commitScene>;
@@ -63,7 +77,7 @@ export const command: GmCommand = {
           baseRev: copy.baseRev,
           author,
           source: 'cli',
-          label: typeof flags.label === 'string' ? flags.label : '',
+          label,
           now,
         });
       } catch (error) {

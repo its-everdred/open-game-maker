@@ -274,6 +274,28 @@ export const ICONS: Record<string, string> = {
   ),
   bulb: line('<path d="M96 184v-12a72 72 0 1 1 64 0v12Z"/><path d="M100 216h56M128 184v-48M108 140l20-20 20 20"/>'),
   focus: line('<circle cx="128" cy="128" r="32"/><path d="M40 88V40h48M168 40h48v48M216 168v48h-48M88 216H40v-48"/>'),
-  check: line('<path d="M48 136l48 48L208 72"/>'),
   leaf: line('<path d="M56 200C56 104 104 48 216 40c-8 112-64 160-160 160Z"/><path d="M56 200l96-96"/>'),
+  /* Map maker tools (#1209). */
+  undo: line('<path d="M80 136 32 88l48-48"/><path d="M32 88h128a56 56 0 0 1 0 112H88"/>'),
+  redo: line('<path d="m176 136 48-48-48-48"/><path d="M224 88H96a56 56 0 0 0 0 112h72"/>'),
+  check: line('<path d="m40 136 56 56L216 72"/>'),
+  rotate: line('<path d="M176 96h48V48"/><path d="M190 184a80 80 0 1 1 2-112l32 24"/>'),
+  copy: line('<path d="M168 168h48V40H88v48"/><rect x="40" y="88" width="128" height="128" rx="8"/>'),
+  trash: line(
+    '<path d="M216 56H40M104 104v64M152 104v64M200 56v152a8 8 0 0 1-8 8H64a8 8 0 0 1-8-8V56M168 56V40a16 16 0 0 0-16-16h-48a16 16 0 0 0-16 16v16"/>',
+  ),
+  pointer: line('<path d="M56 40 104 216l28-84 84-28Z"/>'),
+  brush: line(
+    '<path d="M224 32c-48 8-96 56-120 96l24 24c40-24 88-72 96-120Z"/><path d="M104 128c-32 0-48 24-48 48s-16 40-24 40h64a56 56 0 0 0 56-56"/>',
+  ),
+  eraser: line(
+    '<path d="M216 216H96L44 164a16 16 0 0 1 0-22.6L141.4 44a16 16 0 0 1 22.6 0L212 92a16 16 0 0 1 0 22.6L112 216"/><path d="m92 96 68 68"/>',
+  ),
+  layers: line('<path d="m32 176 96 56 96-56"/><path d="m32 128 96 56 96-56"/><path d="m32 80 96 56 96-56-96-56Z"/>'),
+  eye: line(
+    '<path d="M128 56C48 56 16 128 16 128s32 72 112 72 112-72 112-72-32-72-112-72Z"/><circle cx="128" cy="128" r="40"/>',
+  ),
+  eyeOff: line(
+    '<path d="M128 56C48 56 16 128 16 128s32 72 112 72 112-72 112-72-32-72-112-72Z"/><circle cx="128" cy="128" r="40"/><path d="M40 40l176 176"/>',
+  ),
 };
