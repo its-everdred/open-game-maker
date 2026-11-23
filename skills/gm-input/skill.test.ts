@@ -32,7 +32,9 @@ describe('gm-input skill', () => {
     expect(text).toContain('injected standard gamepad');
     /* Controls drawn over a title cover its Play button (#1298): games pick each screen's layout. */
     expect(text).toContain('host.controls?.set({ layout })');
-    expect(text).toMatch(/`'none'` on title art, cutscenes and\s+dialogue/);
+    expect(text).toMatch(/`'none'` on the\s+title \(players tap Play\), cutscenes/);
+    /* A layout persists, so a game that hides controls on its title must ask for them back when play starts. */
+    expect(text).toMatch(/`'gameplay'` \(the default\) when play starts/);
     expect(checkSkill(SKILL, { commands, sdkExports })).toEqual({ commands: [], sdk: [] });
   }, 30_000);
 });

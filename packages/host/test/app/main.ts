@@ -6,6 +6,7 @@ interface BrowserHost {
   ready: GameManifest[];
   relays: unknown[];
   errors: unknown[];
+  loads: string[];
   forge(): void;
 }
 
@@ -18,6 +19,7 @@ declare global {
 const ready: GameManifest[] = [];
 const relays: unknown[] = [];
 const errors: unknown[] = [];
+const loads: string[] = [];
 const template = new URLSearchParams(location.search).get('template');
 const game =
   template === 'game-2d' || template === 'game-3d'
@@ -56,6 +58,7 @@ const frame = createGameFrame({
   onReady: (manifest) => ready.push(manifest),
   onAudioRelay: (payload) => relays.push(payload),
   onError: (failure) => errors.push(failure),
+  onLoad: (event) => loads.push(event.t),
 });
 
 window.__host = {
@@ -63,6 +66,7 @@ window.__host = {
   ready,
   relays,
   errors,
+  loads,
   forge: () => {
     const iframe = document.createElement('iframe');
     iframe.hidden = true;

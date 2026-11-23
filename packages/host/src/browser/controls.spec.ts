@@ -24,8 +24,9 @@ test('no controls cover the game while it loads, and they appear with its first 
 
 test('a title that asks for none shows no controls, and play shows them all', async ({ page }) => {
   const { game, frame } = await open(page, 'controls=none');
-  await expect.poll(() => page.evaluate(() => window.__host.ready.length)).toBe(1);
-  await page.waitForTimeout(300);
+  /* Past loading, so the controls are hidden by the title's layout and not by the loading hold. */
+  await expect.poll(() => page.evaluate(() => window.__host.loads.includes('load.frame'))).toBe(true);
+  await expect(page.locator(controls)).toHaveCount(4);
   for (const control of await page.locator(controls).all()) await expect(control).toBeHidden();
   await page.screenshot({ path: test.info().outputPath('title.png') });
   await game.locator('#play').tap();

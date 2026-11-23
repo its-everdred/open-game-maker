@@ -190,6 +190,29 @@ describe('TouchOverlay', () => {
     overlay.dispose();
   });
 
+  it('ignores a thumb still dragging a stick the game just hid', () => {
+    const layer = document.createElement('div');
+    const onFrame = vi.fn();
+    const overlay = new TouchOverlay({
+      layer,
+      inputs: { actions: { move: 'stick', look: 'stick' } },
+      touch: 'two-stick',
+      playerIndex: 0,
+      onFrame,
+      coarsePointer: () => true,
+    });
+    const look = layer.querySelector<HTMLElement>('[data-stick="look"]')!;
+    look.setPointerCapture = vi.fn();
+    look.dispatchEvent(pointer('pointerdown', { pointerId: 1, clientX: 10, clientY: 10 }));
+    overlay.setLayout('menu');
+    expect(look.style.visibility).toBe('hidden');
+    expect(onFrame).toHaveBeenLastCalledWith(expect.objectContaining({ actions: { look: { x: 0, y: 0 } } }));
+    const frames = onFrame.mock.calls.length;
+    look.dispatchEvent(pointer('pointermove', { pointerId: 1, clientX: 40, clientY: 10 }));
+    expect(onFrame).toHaveBeenCalledTimes(frames);
+    overlay.dispose();
+  });
+
   it('turns action ids into words a player would say', () => {
     expect(actionLabel('rotateCCW')).toBe('Rotate CCW');
     expect(actionLabel('softDrop')).toBe('Soft drop');

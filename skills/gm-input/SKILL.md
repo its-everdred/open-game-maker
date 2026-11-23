@@ -53,13 +53,13 @@ set `inputs.touch` to `self`. Games do not remember device bindings. Keyboard fa
 
 Menus are not gameplay. Build each menu (title, class select, dialogs, won and lost) as DOM buttons, open it with
 `createMenu({ root, onBack })` from `@gm/sdk/menu`, and dispose the menu on close. The on-screen stick, a keyboard
-(arrows, Enter or Space, Escape), any gamepad (D-pad or left stick, A, B) and touch then move focus and press;
-on-screen A is the first declared button and B the third, so declare confirm and back in those slots. Mark the main
-action `data-gm-primary` so A on the title starts the game, and style `[data-gm-focus]` in the game's UI kit (the
-SDK's plain outline shows until you do). Newer menus take input until disposed; none react while the host's pause
-dialog is open. Never hand-roll menu key or pad handling; a gm-qa journey step pressing on-screen A checks it.
-Pick each screen's on-screen controls with `host.controls?.set({ layout })`: `'none'` on title art, cutscenes and
-dialogue, `'menu'` (stick, A, B) on menus, `'gameplay'` (the default) in play; set the title's while mounting.
+(arrows, Enter or Space, Escape), any gamepad (D-pad or left stick, A, B) and touch then move focus and press; on-screen
+A is the first declared button and B the third, so declare confirm and back in those slots. Mark the main action
+`data-gm-primary` so Enter or a pad's A on the title starts the game, and style `[data-gm-focus]` in the game's UI kit.
+Newer menus take input until disposed; none react while the host's pause dialog is open. Never hand-roll menu key or pad
+handling; a gm-qa journey step pressing A on a `'menu'` screen checks it. Choose each screen's on-screen controls with
+`host.controls?.set({ layout })`: `'none'` on the title (players tap Play), cutscenes and self-advancing dialogue,
+`'menu'` (stick, A, B) on other menus, and `'gameplay'` (the default) when play starts. Set the title's while mounting.
 
 ## Verify
 

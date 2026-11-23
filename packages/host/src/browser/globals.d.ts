@@ -3,6 +3,7 @@ interface Window {
     errors: unknown[];
     ready: { id: string }[];
     relays: unknown[];
+    loads: string[];
     forge(): void;
   };
   __frames: { source?: string }[];

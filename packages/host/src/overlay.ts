@@ -202,6 +202,7 @@ export class TouchOverlay {
       this.emit();
     };
     stick.addEventListener('pointerdown', (event) => {
+      if (!this.shown(stick)) return;
       pointerId = event.pointerId;
       startX = event.clientX;
       startY = event.clientY;
@@ -215,7 +216,8 @@ export class TouchOverlay {
       this.emit();
     });
     stick.addEventListener('pointermove', (event) => {
-      if (event.pointerId === pointerId) move(event);
+      /* A layout change hides the stick under a thumb that keeps dragging; it must not steer anything. */
+      if (event.pointerId === pointerId && this.shown(stick)) move(event);
     });
     const release = (event: PointerEvent) => {
       if (event.pointerId !== pointerId) return;
@@ -262,6 +264,7 @@ export class TouchOverlay {
     });
     button.addEventListener('pointerdown', (event) => {
       event.preventDefault();
+      if (!this.shown(button)) return;
       try {
         button.setPointerCapture?.(event.pointerId);
       } catch {
@@ -298,6 +301,10 @@ export class TouchOverlay {
     if (this.showTimer) clearTimeout(this.showTimer);
     this.showTimer = setTimeout(() => this.refreshVisibility(), Math.max(0, this.suppressedUntil - this.now()));
     this.refreshVisibility();
+  }
+
+  private shown(control: HTMLElement): boolean {
+    return !this.options.layer.hidden && control.style.visibility !== 'hidden';
   }
 
   private applyLayout(): void {

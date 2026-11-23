@@ -97,6 +97,32 @@ it('keeps only what a menu reads under menu: the stick, A (first button) and B (
   frame.dispose();
 });
 
+it('applies a menu layout the game chose before it was ready once the controls are drawn', () => {
+  const { frame, game, shown } = phoneFrame();
+  game('host.controls', { layout: 'menu' });
+  game('ready', { protocol: 1, manifest, marks: [], firstFrameSignal: true });
+  game('load.frame', {});
+  expect(shown('[data-action="attack"]')).toBe(true);
+  expect(shown('[data-action="use"]')).toBe(false);
+  game('host.controls', { layout: 'gameplay' });
+  expect(shown('[data-action="use"]')).toBe(true);
+  frame.dispose();
+});
+
+it('shows the controls when the observed first frame arrived before the game was ready', () => {
+  const { frame, game, layer } = phoneFrame();
+  window.dispatchEvent(
+    new MessageEvent('message', {
+      data: { type: 'ogm.frame.ready.v2' },
+      origin: 'https://games.test',
+      source: frame.iframe.contentWindow,
+    }),
+  );
+  game('ready', { protocol: 1, manifest, marks: [] });
+  expect(layer.hidden).toBe(false);
+  frame.dispose();
+});
+
 it('shows every control for a game that never chooses, as before', () => {
   const { frame, game, shown } = phoneFrame();
   game('ready', { protocol: 1, manifest, marks: [], firstFrameSignal: true });
