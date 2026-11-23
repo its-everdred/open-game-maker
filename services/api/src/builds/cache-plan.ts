@@ -232,6 +232,12 @@ async function codeFiles(
   const relativePaths = paths.map((path) => relative(root, path).split(sep).join('/'));
   const addresses = new Map<string, CachePlanEntry>();
   const visiting = new Set<string>();
+  /*
+   * A module must keep one URL: an entry that lazy chunks import back (Vite's shared entry) was framed as /a/<hash>
+   * from index.html and as its build path from the chunks, so the browser ran the game twice (#1260).
+   */
+  const cyclic = new Set<string>();
+  const buildPath = (path: string) => `/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${path}`;
   const visit = async (relativePath: string): Promise<CachePlanEntry> => {
     const existing = addresses.get(relativePath);
     if (existing) return existing;
@@ -255,8 +261,12 @@ async function codeFiles(
         const references = [...new Set(forms)].filter((reference) => reference && text.includes(reference));
         if (!references.length) continue;
         let address: string;
-        if (visiting.has(target)) address = `/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${target}`;
-        else address = (await visit(target)).url;
+        if (visiting.has(target)) {
+          /* Every file still on the visit stack from the target on is in the cycle and takes its build path. */
+          const stack = [...visiting];
+          for (const member of stack.slice(stack.indexOf(target))) cyclic.add(member);
+          address = buildPath(target);
+        } else address = (await visit(target)).url;
         // One pass, longest form first: replacing `x.js` before `./x.js` left `.//a/<hash>.js` (#1197). A form
         // only matches where a path starts, so `manifest.json` never matches inside `assets/manifest.json`, which
         // left `assets//a/<hash>.json` in every bundle.
@@ -277,7 +287,7 @@ async function codeFiles(
     const file = `${sha256}.${extension}`;
     const entry: CachePlanEntry = {
       sha256,
-      url: privateAssets ? relativePath : `/a/${file}`,
+      url: privateAssets ? relativePath : cyclic.has(relativePath) ? buildPath(relativePath) : `/a/${file}`,
       sourcePath: relativePath,
       bytes: bytes.length,
       kind: CODE_EXTENSIONS.has(extname(source)) ? 'code' : fileKind(extension),
