@@ -157,6 +157,21 @@ def facing_turn(rig, feet, posed=False):
     return math.atan2(-1, 0) - math.atan2(d.y, d.x)
 
 
+def ground(rig, ob):
+    """Stand the rest-pose body on z = 0, where the fitted bodies stand and the camera puts origin_row: a vendor rig's
+    origin is its own (Hyper3D's sits near the hips, which left its feet under the ground). Returns the lift."""
+    rig.data.pose_position = 'REST'
+    bpy.context.view_layer.update()
+    ev = ob.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    me = ev.to_mesh()
+    z = min((ev.matrix_world @ v.co).z for v in me.vertices)
+    ev.to_mesh_clear()
+    rig.data.pose_position = 'POSE'
+    rig.location.z -= z
+    bpy.context.view_layer.update()
+    return -z
+
+
 def setup(spec, n):
     """Load the rigged body and its motion. Returns (mesh, rig, sheet-frame times, per-frame (dx, dy) in-place offsets,
     report)."""
@@ -164,8 +179,10 @@ def setup(spec, n):
     ob, rig = load(rg['path'], rg.get('action') if mo.get('kind', 'own') == 'own' else None, rg.get('colour'))
     rig.rotation_mode = 'XYZ'
     rig.rotation_euler.z += facing_turn(rig, rg['feet']) + math.radians(spec.get('rotz', 0))
+    lift = ground(rig, ob)  # before the copy: it reads the target's hip height from the grounded rest pose
     loop = mo.get('loop', mo.get('clip', 'walk') == 'walk')
-    rep = {'rig': os.path.basename(rg['path']), 'kind': mo.get('kind', 'own'), 'sample': mo.get('sample', 'even')}
+    rep = {'rig': os.path.basename(rg['path']), 'kind': mo.get('kind', 'own'), 'sample': mo.get('sample', 'even'),
+           'lift': lift}
     if mo.get('kind', 'own') == 'own':
         act = rig.animation_data.action
         f0, f1 = mo.get('frames') or act.frame_range

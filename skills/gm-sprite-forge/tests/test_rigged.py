@@ -108,6 +108,27 @@ axis = R @ (Matrix.Rotation(math.radians(roll), 3, 'Y') @ Vector((1, 0, 0)))
 json.dump({'axis': list(axis.normalized()), 'length': rigged.weapon_length(rig, body, 0.75)}, open(out, 'w'))
 '''
 
+GROUND = '''
+import sys, json
+import bpy
+sys.path.insert(0, sys.argv[sys.argv.index('--') + 1])
+import rigged
+out = sys.argv[sys.argv.index('--') + 2]
+bpy.ops.wm.read_factory_settings(use_empty=True)
+a = bpy.data.armatures.new('a'); rig = bpy.data.objects.new('a', a)
+bpy.context.scene.collection.objects.link(rig); bpy.context.view_layer.objects.active = rig
+bpy.ops.object.mode_set(mode='EDIT')
+b = a.edit_bones.new('hips'); b.head, b.tail = (0, 0, 0), (0, 0, 0.1)    # origin at the hips, as Hyper3D's
+bpy.ops.object.mode_set(mode='OBJECT')
+bpy.ops.mesh.primitive_cube_add(size=1)
+body = bpy.context.active_object
+body.scale = (0.3, 0.3, 1.0)                                              # 1 m tall, centred on the hips
+body.parent = rig
+lift = rigged.ground(rig, body)
+zs = [(body.matrix_world @ v.co).z for v in body.data.vertices]
+json.dump({'lift': lift, 'min': min(zs), 'max': max(zs)}, open(out, 'w'))
+'''
+
 
 def run_blender(script):
     with tempfile.TemporaryDirectory() as t:
@@ -146,6 +167,17 @@ class WeaponTest(unittest.TestCase):
         # 0.75 is sized for a 1.8 m body: a 1 m body (2 m mesh in a half-scale rig) gets 0.75 / 1.8 of a metre,
         # which is 2 * 0.75 / 1.8 in the rig's own units
         self.assertAlmostEqual(got['length'], 0.75 * 1.0 / 1.8 / 0.5, places=3)
+
+
+@unittest.skipUnless(shutil.which('blender'), 'needs Blender 4.3')
+class GroundTest(unittest.TestCase):
+    def test_a_body_whose_origin_is_at_the_hips_stands_on_the_ground(self):
+        # The camera puts z = 0 on the pack's origin row: a body left hanging half below it rendered with its feet
+        # under the pack character's (arm B, Hyper3D)
+        got = run_blender(GROUND)
+        self.assertAlmostEqual(got['min'], 0.0, places=4)
+        self.assertAlmostEqual(got['max'], 1.0, places=4)  # lifted, not squashed
+        self.assertAlmostEqual(got['lift'], 0.5, places=4)
 
 
 if __name__ == '__main__':
