@@ -156,6 +156,29 @@ describe('published cache plans', () => {
     expect(gameToHostSchema.safeParse(ready).error?.issues).toBeUndefined();
   });
 
+  /* Two URLs for one module make the browser run it twice: Dusk Helm booted a second game whose hello no host answered
+     (BridgeError: timeout) and whose state the lazy chunks bound to, so the shell never saw a first frame (#1260). */
+  it('gives an entry that lazy chunks import back one URL everywhere, so the game boots once (#1260)', async () => {
+    const { deps } = world();
+    completeRun(deps);
+    const dir = cachedBuild([]);
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><script type="module" src="/assets/main.js"></script>\n');
+    writeFileSync(join(dir, 'assets', 'main.js'), 'export const state={};import("./World.js");\n');
+    writeFileSync(join(dir, 'assets', 'World.js'), 'import{state}from"./main.js";import"./util.js";\n');
+    writeFileSync(join(dir, 'assets', 'util.js'), 'export const u=1;\n');
+    const buildId = await publishFixture(deps, ids.job, dir, SHA);
+    const read = (path: string) => readFileSync(join(deps.config.gamesRoot, ids.game, buildId, path), 'utf8');
+    const urls = new Map(plan(deps, ids.game, buildId).entries.map((entry) => [entry.sourcePath, entry.url]));
+    const main = `/g/${ids.game}/${buildId}/assets/main.js`;
+    expect(urls.get('assets/main.js')).toBe(main);
+    expect(urls.get('assets/World.js')).toBe(`/g/${ids.game}/${buildId}/assets/World.js`);
+    expect(read('index.html')).toContain(`src="${main}"`);
+    expect(read('assets/World.js')).toContain(`from"${main}"`);
+    expect(read('assets/main.js')).toContain(`import("${urls.get('assets/World.js')}")`);
+    /* A file outside the cycle keeps its shared content address. */
+    expect(urls.get('assets/util.js')).toBe(`/a/${digest(Buffer.from('export const u=1;\n'))}.js`);
+  });
+
   it('rewrites root-relative names inside bundles and never part of a longer path (#1197)', async () => {
     const { deps } = world();
     completeRun(deps);
