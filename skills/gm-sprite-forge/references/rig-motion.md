@@ -214,3 +214,10 @@ Dry run (2026-11-22, unapproved base bodies, workbench, debug only): the fit lan
 the joints of all six bodies (`landmarks.png`), with no tearing at sprite scale. Hand-keyed walks score 0.32-0.58 with
 0.15-0.38 px foot slide; KayKit `Walking_C` scores 0.29-0.66 with about 1 px slide and reads as a lunging high-knee
 gait on every body.
+
+## Creator verdict on the round (2026-11-23)
+
+Kevin rejected every cell of the round: hand-keyed, KayKit, Bandai and CMU, walks and attacks, on all six bodies
+("none move like humans at all"). No rig or motion source in this step is approved, and its correlation and foot-slide
+scores did not predict his verdict. Do not post another round from these tools; the next step is the dedicated
+rigging and animation bake-off in #1282, which waits on his approval. The static base bodies and finish B stay approved.
