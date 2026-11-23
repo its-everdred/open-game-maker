@@ -112,13 +112,24 @@ export function StudioMenu() {
   const hasStudioHeader = Boolean(matchPath('/all', location.pathname) || matchPath('/new', location.pathname));
   const gameId = game?.params.gameId;
   const ownedGames = isShowcase ? [] : builds.games.filter((item) => item.ownerId === creatorId);
-  const { workers, feeds, error: workerError, loading: workersLoading } = useWorkers(ownedGames, undefined, creatorId);
-  const reviewData = useWorkerReviews(ownedGames, creatorId);
+  // In a game, builds, reviews and Commands are that game's only; the core's and other games' stay on the library.
+  const trackedGames = gameId === undefined ? ownedGames : ownedGames.filter((item) => item.id === gameId);
+  const {
+    workers,
+    feeds,
+    error: workerError,
+    loading: workersLoading,
+  } = useWorkers(trackedGames, undefined, creatorId);
+  const reviewData = useWorkerReviews(trackedGames, creatorId);
   const reviews = reviewData.reviews;
-  const past = usePastTickets(ownedGames, creatorId);
+  const past = usePastTickets(trackedGames, creatorId);
   const gameReview = useCreatorReviewCommands(creatorId);
-  const coreReview = useCoreReviewCommands(creatorId);
-  const reviewCommands = [...gameReview.commands, ...coreReview.commands];
+  const allCore = useCoreReviewCommands(creatorId);
+  const coreReview = gameId === undefined ? allCore : { commands: [], targets: [], error: false, loading: false };
+  const reviewCommands = [
+    ...gameReview.commands.filter((command) => gameId === undefined || command.game_id === gameId),
+    ...coreReview.commands,
+  ];
   const { finished, dismiss: dismissFinished } = useWorkerFinishes(workers, feeds, creatorId);
   const visibleFinished = isShowcase
     ? []

@@ -67,10 +67,12 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
   const allowed = new Map((snapshot.stale ? [] : tickets).map((ticket) => [ticket.ticket, ticket]));
   const observed = new Set(snapshot.tickets.map((ticket) => ticket.ticket));
   let daemonUnavailable = false;
+  let daemonError: string | undefined;
   const workers = await deps
     .aiurClientForGame(game.id)
     .then((client) => listWorkers(client))
     .catch((error: unknown) => {
+      daemonError = error instanceof HttpError ? error.code : error instanceof Error ? error.name : 'unknown';
       daemonUnavailable = !(
         error instanceof HttpError &&
         error.code === 'daemon_not_found' &&
@@ -97,6 +99,15 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
       if (result.value && belongsToGame(result.value, scope)) allowed.set(result.value.ticket, result.value);
     }
   } else if (lookupIds.size) lookupUnavailable = true;
+  // The creator only sees fewer builds; the log names the source that failed.
+  if (daemonUnavailable || lookupUnavailable || snapshot.stale)
+    deps.log({
+      event: 'game_workers_incomplete',
+      gameId: game.id,
+      ...(daemonUnavailable ? { daemon: daemonError } : {}),
+      ...(lookupUnavailable ? { lookup: lookupIds.size } : {}),
+      ...(snapshot.stale ? { tracker: 'stale' } : {}),
+    });
   const byTicket = new Map(
     workers
       .filter((worker) => allowed.has(worker.ticket))

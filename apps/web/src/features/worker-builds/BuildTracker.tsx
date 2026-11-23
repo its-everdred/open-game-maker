@@ -208,7 +208,6 @@ export function BuildPanel({
           ))}
         </ul>
       )}
-      {workerError && <p role="alert">Could not load all build updates.</p>}
       {reviewError && <p role="alert">Could not load all reviews.</p>}
       {reviewCount > 0 && (
         <button
