@@ -65,9 +65,10 @@ def two_bone(hip, ankle, l1, l2, pole):
     return hip + u * a + p * h
 
 
-def build(rig, spec, n, weapon_axis):
+def build(rig, spec, n, weapon_axis, height):
     """Key frames 1..n of `spec['motion']['keys']` on the rig (bones by role in `spec['motion']['bones']`); returns the
-    keyed frame numbers. weapon_axis: the weapon's long axis (toward its head) in the right hand bone's local space."""
+    keyed frame numbers. weapon_axis: the weapon's long axis (toward its head) in the right hand bone's local space;
+    height: the body's standing height in world units (the skinned mesh's, head top to sole)."""
     mo = spec['motion']
     bones = mo['bones']
     missing = [r for r in ROLES if r != 'spine' and r not in bones]
@@ -87,7 +88,7 @@ def build(rig, spec, n, weapon_axis):
             'thigh_r': rest_dir('thigh_r', 'shin_r'), 'shin_r': rest_dir('shin_r', 'foot_r')}
     legs = {s: ((head0[bones['shin_' + s]] - head0[bones['thigh_' + s]]).length,
                 (head0[bones['foot_' + s]] - head0[bones['shin_' + s]]).length) for s in 'lr'}
-    k = (max(v.z for v in head0.values()) - min(v.z for v in head0.values())) / 1.8  # metres for a 1.8 m body
+    k = height / 1.8  # metres in the keys are for a 1.8 m body
 
     order = [b.name for b in rig.data.bones]  # parents before children (Blender keeps the hierarchy order)
     used = {bones[r] for r in ROLES if r != 'spine'} | set(bones['spine'])

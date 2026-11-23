@@ -196,7 +196,8 @@ def setup(spec, n):
         roll = w.get('roll', weapon_roll(rig, w['bone']) if w else 0.0)
         axis = (Matrix.Rotation(math.radians(roll), 3, 'Y') @ Matrix.Rotation(math.radians(w.get('pitch', 0)), 3, 'Z')
                 @ Vector((1, 0, 0)))
-        ts = handpose.build(rig, spec, n, axis)
+        zs = [(ob.matrix_world @ v.co).z for v in ob.data.vertices]
+        ts = handpose.build(rig, spec, n, axis, max(zs) - min(zs))
         rig.rotation_euler.z += math.radians(spec.get('rotz', 0))
         bpy.context.view_layer.update()
         rep |= {'keys': len(mo['keys']), 'times': ts}
