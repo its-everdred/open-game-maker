@@ -41,7 +41,7 @@ describe('generated promise spec against the stub game', () => {
 
     // Vitest leaves a cache under node_modules; pnpm then refuses this package-less root (real games have one).
     rmSync(join(root, 'node_modules'), { recursive: true, force: true });
-    const page = join(root, 'dist', 'index.html');
+    const page = join(root, 'dist', 'stub.js');
     const html = readFileSync(page, 'utf8');
     expect(html).toMatch(CRASH_LINE);
     writeFileSync(page, html.replace(CRASH_LINE, ''));
