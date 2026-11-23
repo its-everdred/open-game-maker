@@ -6,6 +6,8 @@ cells.json: {"mesh": glb, "rotz": deg, "pack": {"walk": sheet.png, "attack": she
              "pixel": {"colours": 8, "cloth": 6, "smooth": true} (pack-style pixel finish after the colour pass;
                        "cloth" renders a cloth mask and gives the undergarments their own colours),
              "render": {key: value, ...}, "cells": [{"name", "clip": "walk"|"attack", "motion": {...}, "weapon": {...}}]}
+A cell with "rigged" (rigged.py: a body that arrives rigged) skips the fit; its "model", "cost_usd" and "rotz" override
+the top level's for its recipe.
 Each cell gets <out_root>/<name>/ with raw frames, out/sheet.png and scores.json; a summary table is printed.
 --rescore keeps each cell's render and runs only the finish and scoring again (a new colour or pixel finish).
 """
@@ -22,7 +24,7 @@ HERE = Path(__file__).resolve().parent
 LICENCE = (('kaykit', 'CC0 (KayKit Character Animations, owned)'), ('/cmu/', 'CMU mocap (free for any use)'),
            ('/bandai/', 'CC BY-NC 4.0 (Bandai Namco Research Motion)'),
            ('/lafan1/', 'CC BY-NC-ND 4.0 (Ubisoft LaFAN1): private use, adapted output not shared'),
-           ('handkey', 'own work (hand-keyed script)'))
+           ('handkey', 'own work (hand-keyed script)'), ('quaternius', 'CC0 (Quaternius Universal Animation Library)'))
 
 
 def fmt(x):
@@ -33,12 +35,13 @@ def fmt(x):
 def write_recipe(d, spec, c, scores):
     """recipe.json beside the cell: what the review page prints under it (kind, model, cost, skill, arm, motion)."""
     mo = c['motion']
-    key = mo.get('path', '') if mo['kind'] != 'handkey' else 'handkey'
-    lic = next((v for k, v in LICENCE if k in key or k == mo['kind']), 'unknown')
+    key = mo.get('path', (c.get('rigged') or {}).get('path', '')) if mo['kind'] != 'handkey' else 'handkey'
+    lic = c.get('licence') or next((v for k, v in LICENCE if k in key or k == mo['kind']), 'unknown')
     fit = json.loads((d / 'fit.json').read_text())
     render = json.loads((d / 'render.json').read_text())
     rec = {'name': c['name'], 'kind': '3D model -> 2D render (rigged, animated)', 'ai_generated': True,
-           'model': spec.get('model', 'TRELLIS multi-view mesh'), 'cost_usd': spec.get('cost_usd', 0.0),
+           'model': c.get('model', spec.get('model', 'TRELLIS multi-view mesh')),
+           'cost_usd': c.get('cost_usd', spec.get('cost_usd', 0.0)),
            'skill': 'gm-sprite-forge (motion/)', 'arm': c.get('arm', 'A: Rigify metarig fit + bone heat'),
            'motion': {k: v for k, v in mo.items() if k != 'path'} | ({'source': Path(mo['path']).name} if 'path' in mo else {}),
            'motion_licence': lic, 'mesh': Path(spec['mesh']).name, 'skin': fit['skin'], 'retarget': fit['motion'],
@@ -76,9 +79,11 @@ def main():
         if only and c['name'] not in only:
             continue
         d = a.out / c['name']
-        cell = {'mesh': spec['mesh'], 'rotz': spec.get('rotz', 0),
+        cell = {'mesh': spec['mesh'], 'rotz': c.get('rotz', spec.get('rotz', 0)),
                 'motion': {'stance': spec.get('stance')} | c['motion'] | {'clip': c['clip']},
                 'weapon': c.get('weapon', spec.get('weapon')), 'rig_cache': str(a.out / 'rig_cache.blend')}
+        if c.get('rigged'):
+            cell['rigged'] = c['rigged']
         if a.rescore:  # the recipe and masks must describe the frames on disk, not a since-edited cells.json
             why = 'no render' if not (d / 'render.json').is_file() else \
                 'cells.json changed since the render: render it again' if \
