@@ -165,6 +165,29 @@ it('rises above the map maker library sheet too, and again when the sheet opens 
   expect(workspace.style.getPropertyValue('--edit-chat-rise')).toBe('300px');
 });
 
+it("ignores changes inside the library sheet, so scrolling its grid never forces the page's layout", async () => {
+  const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => rect(0, 0, 0, 0));
+  const { container } = render(
+    <EditWorkspace
+      game={
+        <section data-bubble-clear="open">
+          <div className="grid" />
+        </section>
+      }
+      chat={<div />}
+    />,
+  );
+  await act(async () => {});
+  spy.mockClear();
+  container.querySelector('.grid')!.append(document.createElement('button'));
+  await act(async () => {});
+  expect(spy).not.toHaveBeenCalled();
+
+  container.querySelector('section')!.setAttribute('data-bubble-clear', 'closed');
+  await act(async () => {});
+  expect(spy).toHaveBeenCalled();
+});
+
 // Kevin (#1295): the badge means a new agent reply, so the job's replayed history and the creator's own lines never set it.
 it('counts only agent replies from after the page opened, and not a replay after returning from play', () => {
   const now = Date.now();

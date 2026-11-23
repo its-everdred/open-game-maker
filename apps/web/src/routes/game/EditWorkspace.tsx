@@ -50,7 +50,14 @@ function useTouchControlsRise(editing: boolean) {
     };
     measure();
     /* Controls appear when the game loads, change with its inputs and hide after keyboard or pad input. */
-    const mutations = new MutationObserver(measure);
+    /* A panel's own contents (the library's scrolling grid) never move it; only its open/closed attribute does. */
+    const mutations = new MutationObserver((records) => {
+      const inside = (record: MutationRecord) =>
+        record.target instanceof Element &&
+        record.target.closest('[data-bubble-clear]') !== null &&
+        record.attributeName !== 'data-bubble-clear';
+      if (!records.every(inside)) measure();
+    });
     mutations.observe(game, {
       subtree: true,
       childList: true,
