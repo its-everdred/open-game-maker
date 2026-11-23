@@ -56,10 +56,12 @@ export const readApiOrigin = (envDir) => readOrigin(envDir, 'VITE_API_ORIGIN', [
 // rooms CORS origin must each list it, or a deploy would ship an app whose games show Try again.
 export function readPublicAppOrigin(envDir) {
   const origin = readOrigin(envDir, 'OGM_PUBLIC_APP_ORIGIN');
+  // A unit file on this host must name the app; one that is absent belongs to a host that is not this one.
   for (const unit of ['games.env', 'api.env', 'rooms.env']) {
     const file = join(envDir, unit);
-    const listed = existsSync(file) ? readEnvValue(file, 'OGM_APP_ORIGIN').split(/\s+/).filter(Boolean) : [];
-    if (listed.length && !listed.some((value) => value.replace(/\/$/, '') === origin)) {
+    if (!existsSync(file)) continue;
+    const listed = readEnvValue(file, 'OGM_APP_ORIGIN').split(/\s+/).filter(Boolean);
+    if (!listed.some((value) => value.replace(/\/$/, '') === origin)) {
       throw new Error(`OGM_APP_ORIGIN in ${file} does not list OGM_PUBLIC_APP_ORIGIN ${origin}`);
     }
   }

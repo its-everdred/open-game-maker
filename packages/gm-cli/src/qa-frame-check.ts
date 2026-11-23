@@ -12,18 +12,25 @@ export type FrameObservation = {
   error?: string;
 };
 
-const REFUSAL = /frame-ancestors|frame-src|Content Security Policy|X-Frame-Options|Refused to (?:load|display|frame)/iu;
+/* Only refusals of a frame: the game's own CSP lines (img-src, connect-src) are not this check's business. */
+const REFUSAL = /frame-ancestors|frame-src|X-Frame-Options|Refused to (?:display|frame)/iu;
 
 export function isFrameRefusal(text: string): boolean {
   return REFUSAL.test(text);
 }
 
-export function frameFailures(observation: FrameObservation): string[] {
+/**
+ * What failed on one domain. An alias (`canonical` set) must also land on the canonical origin: one that serves the app
+ * itself frames fine while the API and auth do not trust it.
+ */
+export function frameFailures(observation: FrameObservation, canonical?: string): string[] {
   const failures = [
     ...(observation.error ? [`did not load: ${observation.error}`] : []),
     ...observation.refusals.map((line) => `refused: ${line}`),
   ];
   if (!observation.error && !observation.drew) failures.push('the game frame stayed empty');
+  if (canonical && observation.landed && observation.landed !== canonical)
+    failures.push(`stayed on ${observation.landed} instead of redirecting to ${canonical}`);
   return failures;
 }
 
@@ -65,10 +72,14 @@ export async function observeFrame(
       { src: frameUrl, ms: timeoutMs },
     );
     const frame = await (await page.$('iframe[data-frame-check]'))?.contentFrame();
+    /* A frame still navigating never answers; give it 5 s rather than hold the whole check. */
     observation.drew = frame
-      ? await frame
-          .evaluate(() => (document.body?.childElementCount ?? 0) + (document.head?.childElementCount ?? 0) > 0)
-          .catch(() => false)
+      ? await Promise.race([
+          frame
+            .evaluate(() => (document.body?.childElementCount ?? 0) + (document.head?.childElementCount ?? 0) > 0)
+            .catch(() => false),
+          new Promise<boolean>((done) => setTimeout(() => done(false), 5_000)),
+        ])
       : false;
   } catch (error) {
     observation.error = (error instanceof Error ? error.message.split('\n')[0]! : String(error)).slice(0, 300);

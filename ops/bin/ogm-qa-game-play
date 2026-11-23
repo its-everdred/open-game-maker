@@ -7,9 +7,10 @@ production shell at 390x844 with the QA session, the bridge handshake and first 
 one input that must change the frame. One game at a time; each play is capped at 170 s (`--timeout`). A game that
 fails is played once more and fails only if both plays fail: a loaded host can miss one boot, a broken game misses both.
 
-First, every app domain (OGM_PUBLIC_APP_ORIGIN and OGM_APP_ALIAS_ORIGINS in web.env, else OGM_APP_ORIGIN in api.env)
-frames the first game's build in WebKit (`gm qa frame-check`, #1297): a domain the games host's frame-ancestors does
-not allow showed Try again in every game on an iPhone. A failing frame check is run once more, like a play.
+First, every app domain (OGM_PUBLIC_APP_ORIGIN, then each OGM_APP_ALIAS_ORIGINS entry, in web.env) frames the first
+game's build in WebKit (`gm qa frame-check`, #1297): a domain the games host's frame-ancestors does not allow showed Try
+again in every game on an iPhone, and an alias must redirect to the app origin. A failing frame check is run once more,
+like a play; a missing web.env origin or OGM_GAMES_ORIGIN fails it, and only an instance with no tested build skips it.
 
 usage: ogm-qa-game-play [--db <ogm.sqlite3>] [--game <slug> [--build <id>]] [--repo <checkout>] [--attention <file>]
                         [--frames-only]
@@ -85,10 +86,10 @@ def play(gm, repo, game_id, build_id, out):
     return report
 
 
-def app_origins(env_dir, api):
+def app_origins(env_dir):
     """The app domains a player can open: the public app origin first, then every alias that redirects to it."""
     web = env_file(os.path.join(env_dir, 'web.env'))
-    canonical = (web.get('OGM_PUBLIC_APP_ORIGIN') or api.get('OGM_APP_ORIGIN') or '').rstrip('/')
+    canonical = web.get('OGM_PUBLIC_APP_ORIGIN', '').rstrip('/')
     aliases = [origin.rstrip('/') for origin in web.get('OGM_APP_ALIAS_ORIGINS', '').split()]
     return [canonical, *aliases] if canonical else []
 
@@ -144,12 +145,18 @@ def main(argv):
             rows = [(rows[0][0], rows[0][1], args['--build'])]
     failed = 0
     framed = next((row for row in rows if row[2]), None)
-    apps = app_origins(env_dir, api)
+    apps = app_origins(env_dir)
     games = api.get('OGM_GAMES_ORIGIN', '').rstrip('/')
-    if not (framed and apps and games):
-        print('frames: not checked (no tested build, app origin or OGM_GAMES_ORIGIN)')
-        if frames_only:
-            return 64
+    stamp = lambda: datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    if not framed:
+        print('frames: not checked (no tested build yet)')
+    elif not (apps and games):
+        failed = 1
+        line = 'frames: not checked: OGM_PUBLIC_APP_ORIGIN in web.env or OGM_GAMES_ORIGIN in api.env is missing'
+        print(line)
+        if attention:
+            with open(attention, 'a') as handle:
+                handle.write(f'{stamp()} qa-frame-check failed: {line}\n')
     else:
         frame_url = f'{games}/g/{framed[0]}/{framed[2]}/'
         code, output = frame_check(gm, repo, frame_url, apps)
@@ -163,9 +170,8 @@ def main(argv):
             line = f'frames {framed[1]} {framed[2]}: {clean(output, 600)}'
             print(line)
             if attention:
-                stamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
                 with open(attention, 'a') as handle:
-                    handle.write(f'{stamp} qa-frame-check failed: {line}\n')
+                    handle.write(f'{stamp()} qa-frame-check failed: {line}\n')
     if frames_only:
         rows = []
     for game_id, slug, build_id in rows:

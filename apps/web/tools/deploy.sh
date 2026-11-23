@@ -225,6 +225,7 @@ total uploaded
 timed load-check load_check || report_attention 'the load check on the uploaded payload failed (see the deploy log)'
 # Every app domain must frame a game in WebKit, as on an iPhone (#1297): an alias whose 301 is missing, or a games
 # host whose frame-ancestors lacks the app, shows Try again in every game.
-timed frame-check "$ROOT/ops/bin/ogm-qa-game-play" --frames-only --repo "$ROOT" ||
+# Its own attention line is suppressed: report_attention writes the one line for this deploy.
+timed frame-check env OGM_QA_ATTENTION= "$ROOT/ops/bin/ogm-qa-game-play" --frames-only --repo "$ROOT" ||
   report_attention 'the frame check on the app domains failed (see the deploy log)'
 total done

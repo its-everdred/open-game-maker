@@ -81,8 +81,8 @@ steps:
         check: ffmpeg -version && 7z
         cites: [scripts/py/drive-sync/README.md]
       - kind: hand
-        text: Install Chromium for Playwright, including its sudo-managed system dependencies once.
-        command: pnpm --dir apps/web exec playwright install --with-deps chromium
+        text: Install Chromium and WebKit for Playwright, including their sudo-managed system dependencies once.
+        command: pnpm --dir apps/web exec playwright install --with-deps chromium webkit
         writes: [~/.cache/ms-playwright]
         check: pnpm --dir apps/web run e2e -- --list
         cites: [apps/web/package.json, .github/workflows/ci.yml]

@@ -33,11 +33,12 @@ PY
 # The fake gm records its call and writes the report the real `gm qa play-check` would: g_bad is stuck on Try again.
 cat > "$scratch/gm" << 'GM'
 #!/usr/bin/env bash
-printf '%s\n' "$*" >> "$OGM_TEST_CALLS"
 if [[ $2 == frame-check ]]; then
+  printf '%s\n' "$*" >> "$OGM_TEST_CALLS.frames"
   [[ -n ${OGM_TEST_FRAME_FAIL:-} ]] && { printf 'fail https://bare.example: refused: frame-ancestors\n'; exit 1; }
   exit 0
 fi
+printf '%s\n' "$*" >> "$OGM_TEST_CALLS"
 game=$3 out=$6
 [[ $game == "${OGM_TEST_SILENT:-}" ]] && exit 3
 # A flaky game fails its first play only, as a loaded host can.
@@ -60,6 +61,10 @@ printf '{"failures": [], "unchecked": [], "observation": {"trace": []}}\n' > "$o
 GM
 chmod +x "$scratch/gm"
 export OGM_QA_GM=$scratch/gm OGM_TEST_CALLS=$scratch/calls OGM_ENV_DIR=$scratch/env
+mkdir -p "$scratch/env"
+printf 'OGM_PUBLIC_APP_ORIGIN=https://app.example\nOGM_APP_ALIAS_ORIGINS="https://bare.example https://old.example"\n' \
+  > "$scratch/env/web.env"
+printf 'OGM_GAMES_ORIGIN=https://games.example/\n' > "$scratch/env/api.env"
 attention=$scratch/attention
 
 set +e
@@ -143,35 +148,38 @@ assert_grep 'exit=70 qa-game-play' "$scratch/out"
 
 # Every app domain frames the first game's build in WebKit before any play (#1297); a refused frame fails and wakes
 # the Executor, and --frames-only (web deploys) plays nothing.
-mkdir -p "$scratch/env"
-printf 'OGM_PUBLIC_APP_ORIGIN=https://app.example\nOGM_APP_ALIAS_ORIGINS="https://bare.example https://old.example"\n' \
-  > "$scratch/env/web.env"
-printf 'OGM_GAMES_ORIGIN=https://games.example/\n' > "$scratch/env/api.env"
 : > "$scratch/calls"
+: > "$scratch/calls.frames"
 "$check" --db "$db" --repo "$stack" --game ok > "$scratch/out"
 frame='qa frame-check https://games.example/g/g_ok/build_new/ --app https://app.example --app https://bare.example --app https://old.example'
-assert_eq "$frame
-qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/build_new" "$(cat "$scratch/calls")" \
-  'the frame check opens every app domain on the played build, then the game plays'
+assert_eq "$frame" "$(cat "$scratch/calls.frames")" 'the app origin first, then each alias, frame the played build'
+assert_eq "qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/build_new" "$(cat "$scratch/calls")" \
+  'the game still plays after its frame check'
 assert_grep 'frames ok build_new: ok on https://app.example https://bare.example https://old.example' "$scratch/out"
 
 : > "$scratch/calls"
+: > "$scratch/calls.frames"
 : > "$attention"
 set +e
 OGM_TEST_FRAME_FAIL=1 "$check" --db "$db" --repo "$stack" --frames-only --attention "$attention" > "$scratch/out"
 rc=$?
 set -e
 assert_eq 1 "$rc" 'a refused frame fails'
-assert_eq "${frame/g_ok\/build_new/g_bad/build_bad}" "$(sed -n 1p "$scratch/calls")" 'without --game the first game with a tested build is framed'
-assert_eq 2 "$(wc -l < "$scratch/calls")" '--frames-only plays nothing; a failing frame check runs once more'
+assert_eq "${frame/g_ok\/build_new/g_bad/build_bad}" "$(sed -n 1p "$scratch/calls.frames")" \
+  'without --game the first game with a tested build is framed'
+assert_eq 2 "$(wc -l < "$scratch/calls.frames")" 'a failing frame check runs once more'
+[[ ! -s $scratch/calls ]] || fail '--frames-only played a game'
 assert_grep 'qa-frame-check failed: frames bad build_bad: fail https://bare.example: refused: frame-ancestors' "$attention"
 
-rm "$scratch/env/api.env"
+# A host missing the app or games origin cannot be checked: that fails loudly in every mode, never passes.
+mv "$scratch/env/api.env" "$scratch/api.env"
+: > "$attention"
 set +e
-"$check" --db "$db" --repo "$stack" --frames-only > "$scratch/out"
+"$check" --db "$db" --repo "$stack" --game ok --attention "$attention" > "$scratch/out"
 rc=$?
 set -e
-assert_eq 64 "$rc" '--frames-only with nothing to frame is bad configuration, never a pass'
-assert_grep 'frames: not checked' "$scratch/out"
+assert_eq 1 "$rc" 'an unconfigured frame check fails the run'
+assert_grep 'qa-frame-check failed: frames: not checked: OGM_PUBLIC_APP_ORIGIN in web.env or OGM_GAMES_ORIGIN' "$attention"
+mv "$scratch/api.env" "$scratch/env/api.env"
 
 echo 'qa-game-play: ok'

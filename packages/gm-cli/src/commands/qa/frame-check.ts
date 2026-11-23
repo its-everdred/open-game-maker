@@ -8,11 +8,11 @@ import { frameFailures, observeFrame } from '../../qa-frame-check.js';
  */
 export const command: GmCommand = {
   name: 'qa frame-check',
-  summary: 'frame a game in WebKit on every app domain and fail on a refused frame',
-  usage: '<game frame url> --app <origin> [--app <origin> ...] [--timeout 30]',
+  summary: 'frame a game in WebKit on the app origin and each alias; fail on a refused frame or an alias that stays',
+  usage: '<game frame url> --app <app origin> [--app <alias> ...] [--timeout 30]',
   example: 'qa frame-check https://games.example/g/g_123/build_456/ --app https://app.example --app https://example',
   flags: {
-    app: { type: 'string', multiple: true, help: 'an app domain to open; repeat for each' },
+    app: { type: 'string', multiple: true, help: 'the app origin first, then each alias that must redirect to it' },
     timeout: { type: 'number', default: 30, help: 'seconds per domain' },
   },
   async run(ctx, args, flags) {
@@ -26,13 +26,20 @@ export const command: GmCommand = {
     const timeout = flags.timeout as number;
     if (!Number.isFinite(timeout) || timeout <= 0) throw new UsageError('invalid timeout', 'gm help qa frame-check');
 
+    const canonical = new URL(apps[0]!).origin;
     const verify = await import('@ogm/gm-verify');
-    const browser = await verify.launchWebkit();
+    const browser = await verify.launchWebkit().catch((error: Error) => {
+      throw new Error(
+        /Executable doesn't exist/u.test(error.message)
+          ? 'WebKit is not installed: run pnpm --dir apps/web exec playwright install --with-deps webkit'
+          : error.message.split('\n')[0],
+      );
+    });
     const results = [];
     try {
-      for (const app of apps) {
+      for (const [index, app] of apps.entries()) {
         const observation = await observeFrame(browser, app, frameUrl, timeout * 1000);
-        results.push({ ...observation, failures: frameFailures(observation) });
+        results.push({ ...observation, failures: frameFailures(observation, index ? canonical : undefined) });
       }
     } finally {
       await browser.close();

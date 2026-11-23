@@ -138,7 +138,9 @@ describe('Netlify static configuration', () => {
     const deploy = readFileSync(resolve(process.cwd(), 'tools/deploy.sh'), 'utf8');
 
     const upload = deploy.indexOf('timed upload netlify deploy');
-    const frames = deploy.indexOf('timed frame-check "$ROOT/ops/bin/ogm-qa-game-play" --frames-only --repo "$ROOT" ||');
+    const frames = deploy.indexOf(
+      'timed frame-check env OGM_QA_ATTENTION= "$ROOT/ops/bin/ogm-qa-game-play" --frames-only --repo "$ROOT" ||',
+    );
     expect(upload).toBeGreaterThan(-1);
     expect(frames).toBeGreaterThan(upload);
     expect(deploy.slice(frames)).toMatch(/^[^\n]*\|\|\n\s+report_attention/u);

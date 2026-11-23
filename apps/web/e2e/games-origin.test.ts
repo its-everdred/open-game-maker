@@ -236,6 +236,8 @@ describe('app domains', () => {
       [undefined, undefined, 'OGM_APP_ORIGIN=https://old.example\n', 'games.env'],
       [undefined, 'OGM_APP_ORIGIN=https://old.example\n', undefined, 'api.env'],
       ['OGM_APP_ORIGIN=https://old.example\n', undefined, undefined, 'rooms.env'],
+      // A unit file that names no app trusts none: blank is not "nothing to check".
+      [undefined, undefined, 'OGM_GAMES_PORT=10000\n', 'games.env'],
     ] as const) {
       const dir = await envDir(web, rooms, api, games);
       expect(() => readPublicAppOrigin(dir)).toThrow(new RegExp(`${file.replace('.', '\\.')} does not list`));
