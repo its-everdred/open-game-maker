@@ -215,7 +215,10 @@ scene that doesn't exist yet. A scene on an older schema version is upgraded on 
 `migration` revision. `gm scene push <game> <scene> [--label <what changed>]` saves the edited `doc` as a revision by
 `agent:<ticket>`. A push from an older `baseRev` is rebased onto the latest one. If it would change anything Kevin
 edited, the whole push is refused with one line per conflict and nothing is saved: pull again and redo the rest.
-`--json` prints `{ ok, rev, rebased, saved }`, or `{ ok: false, conflicts, hint }` on a refusal (exit 1).
+A saved push also prints the link that opens the scene in the map maker at that revision
+(`/g/<game>?mode=edit&scene=<scene>&rev=<n>`, on `OGM_APP_ORIGIN` when set) for the agent's update to Kevin. The
+scene's chip on the ticket's review card and ticket detail opens the same link.
+`--json` prints `{ ok, rev, rebased, saved, link }`, or `{ ok: false, conflicts, hint }` on a refusal (exit 1).
 
 `gm scene match <mock.png> <brief.json> --pack <id> --facing <direction> --out <new.json>` searches the
 specified pack locally using the reviewed regions in the brief. It checks pack rights and source hashes; the

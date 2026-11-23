@@ -90,12 +90,21 @@ export const command: GmCommand = {
     }
     await writeFile(path, `${JSON.stringify({ ...copy, baseRev: result.head.rev, doc: result.head.doc }, null, 2)}\n`);
     const rev = result.head.rev;
-    if (ctx.json) printJson(ctx, { ok: true, rev, rebased: result.rebased, saved: result.revision !== null });
+    const link = editorLink(ctx.env?.OGM_APP_ORIGIN, ref.game, ref.scene, rev);
+    if (ctx.json) printJson(ctx, { ok: true, rev, rebased: result.rebased, saved: result.revision !== null, link });
     else if (!result.revision) ctx.out(`no changes to ${ref.game}/${ref.scene} (rev ${rev})`);
-    else
+    else {
       ctx.out(
         `pushed ${ref.game}/${ref.scene} rev ${rev}${result.rebased ? ` (rebased from rev ${copy.baseRev})` : ''}`,
       );
+      ctx.out(`open in the editor: ${link}`);
+    }
     return EXIT.ok;
   },
 };
+
+/** The map maker opened on this scene (#1212), for the agent's update to Kevin; a path when no app origin is set. */
+export function editorLink(origin: string | undefined, game: string, scene: string, rev: number): string {
+  const query = new URLSearchParams({ mode: 'edit', scene, rev: String(rev) });
+  return `${(origin ?? '').replace(/\/$/, '')}/g/${encodeURIComponent(game)}?${query}`;
+}
