@@ -53,7 +53,7 @@ function Spark({ points, from, to }: { points: EnergyHistoryPoint[]; from: numbe
         }
         if (values.length === 1) {
           const [[at, left]] = values as [[string, number]];
-          return <circle key={key} className={`energy-spark-${run.kind}`} cx={x(at)} cy={y(left)} r={1.5} />;
+          return <circle key={key} className={`energy-spark-${run.kind}`} cx={x(at)} cy={y(left)} r={2} />;
         }
         return <polyline key={key} className={`energy-spark-${run.kind}`} points={line(values)} />;
       })}
@@ -78,7 +78,8 @@ export function EnergyHistory({
     const points = (history.find(({ id }) => id === resource.id)?.points ?? []).filter(
       (point) => Date.parse(point.at) >= from,
     );
-    return points.length === 0 ? [] : [{ resource, points }];
+    // A resource never known in the window has nothing to draw; the table already says Unknown.
+    return points.some((point) => point.left !== null) ? [{ resource, points }] : [];
   });
   return (
     <div className="admin-card energy-history">

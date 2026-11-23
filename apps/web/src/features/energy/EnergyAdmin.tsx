@@ -105,20 +105,24 @@ function Resources({ resources }: { resources: EnergyResource[] }) {
           {resources.map((resource) => (
             <tr key={resource.id} data-state={resource.state} data-freshness={resource.freshness}>
               <th scope="row">{resource.label}</th>
-              <td>{amount(resource.used, resource.unit)}</td>
+              <td data-label="Used">{amount(resource.used, resource.unit)}</td>
               {/* A window's limit is always 100 %; only a real limit is shown. */}
-              <td>
+              <td data-label="Limit">
                 {resource.unit === 'percent'
                   ? ''
                   : resource.limit === null
                     ? '–'
                     : amount(resource.limit, resource.unit)}
               </td>
-              <td>{resource.limit === null && resource.used !== null ? '–' : amount(resource.left, resource.unit)}</td>
-              <td>{day(resource.resetsAt)}</td>
-              <td>{basisText(resource)}</td>
-              <td>{resource.freshness === 'stale' ? `stale ${ageText(resource.ageMs)}` : ageText(resource.ageMs)}</td>
-              <td>{resource.state}</td>
+              <td data-label="Left">
+                {resource.limit === null && resource.used !== null ? '–' : amount(resource.left, resource.unit)}
+              </td>
+              <td data-label="Resets">{day(resource.resetsAt)}</td>
+              <td data-label="Basis">{basisText(resource)}</td>
+              <td data-label="Age">
+                {resource.freshness === 'stale' ? `stale ${ageText(resource.ageMs)}` : ageText(resource.ageMs)}
+              </td>
+              <td data-label="State">{resource.state}</td>
             </tr>
           ))}
         </tbody>
@@ -143,11 +147,11 @@ function Subscriptions({ view }: { view: EnergyAdminView }) {
           {view.subscriptions.map((plan) => (
             <tr key={plan.id}>
               <th scope="row">{plan.label}</th>
-              <td>{amount(plan.weeklyUsd, 'usd')}</td>
-              <td>
+              <td data-label="A week">{amount(plan.weeklyUsd, 'usd')}</td>
+              <td data-label="Used this week">
                 {plan.usedUsd ? `${amount(plan.usedUsd.low, 'usd')}–${amount(plan.usedUsd.high, 'usd')}` : 'Unknown'}
               </td>
-              <td>{plan.basis}</td>
+              <td data-label="Basis">{plan.basis}</td>
             </tr>
           ))}
         </tbody>

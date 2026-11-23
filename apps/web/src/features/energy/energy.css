@@ -188,3 +188,22 @@
 .energy-spark-band {
   fill: color-mix(in srgb, var(--orange-b) 35%, transparent);
 }
+
+.energy-history {
+  padding: 16px;
+}
+
+.energy-admin form .admin-settings-grid {
+  align-items: start;
+}
+
+.energy-admin input[readonly] {
+  opacity: 0.6;
+}
+
+/* On a phone each row is a card; a cell with nothing to say takes no line. */
+@media (max-width: 600px) {
+  .energy-resources td:empty {
+    display: none;
+  }
+}
