@@ -25,22 +25,24 @@ import sampling  # noqa: E402
 
 
 def _import(path):
-    before = set(bpy.data.objects)
+    """The objects and actions this import created (an action is looked up only among its own file's actions)."""
+    before, acts = set(bpy.data.objects), set(bpy.data.actions)
     if path.lower().endswith('.fbx'):
         bpy.ops.import_scene.fbx(filepath=path)
     elif path.lower().endswith('.bvh'):
         bpy.ops.import_anim.bvh(filepath=path, update_scene_fps=False)
     else:
         bpy.ops.import_scene.gltf(filepath=path)
-    return [o for o in bpy.data.objects if o not in before]
+    return [o for o in bpy.data.objects if o not in before], [a for a in bpy.data.actions if a not in acts]
 
 
-def _action(name_part):
+def _action(name_part, actions):
     """The action named `name_part`, or the only one whose name contains it (importers add suffixes such as
-    `_Armature`); an ambiguous or missing name fails rather than render another clip."""
-    names = [a.name for a in bpy.data.actions]
-    exact = [a for a in bpy.data.actions if a.name == name_part]
-    acts = exact or [a for a in bpy.data.actions if name_part in a.name]
+    `_Armature`), among `actions` (one file's: a copy source's clip must never resolve to the target rig's); an
+    ambiguous or missing name fails rather than render another clip."""
+    names = [a.name for a in actions]
+    exact = [a for a in actions if a.name == name_part]
+    acts = exact or [a for a in actions if name_part in a.name]
     if len(acts) != 1:
         raise SystemExit(f'{"no" if not acts else "more than one"} action matching {name_part!r}: {names}')
     return acts[0]
@@ -48,7 +50,7 @@ def _action(name_part):
 
 def load(path, action=None, colour=None):
     """The armature and one joined mesh skinned to it; stray objects (helpers, unskinned meshes) are removed."""
-    new = _import(path)
+    new, file_actions = _import(path)
     rig = next(o for o in new if o.type == 'ARMATURE')
     skinned = [o for o in new if o.type == 'MESH' and any(m.type == 'ARMATURE' and m.object == rig
                                                            for m in o.modifiers)]
@@ -70,7 +72,7 @@ def load(path, action=None, colour=None):
                 b.inputs['Base Color'].default_value = (*colour, 1)
     rig.animation_data_create()
     if action:
-        rig.animation_data.action = _action(action)
+        rig.animation_data.action = _action(action, file_actions)
     return ob, rig
 
 
@@ -190,14 +192,14 @@ def setup(spec, n):
         rep |= {'action': act.name, 'frames': [f0, f1], 'times': ts}
         driver = rig
     else:
-        new = _import(mo['path'])
+        new, src_actions = _import(mo['path'])
         src = next(o for o in new if o.type == 'ARMATURE')
         for o in new:
             if o is not src:
                 bpy.data.objects.remove(o)
         src.animation_data_create()
         if mo.get('action'):
-            src.animation_data.action = _action(mo['action'])
+            src.animation_data.action = _action(mo['action'], src_actions)
         src.rotation_mode = 'XYZ'
         act = src.animation_data.action
         f0, f1 = mo.get('frames') or act.frame_range
@@ -210,7 +212,6 @@ def setup(spec, n):
         rep |= {'source': os.path.basename(mo['path']), 'action': act.name, 'frames': [f0, f1], 'times': src_ts,
                 'map': mo['map']}
         driver = src
-        f0, f1 = ts[0], ts[-1]
     offsets = [(0.0, 0.0)] * n
     if mo.get('in_place'):
         sc = bpy.context.scene
@@ -220,7 +221,10 @@ def setup(spec, n):
             sc.frame_set(int(math.floor(t)), subframe=t - math.floor(t))
             p = rig.matrix_basis @ hb.head  # the hips in the rig's parent space, where its location lives
             return p.x, p.y
-        offsets = sampling.in_place(track, ts, f0, f1)  # copy: f0, f1 are the keyed frames 1 and n
+        if driver is rig:
+            offsets = sampling.in_place(track, ts, f0, f1)
+        else:  # copy: a held key pose must stay put through its hold
+            offsets = sampling.in_place_keyed(track, src_ts, ts)
         rep['in_place'] = True
     if driver is not rig:
         bpy.data.objects.remove(driver)

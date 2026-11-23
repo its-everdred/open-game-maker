@@ -129,6 +129,24 @@ zs = [(body.matrix_world @ v.co).z for v in body.data.vertices]
 json.dump({'lift': lift, 'min': min(zs), 'max': max(zs)}, open(out, 'w'))
 '''
 
+ACTION = '''
+import sys, json
+import bpy
+sys.path.insert(0, sys.argv[sys.argv.index('--') + 1])
+import rigged
+out = sys.argv[sys.argv.index('--') + 2]
+bpy.ops.wm.read_factory_settings(use_empty=True)
+target = bpy.data.actions.new('Walk')        # the target rig's own file brought a clip named Walk
+source = bpy.data.actions.new('Walk')        # the copy source's Walk, renamed Walk.001 by Blender
+got = rigged._action('Walk', [source]).name
+try:
+    rigged._action('Run', [source])
+    missing = 'found'
+except SystemExit:
+    missing = 'failed'
+json.dump({'got': got, 'source': source.name, 'missing': missing}, open(out, 'w'))
+'''
+
 
 def run_blender(script):
     with tempfile.TemporaryDirectory() as t:
@@ -178,6 +196,16 @@ class GroundTest(unittest.TestCase):
         self.assertAlmostEqual(got['min'], 0.0, places=4)
         self.assertAlmostEqual(got['max'], 1.0, places=4)  # lifted, not squashed
         self.assertAlmostEqual(got['lift'], 0.5, places=4)
+
+
+@unittest.skipUnless(shutil.which('blender'), 'needs Blender 4.3')
+class ActionTest(unittest.TestCase):
+    def test_a_copy_source_clip_never_resolves_to_the_target_rigs_clip(self):
+        # Both files carry a Walk: the exact name now belongs to the target's, so a lookup over every action in the
+        # scene would play the target's own clip and call it the copy
+        got = run_blender(ACTION)
+        self.assertEqual(got['got'], got['source'])
+        self.assertEqual(got['missing'], 'failed')
 
 
 if __name__ == '__main__':

@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts/motion'))
-from sampling import frames, in_place  # noqa: E402
+from sampling import frames, in_place, in_place_keyed  # noqa: E402
 
 
 class Even(unittest.TestCase):
@@ -60,6 +60,18 @@ class InPlace(unittest.TestCase):
         held = [(track(t)[0] + o[0], track(t)[1] + o[1]) for t, o in zip(ts, offs)]
         self.assertEqual([round(y, 9) for _, y in held], [0, 0, 0])  # no forward travel left
         self.assertEqual([x for x, _ in held], [0.0, 0.05, 0.0])  # the sway is still there
+
+
+class InPlaceKeyed(unittest.TestCase):
+    def test_a_held_key_pose_stays_put_through_its_hold(self):
+        # A copy retarget keys sheet frame i at frame 1 + i. Keys sampling holds source time 10 for three sheet
+        # frames: the body is in the same pose there, so it must not slide (drift taken per keyed frame would move it)
+        src_ts = [0.0, 10.0, 10.0, 10.0, 20.0]
+        keyed = [1.0, 2.0, 3.0, 4.0, 5.0]
+        hips = {1.0: 0.0, 2.0: 1.0, 3.0: 1.0, 4.0: 1.0, 5.0: 2.0}  # 1 m of travel per 10 source frames
+        off = in_place_keyed(lambda k: (hips[k], 0.0), src_ts, keyed)
+        held = [hips[k] + dx for k, (dx, _) in zip(keyed, off)]
+        self.assertEqual(held, [0.0] * 5)  # every frame back on the spot, the held ones included
 
 
 if __name__ == '__main__':

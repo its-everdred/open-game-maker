@@ -36,3 +36,13 @@ def in_place(track, ts, f0, f1):
     x1, y1 = track(f1)
     span = (f1 - f0) or 1.0
     return [(-(x1 - x0) * (t - f0) / span, -(y1 - y0) * (t - f0) / span) for t in ts]
+
+
+def in_place_keyed(track, src_ts, keyed):
+    """in_place for a copy retarget, whose pose at sheet frame i is keyed at frame keyed[i] from source time src_ts[i]:
+    the hips are read at the keyed frames (track(keyed frame) -> (x, y)) but the drift is taken over source time, so a
+    key pose held for several sheet frames (the same source time) stays put instead of sliding through its hold."""
+    key = {}
+    for s, k in zip(src_ts, keyed):
+        key.setdefault(s, k)
+    return in_place(lambda s: track(key[s]), src_ts, src_ts[0], src_ts[-1])
