@@ -203,7 +203,8 @@ base bodies, not on those meshes:
   clip: on the base-body dry run it raised the Ranger's hand-keyed walk from 0.43 to 0.53 but lowered the Wizard's
   from 0.37 to 0.21, because the pack Wizard walks with its casting arm raised ahead. Give such a clip its own layer
   in the cell's `motion` (`"stance": "ssi-wizard-walk"`).
-- Base bodies set `"finish": "base"` with `pack.idle`. The attack is scored against the class's own clip: Warrior
+- Base bodies set `"finish": "base"` with `pack.idle`, and `"pixel": {"colours": 8, "cloth": 6, "smooth": true}`:
+  Kevin's finish "B" (hero-finish1-warrior) carries to every hero cell and every later rung. The attack is scored against the class's own clip: Warrior
   Attack1 (`chop`), Wizard CastSpell (`cast`), Ranger QuickShot (`bow`).
 - The class weapon goes in `weapon` on the hand bone, never fused into the body. With nothing fused, the fit's
   weapon cut-off does nothing. Size it to the pack clip, not the default: the Warrior's KayKit `axe_1handed` needs
