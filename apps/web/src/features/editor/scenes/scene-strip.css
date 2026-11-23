@@ -11,7 +11,7 @@
   position: absolute;
   z-index: 3;
   top: calc(var(--safe-t) + 12px);
-  left: 100px;
+  left: 12px;
   display: grid;
   place-items: center;
   width: 46px;
@@ -178,13 +178,9 @@
   text-overflow: ellipsis;
 }
 
-/* Stay inside the game frame: the same widths game-prototype.css gives `.game-stage` for each frame orientation. */
-.game-stage-area[data-frame-orientation='wide'] .scene-strip {
-  max-width: calc(min(100cqw, (100cqh - var(--edit-bar)) * 16 / 9) - 24px);
-}
-
-.game-stage-area[data-frame-orientation='vertical'] .scene-strip {
-  max-width: calc(min(100cqw, (100cqh - var(--edit-bar)) * 9 / 16) - 24px);
+/* Stay inside the game frame: the width game-prototype.css gives `.game-stage` in the editor. */
+.game-stage-area[data-edit-frame] .scene-strip {
+  max-width: calc(min(100cqw, (100cqh - var(--edit-bar)) * var(--edit-frame-aspect)) - 24px);
 }
 
 /* Side by side, the frame sits at the start of its column (edit-workspace.css), so the strip does too. */

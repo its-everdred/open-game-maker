@@ -9,49 +9,56 @@ test.use({ serviceWorkers: 'block', reducedMotion: 'reduce' });
 
 // Kevin's phone (#1199): the controls covered each other and the frame, and a fixed 50/50 split
 // left a cream band under a wide frame. Each control must stay tappable and the frame must meet the chat.
+// #1269: no orientation buttons; the frame takes the window's shape, so turning the phone turns the game.
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 844, height: 390 },
 ]) {
-  for (const orientation of ['Wide game', 'Vertical game'] as const) {
-    test(`edit page controls clear the ${orientation.toLowerCase()} at ${viewport.width}x${viewport.height}`, async ({
-      page,
-    }, testInfo) => {
-      test.skip(testInfo.project.name !== 'desktop', 'the test sets its own viewport');
-      await page.setViewportSize(viewport);
-      await openEditor(page);
-      await page.getByRole('button', { name: orientation }).click();
-      const aspect = orientation === 'Wide game' ? 16 / 9 : 9 / 16;
-      await expect.poll(async () => ratio(await box(page, '.game-stage'))).toBeCloseTo(aspect, 1);
+  test(`edit page frame follows the window and clears the controls at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'the test sets its own viewport');
+    await page.setViewportSize(viewport);
+    await openEditor(page);
+    await expect(page.getByRole('group', { name: 'Game orientation' })).toHaveCount(0);
+    await expect
+      .poll(async () => ratio(await box(page, '.game-stage')))
+      .toBeCloseTo(viewport.width / viewport.height, 1);
 
-      const parts = {
-        orientation: await box(page, '[role="group"][aria-label="Game orientation"]'),
-        play: await box(page, '.editor-play-button'),
-        menu: await box(page, '.studio-menu-button'),
-        editor: await box(page, 'summary[aria-label="Game editor"]'),
-        frame: await box(page, '.game-stage'),
-      };
-      const names = Object.keys(parts) as (keyof typeof parts)[];
-      for (const [i, a] of names.entries()) {
-        for (const b of names.slice(i + 1)) {
-          expect(intersects(parts[a], parts[b]), `${a} overlaps ${b}`).toBe(false);
-        }
+    const parts = {
+      play: await box(page, '.editor-play-button'),
+      menu: await box(page, '.studio-menu-button'),
+      editor: await box(page, 'summary[aria-label="Game editor"]'),
+      frame: await box(page, '.game-stage'),
+    };
+    const names = Object.keys(parts) as (keyof typeof parts)[];
+    for (const [i, a] of names.entries()) {
+      for (const b of names.slice(i + 1)) {
+        expect(intersects(parts[a], parts[b]), `${a} overlaps ${b}`).toBe(false);
       }
+    }
 
-      const frame = parts.frame;
-      const chat = await box(page, '.edit-workspace-chat');
-      const gap =
-        viewport.width < viewport.height ? chat.y - (frame.y + frame.height) : frame.x - (chat.x + chat.width);
-      expect(gap, 'gap between game frame and chat').toBeGreaterThanOrEqual(0);
-      expect(gap, 'gap between game frame and chat').toBeLessThanOrEqual(8);
+    const frame = parts.frame;
+    const chat = await box(page, '.edit-workspace-chat');
+    const gap = viewport.width < viewport.height ? chat.y - (frame.y + frame.height) : frame.x - (chat.x + chat.width);
+    expect(gap, 'gap between game frame and chat').toBeGreaterThanOrEqual(0);
+    expect(gap, 'gap between game frame and chat').toBeLessThanOrEqual(8);
 
-      await testInfo.attach(`edit-${viewport.width}x${viewport.height}-${orientation.split(' ')[0].toLowerCase()}`, {
-        body: await page.screenshot(),
-        contentType: 'image/png',
-      });
+    await testInfo.attach(`edit-${viewport.width}x${viewport.height}`, {
+      body: await page.screenshot(),
+      contentType: 'image/png',
     });
-  }
+  });
 }
+
+test('turning the phone turns the edit preview', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'the test sets its own viewport');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openEditor(page);
+  await expect.poll(async () => ratio(await box(page, '.game-stage'))).toBeCloseTo(390 / 844, 1);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect.poll(async () => ratio(await box(page, '.game-stage'))).toBeCloseTo(844 / 390, 1);
+});
 
 async function openEditor(page: Page) {
   await installAuthRoutes(page, { signedIn: true });

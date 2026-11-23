@@ -220,14 +220,18 @@ describe('GameScreen', () => {
     vi.unstubAllGlobals();
   });
 
-  it('changes the edit game viewport orientation without leaving the route', () => {
+  it('shapes the edit preview like the window, with no orientation buttons', () => {
     const { container } = renderGame('/g/game?mode=edit');
-    const stage = container.querySelector('.game-stage-area');
     expect(container.querySelector('.edit-workspace-chat aiur-composer')).not.toBeNull();
-    expect(stage?.getAttribute('data-frame-orientation')).toBe('wide');
-    fireEvent.click(screen.getByRole('button', { name: 'Vertical game' }));
-    expect(stage?.getAttribute('data-frame-orientation')).toBe('vertical');
+    expect(container.querySelector('.game-stage-area')?.hasAttribute('data-edit-frame')).toBe(true);
+    expect(screen.queryByRole('group', { name: 'Game orientation' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /(Wide|Vertical) game/ })).toBeNull();
     expect(container.querySelector('.game-stage .game-frame')).not.toBeNull();
+  });
+
+  it('leaves the play view unshaped by the edit preview', () => {
+    const { container } = renderGame('/g/game');
+    expect(container.querySelector('.game-stage-area')?.hasAttribute('data-edit-frame')).toBe(false);
   });
 
   it('changes the AI asset preference from the edit menu', async () => {

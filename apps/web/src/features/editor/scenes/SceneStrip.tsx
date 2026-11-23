@@ -40,7 +40,6 @@ export function SceneStrip({ gameId }: { gameId: string }) {
   }, [open?.id]);
   if (scenes.length === 0) return null;
   return (
-    /* A wrapper, so the frame orientation group's `.game-stage-area > [role='group']` rules never reach the chips. */
     <div className="scene-strip-layer">
       <button
         className="scene-strip-toggle"

@@ -61,7 +61,6 @@ import { useBranches } from '../games/useBranches';
 import type { GameSummary } from '../games/types';
 import { clearRoomGrant, storeRoomGrant } from '../join/grant-store';
 import { LoadingLayer } from './LoadingLayer';
-import { EditFrameOrientation, useEditFrameOrientation } from './EditFrameOrientation';
 import { EditPlayBar, GameEditWorkspace } from './EditWorkspace';
 import { useEditConversation } from './useEditConversation';
 import { gameLoadActivity } from './load-analytics';
@@ -92,7 +91,6 @@ type GameTestState = {
 type TestHost = OgmHost & { game?: GameTestState };
 
 export function GameScreen() {
-  const { orientation: frameOrientation, setOrientation: setFrameOrientation } = useEditFrameOrientation();
   const queryClient = useQueryClient();
   const { gameId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -702,8 +700,7 @@ export function GameScreen() {
   });
 
   const gameStage = (
-    <div className="game-stage-area" data-frame-orientation={mode === 'edit' ? frameOrientation : undefined}>
-      {mode === 'edit' && <EditFrameOrientation orientation={frameOrientation} onChange={setFrameOrientation} />}
+    <div className="game-stage-area" data-edit-frame={mode === 'edit' ? '' : undefined}>
       {mode === 'edit' && <SceneStrip gameId={gameId} />}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
