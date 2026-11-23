@@ -159,6 +159,15 @@
   --scene-chip-rule: rgb(245 231 200 / 0.18);
   --scene-chip-picture: #1c1528;
   --scene-chip-live: rgb(111 214 180 / 0.25);
+  /* Map maker (#1209): the backdrop, the map's footprint and the cell outlines drawn on its canvas. */
+  --map-backdrop: #1c1528;
+  --map-footprint: rgb(255 255 255 / 0.04);
+  --map-footprint-edge: rgb(255 255 255 / 0.18);
+  --map-empty: rgb(255 255 255 / 0.12);
+  --map-hover: rgb(255 255 255 / 0.7);
+  --map-select: #ffc43a;
+  --map-select-fill: rgb(255 196 58 / 0.35);
+  --map-glass: rgb(28 21 40 / 0.88);
 }
 
 * {

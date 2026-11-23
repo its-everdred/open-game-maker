@@ -264,4 +264,27 @@ export const ICONS: Record<string, string> = {
   agent: line('<rect x="40" y="88" width="176" height="120" rx="28"/><path d="M128 88V40M96 148h.01M160 148h.01" />'),
   plus: line('<path d="M128 48v160M48 128h160"/>'),
   map: line('<path d="M96 48 32 72v136l64-24 64 24 64-24V48l-64 24Z"/><path d="M96 48v136M160 72v136"/>'),
+  /* Map maker tools (#1209). */
+  undo: line('<path d="M80 136 32 88l48-48"/><path d="M32 88h128a56 56 0 0 1 0 112H88"/>'),
+  redo: line('<path d="m176 136 48-48-48-48"/><path d="M224 88H96a56 56 0 0 0 0 112h72"/>'),
+  check: line('<path d="m40 136 56 56L216 72"/>'),
+  rotate: line('<path d="M176 96h48V48"/><path d="M190 184a80 80 0 1 1 2-112l32 24"/>'),
+  copy: line('<path d="M168 168h48V40H88v48"/><rect x="40" y="88" width="128" height="128" rx="8"/>'),
+  trash: line(
+    '<path d="M216 56H40M104 104v64M152 104v64M200 56v152a8 8 0 0 1-8 8H64a8 8 0 0 1-8-8V56M168 56V40a16 16 0 0 0-16-16h-48a16 16 0 0 0-16 16v16"/>',
+  ),
+  pointer: line('<path d="M56 40 104 216l28-84 84-28Z"/>'),
+  brush: line(
+    '<path d="M224 32c-48 8-96 56-120 96l24 24c40-24 88-72 96-120Z"/><path d="M104 128c-32 0-48 24-48 48s-16 40-24 40h64a56 56 0 0 0 56-56"/>',
+  ),
+  eraser: line(
+    '<path d="M216 216H96L44 164a16 16 0 0 1 0-22.6L141.4 44a16 16 0 0 1 22.6 0L212 92a16 16 0 0 1 0 22.6L112 216"/><path d="m92 96 68 68"/>',
+  ),
+  layers: line('<path d="m32 176 96 56 96-56"/><path d="m32 128 96 56 96-56"/><path d="m32 80 96 56 96-56-96-56Z"/>'),
+  eye: line(
+    '<path d="M128 56C48 56 16 128 16 128s32 72 112 72 112-72 112-72-32-72-112-72Z"/><circle cx="128" cy="128" r="40"/>',
+  ),
+  eyeOff: line(
+    '<path d="M128 56C48 56 16 128 16 128s32 72 112 72 112-72 112-72-32-72-112-72Z"/><circle cx="128" cy="128" r="40"/><path d="M40 40l176 176"/>',
+  ),
 };
