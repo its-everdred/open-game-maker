@@ -1,18 +1,24 @@
-import type { EnergyLimits, EnergyResource, EnergyWindowName } from '@ogm/contracts';
+import type { EnergyCap, EnergyLimits, EnergyResource, EnergyWindowName } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
 import { and, gte, lte } from 'drizzle-orm';
 
 import { netCharges } from '../budget/allowance.js';
 import { dayKey, nextReset } from '../budget/reset.js';
+import { netlifyDeploysSince } from './netlify.js';
 import type { ProviderReading, ProviderReadings } from './providers.js';
-import { readLimits } from './store.js';
+import { energyCaps, energyResources, type EnergyCaps } from './resources.js';
+import { recordSamples } from './samples.js';
+import { readCaps, readLimits } from './store.js';
 
 // What a resource-policy source knows at one instant. Usage is in micro-dollars; null means unknown, never zero.
 export type EnergySnapshot = {
   limits: EnergyLimits;
   usage: Record<EnergyWindowName, number> & { voice: number | null; images: number | null };
   resetsAt: Record<EnergyWindowName, string>;
+  // The admin's per-resource view (#1219), never summed across kinds.
   resources: EnergyResource[];
+  caps: EnergyCap[];
+  capValues: EnergyCaps;
   // Provider readings (#1217): subscription windows, the fal ledger and ElevenLabs.
   readings: ProviderReading[];
 };
@@ -30,44 +36,32 @@ export function localSource(deps: EnergySourceDeps): ResourcePolicySource {
     snapshot(now) {
       const today = dayKey(now, deps.zone);
       const usage = ledgerUsage(deps.db, now, deps.zone);
+      const limits = readLimits(deps.db);
+      const readings = deps.readings ?? [];
+      const capValues = readCaps(deps.db);
+      const resetsAt = {
+        day: nextReset(now, deps.zone).toISOString(),
+        week: startOfDay(addDays(weekStart(today), 7), now, deps.zone),
+        month: startOfDay(nextMonthStart(today), now, deps.zone),
+      };
+      const falCapMicroUsd = readings.find((reading) => reading.provider === 'fal')?.capMicroUsd ?? null;
       return {
-        limits: readLimits(deps.db),
+        limits,
         usage: { ...usage, voice: null, images: null },
-        resetsAt: {
-          day: nextReset(now, deps.zone).toISOString(),
-          week: startOfDay(addDays(weekStart(today), 7), now, deps.zone),
-          month: startOfDay(nextMonthStart(today), now, deps.zone),
-        },
-        resources: [
-          {
-            label: 'Builds',
-            provider: 'aiur',
-            kind: 'metered',
-            spentMicroUsd: usage.month,
-            remainingMicroUsd: null,
-            resetsAt: null,
-            basis: 'estimate',
-            usedPercent: null,
-            observedAt: null,
-            stale: false,
-          },
-          ...(deps.readings ?? []).map((reading): EnergyResource => ({
-            label: reading.label,
-            provider: reading.provider,
-            kind: reading.kind,
-            spentMicroUsd: reading.spentMicroUsd,
-            remainingMicroUsd:
-              reading.capMicroUsd === null || reading.spentMicroUsd === null
-                ? null
-                : Math.max(0, reading.capMicroUsd - reading.spentMicroUsd),
-            resetsAt: reading.resetsAt,
-            basis: reading.basis,
-            usedPercent: reading.usedPercent,
-            observedAt: reading.observedAt,
-            stale: reading.stale,
-          })),
-        ],
-        readings: deps.readings ?? [],
+        resetsAt,
+        resources: energyResources({
+          limits,
+          usage,
+          resetsAt,
+          readings,
+          caps: capValues,
+          falCapMicroUsd,
+          netlifyDeploys: deps.netlifyLog ? netlifyDeploysSince(deps.netlifyLog, monthBefore(resetsAt.month)) : null,
+          now,
+        }),
+        caps: energyCaps(capValues, falCapMicroUsd),
+        capValues,
+        readings,
       };
     },
   };
@@ -114,15 +108,17 @@ function ledgerUsage(db: Db, now: Date, zone: string): Record<EnergyWindowName, 
   };
 }
 
-export type EnergySourceDeps = { db: Db; zone: string; readings?: ProviderReading[] };
+export type EnergySourceDeps = { db: Db; zone: string; readings?: ProviderReading[]; netlifyLog?: string | null };
 
 // The snapshot the routes and job bundles show: provider readings (cached, time-boxed) fetched first.
 export async function readEnergySnapshot(
-  deps: { db: Db; zone: string; readings: ProviderReadings | null },
+  deps: { db: Db; zone: string; readings: ProviderReadings | null; netlifyLog?: string | null },
   now: Date,
 ): Promise<EnergySnapshot> {
   const readings = (await deps.readings?.read(now)) ?? [];
-  return energySource({ db: deps.db, zone: deps.zone, readings }).snapshot(now);
+  const snapshot = energySource({ db: deps.db, zone: deps.zone, readings, netlifyLog: deps.netlifyLog }).snapshot(now);
+  recordSamples(deps.db, snapshot.resources, now);
+  return snapshot;
 }
 
 // The single place the routes and admission get their source; swap it for Aiur's view here.
@@ -135,6 +131,13 @@ function addDays(key: string, days: number): string {
   const date = new Date(`${key}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+// This month's start: a calendar month before its reset (within an hour across a DST change; Netlify is an estimate).
+function monthBefore(reset: string): Date {
+  const date = new Date(reset);
+  date.setUTCMonth(date.getUTCMonth() - 1);
+  return date;
 }
 
 function weekStart(key: string): string {

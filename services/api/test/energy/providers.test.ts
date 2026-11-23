@@ -84,7 +84,7 @@ describe('aiur usage readings', () => {
         id: 'claude:seven_day',
         label: 'Claude',
         provider: 'claude',
-        kind: 'subscription',
+        kind: 'subscription_window',
         usedPercent: 53,
         resetsAt: '2026-11-27T09:00:00.159Z',
         observedAt: '2026-11-22T22:07:20.000Z',
@@ -262,7 +262,7 @@ describe('Energy with provider readings', () => {
     id,
     label: id,
     provider: id,
-    kind: 'subscription',
+    kind: 'subscription_window',
     usedPercent,
     resetsAt: null,
     observedAt: null,
@@ -292,7 +292,12 @@ describe('Energy with provider readings', () => {
       zone: ZONE,
       readings: [
         reading('elevenlabs', 40, { service: 'voice' }),
-        reading('fal', 20, { kind: 'metered', basis: 'estimate', spentMicroUsd: 1_800_000, capMicroUsd: 9_000_000 }),
+        reading('fal', 20, {
+          kind: 'metered_spend',
+          basis: 'estimate',
+          spentMicroUsd: 1_800_000,
+          capMicroUsd: 9_000_000,
+        }),
       ],
     }).snapshot(NOW);
     const view = playerView(snapshot, 'balanced');
@@ -312,7 +317,12 @@ describe('Energy with provider readings', () => {
     deps.registry.energyReadings = {
       read: async () => [
         reading('claude:seven_day', 53),
-        reading('fal', 20, { kind: 'metered', basis: 'estimate', spentMicroUsd: 1_800_000, capMicroUsd: 9_000_000 }),
+        reading('fal', 20, {
+          kind: 'metered_spend',
+          basis: 'estimate',
+          spentMicroUsd: 1_800_000,
+          capMicroUsd: 9_000_000,
+        }),
       ],
     };
     const { app } = await makeApp(deps);
@@ -327,9 +337,11 @@ describe('Energy with provider readings', () => {
     const admin = EnergyAdminView.parse(
       await (await app.request('/api/v1/energy/admin', { headers: asUser(ids.admin) })).json(),
     );
-    expect(admin.resources.find(({ provider }) => provider === 'fal')).toMatchObject({
-      spentMicroUsd: 1_800_000,
-      remainingMicroUsd: 7_200_000,
+    expect(admin.resources.find(({ id }) => id === 'fal/ledger')).toMatchObject({
+      unit: 'usd',
+      used: 1.8,
+      limit: 9,
+      left: 7.2,
       basis: 'estimate',
     });
   });
