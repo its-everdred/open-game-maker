@@ -23,7 +23,10 @@ CROP = (16, 16, 112, 112)  # the figure's area in a 128 px cell (origin row 88)
 
 
 def overlay(pack_frames, our_frames):
-    """Composite frames and per-frame IoU."""
+    """Composite frames and per-frame IoU. Both clips must have the same frame count: a short sheet would otherwise drop
+    the pack's last beats (the recovery) from the check without a word."""
+    if not pack_frames or len(pack_frames) != len(our_frames):
+        raise SystemExit(f'pack has {len(pack_frames)} frames, the cell {len(our_frames)}: they must match')
     out, ious = [], []
     for p, o in zip(pack_frames, our_frames):
         mp, mo = sm.mask(np.asarray(p)), sm.mask(np.asarray(o))
@@ -56,7 +59,7 @@ def main():
                                 [im.crop(CROP) for im in frames(c / 'out/sheet.png', r, shift)])
             report[str(c)][str(r)] = ious
             lines.append((f'{c.name} row {r}', f'mean IoU {np.mean(ious):.2f}', ims, ious))
-    W, H = label_w + 15 * cell * z, len(lines) * (cell * z + 18)
+    W, H = label_w + max(len(ln[2]) for ln in lines) * cell * z, len(lines) * (cell * z + 18)
     sheet = Image.new('RGB', (W, H), BG)
     d = ImageDraw.Draw(sheet)
     for i, (name, mean, ims, ious) in enumerate(lines):
