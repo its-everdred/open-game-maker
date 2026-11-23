@@ -120,6 +120,19 @@ and answers `error { code: 'unsupported' }` when the game has none; throw for an
 
 Obey it only in edit mode; play mode keeps the manifest rig. `templates/game-2d` and `templates/game-3d` show both.
 
+## Editor lighting (HD-2D)
+
+A game that runs `createHd2d` from `@gm/sdk/hd2d` gets the map maker's lighting panel with no code of its own. The
+facade links itself to `boot`, which reports the running scene's HD-2D document, biome and weather to the host as
+`hd2d.scene` (`doc: null` once it is disposed) and again after every change. The host sends edits as
+`hd2d.apply { doc, weather? }`: the facade validates the document and calls `applyScene`, and `weather` previews the
+scene in that weather (`lighting.setConditions`). An invalid document answers `error { code: 'apply_failed' }` and keeps
+the old one; a scene without HD-2D answers `error { code: 'unsupported' }`. Like `design.apply`, only an owner or editor
+may send it. When two scenes overlap, the newest `createHd2d` is the one the editor edits.
+
+Saving goes through the game's agent: the panel's Save asks it to write the exact document over the scene's own (the
+file the game passes to `createHd2d`), so the next build boots with what the creator saw.
+
 ## Authority modes
 
 A game declares who simulates in its manifest:

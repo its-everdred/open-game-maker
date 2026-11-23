@@ -59,6 +59,14 @@ scene without a rebuild. Lighting and focus update in place; any change under `p
 its seed, so use `hd2d.setWind` for live gusts. Quality is not in the document: it belongs to the
 device.
 
+## The creator's lighting panel
+
+The map maker's sun button tunes a running scene live: shafts (count, how often, stay, reach, brightness), cloud
+shadows, weather gates, light, focus and particles. It reaches the game through `createHd2d` itself, so wire nothing:
+keep one `createHd2d` per scene, keep its document in a JSON file, and set the biome and weather with
+`hd2d.lighting.setConditions` so the panel shows them. When Kevin saves, an edit request brings the exact document:
+write it over that scene's file unchanged (`serializeHd2dScene`), rebuild, and never re-tune what he set.
+
 ## Presets and creator controls
 
 Start from `HD2D_FOREST_DEFAULTS`, which holds Kevin's #1149 picks: soft shafts and dapple, depth bands with the
