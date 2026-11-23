@@ -11,7 +11,15 @@ import { entrySource } from '../../resolve.js';
 import { command as checkAssetsCommand } from '../check/assets.js';
 import { buildAudio } from './assets/audio.js';
 import { budgetReport } from './assets/budget.js';
-import { cacheIdentity, loadCached, saveBuilt, sourceDigest } from './assets/cache.js';
+import {
+  assetCacheDir,
+  assetCacheMaxBytes,
+  cacheIdentity,
+  loadCached,
+  saveBuilt,
+  sourceDigest,
+  trimCache,
+} from './assets/cache.js';
 import { assertNoSymlinks, executableExists, resolveOutputDir, writeIfChanged } from './assets/files.js';
 import { buildFont } from './assets/font.js';
 import { buildImage } from './assets/image.js';
@@ -47,11 +55,11 @@ function parseBudget(value: unknown, tiers: Tier[]): Tier {
   return parsed.data;
 }
 
-async function buildFresh(job: BuildJob): Promise<FreshJobResult> {
+async function buildFresh(job: BuildJob, log: (line: string) => void): Promise<FreshJobResult> {
   if (job.kind === 'kit') return buildKit(job);
   if (job.kind === 'model') return buildModel(job);
   if (job.kind === 'image') return buildImage(job);
-  if (job.kind === 'audio') return buildAudio(job);
+  if (job.kind === 'audio') return buildAudio(job, log);
   return buildFont(job);
 }
 
@@ -149,7 +157,9 @@ export const command: GmCommand = {
     const collections = lock.assets.some((entry) => entrySource(entry) === 'library')
       ? (await loadIndex(requireAssetsRoot(ctx))).collections
       : {};
-    const planned = await planBuild(lock, ctx.cwd, tiers, useCache, {
+    const env = ctx.env ?? {};
+    const cacheDir = useCache ? await assetCacheDir(ctx.cwd, env, ctx.home) : null;
+    const planned = await planBuild(lock, tiers, cacheDir, {
       cwd: ctx.cwd,
       assetsRoot: ctx.assetsRoot,
       blobRoot: ctx.blobRoot,
@@ -167,17 +177,17 @@ export const command: GmCommand = {
     for (const job of planned.jobs) {
       try {
         const identity = await cacheIdentity(job);
-        const cached = useCache ? await loadCached(identity, ctx.cwd, outDir) : null;
+        const cached = cacheDir ? await loadCached(identity, cacheDir, ctx.cwd, outDir) : null;
         if (cached) {
           if ((await sourceDigest(job, true)) !== identity.sourceHash)
             throw new Error('source changed during build; retry');
           results.push({ job, result: cached });
           cacheHits += 1;
         } else {
-          const built = await buildFresh(job);
+          const built = await buildFresh(job, ctx.err);
           if ((await sourceDigest(job, true)) !== identity.sourceHash)
             throw new Error('source changed during build; retry');
-          results.push({ job, result: await saveBuilt(identity, ctx.cwd, outDir, built, useCache) });
+          results.push({ job, result: await saveBuilt(identity, cacheDir, ctx.cwd, outDir, built, ctx.err) });
           cacheMisses += 1;
         }
       } catch (error) {
@@ -187,6 +197,14 @@ export const command: GmCommand = {
         };
         failures.push(failure);
         if (strict) break;
+      }
+    }
+
+    if (cacheDir) {
+      try {
+        await trimCache(cacheDir, assetCacheMaxBytes(env));
+      } catch (error) {
+        ctx.err(`asset cache trim skipped: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 

@@ -35,7 +35,11 @@ describe('pixel-art image cache key', () => {
       ],
     } as AssetsLock;
 
-    const { jobs } = await planBuild(lock, cwd, ['desktop'], true, { cwd, assetsRoot: null, blobRoot: null });
+    const { jobs } = await planBuild(lock, ['desktop'], join(cwd, '.gm/cache/assets'), {
+      cwd,
+      assetsRoot: null,
+      blobRoot: null,
+    });
     const job = jobs[0]!;
     const downscalingRecipe = { ...job.recipe };
     delete downscalingRecipe.unscaled;

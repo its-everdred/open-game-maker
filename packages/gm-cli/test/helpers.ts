@@ -24,10 +24,16 @@ export async function gm(
 ): Promise<{ code: number; out: string[]; err: string[] }> {
   const out: string[] = [];
   const err: string[] = [];
+  const cwd = options.cwd ?? tempDir();
+  const env = options.env ?? {};
   const code = await run(argv, {
-    cwd: tempDir(),
-    env: {},
     ...options,
+    cwd,
+    /* Each test repo keeps its own asset cache unless the test names one, so tests never touch the host's shared cache. */
+    env:
+      'GM_ASSET_CACHE_DIR' in env || 'XDG_CACHE_HOME' in env
+        ? env
+        : { ...env, GM_ASSET_CACHE_DIR: join(cwd, '.gm/cache/assets') },
     out: (line) => out.push(line),
     err: (line) => err.push(line),
   });

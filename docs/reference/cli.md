@@ -511,10 +511,16 @@ exactly as it does beside the copied files in a dev server; the lock keeps the c
 card names but the lock does not list keep their own spelling, and a basename two files share is left unresolved
 rather than guessed.
 
-Generated work is cached under `.gm/cache/assets/`. Use `--no-cache` to rebuild without reading or updating that
-cache, `--strict` to stop at the first invalid asset, or `--json` for manifest and budget data on stdout. The selected
+Generated work is cached in one directory every checkout on the host shares, so a fresh workspace (og-merge, og-publish,
+a worker build) reuses any asset another checkout already built and rebuilds only the ones whose source changed:
+`GM_ASSET_CACHE_DIR`, else `$XDG_CACHE_HOME/ogm/assets`, else `~/.cache/ogm/assets`. Entries are keyed by the source
+files' hashes, the tiers, the tool versions and the builder's own code. After each build the cache is trimmed, least
+recently used first, to `GM_ASSET_CACHE_MAX_MB` (default 8192). When that directory can't be created or written the
+build uses the repo's `.gm/cache/assets/` instead. Use `--no-cache` to rebuild without reading or updating the cache,
+`--strict` to stop at the first invalid asset, or `--json` for manifest and budget data on stdout. The selected
 `--budget` tier determines the exit status when a limit is exceeded. `--ktx2` requires `toktx`; KTX2 encoding is
-reserved for a later release, so V1 builds should omit that flag. Audio builds also require `ffmpeg`.
+reserved for a later release, so V1 builds should omit that flag. Audio builds also require `ffmpeg`; a conversion that
+fails or writes an empty file is retried once, with its stderr in the build log, and an empty output is never cached.
 
 ## Find a map or a tileset
 
