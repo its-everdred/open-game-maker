@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 import type { SceneDoc, SceneHead, SceneRevision } from '@ogm/contracts/browser';
 import { commitScene, emptyScene } from '@ogm/design-log';
@@ -227,9 +227,26 @@ for (const viewport of [
   { name: 'phone', width: 390, height: 844 },
   { name: 'desktop', width: 1280, height: 800 },
 ]) {
-  test(`Kevin edits a scene and the agent's next pull sees it (${viewport.name})`, async ({ page }, testInfo) => {
+  test(`Kevin edits a scene and the agent's next pull sees it (${viewport.name})`, async ({
+    browser,
+    page: shared,
+  }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'the test sets its own viewport');
-    await page.setViewportSize(viewport);
+    const size = { width: viewport.width, height: viewport.height };
+    /* A proof run draws a real pack's sprites and records the flow at its own size, for a clip to watch on a phone. */
+    let recording: BrowserContext | undefined;
+    if (proof) {
+      test.setTimeout(180_000);
+      recording = await browser.newContext({
+        ...(testInfo.project.use.baseURL ? { baseURL: testInfo.project.use.baseURL } : {}),
+        viewport: size,
+        serviceWorkers: 'block',
+        reducedMotion: 'reduce',
+        recordVideo: { dir: join(proof, 'out', 'video', viewport.name), size },
+      });
+    }
+    const page = recording ? await recording.newPage() : shared;
+    await page.setViewportSize(size);
     const first = commitScene({
       head: { rev: 0, doc: emptyScene('dusk-helm', 'goblin-cave', 'smallscaleint') },
       log: [],
@@ -245,7 +262,8 @@ for (const viewport of [
     await openEditor(page);
     const saves = await installScene(page, store);
     await page.goto('/g/game?mode=edit&scene=goblin-cave&test', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('button', { name: 'Saved' })).toBeDisabled();
+    /* The app shell boots first; a loaded runner can take a while. */
+    await expect(page.getByRole('button', { name: 'Saved' })).toBeDisabled({ timeout: 30_000 });
     await still(page, `${viewport.name}-1-open`, testInfo);
 
     // Place: pick the chest from the tray and tap a cell.
@@ -299,7 +317,7 @@ for (const viewport of [
 
     // Reload: the saved head opens, with the chest where Kevin left it.
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('button', { name: 'Saved' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Saved' })).toBeDisabled({ timeout: 30_000 });
     await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
     await tap(page, ...(at.to as [number, number]));
     await expect(page.getByRole('toolbar', { name: 'Selected piece' })).toBeVisible();
@@ -332,5 +350,6 @@ for (const viewport of [
         store.log.map((revision) => `${JSON.stringify(revision)}\n`).join(''),
       );
     }
+    await recording?.close();
   });
 }
