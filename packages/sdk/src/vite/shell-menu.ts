@@ -6,7 +6,7 @@
 /** A hamburger glyph, or a control named as a menu for assistive tech (`aria-label="Menu"`, `ariaLabel = 'Game menu'`). */
 const OWN_MENU = [
   /☰|\\u2630|&#9776;|&#x2630;/iu,
-  /(?:aria-label|ariaLabel)["']?\s*[,:=]\s*["'`](?:open |game |pause |main )?menu["'`]/iu,
+  /(?:aria-label|ariaLabel)["']?\s*[,:=]\s*["'`](?:open |game |pause )?menu["'`]/iu,
 ];
 
 export type BundleFile =

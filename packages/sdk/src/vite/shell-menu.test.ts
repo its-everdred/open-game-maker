@@ -46,7 +46,7 @@ describe('assertNoGameMenu', () => {
         manifest(),
         chunk(
           '/* the NEXT tray yields the hamburger\'s measured control */ const screens = ["title","menu"]; ' +
-            'b.setAttribute("aria-label", "Back to the menu screen"); host.settings.onChange(() => {});',
+            "b.setAttribute('aria-label', 'Back to the menu screen'); nav.ariaLabel = 'Main menu';",
         ),
       ),
     ).not.toThrow();
