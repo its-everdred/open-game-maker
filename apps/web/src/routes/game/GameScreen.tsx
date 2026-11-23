@@ -734,7 +734,7 @@ export function GameScreen() {
       {mode === 'edit' && (
         <SceneStrip gameId={gameId} build={runningBuildId} scenarios={frameState.manifest?.scenarios} />
       )}
-      {mode === 'edit' && !editorPlaying && <Hd2dPanel report={frameState.hd2d} apply={frameController?.applyHd2d} />}
+      {mode === 'edit' && <Hd2dPanel report={frameState.hd2d} apply={frameController?.applyHd2d} />}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
         {mode === 'play' && frameController !== undefined ? (

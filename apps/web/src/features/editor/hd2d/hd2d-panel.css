@@ -35,7 +35,8 @@
   position: absolute;
   z-index: 4;
   left: 8px;
-  right: 8px;
+  /* Clear of the chat bubble's column at the bottom right. */
+  right: calc(var(--safe-r, 0px) + var(--edit-bubble-gap, 16px) + 50px + 8px);
   bottom: 8px;
   display: flex;
   flex-direction: column;
@@ -58,8 +59,9 @@
   .hd2d-panel {
     top: calc(var(--safe-t) + 12px + 2 * 46px + 20px);
     right: auto;
+    bottom: auto;
     width: 320px;
-    max-height: none;
+    max-height: calc(100% - var(--safe-t) - 2 * 46px - 40px);
   }
 }
 
