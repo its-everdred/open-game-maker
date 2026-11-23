@@ -112,7 +112,7 @@ export class HostBridge {
   }
 
   send<T extends HostType>(type: T, payload: HostPayload<T>): boolean {
-    if ((type === 'design.apply' || type === 'mode.set') && !canApply(this.options.role())) {
+    if ((type === 'design.apply' || type === 'hd2d.apply' || type === 'mode.set') && !canApply(this.options.role())) {
       this.report({ code: 'forbidden', message: `${type} is not allowed for the current role` });
       return false;
     }

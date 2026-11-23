@@ -25,6 +25,9 @@ import {
 } from '../../features/editor/api';
 import { EditorChrome } from '../../features/editor/EditorChrome';
 import { SceneStrip } from '../../features/editor/scenes/SceneStrip';
+import { Hd2dPanel } from '../../features/editor/hd2d/Hd2dPanel';
+import type { Hd2dDoc } from '../../features/editor/hd2d/controls';
+import { hd2dSaveRequest } from '../../features/editor/hd2d/save';
 import { AssetLibrary } from '../../features/editor/library/AssetLibrary';
 import { fallbackEditRequest, previewEditRequest } from '../../features/editor/fallback-request';
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
@@ -295,23 +298,33 @@ export function GameScreen() {
     mode,
   ]);
   const submitEditRequest = useCallback(
-    (request: CreateJobRequest) => {
+    /** `onDone` hears whether the job was admitted. */
+    (request: CreateJobRequest, onDone?: (sent: boolean) => void) => {
       if (request.branchId !== 'main') {
         pushToast('Changes to this version stay in the preview.');
+        onDone?.(false);
         return;
       }
-      if (fallbackInFlight.current) return;
+      if (fallbackInFlight.current) {
+        onDone?.(false);
+        return;
+      }
       fallbackInFlight.current = true;
       void admitJob(request)
         .then((result) => {
           if (result.kind === 'refused') {
             pushToast(energyRefusalText(result.window) ?? 'The build could not be started.');
+            onDone?.(false);
             return;
           }
+          onDone?.(true);
           void queryClient.invalidateQueries({ queryKey: gameJobsQueryKey(gameId) });
           void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
         })
-        .catch(() => pushToast('The build could not be started.'))
+        .catch(() => {
+          pushToast('The build could not be started.');
+          onDone?.(false);
+        })
         .finally(() => {
           fallbackInFlight.current = false;
         });
@@ -330,6 +343,25 @@ export function GameScreen() {
       );
     },
     [gameId, jobBranch, submitEditRequest],
+  );
+  const saveLighting = useCallback(
+    (doc: Hd2dDoc) =>
+      new Promise<boolean>((resolve) => {
+        let request: CreateJobRequest;
+        try {
+          request = hd2dSaveRequest(
+            { gameId, branchId: jobBranch },
+            { scene: searchParams.get('scene') ?? scenario ?? undefined, doc },
+            `edit:${crypto.randomUUID()}`,
+          );
+        } catch {
+          pushToast('This lighting is too large to save.');
+          resolve(false);
+          return;
+        }
+        submitEditRequest(request, resolve);
+      }),
+    [gameId, jobBranch, scenario, searchParams, submitEditRequest],
   );
   const requestFallbackPlacement = useCallback(
     (prefab: string, point: { x: number; y: number }, path?: Array<{ x: number; y: number }>) => {
@@ -732,11 +764,15 @@ export function GameScreen() {
 
   /** A scene document opened from the scene chips; the map maker covers the game while it is open (#1209). */
   const openScene = searchParams.get('scene');
+  /** The lighting panel edits the running game, so it hides while the map covers it. */
   const [mapOpen, setMapOpen] = useState(false);
   const gameStage = (
     <div className="game-stage-area" data-edit-frame={mode === 'edit' ? '' : undefined}>
       {mode === 'edit' && (
         <SceneStrip gameId={gameId} build={runningBuildId} scenarios={frameState.manifest?.scenarios} />
+      )}
+      {mode === 'edit' && !mapOpen && (
+        <Hd2dPanel report={frameState.hd2d} apply={frameController?.applyHd2d} onSave={saveLighting} />
       )}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />

@@ -141,6 +141,26 @@ describe('HostBridge', () => {
     owner.bridge.close();
   });
 
+  // HD-2D edits change the scene the way a design edit does: a room watcher must not relight it for everyone.
+  it('blocks hd2d.apply for a watcher and sends it for an editor', async () => {
+    const watcherError = vi.fn();
+    const watcher = harness(() => 'watcher');
+    watcher.bridge.onError(watcherError);
+    watcher.inbound(ready());
+    await watcher.bridge.whenReady;
+    watcher.bridge.send('hd2d.apply', { doc: {} });
+    expect(watcher.sent).toHaveLength(0);
+    expect(watcherError).toHaveBeenCalledWith(expect.objectContaining({ code: 'forbidden' }));
+    watcher.bridge.close();
+
+    const editor = harness(() => 'editor');
+    editor.inbound(ready());
+    await editor.bridge.whenReady;
+    editor.bridge.send('hd2d.apply', { doc: {}, weather: 'rain' });
+    expect(editor.sent).toEqual([expect.objectContaining({ t: 'hd2d.apply', payload: { doc: {}, weather: 'rain' } })]);
+    editor.bridge.close();
+  });
+
   // Camera is presence, not design: a room watcher must be able to drive its own Follow/Free camera.
   it('sends editor.camera for a watcher and rejects an invalid mode', async () => {
     const error = vi.fn();

@@ -15,6 +15,7 @@ function fake(kind: string, args: unknown[]) {
     setAtmosphere: record('setAtmosphere'),
     setQuality: record('setQuality'),
     setWind: record('setWind'),
+    setConditions: record('setConditions'),
     emit: record('emit'),
     update: record('update'),
     dispose: record('dispose'),
@@ -26,6 +27,7 @@ vi.mock('./focus/index.js', () => ({ createFocus: (...args: unknown[]) => fake('
 vi.mock('./particles/index.js', () => ({ createParticles: (...args: unknown[]) => fake('particles', args) }));
 
 const { createHd2d } = await import('./create.js');
+const { linkedHd2d } = await import('../core/hd2d-link.js');
 const { HD2D_FOREST_DEFAULTS } = await import('./scene.js');
 
 function threeTarget() {
@@ -171,5 +173,41 @@ describe('createHd2d', () => {
     expect(logged('focus.')).toEqual([]);
     expect(created('focus')).toHaveLength(1);
     expect(created('particles')).toHaveLength(1);
+  });
+
+  // The map maker edits a running game through this link; without it the editor has nothing to show or change.
+  it('links itself to the editor with the document and weather it renders, until disposed', () => {
+    const hd2d = createHd2d(threeTarget().target, HD2D_FOREST_DEFAULTS);
+    hd2d.lighting.setConditions({ biome: 'forest', weather: 'clear' });
+    expect(logged('lighting.setConditions')).toEqual(['lighting.setConditions({"biome":"forest","weather":"clear"})']);
+    expect(linkedHd2d()!.state()).toEqual({ doc: HD2D_FOREST_DEFAULTS, biome: 'forest', weather: 'clear' });
+
+    const lit = { ...HD2D_FOREST_DEFAULTS.lighting, ambient: { color: '#ffffff', intensity: 1 } };
+    linkedHd2d()!.apply({ ...HD2D_FOREST_DEFAULTS, lighting: lit }, 'rain');
+    expect(logged('lighting.apply')).toEqual([`lighting.apply(${JSON.stringify(lit)})`]);
+    expect(linkedHd2d()!.state()).toMatchObject({ doc: { lighting: lit }, biome: 'forest', weather: 'rain' });
+    expect(() => linkedHd2d()!.apply({ ...HD2D_FOREST_DEFAULTS, version: 2 })).toThrow(/version/);
+
+    hd2d.dispose();
+    expect(linkedHd2d()).toBeUndefined();
+  });
+
+  // A gust the game sends is not Kevin's document: reporting it would reset his panel mid-drag.
+  it('reports the document as set, not a wind gust the game sent', () => {
+    const hd2d = createHd2d(threeTarget().target, HD2D_FOREST_DEFAULTS);
+    hd2d.setWind({ strength: 3 });
+    expect(linkedHd2d()!.state().doc).toEqual(HD2D_FOREST_DEFAULTS);
+    hd2d.dispose();
+  });
+
+  it('leaves the newer scene linked when an older one shuts down after it', () => {
+    const older = createHd2d(threeTarget().target, HD2D_FOREST_DEFAULTS);
+    const newer = createHd2d(threeTarget().target, {
+      ...HD2D_FOREST_DEFAULTS,
+      atmosphere: { haze: { color: '#000000' } },
+    });
+    older.dispose();
+    expect(linkedHd2d()!.state().doc).toMatchObject({ atmosphere: { haze: { color: '#000000' } } });
+    newer.dispose();
   });
 });

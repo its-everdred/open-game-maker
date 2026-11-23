@@ -128,6 +128,11 @@ export const hostToGameSchema = z
      * default player when absent); `free` is the editor pan/zoom. Edit mode only; play mode keeps the play rig.
      */
     envelope('editor.camera', cameraCommand),
+    /**
+     * The editor's HD-2D document for the running scene (`Hd2dSceneConfig`, which the game validates), and the weather
+     * to preview it in. The game re-renders through its own HD-2D, so what the editor shows is what plays.
+     */
+    envelope('hd2d.apply', z.looseObject({ doc: z.unknown(), weather: z.string().min(1).max(64).optional() })),
     /** Host pad + touch overlay. */
     envelope('input.frame', actionFrameSchema),
     envelope(
@@ -325,6 +330,18 @@ export const gameToHostSchema = z
         z.looseObject({ id: z.string(), x: z.number(), y: z.number() }),
         z.looseObject({ id: z.string(), offscreen: z.literal(true) }),
       ]),
+    ),
+    /**
+     * The running scene's HD-2D document (`Hd2dSceneConfig`) and the biome and weather it is shown in; `doc: null`
+     * when the scene has none. Sent when the game creates or drops its HD-2D and after each `hd2d.apply`.
+     */
+    envelope(
+      'hd2d.scene',
+      z.looseObject({
+        doc: z.unknown(),
+        biome: z.string().max(64).optional(),
+        weather: z.string().max(64).optional(),
+      }),
     ),
     /** Hides the host Pause control while false (the game shows its own menu); a reload or exit shows it again. */
     envelope('host.pause.visible', z.looseObject({ visible: z.boolean() })),

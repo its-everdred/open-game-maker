@@ -208,6 +208,23 @@ describe('bridge contract', () => {
     ]);
   });
 
+  // The editor's HD-2D tool only works one way round: it sends a document, the game reports the one it renders.
+  it('carries hd2d.apply host → game and hd2d.scene game → host', () => {
+    const doc = { version: 1, lighting: { ambient: { color: '#ffffff', intensity: 1 } } };
+    const apply = { v: 1, id: 'h1', t: 'hd2d.apply', payload: { doc, weather: 'rain' } };
+    expect(hostToGameSchema.parse(JSON.parse(JSON.stringify(apply)))).toEqual(apply);
+    expect(bridgeJson(apply)).toBe(true);
+    expect(gameToHostSchema.safeParse(apply).success).toBe(false);
+    expect(issuePaths(hostToGameSchema, { ...apply, payload: { doc, weather: '' } })).toEqual(['payload.weather']);
+
+    for (const payload of [{ doc, biome: 'forest', weather: 'clear' }, { doc: null }]) {
+      const scene = { v: 1, id: 'h2', t: 'hd2d.scene', payload };
+      expect(gameToHostSchema.parse(JSON.parse(JSON.stringify(scene)))).toEqual(scene);
+      expect(bridgeJson(scene)).toBe(true);
+      expect(hostToGameSchema.safeParse(scene).success).toBe(false);
+    }
+  });
+
   it('builds envelopes with a literal type', () => {
     const ping = envelope('custom.ping', patchSchema.pick({ op: true }));
     expect(ping.safeParse({ v: 1, id: 'p', t: 'custom.ping', payload: { op: 'add' } }).success).toBe(true);

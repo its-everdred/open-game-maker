@@ -30,7 +30,14 @@
       let port;
       let nextId = 0;
       let ready = false;
-      const fixture = (window.__fixture = { messages: [], mode: 'edit', selected: [], applies: [], cameras: [] });
+      const fixture = (window.__fixture = {
+        messages: [],
+        mode: 'edit',
+        selected: [],
+        applies: [],
+        cameras: [],
+        hd2d: [],
+      });
       const envelope = (t, payload, replyTo) => ({
         v: 1,
         id: `fixture-${++nextId}`,
@@ -70,6 +77,10 @@
         } else if (message.t === 'editor.select') {
           fixture.selected = message.payload.ids;
           for (const id of fixture.selected) send('editor.screen', { id, x: 50, y: 30 });
+        } else if (message.t === 'hd2d.apply') {
+          /* Echo it the way the SDK does: the edited document, now running. */
+          fixture.hd2d.push(message.payload);
+          send('hd2d.scene', { doc: message.payload.doc, weather: message.payload.weather ?? 'clear' });
         } else if (message.t === 'editor.camera') {
           fixture.cameras.push(message.payload);
         } else if (message.t === 'editor.validatePlacement') {

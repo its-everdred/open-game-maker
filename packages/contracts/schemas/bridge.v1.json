@@ -617,6 +617,51 @@
             },
             "t": {
               "type": "string",
+              "const": "hd2d.apply"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "doc": {},
+                "weather": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                }
+              },
+              "required": [
+                "doc"
+              ],
+              "additionalProperties": {}
+            },
+            "replyTo": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "v",
+            "id",
+            "t",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "t": {
+              "type": "string",
               "const": "input.frame"
             },
             "payload": {
@@ -4253,6 +4298,54 @@
                   "additionalProperties": {}
                 }
               ]
+            },
+            "replyTo": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "v",
+            "id",
+            "t",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "t": {
+              "type": "string",
+              "const": "hd2d.scene"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "doc": {},
+                "biome": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "weather": {
+                  "type": "string",
+                  "maxLength": 64
+                }
+              },
+              "required": [
+                "doc"
+              ],
+              "additionalProperties": {}
             },
             "replyTo": {
               "type": "string",

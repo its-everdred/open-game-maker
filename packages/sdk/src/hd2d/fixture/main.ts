@@ -4,6 +4,7 @@ import { createPhaserScene, type ClearingScene } from './phaser-scene.js';
 import { createThreeScene } from './three-scene.js';
 import { createTestArt } from './testart.js';
 import { parseHd2dScene } from '../scene.js';
+import { linkedHd2d } from '../../core/hd2d-link.js';
 import type { FrameStats } from './hooks.js';
 import type { MountContext, Mounted } from './mount.js';
 import mountLighting from './mount-lighting.js';
@@ -129,6 +130,7 @@ async function start(): Promise<void> {
       scene: facadeHooks?.scene(),
     }),
     applyScene: facadeHooks && ((json) => facadeHooks!.hd2d.applyScene(parseHd2dScene(json))),
+    applyLinked: facadeHooks && ((json) => linkedHd2d()!.apply(JSON.parse(json))),
   };
 }
 
