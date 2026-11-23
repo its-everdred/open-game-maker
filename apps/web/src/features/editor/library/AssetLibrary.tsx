@@ -285,7 +285,15 @@ function LibraryGrid({
               }}
             >
               <span className="asset-library-picture" style={{ height: picture }}>
-                <img src={libraryThumbUrl(gameId, item.id)} alt="" loading="lazy" decoding="async" draggable={false} />
+                <img
+                  src={libraryThumbUrl(gameId, item.id)}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  draggable={false}
+                  /* A piece whose picture is missing keeps its label on an empty tile, not a broken image. */
+                  onError={(event) => (event.currentTarget.hidden = true)}
+                />
               </span>
               <span className="asset-library-label">{item.label}</span>
             </button>
