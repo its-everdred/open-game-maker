@@ -174,7 +174,9 @@ test('keeps the editor preview usable on a landscape phone', async ({ browser, p
   try {
     await prepareEditor(page, reference);
     const stage = await page.locator('.game-stage').boundingBox();
-    expect(stage!.height).toBeGreaterThan(245);
+    /* The turned phone previews the wide game (#1269), filling the game column (60% of the width, #1199). */
+    expect(stage!.width).toBeGreaterThan(844 * 0.59);
+    expect(stage!.width / stage!.height).toBeCloseTo(844 / 390, 1);
   } finally {
     await reference.context().close();
   }
@@ -416,22 +418,8 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
     expect(chat!.x + chat!.width).toBeLessThanOrEqual(stage!.x);
   }
   const frame = await app.locator('.game-stage').boundingBox();
-  const portraitDevice = app.viewportSize()!.width < app.viewportSize()!.height;
-  expect(frame!.width / frame!.height).toBeCloseTo(portraitDevice ? 16 / 9 : 9 / 16, 1);
-  await app.getByRole('button', { name: portraitDevice ? 'Vertical game' : 'Wide game' }).click();
-  await expect
-    .poll(async () => {
-      const box = await app.locator('.game-stage').boundingBox();
-      return box!.width / box!.height;
-    })
-    .toBeCloseTo(portraitDevice ? 9 / 16 : 16 / 9, 1);
-  await app.getByRole('button', { name: portraitDevice ? 'Wide game' : 'Vertical game' }).click();
-  await expect
-    .poll(async () => {
-      const box = await app.locator('.game-stage').boundingBox();
-      return box!.width / box!.height;
-    })
-    .toBeCloseTo(portraitDevice ? 16 / 9 : 9 / 16, 1);
+  const viewport = app.viewportSize()!;
+  expect(frame!.width / frame!.height).toBeCloseTo(viewport.width / viewport.height, 1);
   return { app: [app.locator('.game-stage')], reference: [reference.locator('#stage')] };
 }
 

@@ -780,41 +780,17 @@
   align-items: center;
 }
 
-.game-stage-area > [role='group'] {
+/* Keeps the strip under the play and menu buttons clear of the frame. */
+.game-stage-area[data-edit-frame]::before {
+  content: '';
   flex: none;
-  display: flex;
-  align-self: flex-start;
-  align-items: center;
-  box-sizing: border-box;
   height: var(--edit-bar);
-  padding: calc(var(--safe-t) + 12px) 0 8px;
-  gap: 4px;
 }
 
-.game-stage-area > [role='group'] button {
-  min-width: 44px;
-  min-height: 44px;
-  border: 1px solid var(--ink);
-  border-radius: 8px;
-  background: var(--editor-card);
-  color: var(--ink);
-  font-size: 24px;
-}
-
-.game-stage-area > [role='group'] button[aria-pressed='true'] {
-  background: var(--action-primary);
-  color: var(--action-primary-text);
-}
-
-.game-stage-area[data-frame-orientation] .game-stage {
+.game-stage-area[data-edit-frame] .game-stage {
   flex: none;
-  width: min(100cqw, (100cqh - var(--edit-bar)) * 16 / 9);
-  aspect-ratio: 16 / 9;
-}
-
-.game-stage-area[data-frame-orientation='vertical'] .game-stage {
-  width: min(100cqw, (100cqh - var(--edit-bar)) * 9 / 16);
-  aspect-ratio: 9 / 16;
+  width: min(100cqw, (100cqh - var(--edit-bar)) * var(--edit-frame-aspect));
+  aspect-ratio: var(--edit-frame-aspect);
 }
 
 .game-screen.is-playing .game-stage-area .game-stage {

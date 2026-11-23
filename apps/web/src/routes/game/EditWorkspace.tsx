@@ -1,7 +1,8 @@
-import type { ComponentProps, ReactNode } from 'react';
+import type { ComponentProps, CSSProperties, ReactNode } from 'react';
 import { FocusZone } from '../../lib/input';
 import { EDITOR_FOCUS_ZONES } from '../../features/editor/focus';
 import { EditConversation } from './EditConversation';
+import { useWindowAspect } from './useWindowAspect';
 import './edit-workspace.css';
 
 type EditWorkspaceProps = {
@@ -13,8 +14,12 @@ type EditWorkspaceProps = {
 
 /** Keep the game and conversation visible while optional game tools open over the game. */
 export function EditWorkspace({ game, chat, editor, editing = true }: EditWorkspaceProps) {
+  const aspect = useWindowAspect();
   return (
-    <div className={editing ? 'edit-workspace' : 'edit-workspace is-playing'}>
+    <div
+      className={editing ? 'edit-workspace' : 'edit-workspace is-playing'}
+      style={{ '--edit-frame-aspect': aspect } as CSSProperties}
+    >
       <div className="edit-workspace-game">{game}</div>
       {editing && <div className="edit-workspace-chat">{chat}</div>}
       {editing && editor != null && (
