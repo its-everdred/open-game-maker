@@ -28,6 +28,7 @@ import { SceneStrip } from '../../features/editor/scenes/SceneStrip';
 import { Hd2dPanel } from '../../features/editor/hd2d/Hd2dPanel';
 import type { Hd2dDoc } from '../../features/editor/hd2d/controls';
 import { hd2dSaveRequest } from '../../features/editor/hd2d/save';
+import { AssetLibrary } from '../../features/editor/library/AssetLibrary';
 import { fallbackEditRequest, previewEditRequest } from '../../features/editor/fallback-request';
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
 import { changeInstanceCount } from '../../features/editor/instanceCount';
@@ -775,6 +776,7 @@ export function GameScreen() {
       )}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
+        {mode === 'edit' && !mapOpen && !frameState.manifest?.palette?.items.length && <AssetLibrary gameId={gameId} />}
         {mode === 'edit' && openScene ? <MapEditor gameId={gameId} scene={openScene} onOpen={setMapOpen} /> : null}
         {mode === 'play' && frameController !== undefined ? (
           <DiagnosticsOverlay

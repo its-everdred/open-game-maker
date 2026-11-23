@@ -5,7 +5,7 @@ import { MemoryRouter, useLocation } from 'react-router';
 const getEditorScenes = vi.hoisted(() => vi.fn());
 vi.mock('../api', () => ({ getEditorScenes }));
 
-import { canCreateScene, loadScenes, newScene } from './scene-source';
+import { canCreateScene, loadScenes, newScene, sceneEditorPath } from './scene-source';
 import { SceneStrip } from './SceneStrip';
 
 afterEach(cleanup);
@@ -34,13 +34,20 @@ describe('scene source', () => {
   it("lists the game's scene documents with who wrote each head", async () => {
     getEditorScenes.mockResolvedValue({
       scenes: [
-        { id: 'goblin-cave', rev: 4, author: 'agent:1208', updatedAt: '2026-11-21T00:00:00.000Z' },
-        { id: 'graveyard', rev: 2, author: 'kevin', updatedAt: '2026-11-20T00:00:00.000Z' },
+        {
+          id: 'goblin-cave',
+          rev: 4,
+          author: 'agent:1212',
+          updatedAt: '2026-11-21T00:00:00.000Z',
+          ticket: '1208',
+          agents: { '1208': 1, '1212': 4 },
+        },
+        { id: 'graveyard', rev: 2, author: 'kevin', updatedAt: '2026-11-20T00:00:00.000Z', agents: {} },
       ],
     });
     expect(await loadScenes('dusk-helm', null)).toEqual([
-      { id: 'goblin-cave', title: 'Goblin cave', rev: 4, author: 'agent:1208' },
-      { id: 'graveyard', title: 'Graveyard', rev: 2, author: 'kevin' },
+      { id: 'goblin-cave', title: 'Goblin cave', rev: 4, author: 'agent:1212', ticket: '1208' },
+      { id: 'graveyard', title: 'Graveyard', rev: 2, author: 'kevin', ticket: undefined },
     ]);
     expect(getEditorScenes).toHaveBeenCalledWith('dusk-helm');
   });
@@ -58,6 +65,11 @@ describe('scene source', () => {
       ['Goblin cave', 'goblin-cave'],
       ['Miniboss arena', 'miniboss-arena'],
     ]);
+  });
+
+  it('links straight to one scene in the editor, at the revision an agent pushed', () => {
+    expect(sceneEditorPath('dusk-helm', 'goblin-cave', 3)).toBe('/g/dusk-helm?mode=edit&scene=goblin-cave&rev=3');
+    expect(sceneEditorPath('dusk helm', 'goblin-cave')).toBe('/g/dusk%20helm?mode=edit&scene=goblin-cave');
   });
 
   it('keeps + off until the editor can write a scene, so a new chip never vanishes on reload', () => {
@@ -83,34 +95,53 @@ describe('SceneStrip', () => {
 
   it('shows real scenes without a review link and marks the opened one', async () => {
     getEditorScenes.mockResolvedValue({
-      scenes: [{ id: 'graveyard', rev: 2, author: 'kevin', updatedAt: '2026-11-20T00:00:00.000Z' }],
+      scenes: [
+        { id: 'graveyard', rev: 2, author: 'kevin', updatedAt: '2026-11-20T00:00:00.000Z', agents: {} },
+        {
+          id: 'goblin-cave',
+          rev: 4,
+          author: 'agent:1212',
+          updatedAt: '2026-11-21T00:00:00.000Z',
+          ticket: '1208',
+          agents: { '1208': 1, '1212': 4 },
+        },
+      ],
     });
-    await renderStrip('/g/dusk-helm?mode=edit&scene=graveyard');
-    expect(screen.getByRole('button', { name: 'Graveyard, changed by you' })).toHaveAttribute('aria-pressed', 'true');
+    await renderStrip('/g/dusk-helm?mode=edit&scene=graveyard&rev=2');
+    expect(screen.getByRole('button', { name: 'Graveyard, changed by you, revision 2' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    /* An agent's scene names the ticket that started it, so Kevin can tell whose prototype it was. */
+    expect(
+      screen.getByRole('button', { name: 'Goblin cave, changed by an agent, revision 4, from ticket 1208' }),
+    ).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: 'New scene' })).toBeDisabled();
   });
 
   it('says who changed each scene last and marks the one the game is showing', async () => {
     await renderStrip('/g/dusk-helm?mode=edit&scenes=fixture&scenario=lush-fields');
-    expect(screen.getByRole('button', { name: 'Graveyard landmark, changed by you' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Graveyard landmark, changed by you, revision 7' })).toHaveAttribute(
       'aria-pressed',
       'false',
     );
-    expect(screen.getByRole('button', { name: 'Lush fields, changed by an agent' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Lush fields, changed by an agent, revision 3' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    expect(screen.getByRole('button', { name: 'Goblin cave, an agent is changing it' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Goblin cave, an agent is changing it, revision 5' }),
+    ).toBeInTheDocument();
   });
 
   it('opens a tapped scene in the game', async () => {
     await renderStrip('/g/dusk-helm?mode=edit&scenes=fixture');
-    fireEvent.click(screen.getByRole('button', { name: 'Goblin cave, an agent is changing it' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Goblin cave, an agent is changing it, revision 5' }));
     const params = new URLSearchParams(search);
     expect(params.get('scene')).toBe('goblin-cave');
     expect(params.get('scenario')).toBe('goblin-cave');
     expect(params.get('mode')).toBe('edit');
-    expect(screen.getByRole('button', { name: 'Goblin cave, an agent is changing it' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Goblin cave, an agent is changing it, revision 5' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );

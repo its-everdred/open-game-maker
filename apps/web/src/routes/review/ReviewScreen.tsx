@@ -20,6 +20,7 @@ import { reviewTitle } from './title';
 import { PreviewReviews, usePreviews } from './PreviewReviews';
 import { RoundReviews, useReviewRounds } from './RoundReviews';
 import { ReviewChoice } from './ReviewChoice';
+import { TicketScenes } from '../../features/worker-builds/TicketScenes';
 import './review-screen.css';
 
 // The short link the Executor pushes to the creator (#591): `/<slug>/review/<n>`, the game's slug and the Command's
@@ -316,6 +317,7 @@ function ReviewScreen({
         <details className="review-screen-question">
           <summary>{withoutLinks(shown.question)}</summary>
         </details>
+        {shown.ticket && <TicketScenes gameId={gameId} ticket={shown.ticket} />}
       </div>
     </ReviewFrame>
   );

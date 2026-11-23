@@ -110,9 +110,16 @@ export function getScenerySource(gameId: string, branch = 'main', buildId?: stri
 }
 
 /** The game's scene documents, each with who wrote its head revision. */
-export function getEditorScenes(
-  gameId: string,
-): Promise<{ scenes: { id: string; rev: number; author: string; updatedAt: string }[] }> {
+export function getEditorScenes(gameId: string): Promise<{
+  scenes: {
+    id: string;
+    rev: number;
+    author: string;
+    updatedAt: string;
+    ticket?: string;
+    agents: Record<string, number>;
+  }[];
+}> {
   return api(`/games/${segment(gameId)}/editor/scenes`);
 }
 

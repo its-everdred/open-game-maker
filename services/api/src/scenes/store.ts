@@ -12,6 +12,8 @@ import {
 import { schema, type Db } from '@ogm/db';
 import { commitScene, isAgent, type CommitSceneResult } from '@ogm/design-log';
 
+import { sceneSummary, type SceneSummary } from '../scenery/source.js';
+
 /**
  * The shared scene store (#1209): #1207's head and revision log in the API's database, so the creator's map maker and
  * every agent's `gm scene pull`/`push` meet on one history. The rules are `commitScene`'s; this only persists them.
@@ -37,30 +39,16 @@ export function readScene(db: Conn, gameId: string, scene: string): SceneStore |
   return { head: { rev: head.rev, doc: SceneDocSchema.parse(JSON.parse(head.doc)) }, log };
 }
 
-export type SceneListing = { id: string; rev: number; author: string; updatedAt: string };
-
-export function listScenes(db: Db, gameId: string): SceneListing[] {
+export function listScenes(db: Db, gameId: string): SceneSummary[] {
   const heads = db
-    .select({ scene: schema.sceneHeads.scene, rev: schema.sceneHeads.rev })
+    .select({ scene: schema.sceneHeads.scene })
     .from(schema.sceneHeads)
     .where(eq(schema.sceneHeads.gameId, gameId))
     .orderBy(asc(schema.sceneHeads.scene))
     .all();
-  return heads.flatMap(({ scene, rev }) => {
-    const row = db
-      .select({ revision: schema.sceneRevisions.revision })
-      .from(schema.sceneRevisions)
-      .where(
-        and(
-          eq(schema.sceneRevisions.gameId, gameId),
-          eq(schema.sceneRevisions.scene, scene),
-          eq(schema.sceneRevisions.rev, rev),
-        ),
-      )
-      .get();
-    if (!row) return [];
-    const last = SceneRevisionSchema.parse(JSON.parse(row.revision));
-    return [{ id: scene, rev, author: last.author, updatedAt: last.createdAt }];
+  return heads.flatMap(({ scene }) => {
+    const log = readScene(db, gameId, scene)?.log ?? [];
+    return log.length > 0 ? [sceneSummary(scene, log)] : [];
   });
 }
 

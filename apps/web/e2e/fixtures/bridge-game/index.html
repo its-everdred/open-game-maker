@@ -53,6 +53,8 @@
           ready = true;
           fixture.mode = message.payload.mode;
           send('ready', { protocol: 1, manifest, marks: [['fixture-ready', performance.now()]] }, message.id);
+          /* A real SDK game reports its first frame; without it the shell raises Try again after 20 s. */
+          send('load.frame', {});
         } else if (message.t === 'design.apply') {
           fixture.applies.push(message.payload);
           send('design.applied', { rev: message.payload.rev, result: 'live' }, message.id);

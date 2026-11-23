@@ -6,6 +6,9 @@ const svg = (body: string) => `<svg viewBox="0 0 256 256" fill="currentColor" ar
 const line = (body: string) =>
   `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
 
+/** A 24-unit line icon drawn on the 256 grid (16 / 10.667 keeps the stroke weight). */
+const mock = (body: string) => line(`<g transform="scale(10.667)" stroke-width="1.5">${body}</g>`);
+
 const duo = (fill: string, body: string) =>
   svg(
     `<path d="${fill}" opacity="0.2"/><g fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">${body}</g>`,
@@ -275,6 +278,16 @@ export const ICONS: Record<string, string> = {
   bulb: line('<path d="M96 184v-12a72 72 0 1 1 64 0v12Z"/><path d="M100 216h56M128 184v-48M108 140l20-20 20 20"/>'),
   focus: line('<circle cx="128" cy="128" r="32"/><path d="M40 88V40h48M168 40h48v48M216 168v48h-48M88 216H40v-48"/>'),
   leaf: line('<path d="M56 200C56 104 104 48 216 40c-8 112-64 160-160 160Z"/><path d="M56 200l96-96"/>'),
+  /* The map maker library's chips: the approved mock's 24-unit line icons (prototypes/map-maker-mocks/icons.js). */
+  search: mock('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>'),
+  ground: mock('<path d="m12 4 9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/>'),
+  fence: mock('<path d="M4 21V7l2-3 2 3v14M16 21V7l2-3 2 3v14M4 11h16M4 17h16"/>'),
+  wall: mock('<path d="m3 12 9-8 9 8M5 10v10h14V10"/>'),
+  door: mock('<path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M3 21h18M14 12h.01"/>'),
+  roof: mock('<path d="M2 16 12 6l10 10"/><path d="M5 19h14"/>'),
+  tree: mock('<path d="M12 22v-6"/><path d="M12 2 5 12h4l-3 4h12l-3-4h4z"/>'),
+  chest: mock('<rect x="3" y="9" width="18" height="11" rx="1"/><path d="M3 9a9 4 0 0 1 18 0M12 12v3"/>'),
+  sparkle: mock('<path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/><path d="M19 3v4M17 5h4"/>'),
   /* Map maker tools (#1209). */
   undo: line('<path d="M80 136 32 88l48-48"/><path d="M32 88h128a56 56 0 0 1 0 112H88"/>'),
   redo: line('<path d="m176 136 48-48-48-48"/><path d="M224 88H96a56 56 0 0 0 0 112h72"/>'),

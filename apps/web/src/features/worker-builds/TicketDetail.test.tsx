@@ -6,6 +6,8 @@ import { TicketDetail, type TicketDetailView } from './TicketDetail';
 
 const api = vi.hoisted(() => vi.fn());
 vi.mock('../../lib/api/client', () => ({ api }));
+const getEditorScenes = vi.hoisted(() => vi.fn().mockResolvedValue({ scenes: [] }));
+vi.mock('../editor/api', () => ({ getEditorScenes }));
 afterEach(() => {
   cleanup();
   api.mockReset();
@@ -95,6 +97,21 @@ describe('ticket detail', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // The ticket conversation is the other way in (#1212): a scene this ticket's agent pushed opens in the map maker.
+  it('links the scenes this ticket pushed to the map maker', async () => {
+    api.mockResolvedValue(view);
+    getEditorScenes.mockResolvedValueOnce({
+      scenes: [
+        { id: 'goblin-cave', rev: 3, author: 'agent:644', updatedAt: '2026-11-23T00:00:00Z', agents: { '644': 3 } },
+      ],
+    });
+    const dialog = show();
+    expect(await within(dialog).findByRole('link', { name: 'Edit Goblin cave' })).toHaveAttribute(
+      'href',
+      '/g/g%201?mode=edit&scene=goblin-cave&rev=3',
+    );
   });
 
   it('keeps the listed title and says so when the detail cannot load', async () => {

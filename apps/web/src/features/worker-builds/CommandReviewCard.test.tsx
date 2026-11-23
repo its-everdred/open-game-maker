@@ -7,6 +7,8 @@ import { CommandReviewCard } from './CommandReviewCard';
 
 const api = vi.hoisted(() => vi.fn().mockResolvedValue({ status: 'answered' }));
 vi.mock('../../lib/api/client', () => ({ api }));
+const getEditorScenes = vi.hoisted(() => vi.fn().mockResolvedValue({ scenes: [] }));
+vi.mock('../editor/api', () => ({ getEditorScenes }));
 afterEach(() => {
   cleanup();
   queryClient.clear();
@@ -460,4 +462,27 @@ it('closes an enlarged candidate when a new round of the Command arrives', () =>
     </QueryClientProvider>,
   );
   expect(screen.queryByRole('dialog', { name: 'Knight sprite' })).toBeNull();
+});
+
+// An agent's pushed scene opens from its review card on a phone (#1212): one tap lands in the map maker on that scene,
+// at the revision this ticket wrote, not at another ticket's or Kevin's.
+it("links each scene the card's ticket pushed to the map maker", async () => {
+  getEditorScenes.mockResolvedValueOnce({
+    scenes: [
+      { id: 'goblin-cave', rev: 5, author: 'kevin', updatedAt: '2026-11-23T00:00:00Z', agents: { '9': 1, '12': 4 } },
+      { id: 'graveyard', rev: 2, author: 'agent:9', updatedAt: '2026-11-23T00:00:00Z', agents: { '9': 2 } },
+    ],
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard command={command} onAnswered={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole('link', { name: 'Edit Goblin cave' })).toHaveAttribute(
+    'href',
+    '/g/g?mode=edit&scene=goblin-cave&rev=4',
+  );
+  expect(screen.queryByRole('link', { name: 'Edit Graveyard' })).toBeNull();
+  expect(getEditorScenes).toHaveBeenCalledWith('g');
+  expect(api).not.toHaveBeenCalled();
 });
