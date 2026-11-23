@@ -93,14 +93,14 @@ fi
 # The archived prototype's generated art/, demo/, and town/ payload is gitignored. Nothing in the web build reads it,
 # so it builds alongside the web build.
 PROTO_LOG="$(mktemp)"
-PROTO_KEY="$(inputs_key "$ROOT/prototypes/studio-v0/tools" "$ROOT/prototypes/ui-v0/site" "$TC" --shallow "$PACKS")"
+PROTO_KEY="$(inputs_key "$ROOT/prototypes/studio-v0/tools" "$ROOT/prototypes/ui-v0/site" "$TC" --packs "$PACKS")"
 cached "$CACHE" prototype "$PROTO_KEY" \
   "$ROOT/prototypes/studio-v0/art" "$ROOT/prototypes/studio-v0/demo" "$ROOT/prototypes/studio-v0/town" -- \
   bash "$ROOT/prototypes/studio-v0/tools/build.sh" >"$PROTO_LOG" 2>&1 &
 PROTO_PID=$!
 
 TOWN_KEY="$(inputs_key "${ASSET_FILTER_ARGS[@]}" "$ROOT/apps/web/tools/town.sh" "$TC" \
-  "$ROOT/prototypes/ui-v0/site/assets/img/logo.png" --shallow "$PACKS")"
+  "$ROOT/prototypes/ui-v0/site/assets/img/logo.png" --packs "$PACKS")"
 cached "$CACHE" town "$TOWN_KEY" "$ROOT/apps/web/public/town" "$ROOT/apps/web/public/art" -- \
   bash "$ROOT/apps/web/tools/town.sh" "${ASSET_FILTER_ARGS[@]}"
 

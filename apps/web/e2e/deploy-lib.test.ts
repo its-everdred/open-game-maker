@@ -91,20 +91,23 @@ describe('deploy build cache', () => {
     expect(key('--public')).not.toBe(before);
   });
 
-  // Listing every pack file took 89 s at load ~38; three levels still see a pack installed or re-extracted.
-  it('lists a --shallow tree to the extracted folder of each pack version', async () => {
+  // Listing every pack file took 89 s at load ~38, and other tools write cards and analysis beside the packs all day.
+  it('keys --packs on each extracted folder, so only an install or re-extract rebuilds', async () => {
     const root = await dir();
-    const deep = join(root, 'packs', 'kenney-x', '1.0', 'extracted', 'PNG', 'a.png');
+    const pack = join(root, 'packs', 'kenney-x');
+    const deep = join(pack, '1.0', 'extracted', 'PNG', 'a.png');
     await mkdir(join(deep, '..'), { recursive: true });
+    await mkdir(join(pack, 'cards'), { recursive: true });
     await writeFile(deep, 'same');
-    const key = () => bash('inputs_key --shallow "$ROOT/packs"', { ROOT: root }).stdout;
+    const key = () => bash('inputs_key --packs "$ROOT/packs"', { ROOT: root }).stdout;
 
     const before = key();
-    await writeFile(deep, 'edited in place');
-    await utimes(deep, new Date(2001, 1, 1), new Date(2001, 1, 1));
+    await writeFile(join(pack, 'cards', 'new.card.json'), '{}');
+    await writeFile(join(pack, 'pack.json'), '{}');
+    await mkdir(join(pack, '1.0', 'analysis'));
     expect(key()).toBe(before);
 
-    await mkdir(join(root, 'packs', 'kenney-x', '1.1', 'extracted'), { recursive: true });
+    await mkdir(join(pack, '1.1', 'extracted'), { recursive: true });
     expect(key()).not.toBe(before);
   });
 

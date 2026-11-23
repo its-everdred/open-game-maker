@@ -12,23 +12,23 @@ timed() {
 }
 
 # Hash a step's inputs: every argument as text, and for each existing path every file's path, size and mtime.
-# `--shallow <dir>` lists three levels only (pack/version/extracted): the library holds hundreds of thousands of
-# pack files, too many to list on every deploy, and intake installs or re-extracts a pack as new directories rather
-# than editing files in place.
+# `--packs <dir>` lists only each pack's <pack>/<version>/extracted folder: the library holds hundreds of thousands
+# of pack files (89 s to list at load ~38), other tools keep writing cards and analysis next to them, and intake
+# installs or re-extracts a pack as a new extracted folder rather than editing files in place.
 inputs_key() {
-  local depth=()
+  local select=()
   while (($#)); do
-    if [[ "$1" == --shallow ]]; then
-      depth=(-maxdepth 3)
+    if [[ "$1" == --packs ]]; then
+      select=(-mindepth 3 -maxdepth 3 -name extracted)
       shift
       continue
     fi
-    printf 'arg %s %s\n' "${depth[*]}" "$1"
+    printf 'arg %s %s\n' "${select[*]}" "$1"
     if [[ -e "$1" ]]; then
       # A dangling link or unreadable entry is skipped rather than stopping the deploy.
-      find -L "$1" "${depth[@]}" -printf '%P\t%s\t%T@\n' 2>/dev/null | LC_ALL=C sort || true
+      find -L "$1" "${select[@]}" -printf '%P\t%s\t%T@\n' 2>/dev/null | LC_ALL=C sort || true
     fi
-    depth=()
+    select=()
     shift
   done | sha256sum | cut -d' ' -f1
 }
