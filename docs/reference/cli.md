@@ -216,6 +216,9 @@ scene that doesn't exist yet. A scene on an older schema version is upgraded on 
 `agent:<ticket>`. A push from an older `baseRev` is rebased onto the latest one. If it would change anything Kevin
 edited, the whole push is refused with one line per conflict and nothing is saved: pull again and redo the rest.
 `--json` prints `{ ok, rev, rebased, saved }`, or `{ ok: false, conflicts, hint }` on a refusal (exit 1).
+Inside a game daemon (`OGM_INTERNAL_URL` and `OGM_HOOK_SECRET_FILE` set), both go through the API's shared scene
+store, where the map maker saves Kevin's edits: pull reads it (starting it from the game folder's copy the first time),
+push commits there, and both then rewrite `scenes/<scene>.scene.json` and its log to match, ready to commit.
 
 `gm scene match <mock.png> <brief.json> --pack <id> --facing <direction> --out <new.json>` searches the
 specified pack locally using the reviewed regions in the brief. It checks pack rights and source hashes; the
