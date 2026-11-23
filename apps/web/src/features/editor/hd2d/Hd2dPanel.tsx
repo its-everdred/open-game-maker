@@ -31,17 +31,20 @@ const ECHOES = 24;
 export function Hd2dPanel({
   report,
   apply,
+  onSave,
 }: {
   /** What the running scene renders, as the game last reported it. */
   report?: Hd2dReport;
   apply?: (doc: Hd2dDoc, weather?: string) => void;
+  /** Keeps the tuned document; `false` when it could not be sent, so Reset still returns to the last kept look. */
+  onSave?: (doc: Hd2dDoc) => boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>('shafts');
   const [draft, setDraft] = useState<Hd2dDoc>();
   const [weather, setWeather] = useState<string>();
-  /** The document the scene started with, for Reset. */
-  const start = useRef<Hd2dDoc | undefined>(undefined);
+  /** The document the scene started with or Kevin last saved: Reset returns to it, Save waits for a change from it. */
+  const [kept, setKept] = useState<Hd2dDoc>();
   const recent = useRef<unknown[]>([]);
   /** Shafts and clouds Kevin switched off, so switching them back on restores his settings. */
   const parked = useRef<{ shafts?: Hd2dDoc['lighting']['shafts']; clouds?: Hd2dDoc['lighting']['clouds'] }>({});
@@ -53,14 +56,14 @@ export function Hd2dPanel({
     setWeather(report?.weather);
     if (!doc) {
       setDraft(undefined);
-      start.current = undefined;
+      setKept(undefined);
       return;
     }
     if (recent.current.some((sent) => sameDoc(sent, doc))) return;
     /* A new scene, or the game changed its own document: start over from what it renders. */
     recent.current = [];
     parked.current = {};
-    start.current = doc;
+    setKept(doc);
     setDraft(doc);
   }, [report]);
 
@@ -106,28 +109,43 @@ export function Hd2dPanel({
         <Icon name="sun" />
       </button>
       <section id="hd2d-panel" className="hd2d-panel" hidden={!open} aria-label="Lighting">
-        <div className="hd2d-tabs" role="tablist" aria-label="Lighting controls">
-          {TABS.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              role="tab"
-              aria-label={entry.label}
-              aria-selected={tab === entry.id}
-              onClick={() => setTab(entry.id)}
-            >
-              <Icon name={entry.icon} />
-            </button>
-          ))}
+        <div className="hd2d-tabs">
+          <div className="hd2d-tablist" role="tablist" aria-label="Lighting controls">
+            {TABS.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                role="tab"
+                aria-label={entry.label}
+                aria-selected={tab === entry.id}
+                onClick={() => setTab(entry.id)}
+              >
+                <Icon name={entry.icon} />
+              </button>
+            ))}
+          </div>
           <button
             className="hd2d-reset"
             type="button"
             aria-label="Reset lighting"
-            disabled={start.current === undefined || sameDoc(start.current, draft)}
-            onClick={() => start.current && push(start.current)}
+            disabled={kept === undefined || sameDoc(kept, draft)}
+            onClick={() => kept && push(kept)}
           >
             <Icon name="replay" />
           </button>
+          {onSave && (
+            <button
+              className="hd2d-save"
+              type="button"
+              aria-label="Save lighting"
+              disabled={kept !== undefined && sameDoc(kept, draft)}
+              onClick={() => {
+                if (onSave(draft)) setKept(draft);
+              }}
+            >
+              <Icon name="check" />
+            </button>
+          )}
         </div>
         <div className="hd2d-body" role="tabpanel" aria-label={TABS.find((entry) => entry.id === tab)!.label}>
           {tab === 'shafts' && (

@@ -26,6 +26,8 @@ import {
 import { EditorChrome } from '../../features/editor/EditorChrome';
 import { SceneStrip } from '../../features/editor/scenes/SceneStrip';
 import { Hd2dPanel } from '../../features/editor/hd2d/Hd2dPanel';
+import type { Hd2dDoc } from '../../features/editor/hd2d/controls';
+import { hd2dSaveRequest } from '../../features/editor/hd2d/save';
 import { fallbackEditRequest, previewEditRequest } from '../../features/editor/fallback-request';
 import { GizmoOverlay } from '../../features/editor/GizmoOverlay';
 import { changeInstanceCount } from '../../features/editor/instanceCount';
@@ -329,6 +331,24 @@ export function GameScreen() {
       );
     },
     [gameId, jobBranch, submitEditRequest],
+  );
+  const saveLighting = useCallback(
+    (doc: Hd2dDoc) => {
+      let request: CreateJobRequest;
+      try {
+        request = hd2dSaveRequest(
+          { gameId, branchId: jobBranch },
+          { scene: searchParams.get('scene') ?? scenario ?? undefined, doc },
+          `edit:${crypto.randomUUID()}`,
+        );
+      } catch {
+        pushToast('This lighting is too large to save.');
+        return false;
+      }
+      submitEditRequest(request);
+      return request.branchId === 'main';
+    },
+    [gameId, jobBranch, scenario, searchParams, submitEditRequest],
   );
   const requestFallbackPlacement = useCallback(
     (prefab: string, point: { x: number; y: number }, path?: Array<{ x: number; y: number }>) => {
@@ -734,7 +754,9 @@ export function GameScreen() {
       {mode === 'edit' && (
         <SceneStrip gameId={gameId} build={runningBuildId} scenarios={frameState.manifest?.scenarios} />
       )}
-      {mode === 'edit' && <Hd2dPanel report={frameState.hd2d} apply={frameController?.applyHd2d} />}
+      {mode === 'edit' && (
+        <Hd2dPanel report={frameState.hd2d} apply={frameController?.applyHd2d} onSave={saveLighting} />
+      )}
       <div className="game-stage">
         <div className="game-frame" ref={containerRef} />
         {mode === 'play' && frameController !== undefined ? (

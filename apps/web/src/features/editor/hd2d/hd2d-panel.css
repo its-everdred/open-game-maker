@@ -67,16 +67,25 @@
 
 .hd2d-tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   padding: 8px;
   border-bottom: 1px solid var(--rule);
 }
 
+.hd2d-tablist {
+  display: flex;
+  flex: 6 1 auto;
+  min-width: 0;
+  gap: 2px;
+}
+
 .hd2d-tabs button {
   display: grid;
+  flex: 0 1 44px;
   place-items: center;
-  width: 44px;
+  min-width: 0;
   height: 44px;
+  padding: 0;
   border: 0;
   border-radius: 12px;
   background: none;
@@ -93,7 +102,12 @@
   color: var(--ink);
 }
 
-.hd2d-tabs .hd2d-reset:disabled {
+.hd2d-tabs .hd2d-save {
+  color: var(--yellow-b);
+}
+
+.hd2d-tabs .hd2d-reset:disabled,
+.hd2d-tabs .hd2d-save:disabled {
   opacity: 0.35;
 }
 

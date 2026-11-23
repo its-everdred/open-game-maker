@@ -274,5 +274,6 @@ export const ICONS: Record<string, string> = {
   ),
   bulb: line('<path d="M96 184v-12a72 72 0 1 1 64 0v12Z"/><path d="M100 216h56M128 184v-48M108 140l20-20 20 20"/>'),
   focus: line('<circle cx="128" cy="128" r="32"/><path d="M40 88V40h48M168 40h48v48M216 168v48h-48M88 216H40v-48"/>'),
+  check: line('<path d="M48 136l48 48L208 72"/>'),
   leaf: line('<path d="M56 200C56 104 104 48 216 40c-8 112-64 160-160 160Z"/><path d="M56 200l96-96"/>'),
 };

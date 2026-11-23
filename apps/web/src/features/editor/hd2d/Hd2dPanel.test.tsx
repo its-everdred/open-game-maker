@@ -117,4 +117,33 @@ describe('Hd2dPanel', () => {
     nextFrame();
     expect(apply.mock.lastCall![0].lighting.clouds).toBeUndefined();
   });
+
+  // Save keeps what Kevin tuned; after it, Reset returns to the saved look, not the one the scene booted with.
+  it('saves the tuned document and makes it the look Reset returns to', () => {
+    const apply = vi.fn();
+    const onSave = vi.fn(() => true);
+    render(<Hd2dPanel report={{ doc: scene() }} apply={apply} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Lighting' }));
+    expect(screen.getByRole('button', { name: 'Save lighting' })).toHaveProperty('disabled', true);
+    fireEvent.change(slider('Beams'), { target: { value: '9' } });
+    nextFrame();
+    fireEvent.click(screen.getByRole('button', { name: 'Save lighting' }));
+    expect(onSave).toHaveBeenCalledOnce();
+    expect((onSave.mock.calls[0] as unknown as [Hd2dDoc])[0].lighting.shafts!.count).toBe(9);
+    expect(screen.getByRole('button', { name: 'Save lighting' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Reset lighting' })).toHaveProperty('disabled', true);
+
+    fireEvent.change(slider('Beams'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset lighting' }));
+    nextFrame();
+    expect(apply.mock.lastCall![0].lighting.shafts.count).toBe(9);
+  });
+
+  it('keeps Save available when the save could not be sent', () => {
+    render(<Hd2dPanel report={{ doc: scene() }} apply={vi.fn()} onSave={() => false} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Lighting' }));
+    fireEvent.change(slider('Beams'), { target: { value: '9' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save lighting' }));
+    expect(screen.getByRole('button', { name: 'Save lighting' })).toHaveProperty('disabled', false);
+  });
 });
