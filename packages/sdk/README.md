@@ -126,8 +126,8 @@ A game that runs `createHd2d` from `@gm/sdk/hd2d` gets the map maker's lighting 
 facade links itself to `boot`, which reports the running scene's HD-2D document, biome and weather to the host as
 `hd2d.scene` (`doc: null` once it is disposed) and again after every change. The host sends edits as
 `hd2d.apply { doc, weather? }`: the facade validates the document and calls `applyScene`, and `weather` previews the
-scene in that weather (`lighting.setConditions`). An invalid document answers `error { code: 'apply_failed' }` and keeps
-the old one; a scene without HD-2D answers `error { code: 'unsupported' }`. Like `design.apply`, only an owner or editor
+scene in that weather (`lighting.setConditions`). An invalid document answers `error { code: 'hd2d_rejected' }` and the
+scene keeps the old one (the host leaves the game running); a scene without HD-2D answers `error { code: 'unsupported' }`. Like `design.apply`, only an owner or editor
 may send it. When two scenes overlap, the newest `createHd2d` is the one the editor edits.
 
 Saving goes through the game's agent: the panel's Save asks it to write the exact document over the scene's own (the
