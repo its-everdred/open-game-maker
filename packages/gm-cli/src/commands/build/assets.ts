@@ -187,7 +187,7 @@ export const command: GmCommand = {
           const built = await buildFresh(job, ctx.err);
           if ((await sourceDigest(job, true)) !== identity.sourceHash)
             throw new Error('source changed during build; retry');
-          results.push({ job, result: await saveBuilt(identity, cacheDir, ctx.cwd, outDir, built) });
+          results.push({ job, result: await saveBuilt(identity, cacheDir, ctx.cwd, outDir, built, ctx.err) });
           cacheMisses += 1;
         }
       } catch (error) {
@@ -200,7 +200,13 @@ export const command: GmCommand = {
       }
     }
 
-    if (cacheDir) await trimCache(cacheDir, assetCacheMaxBytes(env));
+    if (cacheDir) {
+      try {
+        await trimCache(cacheDir, assetCacheMaxBytes(env));
+      } catch (error) {
+        ctx.err(`asset cache trim skipped: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
 
     if (failures.length > 0) {
       reportBuildFailures(ctx, { tiers, failures, strict, cacheHits, cacheMisses });

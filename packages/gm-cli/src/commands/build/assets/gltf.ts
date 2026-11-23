@@ -7,6 +7,7 @@ import { getBounds } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
+import { builderFingerprint, markUsed } from './cache.js';
 import { assertNoSymlinks, sha256, writeIfChanged } from './files.js';
 import type { GltfFacts } from './types.js';
 
@@ -72,14 +73,19 @@ export async function inspectGltf(
 ): Promise<{ facts: GltfFacts; sourceHash: string }> {
   const bytes = await readFile(path);
   const sourceHash = sha256(bytes);
-  const recipeHash = sha256('gltf-facts-v2|gltf-transform-4.5.1|meshoptimizer-1.3.0|sharp-0.35.5');
+  const recipeHash = sha256(
+    `gltf-facts-v2|gltf-transform-4.5.1|meshoptimizer-1.3.0|sharp-0.35.5|${await builderFingerprint()}`,
+  );
   const cacheName = `${sourceHash}-${recipeHash}.json`;
   if (cacheDir !== null) {
     try {
       const cachePath = join(cacheDir, 'facts', cacheName);
       await assertNoSymlinks(cacheDir, cachePath);
       const cached = JSON.parse(await readFile(cachePath, 'utf8')) as unknown;
-      if (validFacts(cached)) return { facts: cached, sourceHash };
+      if (validFacts(cached)) {
+        await markUsed(cachePath);
+        return { facts: cached, sourceHash };
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
     }

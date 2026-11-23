@@ -1,6 +1,8 @@
-import { mkdir, readdir, readFile, rm, stat, utimes } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { access, mkdir, readdir, readFile, rm, stat, utimes } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { assertNoSymlinks, generatedPath, sha256, stableJson, writeIfChanged } from './files.js';
 import type { BuildItem, BuildJob, CacheIdentity, FreshJobResult, JobResult } from './types.js';
@@ -29,9 +31,27 @@ export async function sourceDigest(job: BuildJob, refresh = false): Promise<stri
   return sha256(stableJson(sources));
 }
 
+let fingerprint: Promise<string> | undefined;
+
+/**
+ * A digest of the asset builder's own code (this directory), folded into every cache key: checkouts on different
+ * branches share the cache, so a branch that changes how assets are encoded must not be served another branch's output.
+ */
+export function builderFingerprint(): Promise<string> {
+  fingerprint ??= (async () => {
+    const directory = fileURLToPath(new URL('.', import.meta.url));
+    const names = (await readdir(directory)).filter((name) => /\.(?:js|ts)$/.test(name) && !name.endsWith('.d.ts'));
+    const files: Array<{ name: string; sha256: string }> = [];
+    for (const name of names.sort()) files.push({ name, sha256: sha256(await readFile(join(directory, name))) });
+    return sha256(stableJson(files));
+  })();
+  return fingerprint;
+}
+
 export async function cacheIdentity(job: BuildJob): Promise<CacheIdentity> {
   const sourceHash = await sourceDigest(job);
-  return { sourceHash, key: `${sourceHash}-${sha256(stableJson(job.recipe))}` };
+  const builder = await builderFingerprint();
+  return { sourceHash, key: `${sourceHash}-${sha256(stableJson({ recipe: job.recipe, builder }))}` };
 }
 
 function validateGeneratedNames(result: JobResult): void {
@@ -49,7 +69,8 @@ const DEFAULT_MAX_MB = 8192;
 /**
  * The asset cache every build on this host shares, so a fresh checkout (og-merge, og-publish, a worker) reuses what any
  * other checkout already built: `GM_ASSET_CACHE_DIR`, else `$XDG_CACHE_HOME/ogm/assets`, else `~/.cache/ogm/assets`.
- * A host where that directory can't be created (a read-only sandbox home) falls back to the repo's `.gm/cache/assets`.
+ * A host where that directory can't be created or written (a read-only sandbox home) falls back to the repo's
+ * `.gm/cache/assets`.
  */
 export async function assetCacheDir(
   cwd: string,
@@ -64,10 +85,11 @@ export async function assetCacheDir(
     : join(env.XDG_CACHE_HOME || join(home, '.cache'), 'ogm', 'assets');
   try {
     await mkdir(shared, { recursive: true });
+    await access(shared, constants.W_OK);
     return shared;
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== 'EACCES' && code !== 'EROFS' && code !== 'EPERM' && code !== 'ENOTDIR') throw error;
+    const code = (error as NodeJS.ErrnoException).code ?? '';
+    if (!['EACCES', 'EROFS', 'EPERM', 'ENOTDIR', 'EEXIST'].includes(code)) throw error;
     return join(cwd, '.gm/cache/assets');
   }
 }
@@ -90,23 +112,32 @@ async function treeBytes(path: string): Promise<number> {
   return total;
 }
 
-/**
- * Least-recently-used trim: a hit or a save stamps its entry's directory, so the entries no build has touched for
- * longest go first until the cache fits `maxBytes`. An entry another build removes mid-walk is skipped.
- */
-export async function trimCache(cacheDir: string, maxBytes: number): Promise<{ removed: number; bytes: number }> {
-  const entries: Array<{ path: string; used: number; bytes: number }> = [];
-  let names: string[];
+async function listNames(directory: string): Promise<string[]> {
   try {
-    names = await readdir(cacheDir);
+    return await readdir(directory);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { removed: 0, bytes: 0 };
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
-  for (const name of names.filter((entry) => ENTRY.test(entry))) {
-    const path = join(cacheDir, name);
+}
+
+/**
+ * Least-recently-used trim over built entries and model facts files: a hit or a save stamps its entry, so the ones no
+ * build has touched for longest go first until the cache fits `maxBytes`. An entry another build removes mid-walk is
+ * skipped.
+ */
+export async function trimCache(cacheDir: string, maxBytes: number): Promise<{ removed: number; bytes: number }> {
+  const paths = [
+    ...(await listNames(cacheDir)).filter((name) => ENTRY.test(name)).map((name) => join(cacheDir, name)),
+    ...(await listNames(join(cacheDir, 'facts')))
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => join(cacheDir, 'facts', name)),
+  ];
+  const entries: Array<{ path: string; used: number; bytes: number }> = [];
+  for (const path of paths) {
     try {
-      entries.push({ path, used: (await stat(path)).mtimeMs, bytes: await treeBytes(path) });
+      const info = await stat(path);
+      entries.push({ path, used: info.mtimeMs, bytes: info.isDirectory() ? await treeBytes(path) : info.size });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
@@ -122,9 +153,14 @@ export async function trimCache(cacheDir: string, maxBytes: number): Promise<{ r
   return { removed, bytes };
 }
 
-async function markUsed(directory: string): Promise<void> {
+/** Stamp an entry as just used for the LRU trim; one another build's trim already removed is left alone. */
+export async function markUsed(path: string): Promise<void> {
   const now = new Date();
-  await utimes(directory, now, now);
+  try {
+    await utimes(path, now, now);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
 }
 
 export async function loadCached(
@@ -158,12 +194,17 @@ export async function loadCached(
   return result;
 }
 
+/**
+ * Writes a fresh build to the output directory, then to the cache. A failed cache write (a full disk, another build's
+ * trim racing it) is logged and costs only a later rebuild, never this build.
+ */
 export async function saveBuilt(
   identity: CacheIdentity,
   cacheDir: string | null,
   cwd: string,
   outDir: string,
   result: FreshJobResult,
+  log: (line: string) => void = () => {},
 ): Promise<JobResult> {
   const { buffers, ...metadata } = result;
   validateGeneratedNames(metadata);
@@ -172,12 +213,16 @@ export async function saveBuilt(
   }
   if (cacheDir && Object.values(buffers).every((bytes) => bytes.length > 0)) {
     const directory = join(cacheDir, identity.key);
-    for (const [name, bytes] of Object.entries(buffers)) {
-      await writeIfChanged(generatedPath(join(directory, 'files'), name), bytes, cacheDir);
+    try {
+      for (const [name, bytes] of Object.entries(buffers)) {
+        await writeIfChanged(generatedPath(join(directory, 'files'), name), bytes, cacheDir);
+      }
+      /* result.json goes last: a reader that finds it finds every file it names (or misses on a hash check). */
+      await writeIfChanged(join(directory, 'result.json'), `${JSON.stringify(metadata, null, 2)}\n`, cacheDir);
+      await markUsed(directory);
+    } catch (error) {
+      log(`asset cache write skipped for ${identity.key}: ${error instanceof Error ? error.message : String(error)}`);
     }
-    /* result.json goes last: a reader that finds it finds every file it names (or misses on a hash check). */
-    await writeIfChanged(join(directory, 'result.json'), `${JSON.stringify(metadata, null, 2)}\n`, cacheDir);
-    await markUsed(directory);
   }
   return metadata;
 }
