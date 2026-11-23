@@ -330,6 +330,18 @@ describe('GameScreen', () => {
       params: { scenario: 'combat-chain' },
     });
   });
+  it('keeps a linked build read-only: no branch lease, and the head design never replaces it', async () => {
+    const reviewed = { rev: 0, buildId: 'build_reviewed', doc: { schemaVersion: 1, globals: { g: 1 }, entities: {} } };
+    editorApi.getBuildDesign.mockResolvedValue(reviewed);
+    renderGame('/g/game?mode=edit&build=build_reviewed');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(editorApi.acquireLease).not.toHaveBeenCalled();
+    for (const [, doc] of host.controller.applyDesign.mock.calls) expect(doc).toEqual(reviewed.doc);
+    expect(host.mountGameFrame).toHaveBeenCalledTimes(1);
+  });
   it('plays the branch head without another request when the link names the head build', async () => {
     renderGame('/g/game?mode=edit&build=build');
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());

@@ -62,6 +62,10 @@ export function checkPrReview(cwd: string, bodyFile: string, base: string): stri
       problems.push(
         `Prototype review Play links the games host (${playLink}), which opens the browser from the home-screen app; link the game's editor: <app>/g/<gameId>?mode=edit&build=<buildId>`,
       );
+    else if (playLink && !namesBuild(playLink))
+      problems.push(
+        `Prototype review Play (${playLink}) opens the game without the reviewed build; link <app>/g/<gameId>?mode=edit&build=<buildId>`,
+      );
     const reviewedIds = field('Weigh in on').match(/[A-Za-z][A-Za-z0-9_-]*/g) ?? [];
     if (reviewedIds.length < 3 || reviewedIds.length > 6)
       problems.push('Prototype review must name 3–6 decision ids under Weigh in on');
@@ -83,4 +87,15 @@ function gamesHostLink(link: string): boolean {
     return false;
   }
   return url.port === '10000' || /^\/g\/[^/]+\/[^/]+/u.test(url.pathname);
+}
+
+/* A link to a game's page must carry the reviewed build, or it plays the branch head instead. */
+function namesBuild(link: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(link);
+  } catch {
+    return true;
+  }
+  return !url.pathname.startsWith('/g/') || !!url.searchParams.get('build');
 }

@@ -167,6 +167,8 @@ export function GameScreen() {
     retry: false,
   });
   const linkedSnapshot = otherBuild ? linkedDesign.data : undefined;
+  /* The build the frame runs: saves, away state, extras and thumbnails belong to it, not to the branch head. */
+  const runningBuildId = linkedSnapshot?.buildId ?? activeSnapshot?.buildId;
   const previews = useQuery({
     queryKey: ['editor-previews', gameId],
     queryFn: () => getEditorPreviews(gameId),
@@ -273,7 +275,7 @@ export function GameScreen() {
       : native.palette
         ? { ...native, palette: annotateGeneratedPalette(native.palette, fallback.data?.palette) }
         : native;
-    const buildId = activePreview?.accessId ?? activeSnapshot?.buildId;
+    const buildId = activePreview?.accessId ?? runningBuildId;
     if (mode !== 'edit' || fallbackActive || !buildId || (noBuild && !activePreview)) return manifest;
     return resolvePaletteThumbnails(manifest, gamesOrigin, gameId, buildId, !!activePreview);
   }, [
@@ -282,7 +284,7 @@ export function GameScreen() {
     fallbackPalette,
     fallback.data,
     activePreview,
-    activeSnapshot?.buildId,
+    runningBuildId,
     noBuild,
     gamesOrigin,
     gameId,
@@ -370,7 +372,7 @@ export function GameScreen() {
     },
     [activeStage, fallbackPalette, fallbackActive, frameState.manifest, gameId, jobBranch, submitEditRequest],
   );
-  const build = publishedBuildId !== undefined && publishedBuildId === activeSnapshot?.buildId ? 'published' : 'draft';
+  const build = publishedBuildId !== undefined && publishedBuildId === runningBuildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
   const pauseRequested = useRef(false);
   const wasMatchPaused = useRef(false);
@@ -506,10 +508,11 @@ export function GameScreen() {
     branch,
     mode,
     role: room.snapshot?.role,
-    activeSnapshot,
-    requestOnlySnapshot,
-    previewOnly: sidePreview,
-    source: previewSource,
+    /* A linked build is shown read-only: no branch lease, so the head design never replaces it in the frame. */
+    activeSnapshot: otherBuild ? undefined : activeSnapshot,
+    requestOnlySnapshot: otherBuild ? linkedSnapshot : requestOnlySnapshot,
+    previewOnly: otherBuild ? false : sidePreview,
+    source: otherBuild ? undefined : previewSource,
     frameRef,
     setAdopted,
   });
@@ -585,7 +588,7 @@ export function GameScreen() {
     () => ({
       gameId,
       branchId: branch,
-      buildId: activeSnapshot?.buildId,
+      buildId: runningBuildId,
       mode,
       authorityMode: frameState.manifest?.net?.authority,
       onNavigate: closeMenu,
@@ -595,7 +598,7 @@ export function GameScreen() {
       roomSnapshot: room.snapshot,
     }),
     [
-      activeSnapshot?.buildId,
+      runningBuildId,
       activateRoom,
       branch,
       closeMenu,
@@ -711,7 +714,7 @@ export function GameScreen() {
   const { onSavePersisted: onAwaySavePersisted, resetAway } = useAwayPause({
     frame: mode === 'play' ? frameController : undefined,
     gameId,
-    buildId: activeSnapshot?.buildId,
+    buildId: runningBuildId,
     solo: roomId === undefined,
     captureSaves: hudShown,
     menuOpen,
@@ -810,7 +813,7 @@ export function GameScreen() {
             pauseName={room.snapshot?.matchPause?.name}
             resumeAt={room.snapshot?.matchPause?.resumeAt}
             serverOffsetMs={room.snapshot?.serverOffsetMs}
-            saveContext={{ branch, buildId: activeSnapshot.buildId }}
+            saveContext={{ branch, buildId: runningBuildId ?? activeSnapshot.buildId }}
             saves={frameState.manifest.saves}
             saveWritesDisabled={frameState.startupSaveError}
             manualLoadDisabled={frameState.startupRecoveryUnavailable}

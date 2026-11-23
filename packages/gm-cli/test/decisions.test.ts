@@ -357,6 +357,9 @@ describe('gm decisions', () => {
       expect(result.code).toBe(1);
       expect(JSON.parse(result.out[0]!).prototypeReview.problems.join('\n')).toContain('Play links the games host');
     }
+    writeFileSync(body, review('https://app.example.test/g/g_1?mode=edit'));
+    const headOnly = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
+    expect(JSON.parse(headOnly.out[0]!).prototypeReview.problems.join('\n')).toContain('without the reviewed build');
     writeFileSync(body, review('https://app.example.test/g/g_1?mode=edit&build=build_1'));
     const inApp = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
     expect(JSON.parse(inApp.out[0]!).prototypeReview.problems).toEqual([]);
