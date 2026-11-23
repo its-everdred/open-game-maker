@@ -77,8 +77,7 @@ export function GamesScreen() {
 
   const branch = branches.find((item) => item.name === 'main') ?? branches[0];
   const canOpen = Boolean(
-    (selected?.id.startsWith('showcase:') && selected.showcase?.id !== 'goblin-cellar') ||
-    (selected && target && branch?.latestBuildId && activeJobs.get(selected.id)?.kind !== 'new_game'),
+    (selected?.id.startsWith('showcase:') && selected.showcase?.id !== 'goblin-cellar') || (selected && target),
   );
 
   const captureTransition = () => {
@@ -116,8 +115,10 @@ export function GamesScreen() {
       navigate(`/g/showcase/${encodeURIComponent(game.showcase.id)}?mode=${mode}`);
       return;
     }
-    if (!target || !branch?.latestBuildId) return;
-    navigate(`/g/${encodeURIComponent(target.id)}?v=${encodeURIComponent(branch.id)}&mode=${mode}`);
+    if (!target) return;
+    // Opens at once; the game screen resolves main itself and shows the loading screen until the build is ready.
+    const version = branch?.latestBuildId ? `v=${encodeURIComponent(branch.id)}&` : '';
+    navigate(`/g/${encodeURIComponent(target.id)}?${version}mode=${mode}`);
   };
 
   const nav = useGridNav({
@@ -257,7 +258,6 @@ export function GamesScreen() {
                           game={selected}
                           sharedCover
                           job={activeJobs.get(selected.id)}
-                          canOpen={canOpen}
                           onPlay={() => open(selectedIndex ?? -1, 'play')}
                           onEdit={() => open(selectedIndex ?? -1, 'edit')}
                           onClose={close}

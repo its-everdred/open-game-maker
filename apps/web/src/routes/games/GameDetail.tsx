@@ -79,7 +79,6 @@ export function detailOf(game: GameSummary): { description?: string; tags: Detai
 export function GameDetail({
   game,
   job,
-  canOpen,
   onPlay,
   onEdit,
   onClose,
@@ -88,7 +87,6 @@ export function GameDetail({
   game: GameSummary;
   job?: JobView;
   sharedCover?: boolean;
-  canOpen: boolean;
   onPlay(): void;
   onEdit(): void;
   onClose(): void;
@@ -192,22 +190,10 @@ export function GameDetail({
           </dl>
         )}
         <div className="games-spotlight-actions">
-          <button
-            type="button"
-            className="tap-primary games-play"
-            disabled={!canOpen}
-            aria-label={`Play ${game.title}`}
-            onClick={onPlay}
-          >
+          <button type="button" className="tap-primary games-play" aria-label={`Play ${game.title}`} onClick={onPlay}>
             ▶
           </button>
-          <button
-            type="button"
-            className="tap-primary games-edit"
-            disabled={!canOpen}
-            aria-label={`Edit ${game.title}`}
-            onClick={onEdit}
-          >
+          <button type="button" className="tap-primary games-edit" aria-label={`Edit ${game.title}`} onClick={onEdit}>
             <Icon name="pencil" />
           </button>
         </div>
@@ -230,7 +216,7 @@ export function GameDetail({
               className="game-logo"
               src={game.logoUrl}
               image={game.logoImage}
-              sizes="(max-width: 600px) 55vw, 320px"
+              sizes="(max-width: 600px) 80vw, 560px"
             />
           )}
         </span>

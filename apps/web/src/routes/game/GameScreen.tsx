@@ -58,6 +58,7 @@ import { DiagnosticsOverlay } from '../../net/diagnostics/DiagnosticsOverlay';
 import { RoomLayer } from '../../features/room/RoomLayer';
 import { useRoomRuntime } from '../../features/room/useRoomRuntime';
 import { useBranches } from '../games/useBranches';
+import type { GameSummary } from '../games/types';
 import { clearRoomGrant, storeRoomGrant } from '../join/grant-store';
 import { LoadingLayer } from './LoadingLayer';
 import { EditFrameOrientation, useEditFrameOrientation } from './EditFrameOrientation';
@@ -105,6 +106,15 @@ export function GameScreen() {
   const gamesOrigin = import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000';
   const game = useQuery({ queryKey: ['game', gameId], queryFn: () => getGame(gameId), enabled: gameId !== '' });
   const loadedGameId = game.data?.id;
+  /* The games list already holds this game's art, so the loading screen never waits on the game request. */
+  const listedGame = useMemo(
+    () =>
+      queryClient
+        .getQueriesData<GameSummary[]>({ queryKey: ['games'] })
+        .flatMap(([, games]) => games ?? [])
+        .find((item) => item.id === gameId),
+    [queryClient, gameId],
+  );
   useEffect(() => {
     if (!isGameRoute || mode !== 'play' || loadedGameId !== gameId || !gameId) return;
     const controller = new AbortController();
@@ -709,7 +719,7 @@ export function GameScreen() {
         {!designLoadFailed && (!noBuild || activePreview !== undefined) && frameState.bridgeState !== 'error' ? (
           <LoadingLayer
             key={`${activePreview?.accessId ?? activeSnapshot?.buildId ?? 'pending'}-${frameAttempt}`}
-            game={game.data ?? { familyId: '', title: '' }}
+            game={game.data ?? listedGame ?? { familyId: '', title: '' }}
             load={frameState.load}
             firstFrame={frameState.firstFrame}
           />

@@ -30,7 +30,7 @@ export function preloadGames(userId: string | undefined): void {
       '(max-width: 600px) 45vw, (max-width: 1000px) 25vw, 240px',
       game.slotImages?.tile,
     );
-    preloadDisplayImage(game.logoImage, game.logoUrl, '(max-width: 600px) 55vw, 320px');
+    preloadDisplayImage(game.logoImage, game.logoUrl, '(max-width: 600px) 80vw, 560px');
   }
 }
 
