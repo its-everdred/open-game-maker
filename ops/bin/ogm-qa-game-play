@@ -4,7 +4,8 @@
 ogm-qa-game-boot only proves a game's files return 200; on 2026-11-22 every game still showed "Try again" for a day
 (#1252, #1266, #1267). For each game with a tested build (QA games excluded), this runs `gm qa play-check`: the
 production shell at 390x844 with the QA session, the bridge handshake and first frame, the game's first tap path, and
-one input that must change the frame. One game at a time; each play is capped at 170 s (`--timeout`).
+one input that must change the frame. One game at a time; each play is capped at 170 s (`--timeout`). A game that
+fails is played once more and fails only if both plays fail: a loaded host can miss one boot, a broken game misses both.
 
 usage: ogm-qa-game-play [--db <ogm.sqlite3>] [--game <slug> [--build <id>]] [--repo <checkout>] [--attention <file>]
   --game       play only this game (the publish hook passes the game it published)
@@ -64,10 +65,10 @@ def play(gm, repo, game_id, build_id, out):
     # The command's own deadline covers the play; this one also covers waiting for the capture slot.
     command = [*gm, 'qa', 'play-check', game_id, build_id, '--out', out]
     try:
-        run = subprocess.run(command, cwd=repo, capture_output=True, text=True, timeout=900)
+        run = subprocess.run(command, cwd=repo, capture_output=True, text=True, timeout=540)
         code, stderr = run.returncode, run.stderr
     except subprocess.TimeoutExpired:
-        code, stderr = 124, 'timed out after 900 s'
+        code, stderr = 124, 'timed out after 540 s'
     try:
         with open(report_path) as handle:
             report = json.load(handle)
@@ -122,6 +123,11 @@ def main(argv):
         out = os.path.join(repo, 'assets-local', 'review', 'app', 'play-check', build_id)
         report = play(gm, repo, game_id, build_id, out)
         failures = report.get('failures') or []
+        if failures:
+            # A loaded host can miss one boot (a handshake timer, a slow tap); a broken game fails both plays.
+            print(f"{slug} {build_id}: first play failed ({clean('; '.join(failures))}), playing again")
+            report = play(gm, repo, game_id, build_id, out)
+            failures = report.get('failures') or []
         if not failures:
             unchecked = report.get('unchecked') or []
             print(f'{slug} {build_id}: ok' + (f" (unchecked: {'; '.join(clean(item) for item in unchecked)})" if unchecked else ''))

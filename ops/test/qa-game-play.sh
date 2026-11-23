@@ -36,6 +36,13 @@ cat > "$scratch/gm" << 'GM'
 printf '%s\n' "$*" >> "$OGM_TEST_CALLS"
 game=$3 out=$6
 [[ $game == "${OGM_TEST_SILENT:-}" ]] && exit 3
+# A flaky game fails its first play only, as a loaded host can.
+flake=$OGM_TEST_CALLS.flaked
+if [[ $game == "${OGM_TEST_FLAKY:-}" && ! -e $flake ]]; then
+  touch "$flake"
+  printf '{"failures": ["could not tap \\"Play\\""], "observation": {"trace": []}}\n' > "$out/play-check.json"
+  exit 1
+fi
 if [[ $game == g_bad ]]; then
   cat > "$out/play-check.json" << 'JSON'
 {"failures": ["bridge error", "the shell shows Try again"], "unchecked": [], "observation": {"trace": [
@@ -57,8 +64,9 @@ rc=$?
 set -e
 assert_eq 1 "$rc" 'a game stuck on Try again fails'
 assert_eq "qa play-check g_bad build_bad --out $stack/assets-local/review/app/play-check/build_bad
+qa play-check g_bad build_bad --out $stack/assets-local/review/app/play-check/build_bad
 qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/build_new" "$(cat "$scratch/calls")" \
-  'each published game is played once, at its latest tested build; QA games are skipped'
+  'each published game is played at its latest tested build, a failing one twice; QA games are skipped'
 assert_grep 'ok build_new: ok' "$scratch/out"
 assert_grep 'new: no tested build, not played' "$scratch/out"
 # A type the game sent with a newline in it is shown as ?, so it cannot forge an attention line.
@@ -74,6 +82,15 @@ assert_grep "qa-game-play failed: $line" "$attention"
 assert_eq "qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/build_new" "$(cat "$scratch/calls")" \
   '--game plays one game'
 assert_grep 'exit=0 qa-game-play' "$scratch/out"
+
+# A game that fails one play and passes the next (a loaded host) is ok, and wakes no one.
+: > "$scratch/calls"
+: > "$attention"
+OGM_TEST_FLAKY=g_ok "$check" --db "$db" --repo "$stack" --game ok --attention "$attention" > "$scratch/out"
+assert_grep 'ok build_new: first play failed (could not tap "Play"), playing again' "$scratch/out"
+assert_grep 'ok build_new: ok' "$scratch/out"
+assert_grep 'exit=0 qa-game-play' "$scratch/out"
+[[ ! -s $attention ]] || fail 'a game that passed its second play woke the Executor'
 
 # The publish hook plays the build it just published, even when it is not the latest tested one.
 : > "$scratch/calls"

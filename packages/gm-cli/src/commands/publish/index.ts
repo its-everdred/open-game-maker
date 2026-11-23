@@ -641,7 +641,7 @@ export const command: GmCommand = {
             hookArgs,
             coreRoot,
             env.OGM_INTERNAL_TOKEN ? { OGM_INTERNAL_TOKEN: env.OGM_INTERNAL_TOKEN } : {},
-            1_200_000 /* the hook plays the game (#1272): up to 900 s with a wait for the capture slot */,
+            1_200_000 /* the hook plays the game (#1272): two plays of up to 540 s each, capture-slot wait included */,
           );
           if (publishAttention) ctx.err(`attention: ${publishAttention}`);
           if (!checked.ok && checked.out.trim() && !ctx.json) ctx.out(checked.out.trim());

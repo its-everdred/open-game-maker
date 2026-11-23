@@ -535,7 +535,8 @@ host's move stick, else a key bound to `move.right`, else a swipe. It fails when
 shows Try again, no first frame arrives, a tap never appears, the frame is blank, or the input changes the frame no
 more than waiting does. A swipe that moves nothing is reported as unchecked instead, unless the host should have drawn
 the game's move stick (a `move` stick without `touch: "self"`). One game plays at a time, in the capture slot, and
-each play is capped at 170 s.
+each play is capped at 170 s. A game that fails is played once more and fails only when both plays fail: a loaded host
+can miss one boot, a broken game misses both.
 
 The QA account cannot read another family's private game, so the check answers that game's own API routes from its
 published build (`design/design.json`) and absorbs its writes; the shell, auth, the rest of the API and the games host
@@ -548,7 +549,8 @@ allows the hook 20 minutes), and every game after a deploy that touches the boot
 `packages/{contracts,host,iframe-bridge,sdk}/`, `services/games-host/`, `services/api/src/{games,builds}/`). A game that
 fails appends one `qa-game-play failed` line to the attention file with its failures, the bridge messages it got and its
 stills folder, and fails the hook; a crash of the check itself exits 70 and the hook writes the line instead. Replay a
-build against an older shell with `--web-dist <web build>`.
+build against an older shell with `--web-dist <web build>`; `--cpu-throttle <n>` slows the page as a slower phone does,
+which brings out load stalls (#1267).
 
 ## Prove the instance monorepo flow
 
