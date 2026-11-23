@@ -174,7 +174,16 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     });
   };
   const handleLoad = (event: GameLoadEvent) => {
-    if (disposed || current.bridgeState === 'error') return;
+    if (disposed) return;
+    if (current.bridgeState === 'error') {
+      /*
+       * A stall is a guess from silence. A game that was only busy (Blobs compiling its shaders reported nothing for
+       * 20 s under load and kept "Try again" up over a running game, #1260) and then reports again is alive: recover.
+       */
+      if (current.errorCode !== 'load-stalled' && current.errorCode !== 'first-frame-stalled') return;
+      if (current.errorCode === 'load-stalled') loadTerminal = false;
+      current = { ...current, bridgeState: 'ready', error: undefined, errorCode: undefined };
+    }
     if (event.t === 'load.frame') {
       clearFirstFrameTimer();
       current = { ...current, firstFrame: true };
