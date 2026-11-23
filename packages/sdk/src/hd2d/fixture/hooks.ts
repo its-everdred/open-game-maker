@@ -19,6 +19,8 @@ declare global {
       };
       /** `?facade=1`: applies a scene document to the running instance. */
       applyScene?(json: string): void;
+      /** `?facade=1`: applies it the way the editor does, through the link `createHd2d` makes for `hd2d.apply`. */
+      applyLinked?(json: string): void;
     };
   }
 }
