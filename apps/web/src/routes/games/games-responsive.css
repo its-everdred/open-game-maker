@@ -134,27 +134,15 @@
   }
 }
 
-/* Portrait phones keep a strip of the other games under the spotlight, as landscape does (#1287). */
+/* Portrait phones compact the spotlight so the other games' tiles start on the first screen (ticket 1287). */
 @media (orientation: portrait) and (max-width: 600px) {
-  .games-grid:has(.is-selected) {
-    grid-template-columns: repeat(var(--game-count), minmax(176px, 1fr));
-    overflow-x: auto;
-  }
-
   .games-grid:has(.is-selected) > .is-selected {
     order: -1;
   }
 
   .games-spotlight {
-    position: sticky;
-    left: 0;
-    width: 100vw;
     gap: 8px;
     padding-bottom: 12px;
-  }
-
-  .games-spotlight-media {
-    width: min(100%, 320px);
   }
 
   .games-spotlight-copy {
