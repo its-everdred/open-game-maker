@@ -46,3 +46,9 @@ def in_place_keyed(track, src_ts, keyed):
     for s, k in zip(src_ts, keyed):
         key.setdefault(s, k)
     return in_place(lambda s: track(key[s]), src_ts, src_ts[0], src_ts[-1])
+
+
+def compatible(prev, q):
+    """q, or -q when that is nearer prev (q and -q are one rotation): consecutive quaternion keys on one hemisphere, so
+    any interpolation between them turns the short way instead of spinning a bone round (a back-and-forth glitch)."""
+    return [-x for x in q] if sum(x * y for x, y in zip(prev, q)) < 0 else list(q)
