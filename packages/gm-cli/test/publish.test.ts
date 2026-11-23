@@ -217,6 +217,7 @@ async function publish(argv: string[], options: { home?: string; cwd?: string; e
     OGM_ASSETS_ROOT: join(root, 'assets-local'),
     OGM_QA_GM: 'true',
     OGM_QA_GAME_BOOT: 'true',
+    OGM_QA_GAME_PLAY: 'true',
     GITHUB_TOKEN: 'test-token',
     ...options.env,
   };

@@ -95,7 +95,9 @@ The publish host's `api.env` supplies `OGM_GAMES_ORIGIN` so the review link open
 `OGM_PUBLISH_BUILD_TIMEOUT_MS` in that file to change the production build deadline in milliseconds; it defaults to
 1,800,000 (30 minutes). A timed-out build reports its deadline directly and is not reported as missing `dist/` output.
 
-The post-publish check runs through `ops/bin/ogm-qa-review-hook`. For a direct check, use
+The post-publish check runs through `ops/bin/ogm-qa-review-hook`; it also plays the published game in the production
+shell with `gm qa play-check <game id> <build id> --out <dir>` (first frame, first tap path, one input; see the ops
+runbook). For a direct check, use
 `gm qa publish-review-check <slug> <build-id>`; `gm qa publish-review-check --all` lists any published builds still
 waiting for a round. The host timer runs the sweep every ten minutes and records gaps in the configured QA attention file.
 

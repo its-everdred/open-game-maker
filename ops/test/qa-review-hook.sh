@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# ogm-qa-review-hook against a scratch repository and a fake gm: every deploy runs the paid-API check (#1221); a deploy
+# ogm-qa-review-hook against a scratch repository and a fake gm: every deploy runs the paid-API check (#1221), and one
+# on a player's boot path plays every published game (#1272); a deploy
 # that leaves the review screens and API alone runs nothing else; one that touches them refreshes the QA session and runs the E2E; a failing E2E wakes the Executor with
 # one line in the attention file, and a passing one leaves it alone.
 
@@ -42,9 +43,22 @@ printf '#!/usr/bin/env bash\necho session >> "$OGM_TEST_CALLS"\n' > "$scratch/se
 printf '#!/usr/bin/env bash\necho game-boot >> "$OGM_TEST_CALLS"\nexit "${OGM_TEST_RC_BOOT:-0}"\n' > "$scratch/boot"
 # The fake paid-API check (#1221) records its call in its own file and passes unless OGM_TEST_RC_PAID says otherwise.
 printf '#!/usr/bin/env bash\necho paid-apis >> "$OGM_TEST_PAID"\nprintf "exit=%%s qa-paid-apis\\n" "${OGM_TEST_RC_PAID:-0}"\nexit "${OGM_TEST_RC_PAID:-0}"\n' > "$scratch/paid"
-chmod +x "$scratch/gm" "$scratch/session" "$scratch/boot" "$scratch/paid"
+# The fake play check (#1272) records its arguments; failing, it writes its own per-game line, as the real one does.
+cat > "$scratch/play" << 'PLAY'
+#!/usr/bin/env bash
+printf 'game-play %s\n' "$*" >> "$OGM_TEST_CALLS"
+rc=${OGM_TEST_RC_PLAY:-0}
+while (($#)); do
+  [[ $1 == --attention ]] && ((rc == 1)) && printf 'qa-game-play failed: blobs build_1: bridge error; trace hello\n' >> "$2"
+  shift
+done
+printf 'exit=%s qa-game-play\n' "$rc"
+exit "$rc"
+PLAY
+chmod +x "$scratch/gm" "$scratch/session" "$scratch/boot" "$scratch/paid" "$scratch/play"
 export OGM_QA_GM=$scratch/gm OGM_QA_SESSION_CMD=$scratch/session OGM_TEST_CALLS=$scratch/calls
 export OGM_QA_GAME_BOOT=$scratch/boot OGM_QA_PAID_APIS=$scratch/paid OGM_TEST_PAID=$scratch/paid-calls
+export OGM_QA_GAME_PLAY=$scratch/play
 attention=$scratch/attention
 
 # Bad usage.
@@ -137,6 +151,52 @@ rc=$?
 set -e
 assert_eq 1 "$rc" 'a publish that leaves a game unbootable fails'
 assert_grep 'qa-game-boot failed after publishing blobs' "$attention"
+rm -f "$attention"
+: > "$scratch/calls"
+
+# A publish plays the published game in the production shell (#1272); a game stuck before its first frame fails the
+# publish, and the play check's own line (trace, stills) is the only wake.
+OGM_TEST_RC=0 "$hook" --game-publish blobs build_1 --repo "$stack" --attention "$attention" > "$scratch/out"
+assert_grep 'exit=0 qa-game-play' "$scratch/out"
+assert_grep "game-play --game blobs --build build_1 --repo $stack --attention $attention" "$scratch/calls"
+set +e
+OGM_TEST_RC=0 OGM_TEST_RC_PLAY=1 "$hook" --game-publish blobs build_1 --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a published game that does not play fails the publish hook'
+assert_eq 'qa-game-play failed: blobs build_1: bridge error; trace hello' "$(cat "$attention")" 'one line, from the play check'
+rm -f "$attention"
+# A play check that crashed (or was misused) wrote no line of its own: the hook writes one.
+set +e
+OGM_TEST_RC=0 OGM_TEST_RC_PLAY=70 "$hook" --game-publish blobs build_1 --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a crashed play check fails the publish hook'
+assert_grep 'qa-game-play failed after publishing blobs (exit 70)' "$attention"
+rm -f "$attention"
+: > "$scratch/calls"
+
+# The 2026-11-22 causes lived in the bridge contract (#1252), the shell's frame (#1267) and publishing (#1266): each
+# plays every game after deploy, on the deploy's session. A deploy that leaves the boot path alone does not (above).
+for path in packages/contracts/src/bridge.ts apps/web/src/features/editor/frame.ts services/api/src/builds/cache-plan.ts \
+  packages/sdk/src/bridge.ts packages/host/src/frame.ts; do
+  from=$(git -C "$stack" rev-parse HEAD)
+  to=$(commit "$path")
+  : > "$scratch/calls"
+  OGM_TEST_RC=0 "$hook" "$from" "$to" --repo "$stack" --attention "$attention" > "$scratch/out"
+  assert_grep "game-play --repo $stack --attention $attention" "$scratch/calls"
+  assert_grep 'exit=0 qa-game-play' "$scratch/out"
+done
+assert_eq session "$(head -n 1 "$scratch/calls")" 'the play check runs on a fresh session'
+from=$(git -C "$stack" rev-parse HEAD)
+to=$(commit apps/web/src/routes/game/GameScreen.tsx)
+set +e
+OGM_TEST_RC=0 OGM_TEST_RC_PLAY=1 "$hook" "$from" "$to" --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a game that no longer plays fails the deploy hook'
+assert_grep 'exit=1 qa-game-play' "$scratch/out"
+assert_eq 'qa-game-play failed: blobs build_1: bridge error; trace hello' "$(cat "$attention")" 'only the per-game line'
 rm -f "$attention"
 : > "$scratch/calls"
 
