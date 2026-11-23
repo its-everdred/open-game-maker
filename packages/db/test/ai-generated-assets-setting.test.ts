@@ -51,6 +51,7 @@ describe('AI-generated asset game setting migration', () => {
       '20261120140217_prototype_review_sweep_state.sql',
       '20261120220454_game_drafts.sql',
       '20261123020745_energy_admin.sql',
+      '20261123185739_scene_store.sql',
     ]);
     expect(sqlite.prepare('SELECT id, allow_ai_generated_assets FROM games').get()).toEqual({
       id: 'g_1',

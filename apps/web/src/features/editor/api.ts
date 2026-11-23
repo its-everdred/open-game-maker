@@ -11,6 +11,7 @@ import type {
   SaveData,
   SaveRevision,
   SaveSlot,
+  SceneDoc,
   Transaction,
 } from '@ogm/contracts/browser';
 import type { Scenery } from '@ogm/contracts/scenery';
@@ -113,6 +114,27 @@ export function getEditorScenes(
   gameId: string,
 ): Promise<{ scenes: { id: string; rev: number; author: string; updatedAt: string }[] }> {
   return api(`/games/${segment(gameId)}/editor/scenes`);
+}
+
+/** A scene document as the map maker opens it (#1209): its head, who wrote it, and the facing images of its sprites. */
+export type EditorScene = {
+  rev: number;
+  doc: SceneDoc;
+  author: string | null;
+  sprites: Record<string, { facings: Record<string, string> }>;
+};
+
+export function getEditorScene(gameId: string, scene: string): Promise<EditorScene> {
+  return api(`/games/${segment(gameId)}/editor/scenes/${segment(scene)}`);
+}
+
+/** Save the creator's edits as a revision on the shared scene; the head comes back with their units locked. */
+export function saveEditorScene(
+  gameId: string,
+  scene: string,
+  body: { baseRev: number; doc: SceneDoc; label?: string },
+): Promise<{ rev: number; doc: SceneDoc; saved: boolean }> {
+  return api(`/games/${segment(gameId)}/editor/scenes/${segment(scene)}/revisions`, { method: 'POST', json: body });
 }
 
 export function getFallbackPalette(gameId: string): Promise<FallbackPalette> {

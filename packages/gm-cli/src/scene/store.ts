@@ -188,3 +188,21 @@ export async function persistMigration(
   await writeRevision(ref, head, revision);
   return { head, log: [...store.log, revision], exists: true };
 }
+
+/**
+ * Mirror the shared store (#1209) into the game folder: the whole log, then the head, each replaced atomically, so the
+ * build and the agent's commit carry exactly what the API holds.
+ */
+export async function writeStore(
+  ref: SceneRef,
+  store: { head: SceneHead; log: readonly SceneRevision[] },
+): Promise<void> {
+  const file = paths(ref);
+  await mkdir(dirname(file.head), { recursive: true });
+  const log = `${file.log}.${process.pid}.tmp`;
+  await writeFile(log, store.log.map((revision) => `${JSON.stringify(revision)}\n`).join(''));
+  await rename(log, file.log);
+  const head = `${file.head}.${process.pid}.tmp`;
+  await writeFile(head, `${JSON.stringify(store.head, null, 2)}\n`);
+  await rename(head, file.head);
+}

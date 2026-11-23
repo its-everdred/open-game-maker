@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { skillPack } from '@ogm/game-repo-template';
 
 import { agentDesignRoutes } from './agent-design.js';
+import { agentSceneRoutes } from './agent-scenes.js';
 import { bundleRoutes, hookIdentityFiles, hookSecretFiles, type SkillTarball } from './bundle.js';
 import { tarGz } from './tarball.js';
 
@@ -20,4 +21,6 @@ export default bundleRoutes({
     }
     return tarball;
   },
-}).route('/', agentDesignRoutes({ identityForSecret: hookIdentityFiles(homedir()) }));
+})
+  .route('/', agentDesignRoutes({ identityForSecret: hookIdentityFiles(homedir()) }))
+  .route('/', agentSceneRoutes({ identityForSecret: hookIdentityFiles(homedir()) }));

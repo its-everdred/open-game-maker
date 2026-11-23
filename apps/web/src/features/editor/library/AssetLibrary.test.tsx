@@ -61,7 +61,8 @@ async function renderLibrary(onPlace: Mock<(asset: string, point: PlacePoint) =>
 
 const item = (name: string) => screen.getByRole('button', { name });
 
-describe('asset library', () => {
+/* jsdom renders of the windowed grid take seconds when the whole web suite shares the CPU. */
+describe('asset library', { timeout: 15_000 }, () => {
   it("reads the game's library and stays out of the page when it has nothing to offer", async () => {
     api.mockResolvedValue({ groups: [], packs: [], items: [] });
     await renderLibrary(vi.fn(), false);

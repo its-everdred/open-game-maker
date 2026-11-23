@@ -22,6 +22,7 @@ import { listSceneDocs, readGameLock, readSceneryFile, readScenerySource } from 
 import { scopePaletteItems } from './scope-palette.js';
 import { selectStageMedia } from './stage.js';
 import { latestSceneryEdit } from './edit-time.js';
+import { listScenes } from '../scenes/store.js';
 
 export const prefix = '/api/v1';
 
@@ -222,11 +223,19 @@ export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
     .get('/games/:gameId/editor/scenes', async (c) => {
       const target = checkout(c);
       c.header('Cache-Control', 'private, no-store');
+      let files;
       try {
-        return c.json({ scenes: await listSceneDocs(target.checkout, target.path) });
+        files = await listSceneDocs(target.checkout, target.path, target.game.slug ?? undefined);
       } catch {
         throw new HttpError(404, 'scenery_source_unavailable');
       }
+      /* Once a scene is opened, the shared store (#1209) holds its history; the repository copy only lists the rest. */
+      const shared = listScenes(c.get('deps').db, target.game.id);
+      const ids = new Set(shared.map((scene) => scene.id));
+      const scenes = [...shared, ...files.filter((scene) => !ids.has(scene.id))].sort((a, b) =>
+        a.id.localeCompare(b.id),
+      );
+      return c.json({ scenes });
     })
     .get('/games/:gameId/scenery/source', async (c) => {
       const buildId = c.req.query('build');
