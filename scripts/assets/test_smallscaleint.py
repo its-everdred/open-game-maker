@@ -111,8 +111,8 @@ class Reader(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid store media manifest"):
             ssi.decorate_collection(collection(self.pack.name), self.pack.name, self.pack)
 
-    def test_all_26_imported_packs_have_one_of_the_three_worlds(self):
-        self.assertEqual(len(ssi.PACKS), 26)
+    def test_all_27_imported_packs_have_one_of_the_three_worlds(self):
+        self.assertEqual(len(ssi.PACKS), 27)
         self.assertEqual({ssi.world_for(pack) for pack in ssi.PACKS}, {"fantasy", "modern-zombie", "creatures"})
         self.assertEqual(sum(ssi.world_for(pack) == "creatures" for pack in ssi.PACKS), 1)
 
@@ -307,6 +307,18 @@ class UnityPackage(unittest.TestCase):
                     "Shield", "Melee", "Pistol", "Shotgun", "Sniper", "MachineGun", "Special", "GunFire",
                 ],
             )
+
+    def test_fantasy_creator_manifest_records_the_combine_order_so_composites_match_the_creator(self):
+        # Shoes go under Legs and Head over the weapon in the Fantasy creator; the modern order would draw boots over
+        # trousers and helmets under axes.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            package = tmp / "fantasy.unitypackage"
+            self.package(package, "Assets/Spritesheets/NakedBody/Idle.png")
+            order = ssi.extract_unitypackage(package, tmp / "fantasy-pack", "fantasy")["part_order"]
+            self.assertLess(order.index("Shoes"), order.index("Legs"))
+            self.assertLess(order.index("Melee"), order.index("Head"))
+            self.assertEqual(order[:2], ["Shadow", "NakedBody"])
 
     def test_member_limit_covers_the_measured_fantasy_archive_and_remains_enforced(self):
         self.assertGreaterEqual(ssiu.MAX_UNITY_MEMBERS, 157_266)

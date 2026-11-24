@@ -20,6 +20,12 @@ MODERN_PART_ORDER = [
     "Shadow", "NakedBody", "Legs", "Shoes", "Chest", "Head", "Bag", "Mount",
     "Shield", "Melee", "Pistol", "Shotgun", "Sniper", "MachineGun", "Special", "GunFire",
 ]
+# Fantasy creator combine order (Character creator - Fantasy v1.3, SpritesheetGenerator.cs). The pack's own
+# rules also swap Weapon/Shield and Bag by facing row; this is the default order.
+FANTASY_PART_ORDER = [
+    "Shadow", "NakedBody", "Shoes", "Legs", "Chest", "Belt", "Hands", "Shield",
+    "Melee", "Ranged", "Magic", "Offhand", "Bag", "Head", "Slash", "Effect",
+]
 
 
 def safe_member(name: str) -> PurePosixPath:
@@ -98,8 +104,7 @@ def extract_unitypackage(package: Path, destination: Path, world: str = "fantasy
                             "order_source": item["order_source"], "guid": item["guid"]} for index, item in enumerate(ordered)]
         manifest = {"schema": "ogm.smallscaleint-layers/1", "source": package.name, "world": world,
                     "layers": manifest_layers}
-        if world == "modern-zombie":
-            manifest["part_order"] = MODERN_PART_ORDER
+        manifest["part_order"] = MODERN_PART_ORDER if world == "modern-zombie" else FANTASY_PART_ORDER
         extracted = stage / "1.0" / "extracted"
         for item in ordered:
             target = extracted.joinpath(*PurePosixPath(item["path"]).parts)
