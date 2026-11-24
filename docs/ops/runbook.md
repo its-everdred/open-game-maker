@@ -562,6 +562,33 @@ host's load average and its stills folder, and fails the hook; a crash of the ch
 the line instead. Replay a build against an older shell with `--web-dist <web build>`; `--stall <seconds>` holds the
 game's load reports that long after the first, the silence that left the shell on Try again (#1267).
 
+## Crash and app-open telemetry
+
+The app shell posts to `POST /api/v1/telemetry/client-events` (#1318), signed in, at most 240 batches an account an
+hour. It sends an app open on load (and again on return after 10 minutes hidden), a session end when hidden or closed,
+first-frame and in-world heartbeats per game build, and crashes: the Try again overlay, a bridge timeout, a save that
+could not be restored, a failed lazy chunk, a shell error, and what the game frame relays over the bridge's `fault`
+message (uncaught error, unhandled rejection, CSP block, failed asset, lost WebGL context). Games relay faults once
+their SDK has this change (a core bump). Each event carries the account id, a per-load session id, the origin domain,
+the user agent, the app version (`VITE_APP_VERSION`, the commit `deploy.sh` built) and, for a crash, the step reached
+(`loading`, `title`, `play`, `in-world`) with the last 20 breadcrumbs. The API stores events in `client_events`
+(pruned after 30 days) and groups crashes in `crash_groups` by game, build and signature (crash kind, normalised
+message, top stack frame, game).
+
+`ogm-telemetry-listen` (unit `ogm-telemetry-listen`) reads the database read-only every 15 s and appends one line to
+the Executor's attention file (`HS_ATTENTION`, else `OGM_QA_ATTENTION` from `qa-hook.env`; put overrides in
+`~/.config/ogm/env/telemetry.env`) for each new crash group and each app open. App opens from a headless browser (the
+play check below) are skipped. The first new crash of a signature opens an issue on `OGM_TELEMETRY_REPO` (default
+`its-everdred/open-game-maker`, label `priority:1`, since the repository has no P0 label) with the build, the release,
+tag and merged PR that published it, the message, stack, breadcrumbs and a repro path. The same signature in a new build
+comments on that issue. GitHub failures are retried on later passes. State (cursor, filed issues) is in
+`~/.local/state/ogm/telemetry-listen.json`; without it the listener starts from now. The post-deploy play check below
+drives the production shell, so its Try again failures reach the same crash groups.
+
+```bash
+ogm-telemetry-listen stats --days 7   # per game and build: sessions, crashed sessions, crashes, first frames, in-world rate
+```
+
 ## Prove the instance monorepo flow
 
 Creator games live in the repository named by `OGM_INSTANCE_REPO`: `games/<slug>/` per game and
