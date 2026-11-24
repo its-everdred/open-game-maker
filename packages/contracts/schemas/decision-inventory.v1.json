@@ -9,6 +9,17 @@
         "minLength": 1,
         "maxLength": 80
       },
+      "command_id": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^cp_[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "area": {
         "type": "string",
         "minLength": 1,
@@ -112,6 +123,32 @@
             "type": "null"
           }
         ]
+      },
+      "reuse": {
+        "type": "object",
+        "properties": {
+          "paths": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "generator": {
+            "type": "string",
+            "minLength": 1
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "paths"
+        ],
+        "additionalProperties": false
       }
     },
     "required": [

@@ -30,6 +30,15 @@ export const CreatorDecision = z
     status: z.enum(['open', 'asked', 'answered', 'defaulted']),
     answer: z.string().trim().min(1).nullable(),
     answered_at: z.string().datetime({ offset: true }).nullable(),
+    /* What an approved round left to build on (#1311): files, the generator that made them, and how to reuse them. */
+    reuse: z
+      .object({
+        paths: z.array(z.string().trim().min(1)).min(1),
+        generator: z.string().trim().min(1).optional(),
+        notes: z.string().trim().min(1).max(500).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((entry, ctx) => {

@@ -128,6 +128,28 @@ describe('gm decisions', () => {
     });
   });
 
+  it("records an approved round's reusable outputs so later tickets build on them (#1311)", async () => {
+    const root = game();
+    const file = join(root, 'docs', basename(root), 'decisions.json');
+    const inventory = structuredClone(data);
+    inventory[0]!.options[1] = { label: 'Golems', media: 'chat:chat-golems' };
+    inventory[0]!.status = 'asked';
+    writeFileSync(file, JSON.stringify(inventory));
+    const orphan = await gm(['decisions', 'answer', 'enemy-style', 'Golems', '--generator', 'gen.py'], { cwd: root });
+    expect(orphan.code).toBe(2);
+    expect(JSON.parse(readFileSync(file, 'utf8'))[0].status).toBe('asked');
+    const args = ['decisions', 'answer', 'enemy-style', 'Golems', '--reuse', 'src/golem.ts', '--reuse', 'review/9/'];
+    const result = await gm([...args, '--generator', 'scripts/golem.py', '--reuse-note', 'Recolour per biome'], {
+      cwd: root,
+    });
+    expect(result.code, result.err.join('\n')).toBe(0);
+    expect(JSON.parse(readFileSync(file, 'utf8'))[0].reuse).toEqual({
+      paths: ['src/golem.ts', 'review/9/'],
+      generator: 'scripts/golem.py',
+      notes: 'Recolour per biome',
+    });
+  });
+
   it('raises creator inventory decisions and stores the ledger command id', async () => {
     const root = game();
     const file = join(root, 'docs', basename(root), 'decisions.json');

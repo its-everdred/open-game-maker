@@ -60,4 +60,6 @@ prototype needs the creator's approved mock, a build needs the approved prototyp
 ## On approval (automatic)
 The reconciler swaps `phase:*` and `model:<effort>` to the next rung on this same ticket and reworks it with
 the rung's template. Earlier rungs' throwaway code is replaced, not polished. Approved assets on main win over
-anything baked into a mock. After the last rung is approved, the close gate allows the close.
+anything baked into a mock. After the last rung is approved, the close gate allows the close. Record what the approved
+round left to build on in the inventory (`gm decisions answer <id> <label> --reuse <path> --generator <script>`), so
+`gm context` points later tickets at it.

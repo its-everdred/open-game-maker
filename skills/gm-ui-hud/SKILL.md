@@ -21,7 +21,7 @@ gameplay calls, so the same model drives the screen, tests, and spectators. Keep
 
 ## Layout
 
-Follow [image distortion guidance](references/image-distortion.md) for UI art and canvas sprites.
+Follow [image distortion guidance](references/image-distortion.md) for UI art and canvas sprites. Before a new UI kit, panel or screen style, run `gm context`: extend the game's approved kit, never start a second one.
 Read the `Viewport` from `HostApi.viewport.current()` on the `host` that `mount` receives, and follow
 `HostApi.viewport.onChange`; it carries size, `dpr`, orientation, and `safe` insets. Keep every HUD element inside the
 safe insets. Lay out against the manifest's `presentation.minLogical` reference size and scale uniformly from it;

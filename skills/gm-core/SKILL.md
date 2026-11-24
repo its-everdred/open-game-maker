@@ -19,7 +19,7 @@ Pack facts go on asset cards or in the set adapter, never in the game. Call adap
 
 ## Choose assets before making them
 
-Use this order and say when you move down a tier:
+Start from approved work: `gm context` lists what this game's earlier tickets got approved (kits, biomes, ground maps, generators); it is inlined below as **Build on this approved work** when it found any. Reuse or extend it, never rebuild it, and say in the workpad what you reused or why none applied. Then use this order and say when you move down a tier:
 
 1. Installed packs: search, inspect, and make a labelled lineup before choosing.
 2. Mirrors: search tier 2 when the installed set has no fit.
@@ -79,7 +79,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 - `gm docs pattern` retrieves a mechanic card without loading a whole reference game.
 - `gm chat post` sends the current still or clip to the build chat.
 - `gm decide` asks; `gm command wait` waits, or park on it; a `gm-decision-answer` comment answers. `gm ask` queues words.
-- `gm changes` summarizes the current game-repo diff.
+- `gm changes` summarizes the current game-repo diff; `gm context [ticket]` lists the game's approved work to build on.
 - `gm preview [--ticket <number>] [--branch <id>]` builds this workspace for creator review without changing the live release; the verdict returns to the ticket. The game branch defaults to `main`. `gm publish` (operator, on the host) builds a registered game at its repository's remote main and publishes it.
 - `gm energy` shows the instance's Energy and the creator's Save/Balanced/Best preference.
 ## Load when…

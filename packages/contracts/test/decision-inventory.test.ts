@@ -46,4 +46,15 @@ describe('creator decision inventory', () => {
     expect(DecisionInventory.safeParse([{ ...entry, phase: 'prototype' }]).success).toBe(true);
     expect(DecisionInventory.safeParse([{ ...entry, phase: 'review' }]).success).toBe(false);
   });
+
+  it('records what an approved round left to reuse, with at least one path', () => {
+    const reuse = {
+      paths: ['games/dusk/src/ui/journal-kit.ts'],
+      generator: 'scripts/journal.py',
+      notes: 'Nine-slice.',
+    };
+    expect(DecisionInventory.safeParse([{ ...entry, reuse }]).success).toBe(true);
+    expect(DecisionInventory.safeParse([{ ...entry, reuse: { paths: [] } }]).success).toBe(false);
+    expect(DecisionInventory.safeParse([{ ...entry, reuse: { ...reuse, url: 'x' } }]).success).toBe(false);
+  });
 });

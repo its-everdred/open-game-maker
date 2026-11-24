@@ -6,7 +6,7 @@ description: Load when a scene needs an asset the library has nearly but not exa
 # Asset variants
 
 Making a variation of an existing asset is a normal build step, not a workaround. It is tier 3 in gm-core's asset
-order: try installed packs and mirrors first, then vary a selected source before making anything from scratch.
+order: try installed packs and mirrors first, then vary a selected source before making anything from scratch. Before a new asset set, biome dressing or generator, run `gm context`: vary or extend what earlier tickets got approved.
 
 ## Hard rules
 
