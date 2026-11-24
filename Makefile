@@ -24,6 +24,7 @@ test-py:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_trim_bvh.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_blade.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_recipe.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-vfx/tests/test_efkgen.py
 	$(MAKE) py-compile
 
 test-py-models:
