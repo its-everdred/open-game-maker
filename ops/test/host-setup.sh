@@ -40,7 +40,7 @@ run_setup > "$scratch/first.out"
 unit_dir=$config_home/systemd/user
 [[ -x $repo/ops/bin/ogm-run ]] || fail "ogm-run should be executable"
 unit_count=$(find "$unit_dir" -maxdepth 1 -type f | wc -l)
-assert_eq "20" "$unit_count" "installer should render all twenty unit files"
+assert_eq "21" "$unit_count" "installer should render all twenty-one unit files"
 
 if grep -R -Fq -- '@REPO@' "$unit_dir"; then
   fail "rendered unit files still contain @REPO@"
