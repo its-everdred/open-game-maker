@@ -262,7 +262,12 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       playerIndex: 0,
       capabilities: [],
       role: () => 'owner',
-      readyTimeoutMs: 10_000,
+      /*
+       * The handshake waits for the game's entry module to download and run. Over Funnel from a busy host that took
+       * 7-12 s for Dusk Helm (2026-11-24) and 10 s showed "Try again" before the title; slow loads after the handshake
+       * have their own 20 s stall timer, so this only guards a frame that never answers.
+       */
+      readyTimeoutMs: 30_000,
       onReady: (manifest, marks, startupHold) => {
         if (current.bridgeState === 'error') return;
         // The games host forwards the existing game-ready event for legacy builds; new SDKs also send load.frame.

@@ -159,6 +159,8 @@ describe('publishing a merged build', () => {
       () => {
         const metadata = JSON.parse(readFileSync(join(build, '.ogm-display.json'), 'utf8'));
         expect(metadata.images?.['media/thumbnail.png']).toBeDefined();
+        // The card art is published first (partial); the loading screens follow.
+        expect(metadata.partial).toBeUndefined();
         return metadata;
       },
       { timeout: 30_000 },

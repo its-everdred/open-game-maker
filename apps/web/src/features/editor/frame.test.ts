@@ -388,7 +388,8 @@ describe('game frame adapter', () => {
       buildId: 'build',
       build: 'draft',
       mode: 'play',
-      readyTimeoutMs: 10_000,
+      // A slow but live entry module (7-12 s over Funnel under load) must not hit "Try again" before hello.
+      readyTimeoutMs: 30_000,
     });
     frameOptions?.onReady?.(manifest, []);
     frameOptions?.onLoad?.({

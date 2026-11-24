@@ -4,7 +4,8 @@ Usage: run_cells.py <cells.json> <out_root> [--engine workbench|cycles] [--only 
 cells.json: {"mesh": glb, "rotz": deg, "pack": {"walk": sheet.png, "attack": sheet.png, "idle": sheet.png}, "blender": wrapper,
              "finish": "base" (a base body: skin-only colour pass against pack.idle; default: pack colour match),
              "pixel": {"colours": 8, "cloth": 6, "smooth": true} (pack-style pixel finish after the colour pass;
-                       "cloth" renders a cloth mask and gives the undergarments their own colours),
+                       "cloth" renders a cloth mask and gives the undergarments their own colours; "weapon": N
+                       gives the weapon N colours of its own from the same mask),
              "render": {key: value, ...}, "cells": [{"name", "clip": "walk"|"attack", "motion": {...}, "weapon": {...}}]}
 A cell with "rigged" (rigged.py: a body that arrives rigged) skips the fit and faces itself from its feet (its own
 "rotz", default 0, turns it further); its "model", "cost_usd" and "licence" override the top level's for its recipe.
@@ -36,7 +37,7 @@ def fmt(x):
 def write_recipe(d, spec, c, scores):
     """recipe.json beside the cell: what the review page prints under it (kind, model, cost, skill, arm, motion)."""
     mo = c['motion']
-    key = mo.get('path', (c.get('rigged') or {}).get('path', '')) if mo['kind'] != 'handkey' else 'handkey'
+    key = 'handkey' if mo['kind'] in ('handkey', 'pose') else mo.get('path', (c.get('rigged') or {}).get('path', ''))
     lic = c.get('licence') or next((v for k, v in LICENCE if k in key or k == mo['kind']), 'unknown')
     fit = json.loads((d / 'fit.json').read_text())
     render = json.loads((d / 'render.json').read_text())
@@ -124,7 +125,8 @@ def main():
         if spec.get('pixel'):
             px = spec['pixel']
             loop += ['--pixel', str(px['colours'])] + (['--smooth'] if px.get('smooth') else []) + \
-                (['--cloth', str(px['cloth'])] if px.get('cloth') else [])
+                (['--cloth', str(px['cloth'])] if px.get('cloth') else []) + \
+                (['--weapon', str(px['weapon'])] if px.get('weapon') and c.get('weapon', spec.get('weapon')) else [])
         s = subprocess.run([sys.executable, '-I', str(HERE / 'score_cell.py'), str(d), spec['pack'][c['clip']], '--finish', *loop],
                            capture_output=True, text=True)
         if s.returncode:
@@ -143,4 +145,5 @@ def main():
         sys.exit(1)
 
 
-main()
+if __name__ == '__main__':
+    main()

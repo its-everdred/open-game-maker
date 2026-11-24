@@ -32,6 +32,30 @@ afterEach(() => {
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
+describe('music prefetch', () => {
+  afterEach(() => window.history.replaceState(null, '', '/'));
+
+  it('fetches no music before it is wanted when the app opens on the games list', async () => {
+    window.history.replaceState(null, '', '/all');
+    const { sound } = await loadSound();
+    await flush();
+
+    // A cold phone opening the list must spend its bandwidth on the cards' art, not 5 MB of tracks.
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await sound.titleReady).toBeNull();
+
+    sound.unlock();
+    sound.set('menu', 0);
+    await flush();
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/art/music/camelot.mp3']);
+  });
+
+  it('still prefetches both tracks on the title screen so the first tap plays at once', async () => {
+    await loadSound();
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/art/music/underground.mp3', '/art/music/camelot.mp3']);
+  });
+});
+
 describe('unlock', () => {
   it('keeps playing on the iPhone silent switch and resumes the suspended context', async () => {
     const { sound, ctx } = await loadSound();

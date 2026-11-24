@@ -32,6 +32,7 @@ describe('playStep', () => {
   it('walks loading → title → play → in-world', () => {
     expect(playStep(connecting)).toBe('loading');
     expect(playStep({ ...connecting, bridgeState: 'ready' })).toBe('title');
+    expect(playStep({ ...connecting, bridgeState: 'error', errorCode: 'ready-timeout' })).toBe('loading');
     expect(playStep(playing)).toBe('play');
     expect(playStep(inWorld)).toBe('in-world');
   });
@@ -93,6 +94,15 @@ describe('usePlayTelemetry', () => {
     hook.rerender({ frameState: { ...connecting, bridgeState: 'error', errorCode: 'ready-timeout' }, failed: true });
     expect(telemetry.reportCrash).toHaveBeenCalledWith(
       expect.objectContaining({ crash: 'bridge_timeout', step: 'loading' }),
+    );
+  });
+
+  /* The shell hides a first ready timeout behind one silent reload; the slow boot is still worth knowing about. */
+  it('reports a ready timeout the shell reloads silently', () => {
+    const hook = render(connecting);
+    hook.rerender({ frameState: { ...connecting, bridgeState: 'error', errorCode: 'ready-timeout' }, failed: false });
+    expect(telemetry.reportCrash).toHaveBeenCalledWith(
+      expect.objectContaining({ crash: 'bridge_timeout', message: 'ready-timeout (reloading once)', step: 'loading' }),
     );
   });
 

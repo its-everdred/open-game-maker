@@ -9,6 +9,7 @@ import { hasGameGrant, listGames, type GameRow } from '../games/games.js';
 import { listJobs } from '../jobs/repo.js';
 import { reviewNumbers } from '../reviews/numbers.js';
 import { gameCommandsFromAiur } from './aiur.js';
+import { withPhases } from './advance.js';
 import { reviewMediaUrl } from '../blobs/review-url.js';
 import { isCreatorCommand } from './audience.js';
 
@@ -103,7 +104,11 @@ async function resolveGameCommands(deps: AppDeps, game: GameRow, onUnavailable?:
     }
   }
 
-  return commands;
+  return withPhases(
+    deps,
+    game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined,
+    commands,
+  );
 }
 
 // A creator Command is a review card only when every option has media or is playable. Product questions use the

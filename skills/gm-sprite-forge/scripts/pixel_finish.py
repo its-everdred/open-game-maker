@@ -19,12 +19,14 @@ from skimage.color import lab2rgb, rgb2lab
 W = np.array([2.0, 1.0, 1.0])  # L, a*, b* weights for the clustering
 
 
-def pixel_finish(rgba, colours, smooth=False, seed=7, cloth=None, cloth_colours=6):
-    """rgba: uint8 (H, W, 4); cloth: optional bool (H, W) mask. Returns a copy with at most `colours` RGB colours
-    inside the silhouette, plus at most `cloth_colours` on the cloth."""
+def pixel_finish(rgba, colours, smooth=False, seed=7, cloth=None, cloth_colours=6, weapon=None, weapon_colours=4):
+    """rgba: uint8 (H, W, 4); cloth, weapon: optional bool (H, W) masks. Returns a copy with at most `colours` RGB
+    colours inside the silhouette, plus at most `cloth_colours` on the cloth and `weapon_colours` on the weapon (on the
+    body's palette a lit steel blade turned skin)."""
     a = rgba.copy()
     m = a[..., 3] > 0
     cloth = np.zeros(m.shape, bool) if cloth is None else cloth & m
+    weapon = np.zeros(m.shape, bool) if weapon is None else weapon & m & ~cloth
     lab = rgb2lab(a[..., :3] / 255)
     if smooth:  # per channel, inside the silhouette only: the background never bleeds in
         for k in range(3):
@@ -32,7 +34,7 @@ def pixel_finish(rgba, colours, smooth=False, seed=7, cloth=None, cloth_colours=
             lab[..., k] = np.where(m, median_filter(np.where(m, ch, np.median(ch[m])), size=3), ch)
     rng = np.random.default_rng(seed)
     idx, cents = np.full(m.shape, -1), []
-    for sel, n in ((m & ~cloth, colours), (cloth, cloth_colours)):
+    for sel, n in ((m & ~cloth & ~weapon, colours), (cloth, cloth_colours), (weapon, weapon_colours)):
         if sel.sum() < n:  # too few pixels to cluster: keep them as they are
             continue
         cent, li = kmeans2(lab[sel] * W, n, minit='++', iter=30, seed=rng)

@@ -19,6 +19,10 @@ test-py:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/py/maps/test_layout_fields.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_fal3d.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_sampling.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_posekey.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_guard_walk.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_trim_bvh.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_recipe.py
 	$(MAKE) py-compile
 
 test-py-models:

@@ -15,10 +15,11 @@ const FAULT_CRASH: Record<GameFault['kind'], CrashKind> = {
 // The bridge never came up: the game's script did not run or did not answer.
 const BRIDGE_TIMEOUTS = new Set(['ready-timeout', 'bridge-connect']);
 
-export function playStep(state: Pick<GameFrameState, 'bridgeState' | 'firstFrame' | 'load'>): PlayStep {
+export function playStep(state: Pick<GameFrameState, 'bridgeState' | 'firstFrame' | 'load' | 'manifest'>): PlayStep {
   if (state.firstFrame && state.load?.done) return 'in-world';
   if (state.firstFrame) return 'play';
-  return state.bridgeState === 'connecting' ? 'loading' : 'title';
+  // Past the handshake once the game said ready (its manifest stays after a later error).
+  return state.bridgeState === 'ready' || state.manifest ? 'title' : 'loading';
 }
 
 /**
@@ -86,6 +87,13 @@ export function usePlayTelemetry(input: {
     });
     // Report each time the overlay appears, not on unrelated state changes while it shows.
   }, [failed, idsKey, live]);
+
+  /* The shell reloads a frame that timed out once before showing "Try again": a slow boot it recovered from. */
+  useEffect(() => {
+    if (!gameId || !live || failed || frameState.errorCode !== 'ready-timeout') return;
+    reportCrash({ crash: 'bridge_timeout', message: 'ready-timeout (reloading once)', step: step.current, ...ids });
+    // `ids` is derived from gameId/buildId, both covered by idsKey.
+  }, [frameState.errorCode, failed, idsKey, live]);
 
   const reportFault = useCallback(
     (fault: GameFault) =>

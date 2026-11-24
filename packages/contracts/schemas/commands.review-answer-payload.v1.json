@@ -46,6 +46,14 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 2000
+    },
+    "advance": {
+      "type": "string",
+      "enum": [
+        "prototype",
+        "build",
+        "ship"
+      ]
     }
   },
   "required": [

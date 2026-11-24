@@ -31,11 +31,12 @@ def frames(spec, n, f0, f1, loop):
 
 def in_place(track, ts, f0, f1):
     """Offsets that hold a travelling clip in place: minus the straight-line drift of the hips' ground position from f0
-    to f1 (track(t) -> (x, y)), so the step-to-step sway stays and only the forward travel goes."""
+    to f1 (track(t) -> (x, y)), so the step-to-step sway stays and only the forward travel goes. The window's start
+    goes too: a cycle cut from deep in a long take starts metres from the origin, outside the camera."""
     x0, y0 = track(f0)
     x1, y1 = track(f1)
     span = (f1 - f0) or 1.0
-    return [(-(x1 - x0) * (t - f0) / span, -(y1 - y0) * (t - f0) / span) for t in ts]
+    return [(-x0 - (x1 - x0) * (t - f0) / span, -y0 - (y1 - y0) * (t - f0) / span) for t in ts]
 
 
 def in_place_keyed(track, src_ts, keyed):
@@ -46,3 +47,9 @@ def in_place_keyed(track, src_ts, keyed):
     for s, k in zip(src_ts, keyed):
         key.setdefault(s, k)
     return in_place(lambda s: track(key[s]), src_ts, src_ts[0], src_ts[-1])
+
+
+def compatible(prev, q):
+    """q, or -q when that is nearer prev (q and -q are one rotation): consecutive quaternion keys on one hemisphere, so
+    any interpolation between them turns the short way instead of spinning a bone round (a back-and-forth glitch)."""
+    return [-x for x in q] if sum(x * y for x, y in zip(prev, q)) < 0 else list(q)

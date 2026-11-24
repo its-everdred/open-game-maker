@@ -33,6 +33,11 @@ PY
 # The fake gm records its call and writes the report the real `gm qa play-check` would: g_bad is stuck on Try again.
 cat > "$scratch/gm" << 'GM'
 #!/usr/bin/env bash
+if [[ $2 == cards-check ]]; then
+  printf '%s\n' "$*" >> "$OGM_TEST_CALLS.cards"
+  [[ -n ${OGM_TEST_CARDS_FAIL:-} ]] && { printf 'fail: Dusk Helm logo: disappeared 1.2 s after it showed (loading)\n'; exit 1; }
+  exit 0
+fi
 if [[ $2 == frame-check ]]; then
   printf '%s\n' "$*" >> "$OGM_TEST_CALLS.frames"
   [[ -n ${OGM_TEST_FRAME_FAIL:-} ]] && { printf 'fail https://bare.example: refused: frame-ancestors\n'; exit 1; }
@@ -170,6 +175,23 @@ assert_eq "${frame/g_ok\/build_new/g_bad/build_bad}" "$(sed -n 1p "$scratch/call
 assert_eq 2 "$(wc -l < "$scratch/calls.frames")" 'a failing frame check runs once more'
 [[ ! -s $scratch/calls ]] || fail '--frames-only played a game'
 assert_grep 'qa-frame-check failed: frames bad build_bad: fail https://bare.example: refused: frame-ancestors' "$attention"
+
+# Every game card's thumbnail and logo must show and stay on the app origin's list (#1312), on web deploys too; a
+# card that blanks fails and wakes the Executor after one more check.
+: > "$scratch/calls.cards"
+"$check" --db "$db" --repo "$stack" --game ok > "$scratch/out"
+cards="qa cards-check --app https://app.example --out $stack/assets-local/review/app/cards-check"
+assert_eq "$cards" "$(cat "$scratch/calls.cards")" 'the cards are checked once on the app origin'
+assert_grep 'cards: ok' "$scratch/out"
+: > "$scratch/calls.cards"
+: > "$attention"
+set +e
+OGM_TEST_CARDS_FAIL=1 "$check" --db "$db" --repo "$stack" --frames-only --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a card whose logo vanishes fails'
+assert_eq 2 "$(wc -l < "$scratch/calls.cards")" 'a failing cards check runs once more'
+assert_grep "qa-cards-check failed: cards: fail: Dusk Helm logo: disappeared 1.2 s after it showed (loading); report $stack/assets-local/review/app/cards-check" "$attention"
 
 # A host missing the app or games origin cannot be checked: that fails loudly in every mode, never passes.
 mv "$scratch/env/api.env" "$scratch/api.env"

@@ -9,6 +9,7 @@ import { parseBody } from '../app/validate.js';
 import { parseEmailList } from '../auth/access.js';
 import { authContextFor } from '../auth/routes.js';
 import { ensureQaAccount, mintQaSession } from './account.js';
+import { cardGames } from './cards.js';
 import { deleteTicketFixtures, seedTicketFixtures } from './tickets.js';
 import { deleteReviewFixtures, reviewFixtureReport, seedReviewFixtures } from './fixtures.js';
 import { deleteVoiceFixtures, seedVoiceFixture, voiceFixtureReport } from './voice.js';
@@ -109,6 +110,11 @@ export default new Hono<ApiBindings>()
     const result = await commitQa(c.get('deps'), 'GET', 'create-audit', c.req.param('id'));
     if (typeof result.terminal !== 'boolean') throw new HttpError(502, 'qa_commit_response_invalid');
     return c.json({ terminal: result.terminal });
+  })
+  .get('/cards', async (c) => {
+    requireOperator(c);
+    c.header('cache-control', 'no-store');
+    return c.json({ games: await cardGames(c.get('deps')) });
   })
   .get('/new-games', (c) => {
     requireOperator(c);

@@ -4,7 +4,7 @@ import { ShowcaseCover } from './ShowcaseCover';
 
 type CoverGame = Pick<GameSummary, 'title' | 'coverUrl' | 'coverImage' | 'logoUrl' | 'showcase' | 'slotImages'>;
 
-export function Cover({ game, hero = false }: { game: CoverGame; hero?: boolean }) {
+export function Cover({ game, hero = false, eager = false }: { game: CoverGame; hero?: boolean; eager?: boolean }) {
   if (game.coverUrl) {
     return (
       <DisplayImage
@@ -17,7 +17,9 @@ export function Cover({ game, hero = false }: { game: CoverGame; hero?: boolean 
             ? '(max-width: 600px) 85vw, (max-width: 1000px) 50vw, 640px'
             : '(max-width: 600px) 45vw, (max-width: 1000px) 25vw, 240px'
         }
-        priority={hero}
+        priority={hero || eager}
+        placeholder
+        keepShown
       />
     );
   }

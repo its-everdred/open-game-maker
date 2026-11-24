@@ -5,7 +5,7 @@ mask=1 also renders mask_<row>_<col>.png (white where the base-colour texture is
 undergarments) through the same camera and frames, for the pixel finish's cloth ramp; mask_only=1 renders only those.
 spec: {"mesh": glb, "rotz": deg, "motion": {"kind": "kaykit"|"bvh"|"handkey"|"none", "path", "action",
        "frames": [f0, f1] | "auto", "loop": true, "foot_ik": true, "clip": "walk"|"attack"},
-       "weapon": {"path": glb, "bone": "hand.R", "length": 0.3, "spin": deg, "roll": deg}}
+       "weapon": {"path": glb, "bone": "hand.R", "length": 0.3, "spin": deg, "pitch": deg, "roll": deg}}
        With "rigged" (rigged.py) the body arrives rigged: no fit, no retarget.py, no stance, no IK.
 keys: rows=1,2 (sheet rows E=0 SE=1 S=2 ...)  frames=15  cell=128  height_px=43  origin_row=88  engine=cycles|workbench
       samples=32 supersample=1 threads=6
@@ -97,7 +97,8 @@ def matte(ob):
 
 def mask_materials(ob, wob):
     """Emission only: white where the body's base-colour texture is cloth (saturation < mask_s, value > mask_v, in sRGB),
-    black elsewhere (skin, eyes) and on the weapon. As hero-base/tools/e_mask.py, the Stage 1 still's mask."""
+    pure red on the weapon (its own colours in the pixel finish) and black elsewhere (skin, eyes). As
+    hero-base/tools/e_mask.py, the Stage 1 still's mask."""
     for o, cloth in ((ob, True), (wob, False)):
         if o is None:
             continue
@@ -109,7 +110,7 @@ def mask_materials(ob, wob):
             lk = bsdf.inputs['Base Color'].links if bsdf else []
             tex = lk[0].from_node if cloth and lk and lk[0].from_node.type == 'TEX_IMAGE' else None
             em = nt.nodes.new('ShaderNodeEmission')
-            em.inputs['Color'].default_value = (0, 0, 0, 1)
+            em.inputs['Color'].default_value = (0, 0, 0, 1) if cloth else (1, 0, 0, 1)
             if tex:
                 gam = nt.nodes.new('ShaderNodeGamma')
                 gam.inputs['Gamma'].default_value = 1 / 2.2  # the texture is linear; the thresholds are sRGB
@@ -144,8 +145,10 @@ def weapon(rig, w):
         if i != ax:
             grip[i] = (v[:, i].min() + v[:, i].max()) / 2
     to_x = {0: Matrix(), 1: Matrix.Rotation(-math.pi / 2, 4, 'Z'), 2: Matrix.Rotation(math.pi / 2, 4, 'Y')}[ax]
-    # spin turns the weapon about its own long axis; roll turns it about the hand bone (Y), e.g. to stand a bow upright
+    # spin turns the weapon about its own long axis; pitch tips its head toward the fingers (bone Z), e.g. to hang an
+    # axe lower; roll turns it about the hand bone (Y), e.g. to stand a bow upright
     ob.data.transform(Matrix.Rotation(math.radians(w.get('roll', 0)), 4, 'Y') @
+                      Matrix.Rotation(math.radians(w.get('pitch', 0)), 4, 'Z') @
                       Matrix.Rotation(math.radians(w.get('spin', 0)), 4, 'X') @ to_x @ Matrix.Scale(s, 4) @
                       Matrix.Translation(Vector(-grip)))
     pb = rig.pose.bones[w.get('bone', 'hand.R')]

@@ -322,6 +322,15 @@
           },
           "text_only": {
             "type": "boolean"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "mock",
+              "prototype",
+              "build",
+              "polish"
+            ]
           }
         },
         "required": [

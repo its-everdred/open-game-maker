@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mergeShowcase } from './showcase';
 import { Tile } from './Tile';
@@ -95,4 +95,24 @@ it('shows retained uncertain creates as failed setup instead of a dead game tile
   render(<Tile game={game} selected={false} tabIndex={0} onClick={vi.fn()} onFocus={vi.fn()} />);
   expect(screen.getByText('Setup failed')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Castle Game: Setup failed' })).toBeDisabled();
+});
+
+// #1312: a refreshed list pointed a card at a new build's logo and the card blanked until it loaded.
+it('keeps a card logo on screen while a refreshed list changes it, and loads first-screen art first', () => {
+  const game = { id: 'g', familyId: 'f', ownerId: 'o', repo: null, title: 'Dusk Helm', createdAt: '' };
+  const props = { selected: false, tabIndex: 0, onClick: vi.fn(), onFocus: vi.fn() };
+  const { container, rerender } = render(<Tile game={{ ...game, logoUrl: '/old.png' }} eager {...props} />);
+  const old = container.querySelector<HTMLImageElement>('img.game-logo')!;
+  expect(old).toHaveAttribute('fetchpriority', 'high');
+  expect(old).toHaveAttribute('loading', 'eager');
+  Object.defineProperty(old, 'naturalWidth', { configurable: true, value: 300 });
+  fireEvent.load(old);
+
+  rerender(<Tile game={{ ...game, logoUrl: '/new.png' }} eager {...props} />);
+  const logos = [...container.querySelectorAll('img.game-logo')];
+  expect(logos.map((img) => img.getAttribute('src'))).toEqual(['/new.png', '/old.png']);
+  expect(logos[1]).toBe(old);
+
+  rerender(<Tile game={{ ...game, logoUrl: '/new.png' }} {...props} />);
+  expect(container.querySelector('img.game-logo')).toHaveAttribute('loading', 'lazy');
 });

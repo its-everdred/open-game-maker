@@ -11,6 +11,8 @@ First, every app domain (OGM_PUBLIC_APP_ORIGIN, then each OGM_APP_ALIAS_ORIGINS 
 game's build in WebKit (`gm qa frame-check`, #1297): a domain the games host's frame-ancestors does not allow showed Try
 again in every game on an iPhone, and an alias must redirect to the app origin. A failing frame check is run once more,
 like a play; a missing web.env origin or OGM_GAMES_ORIGIN fails it, and only an instance with no tested build skips it.
+Then the games list shows every game's card on the app origin in WebKit (`gm qa cards-check`, #1312): each thumbnail and
+logo must load and stay visible for 5 s. It also runs with --frames-only; a failure is checked once more.
 
 usage: ogm-qa-game-play [--db <ogm.sqlite3>] [--game <slug> [--build <id>]] [--repo <checkout>] [--attention <file>]
                         [--frames-only]
@@ -104,6 +106,17 @@ def frame_check(gm, repo, frame_url, apps):
     return code, output
 
 
+def cards_check(gm, repo, app):
+    out = os.path.join(repo, 'assets-local', 'review', 'app', 'cards-check')
+    command = [*gm, 'qa', 'cards-check', '--app', app, '--out', out]
+    try:
+        run = subprocess.run(command, cwd=repo, capture_output=True, text=True, timeout=600)
+        code, output = run.returncode, (run.stdout + run.stderr).strip()
+    except subprocess.TimeoutExpired:
+        code, output = 124, 'timed out after 600 s'
+    return code, output, out
+
+
 def main(argv):
     frames_only = '--frames-only' in argv
     argv = [arg for arg in argv if arg != '--frames-only']
@@ -172,6 +185,21 @@ def main(argv):
             if attention:
                 with open(attention, 'a') as handle:
                     handle.write(f'{stamp()} qa-frame-check failed: {line}\n')
+    # Every game card's thumbnail and logo must show and stay for 5 s on the list (#1312: logos showed, then vanished).
+    if apps:
+        code, output, out = cards_check(gm, repo, apps[0])
+        if code != 0:
+            print(f'cards: first check failed ({clean(output)}), checking again')
+            code, output, out = cards_check(gm, repo, apps[0])
+        if code == 0:
+            print('cards: ok')
+        else:
+            failed = 1
+            line = f'cards: {clean(output, 600)}; report {out}'
+            print(line)
+            if attention:
+                with open(attention, 'a') as handle:
+                    handle.write(f'{stamp()} qa-cards-check failed: {line}\n')
     if frames_only:
         rows = []
     for game_id, slug, build_id in rows:

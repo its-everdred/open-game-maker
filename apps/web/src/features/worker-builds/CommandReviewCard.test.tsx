@@ -486,3 +486,69 @@ it("links each scene the card's ticket pushed to the map maker", async () => {
   expect(getEditorScenes).toHaveBeenCalledWith('g');
   expect(api).not.toHaveBeenCalled();
 });
+
+// Kevin should not have to type "move to the next phase" (#1124): a phase ticket's card shows where the ticket is and
+// approves the rung in one tap, keeping whatever else the card already says.
+it('shows the phase strip with the current rung and approves it with the card’s votes', async () => {
+  const answered = vi.fn();
+  render(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard command={{ ...command, phase: 'mock' }} onAnswered={answered} />
+    </QueryClientProvider>,
+  );
+  const strip = screen.getByRole('list', { name: 'Phase' });
+  expect([...strip.querySelectorAll('li')].map((item) => item.textContent)).toEqual(['Mock', 'Prototype', 'Build']);
+  expect(strip.querySelector('[aria-current="step"]')).toHaveTextContent('Mock');
+  fireEvent.click(screen.getByRole('button', { name: '👍' }));
+  fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Warmer light' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Approve → Prototype' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith('/games/g/commands/d/answer', {
+      method: 'POST',
+      json: {
+        option_id: 'a',
+        version: 2,
+        review: { likes: ['a'], dislikes: [], notes: 'Warmer light' },
+        advance: 'prototype',
+      },
+    }),
+  );
+  expect(answered).toHaveBeenCalledWith({ likes: ['a'], dislikes: [], notes: 'Warmer light', advance: 'prototype' });
+});
+
+it('approves with nothing else on the card, adds Polish only on a polish ticket and ships from it', async () => {
+  render(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard command={{ ...command, phase: 'polish' }} onAnswered={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByRole('list', { name: 'Phase' })).toHaveTextContent('MockPrototypeBuildPolish');
+  fireEvent.click(screen.getByRole('button', { name: 'Approve → Ship' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith('/games/g/commands/d/answer', {
+      method: 'POST',
+      json: { option_id: 'a', version: 2, review: { likes: [], dislikes: [] }, advance: 'ship' },
+    }),
+  );
+});
+
+it('says so when the answer saved but the ticket did not move', async () => {
+  api.mockResolvedValueOnce({ status: 'answered', advanced: false });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard command={{ ...command, phase: 'build' }} onAnswered={() => {}} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Approve → Ship' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('did not move');
+});
+
+it('shows no strip or approve button on a ticket without a phase rung', () => {
+  render(
+    <QueryClientProvider client={queryClient}>
+      <CommandReviewCard command={command} onAnswered={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.queryByRole('list', { name: 'Phase' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull();
+});

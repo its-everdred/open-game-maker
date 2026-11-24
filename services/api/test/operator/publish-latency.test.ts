@@ -4,15 +4,16 @@ import { access, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 
-let finishImages!: (value: Record<string, never>) => void;
-let failImages!: (error: Error) => void;
+// Each encoder pass waits for the test to settle it. A build takes two passes: its card art, then the rest.
+type Pass = { finish: (value: Record<string, never>) => void; fail: (error: Error) => void };
+const passes = vi.hoisted(() => [] as Pass[]);
 vi.mock('../../src/builds/display-images.js', () => ({
-  makeDisplayImages: () =>
-    new Promise((resolve, reject) => {
-      finishImages = resolve;
-      failImages = reject;
-    }),
+  makeDisplayImages: () => new Promise((finish, fail) => passes.push({ finish, fail })),
 }));
+const pass = async (index: number) => {
+  await vi.waitFor(() => expect(passes.length).toBeGreaterThan(index));
+  return passes[index]!;
+};
 
 import { sweepBuilds } from '../../src/builds/publish.js';
 import { gameMedia } from '../../src/games/media.js';
@@ -34,6 +35,7 @@ it('publishes three display images within the budget while derivation is still r
     JSON.stringify({ ...manifest, loading: { portrait: 'media/portrait.png', landscape: 'media/landscape.png' } }),
   );
   const archive = execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', files, '.']);
+  const start = passes.length;
   const started = performance.now();
   const response = await app.request(`${prefix}/games/castle-game/builds`, {
     method: 'POST',
@@ -51,7 +53,8 @@ it('publishes three display images within the budget while derivation is still r
   expect(media.coverUrl).toMatch(/^https:\/\/games\.example\.test\/a\/[a-f0-9]{64}\.png$/u);
   expect(media.loadingUrls?.portrait).toMatch(/^https:\/\/games\.example\.test\/a\/[a-f0-9]{64}\.png$/u);
   expect(media.loadingImages).toBeUndefined();
-  finishImages({});
+  (await pass(start)).finish({});
+  (await pass(start + 1)).finish({});
   await vi.waitFor(async () => expect(JSON.parse(await readFile(path, 'utf8')).images).toEqual({}));
   // Simulate a restart before derivation completed: the sweep requeues the pending build.
   const marker = join(deps.config.gamesRoot, '.display-pending', buildId);
@@ -65,10 +68,10 @@ it('publishes three display images within the budget while derivation is still r
   );
   await writeFile(path, JSON.stringify(metadata));
   await writeFile(marker, JSON.stringify({ gameId: ids.game, buildId }));
-  const previous = finishImages;
+  const resumed = passes.length;
   await sweepBuilds(deps, 60_000);
-  expect(finishImages).not.toBe(previous);
-  finishImages({});
+  (await pass(resumed)).finish({});
+  (await pass(resumed + 1)).finish({});
   await vi.waitFor(async () => expect(JSON.parse(await readFile(path, 'utf8')).images).toEqual({}));
   await vi.waitFor(async () =>
     expect(
@@ -90,16 +93,16 @@ it('continues with other pending builds after an encoder failure', async () => {
       headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'x-gm-sha': SHA },
       body: archive,
     });
+  const start = passes.length;
   const first = await publish();
   expect(first.status).toBe(201);
-  const failFirst = failImages;
+  const failFirst = await pass(start);
   const second = await publish();
   expect(second.status).toBe(201);
   const { buildId } = (await second.json()) as { buildId: string };
-  const previous = finishImages;
-  failFirst(new Error('invalid image'));
-  await vi.waitFor(() => expect(finishImages).not.toBe(previous));
-  finishImages({});
+  failFirst.fail(new Error('invalid image'));
+  (await pass(start + 1)).finish({});
+  (await pass(start + 2)).finish({});
   const marker = join(deps.config.gamesRoot, '.display-pending', buildId);
   await vi.waitFor(async () =>
     expect(

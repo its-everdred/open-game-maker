@@ -17,6 +17,8 @@ const playerTags = new Set([
 type TileProps = {
   game: GameSummary;
   sharedCover?: boolean;
+  /** On the first screen: its art loads first. */
+  eager?: boolean;
   job?: JobView;
   selected: boolean;
   tabIndex: number;
@@ -24,7 +26,7 @@ type TileProps = {
   onFocus(): void;
 };
 
-export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCover }: TileProps) {
+export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCover, eager }: TileProps) {
   const unavailable = game.creationStatus === 'creating' || game.creationStatus === 'failed';
   const statusLabel = game.creationStatus === 'creating' ? 'Creating' : 'Setup failed';
   const accessibleName = unavailable
@@ -46,7 +48,7 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
         onFocus={onFocus}
       >
         <span className="game-cover">
-          {sharedCover ? <span data-cover-slot /> : <Cover game={game} />}
+          {sharedCover ? <span data-cover-slot /> : <Cover game={game} eager={eager} />}
           {job && <span className="game-building-chip">{jobLabel(job)}</span>}
           {unavailable && (
             <span className="game-building-chip">
@@ -60,6 +62,8 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
               src={game.logoUrl}
               image={game.logoImage}
               sizes="(max-width: 600px) 80vw, 560px"
+              priority={eager}
+              keepShown
             />
           )}
           <span className="game-tile-meta">
@@ -106,7 +110,7 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
       onFocus={onFocus}
     >
       <span className="game-cover">
-        {sharedCover ? <span data-cover-slot /> : <Cover game={game} />}
+        {sharedCover ? <span data-cover-slot /> : <Cover game={game} eager={eager} />}
         {job && <span className="game-building-chip">{jobLabel(job)}</span>}
         {unavailable && (
           <span className="game-building-chip">
@@ -120,6 +124,8 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
             src={game.logoUrl}
             image={game.logoImage}
             sizes="(max-width: 600px) 80vw, 560px"
+            priority={eager}
+            keepShown
           />
         )}
         <span className="game-tile-meta">

@@ -8,7 +8,8 @@ T-pose source drives an A-pose target), and the hips take the source hips' trave
 
 spec["rigged"]: {"path": glb|fbx, "action": name part, "feet": {"L": [foot, toe], "R": [foot, toe]}, "hips": bone,
                  "colour": [r, g, b] (optional flat base colour, linear, for an untextured library mannequin)}
-spec["motion"]: {"kind": "own"|"copy", "frames": [f0, f1] (default: the action's range), "loop": bool,
+spec["motion"]: {"kind": "own"|"copy"|"pose" (hand-keyed key poses, handpose.py), "frames": [f0, f1] (default: the
+                 action's range), "loop": bool,
                  "in_place": bool (hold a travelling clip in place), "sample": "even"|"keys"|"times", ...
                  copy: "path", "action", "map": {target bone: source bone}, "src_hips": bone, "rotz": deg (turn the
                  source to face -Y)}
@@ -118,6 +119,7 @@ def copy_rotations(src, rig, mapping, src_hips, hips, times):
     rig.animation_data.action = act
     for pb in rig.pose.bones:
         pb.rotation_mode = 'QUATERNION'
+    prev = {}
     for i, t in enumerate(times):
         sc.frame_set(int(math.floor(t)), subframe=t - math.floor(t))
         world = {}
@@ -137,6 +139,9 @@ def copy_rotations(src, rig, mapping, src_hips, hips, times):
         bpy.context.view_layer.update()
         for tn in order:
             pb = rig.pose.bones[tn]
+            if i:  # the previous key's side: q and -q are one pose, but an interpolation across them spins the long way
+                pb.rotation_quaternion = sampling.compatible(prev[tn], pb.rotation_quaternion)
+            prev[tn] = list(pb.rotation_quaternion)
             pb.keyframe_insert('rotation_quaternion', frame=1 + i)
             if tn == hips:
                 pb.keyframe_insert('location', frame=1 + i)
@@ -180,11 +185,26 @@ def setup(spec, n):
     rg, mo = spec['rigged'], spec.get('motion', {})
     ob, rig = load(rg['path'], rg.get('action') if mo.get('kind', 'own') == 'own' else None, rg.get('colour'))
     rig.rotation_mode = 'XYZ'
-    rig.rotation_euler.z += facing_turn(rig, rg['feet']) + math.radians(spec.get('rotz', 0))
+    pose = mo.get('kind') == 'pose'  # hand-keyed in a body facing -Y: the cell's turn comes after the keys
+    rig.rotation_euler.z += facing_turn(rig, rg['feet']) + (0 if pose else math.radians(spec.get('rotz', 0)))
     lift = ground(rig, ob)  # before the copy: it reads the target's hip height from the grounded rest pose
     loop = mo.get('loop', mo.get('clip', 'walk') == 'walk')
     rep = {'rig': os.path.basename(rg['path']), 'kind': mo.get('kind', 'own'), 'sample': mo.get('sample', 'even'),
            'lift': lift}
+    if pose:  # hand-keyed: no source clip, keyed 1..n in place
+        import handpose
+        w = spec.get('weapon') or {}
+        roll = w.get('roll', weapon_roll(rig, w['bone']) if w else 0.0)
+        if w:  # render_motion would measure it again after the cell's turn below: the mesh must take this one
+            w['roll'] = roll
+        axis = (Matrix.Rotation(math.radians(roll), 3, 'Y') @ Matrix.Rotation(math.radians(w.get('pitch', 0)), 3, 'Z')
+                @ Vector((1, 0, 0)))
+        zs = [(ob.matrix_world @ v.co).z for v in ob.data.vertices]
+        ts = handpose.build(rig, spec, n, axis, max(zs) - min(zs))
+        rig.rotation_euler.z += math.radians(spec.get('rotz', 0))
+        bpy.context.view_layer.update()
+        rep |= {'keys': len(mo['keys']), 'times': ts}
+        return ob, rig, ts, [(0.0, 0.0)] * n, rep
     if mo.get('kind', 'own') == 'own':
         act = rig.animation_data.action
         f0, f1 = mo.get('frames') or act.frame_range

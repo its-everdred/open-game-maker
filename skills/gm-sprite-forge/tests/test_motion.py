@@ -13,7 +13,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts/motion'))
-from score_cell import best_shift, cloth_sheet, foot_slide  # noqa: E402
+from score_cell import best_shift, foot_slide, mask_sheets  # noqa: E402
 
 CELL = 128
 PX_PER_UNIT = CELL / (2 * 2 ** 0.5)
@@ -269,13 +269,17 @@ class ClothSheetTest(unittest.TestCase):
             m = np.zeros((256, 256, 4), np.uint8)
             m[40:200, 40:200] = (0, 0, 0, 255)  # the body: skin renders black
             m[64:128, 64:128] = (255, 255, 255, 255)  # the briefs render white
+            m[150:200, 40:60] = (255, 0, 0, 255)  # the axe renders red
             Image.fromarray(m).save(d / 'mask_1_2.png')
-            cloth = cloth_sheet(d, (8 * 128, 15 * 128))
+            cloth, weapon = mask_sheets(d, (8 * 128, 15 * 128))
             self.assertTrue(cloth[128 + 32:128 + 64, 2 * 128 + 32:2 * 128 + 64].all())
-            self.assertEqual(cloth.sum(), 32 * 32)  # nothing else: not the skin, not another frame
+            self.assertEqual(cloth.sum(), 32 * 32)  # nothing else: not the skin, not the axe, not another frame
+            # the axe gets its own colours: on the body's palette its lit blade and wooden haft turned skin
+            self.assertTrue(weapon[128 + 75:128 + 100, 2 * 128 + 20:2 * 128 + 30].all())
+            self.assertEqual(weapon.sum(), 25 * 10)
             (d / 'mask_1_2.png').rename(d / 'mask_2_2.png')  # a mask for a frame that was not rendered
             with self.assertRaises(SystemExit):
-                cloth_sheet(d, (8 * 128, 15 * 128))
+                mask_sheets(d, (8 * 128, 15 * 128))
 
 
 if __name__ == '__main__':

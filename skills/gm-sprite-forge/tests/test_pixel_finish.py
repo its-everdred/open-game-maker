@@ -68,5 +68,23 @@ class PixelFinishTest(unittest.TestCase):
         self.assertTrue(shared(pixel_finish(a, 14, smooth=True)))
         self.assertFalse(shared(pixel_finish(a, 8, smooth=True, cloth=cloth, cloth_colours=6)))
 
+    def test_weapon_keeps_its_own_colours(self):
+        # A lit steel blade is pale and nearly neutral: on the body's palette it took the pale skin colour and the axe
+        # read as a flesh stick (#1282 round 2). With a weapon mask it is clustered on its own.
+        a = render_like()
+        body = a[..., 3] > 0
+        y, x = np.mgrid[0:128, 0:192]
+        cx, cy = x % 64 - 32, y % 64 - 32
+        blade = (np.abs(cx + 4) < 2) & (cy < 0) & body  # a thin blade over the body: few pixels, like the axe
+        a[body & ~blade, :3] = np.clip(a[body & ~blade, :3] * 1.35, 0, 255)  # pale skin
+        steel = np.array([205, 210, 220]) * (0.8 + 0.4 * (cy[blade] + 26) / 26)[:, None]  # lit, shaded
+        a[blade, :3] = np.clip(steel, 0, 255)
+
+        def shared(out):
+            return set(map(tuple, out[blade][:, :3])) & set(map(tuple, out[body & ~blade][:, :3]))
+        self.assertTrue(shared(pixel_finish(a, 8, smooth=True)))  # the bug: blade and skin share colours
+        self.assertFalse(shared(pixel_finish(a, 8, smooth=True, weapon=blade, weapon_colours=4)))
+
+
 if __name__ == '__main__':
     unittest.main()

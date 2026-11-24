@@ -28,6 +28,8 @@ import { useGridCapacity } from './useGridCapacity';
 import './games.css';
 import './games-responsive.css';
 
+// Cards a phone or a desktop row shows before scrolling: their art loads first.
+const FIRST_SCREEN = 4;
 let gamesApiRegistered = false;
 const gamesTestSnapshot: { selected: string | null; tiles: string[] } = { selected: null, tiles: [] };
 
@@ -236,11 +238,13 @@ export function GamesScreen() {
                     key={game.id}
                     game={game}
                     selected={game.id === selected?.id}
+                    eager={index < FIRST_SCREEN}
                     tile={
                       <>
                         <Tile
                           game={game}
                           sharedCover
+                          eager={index < FIRST_SCREEN}
                           job={activeJobs.get(game.id)}
                           selected={false}
                           tabIndex={nav.tabIndexFor(index)}

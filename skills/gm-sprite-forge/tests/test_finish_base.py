@@ -64,6 +64,14 @@ class BasePassTest(unittest.TestCase):
             self.assertGreater(chroma.min(), 8, x)
         self.assertLess(np.median(np.hypot(*lab_of(out, 98)[:, 1:].T)), 8)
 
+    def test_weapon_pixels_keep_their_rendered_colour(self):
+        # the axe's wooden haft is warm: the skin pass turned it skin
+        keep = np.zeros(self.ours.shape[:2], bool)
+        keep[:, 30:48] = True  # the first stripe stands in for the weapon
+        out, _ = base_pass(self.ours, self.ref, keep=keep)
+        np.testing.assert_array_equal(out[keep], self.ours[keep])
+        self.assertFalse(np.array_equal(out[:, 70:88], self.ours[:, 70:88]))  # the rest of the skin still moves
+
     def test_nothing_to_match_fails_loudly(self):
         # empty medians would turn the whole sprite into NaN colours (black) and still score
         with self.assertRaises(ValueError):
