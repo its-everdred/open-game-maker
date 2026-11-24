@@ -32,7 +32,8 @@ describe('playStep', () => {
   it('walks loading → title → play → in-world', () => {
     expect(playStep(connecting)).toBe('loading');
     expect(playStep({ ...connecting, bridgeState: 'ready' })).toBe('title');
-    expect(playStep({ ...connecting, bridgeState: 'error', errorCode: 'ready-timeout' })).toBe('loading');
+    const timedOut: GameFrameState = { ...connecting, bridgeState: 'error', errorCode: 'ready-timeout' };
+    expect(playStep(timedOut)).toBe('loading');
     expect(playStep(playing)).toBe('play');
     expect(playStep(inWorld)).toBe('in-world');
   });
