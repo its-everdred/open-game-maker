@@ -5,7 +5,8 @@ cells.json: {"mesh": glb, "rotz": deg, "pack": {"walk": sheet.png, "attack": she
              "finish": "base" (a base body: skin-only colour pass against pack.idle; default: pack colour match),
              "pixel": {"colours": 8, "cloth": 6, "smooth": true} (pack-style pixel finish after the colour pass;
                        "cloth" renders a cloth mask and gives the undergarments their own colours; "weapon": N
-                       gives the weapon N colours of its own from the same mask),
+                       gives the weapon N colours of its own from the same mask; "body_smooth": N an N x N median
+                       over the skin alone),
              "render": {key: value, ...}, "cells": [{"name", "clip": "walk"|"attack", "motion": {...}, "weapon": {...}}]}
 A cell with "rigged" (rigged.py: a body that arrives rigged) skips the fit and faces itself from its feet (its own
 "rotz", default 0, turns it further); its "model", "cost_usd" and "licence" override the top level's for its recipe.
@@ -126,7 +127,8 @@ def main():
             px = spec['pixel']
             loop += ['--pixel', str(px['colours'])] + (['--smooth'] if px.get('smooth') else []) + \
                 (['--cloth', str(px['cloth'])] if px.get('cloth') else []) + \
-                (['--weapon', str(px['weapon'])] if px.get('weapon') and c.get('weapon', spec.get('weapon')) else [])
+                (['--weapon', str(px['weapon'])] if px.get('weapon') and c.get('weapon', spec.get('weapon')) else []) + \
+                (['--body-smooth', str(px['body_smooth'])] if px.get('body_smooth') else [])
         s = subprocess.run([sys.executable, '-I', str(HERE / 'score_cell.py'), str(d), spec['pack'][c['clip']], '--finish', *loop],
                            capture_output=True, text=True)
         if s.returncode:

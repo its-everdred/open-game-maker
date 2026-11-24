@@ -106,7 +106,10 @@ loop, none for an attack, in pixels at the pack cell.
   rendered: on the body's palette the Warrior's lit axe blade and wooden haft turned skin and read as a flesh stick
   (#1282 round 2). Masks rendered before this change have no red: delete a cell's `mask_*.png` and `--rescore`. The sheet before it is kept as
   `out/sheet_colour.png`. `render` keys `mask_s` and `mask_v` (0.16, 0.5) set the cloth thresholds; stricter ones
-  lose the briefs.
+  lose the briefs. `"body_smooth": 5` adds a 5x5 median over the skin alone (not the cloth or the weapon): on the
+  Hammer slam, which faces the light, the base body's texture showed through as stray dark and light specks (#1282
+  round 5; specks per frame 33 to 21). More Cycles samples (128) did not change them: they are texture, not render
+  noise. A median across the weapon as well smeared the haft into skin-coloured fragments.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,
   `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`, `mask_s`, `mask_v` (`mask=1` is added
   for you when `pixel.cloth` is set). Use the pack class's Stage 1 values
