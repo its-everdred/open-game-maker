@@ -1,3 +1,5 @@
+import { isRecordingSession } from './session.js';
+
 export interface PcmFrame {
   format: string;
   data_b64: string;
@@ -23,7 +25,8 @@ function preferPlaybackSession() {
     }
   ).audioSession;
   try {
-    if (audioSession) audioSession.type = 'playback';
+    // An open microphone needs 'play-and-record'; Safari plays that through the speaker too.
+    if (audioSession && !isRecordingSession()) audioSession.type = 'playback';
   } catch {
     // Some browsers expose a read-only draft of the Audio Session API.
   }

@@ -90,3 +90,34 @@ it('feeds the recorded clip, and only the clip, into the page microphone', async
     await context.close();
   }
 });
+
+it("refuses the microphone under Safari's playback audio session, as an iPhone does", async () => {
+  const context = await browser.newContext();
+  try {
+    await context.addInitScript(installFakeMic, {});
+    const page = await context.newPage();
+    await page.route('https://mic.test/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<!doctype html>' }),
+    );
+    await page.goto('https://mic.test/');
+    const outcomes = await page.evaluate(async () => {
+      const session = (navigator as Navigator & { audioSession: { type: string } }).audioSession;
+      const open = () =>
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(
+          () => 'open',
+          (error: DOMException) => error.name,
+        );
+      session.type = 'playback';
+      const playback = await open();
+      session.type = 'play-and-record';
+      const recording = await open();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      session.type = 'playback';
+      return { playback, recording, afterSwitch: stream.getAudioTracks().map((track) => track.readyState) };
+    });
+    // Chromium has no audio session, so without this the post-deploy voice check passed while iPhones failed (#1325).
+    expect(outcomes).toEqual({ playback: 'InvalidStateError', recording: 'open', afterSwitch: ['ended'] });
+  } finally {
+    await context.close();
+  }
+});
