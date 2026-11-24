@@ -252,6 +252,11 @@ A cycle's `f0` and `f1` are the take's own frame numbers: play it as `kind: copy
 `frames: [f0, f1]`, `in_place` and the LaFAN1 names in `map` (mixamo `LeftToeBase` is LaFAN1 `LeftToe`). The Synty Goblin Locomotion walk (owned, local only) maps
 onto the Meshy rig by name (Shoulder/Elbow are the upper arm and forearm, Ankle the foot, Ball the toe).
 
+100STYLE (CC BY 4.0, Geno skeleton from `orangeduck/100style-retarget`) uses the same names but 60 fps and `ToeBase`,
+and its BVH zip is 4.7 GB: fetch only the styles you need (`<Style>_FW.bvh` is the forward walk) with HTTP range reads
+of the zip, then `motion/trim_bvh.py <in> <out> 1200 2400` cuts a window at 30 fps with LaFAN1 toe names, so
+`bvh_track.py`, `guard_walk.py` and the LaFAN1 `map` work unchanged.
+
 Check every cell frame by frame against the pack clip: `gm py -- skills/gm-sprite-forge/scripts/motion/pose_overlay.py
 <out.png> <pack sheet> <cell_dir> ... [--rows 1,2] [--zoom 3]` lays each frame's silhouette over the pack's (pack red,
 ours cyan, both white) and writes the per-frame IoU to `<out>.json`.
@@ -322,7 +327,7 @@ Keep mocap under `assets-local/experiments/sprite-pipeline/hero-s2/mocap/` in fo
 | CMU mocap (BVH mirror `una-dinosauria/cmu-mocap`) | free for any use | 120 fps; the cycle is picked automatically |
 | Bandai Namco Research Motion | CC BY-NC 4.0 | styled walks (giant, proud, ...) and slashes; rest pose along +X |
 | LaFAN1 (Ubisoft) | CC BY-NC-ND 4.0 | ND: retargeted output stays private, never in shared media |
-| 100STYLE | CC BY 4.0 | 1.5 GB zip; not downloaded in #1202 |
+| 100STYLE | CC BY 4.0 | walk styles only; retargeted BVH zip 4.7 GB, range-fetch single styles (#1282) |
 | Hand-keyed (`handkey.py`) | own | the only source tuned to the pack's timing |
 
 ## Findings (#1202, Stage 1 Warrior mesh as test subject)
