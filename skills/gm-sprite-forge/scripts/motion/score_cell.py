@@ -119,6 +119,13 @@ def mask_sheets(cell_dir, shape, cell=128):
     return cloth, weapon
 
 
+def empty_render(cell_dir):
+    """True when no raw frame shows anything: the body stood outside the camera the whole clip (a window cut from deep
+    in a mocap take without in_place), which every later pass would misreport (no weapon in the masks, IoU 0)."""
+    raws = list(cell_dir.glob('raw_*_*.png'))
+    return bool(raws) and not any(np.asarray(Image.open(p).convert('RGBA'))[..., 3].any() for p in raws)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('cell_dir', type=Path)
@@ -138,6 +145,9 @@ def main():
         ap.error('--weapon reads the mask frames: add --cloth')
     if (a.pixel or a.smooth or a.cloth) and not (a.finish and a.pixel):
         ap.error('--pixel is part of the finish pass: add --finish (and --pixel N for --smooth or --cloth)')
+    if empty_render(a.cell_dir):
+        sys.exit(f'{a.cell_dir.name}: every raw frame is empty: the body is outside the camera (in_place on a clip that '
+                 'starts away from the origin)')
     rows = [int(r) for r in a.rows.split(',')]
     out = a.cell_dir / 'out'
     if a.finish:
