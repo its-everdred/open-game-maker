@@ -34,11 +34,12 @@ so all three reach every mechanic and every screen's way forward:
 - Phone: the host draws up to two declared sticks and five buttons, including for games with no stick. The first
   declared button is the 64 px primary. Declare a `move` stick and keep button actions to five, most-used first.
   A game that already draws its own controls must declare `inputs.touch: 'self'` to suppress the host overlay.
+- Buttons show icons, never letters: map each button action to a `touchIconSchema` id (`@ogm/contracts/input`) in
+  `inputs.icons`, e.g. `{ charge: 'heavy-attack' }`. Undeclared buttons get a guessed icon and a `gm build` warning.
 - Use `stick` or `button` for anything a player must reach: `axis` actions get no touch or gamepad default.
 - Keyboard: the default map binds WASD and arrows to `move`, Space to `jump`, and E or Enter to `use`. Give every
   other action a key: pass `{ keyboard: { KeyF: 'fire' } }` as the second argument to `defaultInputMapping`.
-- Gamepad: the host's default map gives sticks to the left and right sticks and buttons to A, X, B, Y, LB, RB in
-  declaration order.
+- Gamepad: the host's default map gives sticks to the left and right sticks and buttons to A, X, B, Y, LB, RB in declaration order.
 - The overlay shows only on a coarse pointer and hides for 2 s after keyboard or gamepad input.
 
 Never claim universal device support. Say which devices and viewports a journey actually demonstrated.
@@ -74,7 +75,6 @@ Report only the devices those journeys passed on, and distinguish the injected g
 
 ## Reference
 
-Open `vendor/gamedev/input-systems` for buffering and accessibility, and
-`vendor/phaser/input-keyboard-mouse-touch` only for engine integration details. The host contract wins when a
-vendor reference suggests reading devices inside game code. For platformers, open
-`gm-genre-platformer/references/cards/jump-buffer-coyote.md` for mechanic-specific buffering.
+Open `vendor/gamedev/input-systems` for buffering and accessibility, and `vendor/phaser/input-keyboard-mouse-touch`
+only for engine integration details. The host contract wins when a vendor reference suggests reading devices inside
+game code. For platformers, open `gm-genre-platformer/references/cards/jump-buffer-coyote.md` for mechanic buffering.
