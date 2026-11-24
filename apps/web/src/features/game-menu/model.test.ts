@@ -87,6 +87,12 @@ describe('edit menu work rows (#1326)', () => {
     expect(row!.last).toBe('Rendering stills');
   });
 
+  it('names a fresh job by its stage before the worker writes a line', () => {
+    // A just-admitted edit job has a stage but no stageText; the row must not go blank while it queues.
+    const [row] = workRows('g1', [], [job('j9', { stage: 'queued_ogm', stageText: undefined })], new Set(), NOW);
+    expect(row!.last).toBe('Waiting for a free slot');
+  });
+
   it('shows a job no worker lists yet, and a finished one only for a few minutes', () => {
     const fresh = new Date(NOW - 60_000).toISOString();
     const stale = new Date(NOW - DONE_VISIBLE_MS - 1).toISOString();

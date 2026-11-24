@@ -1,4 +1,4 @@
-import type { EnergyView, Job } from '@ogm/contracts/browser';
+import { JOB_STAGE_WORDS, type EnergyView, type Job } from '@ogm/contracts/browser';
 
 import { isTerminal } from '../build-chat/jobs';
 import { WINDOW_LABELS } from '../energy/api';
@@ -124,7 +124,7 @@ export function workRows(
       title: worker.title,
       percent: worker.percent,
       state: waiting.has(ticket) || (job?.openRequestCount ?? 0) > 0 ? 'wait' : 'work',
-      last: worker.last ?? job?.stageText,
+      last: worker.last ?? (job && jobLast(job)),
       jobId: job?.id,
       gameId,
     });
@@ -147,12 +147,17 @@ export function workRows(
         : (ticket !== undefined && waiting.has(ticket)) || (job.openRequestCount ?? 0) > 0
           ? 'wait'
           : 'work',
-      last: job.stageText,
+      last: jobLast(job),
       jobId: job.id,
       gameId,
     });
   }
   return rows.sort((a, b) => RANK[a.state] - RANK[b.state] || (b.percent ?? -1) - (a.percent ?? -1));
+}
+
+// The job's own words, else the words for its stage ("Waiting for a free slot").
+function jobLast(job: Job): string | undefined {
+  return job.stageText ?? (job.stage ? JOB_STAGE_WORDS[job.stage] : undefined);
 }
 
 /** Provider readings (Claude, Codex, …) when the API has them, else the day/week/month windows. */
