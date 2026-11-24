@@ -102,6 +102,8 @@ A ticket changing art direction, logo, board or scene look, core gameplay, or ad
   content built on it. A known-broken base is repaired, never copied.
 - Every visual or audio ticket ends with real evidence (screenshots and short captures at phone portrait, phone
   landscape and desktop; audio previews) that the agent has looked at itself.
+- Reuse before rebuild: send back a round that rebuilds from scratch what `gm context <ticket>` lists as approved (a
+  kit, biome, ground map or generator) unless its workpad says why that work does not apply.
 - Review states: generated → agent-reviewed → player review requested → player-approved or provisional default.
   Silence is never approval; low-confidence work (a new or poorly preprocessed pack) asks for review in small batches.
 - Fairness across aspect ratios is gameplay: test encounter visibility, threat cues, aiming and puzzles on narrow and

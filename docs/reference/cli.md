@@ -136,7 +136,7 @@ gm decisions check [--game <slug>]
 gm decisions render
 gm decisions next --ticket <n> [--body <file>]
 gm decisions raise <id>
-gm decisions answer <id> <option label> [--note <text>]
+gm decisions answer <id> <option label> [--note <text>] [--reuse <path>]... [--generator <path>] [--reuse-note <text>]
 gm decisions sync
 ```
 
@@ -170,7 +170,9 @@ loading art, or `images` slots pass without image checks.
 `gm decisions render` refreshes it. `gm decisions next --ticket <n> --body <ticket-body.md>` prints the ticket's open
 decisions as JSON, including IDs linked from its `## Creator decisions` section when the inventory has no ticket number.
 Raise an entry with `gm decisions raise <id>` after every option has media, then record the creator's answer with
-`gm decisions answer <id> <option label> [--note <text>]`. `gm decisions sync` reads answered review maps from the local
+`gm decisions answer <id> <option label> [--note <text>]`. When the answer approves work later tickets should extend,
+add `--reuse <path>` (repeatable) with an optional `--generator <script>` and `--reuse-note <text>`; they are stored as
+the entry's `reuse` record. `gm decisions sync` reads answered review maps from the local
 Aiur API and records likes and notes for raised decisions in `decisions.json`.
 
 `gm check boot` serves the build and checks readiness and visible frames at phone and landscape sizes. Frames with
@@ -418,6 +420,26 @@ revised or superseded by a later one, mooted by a later `gm options reject` that
 Command, or is missing from the history, or when a spec or owned file changed between `context-sha` and HEAD. It
 prints one JSON report (`flagged` with each ticket's reasons, `clean`, and `unchecked` for tickets that name no
 premise) and exits 1 when any ticket is flagged. It needs no model; run it from the game's folder.
+
+## List approved work to build on
+
+```text
+gm context [ticket] [--inject <skills dir>] [--json] [--limit <n>]
+```
+
+`gm context` runs in an instance repository and lists the earlier work in the ticket's game (`game:<slug>` label) that
+the ticket should build on: sibling tickets with a creator approval (the latest review-page verdict or answered
+decision on the ticket, from an owner, member or collaborator, likes or approves something), their merged PRs and the files they touched, their review folders under
+`games/<slug>/review/` and `assets-local/review/<slug>/` with any generator scripts, answered entries in `docs/<slug>/decisions.json`
+with their picked media and `reuse` record, defaulted entries with the recommendation that stands, and approved screens in
+`review/decisions.json`. It ranks siblings by shared `role:*` and `feature:*` labels, rare words shared in titles and
+bodies, and folders touched; tickets with only rejections and no merged work are left out. The ticket defaults to the
+workspace's own (`AIUR_HOOK_TICKET_IDENTIFIER` or `.gm/context/ticket`); it reads GitHub through `gh`.
+`--inject <dir>` writes the list as a **Build on this approved work** block at the end of `<dir>/gm-core/SKILL.md`,
+replacing an earlier block; until the run finishes the block says it did not, so a failed or timed-out refresh never
+leaves an old list standing. A sibling whose timeline cannot be read is skipped with a warning. A game daemon's `before_run` hook runs `gm context <ticket> --limit 5 --inject .claude/skills`
+(bounded to five minutes), so aiur's skill preload inlines the block in the worker's prompt; a failure never stops the
+turn. `--limit` caps the tickets and the decisions listed (default 10).
 
 ## Check ticket roles
 

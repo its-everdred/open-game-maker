@@ -191,6 +191,8 @@ before_run: |
       fs.writeFileSync(".gm/context/preview.json", JSON.stringify({ token: payload + "." + signature }), { mode: 0o600 });
     ' || rm -f .gm/context/preview.json
   fi
+  # The game's approved work this ticket should build on, inlined with gm-core in the first prompt (#1311).
+  case "$ticket" in ''|*[!0-9]*) ;; *) [ ! -x node_modules/.bin/gm ] || timeout 300 node_modules/.bin/gm context "$ticket" --limit 5 --inject .claude/skills >&2 || true ;; esac
 before_remove: |
   git status --short
   ticket="${AIUR_HOOK_TICKET_IDENTIFIER:-}"

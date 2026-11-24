@@ -24,6 +24,7 @@ answer, ticket). Never edit the `.md` alone.
 | `phase` | The approval rung represented by a `review/decisions.json` screen target or answered ticket decision: `mock`, `prototype`, `build`, or `polish`. Creative prototype PRs require `mock` or later; build PRs require `prototype` or later. |
 | `status` | `open` (not yet asked) → `asked` (a Command is raised) → `answered` (the creator picked) or `defaulted` (the recommendation stands after silence; a later answer still wins). |
 | `answer`, `answered_at` | The picked label plus any note; ISO time. `null` until then. |
+| `reuse` | Optional, once a round is approved: `{paths, generator?, notes?}`, the files and folders it left to build on, the script that made them, and how to extend them. `gm context` points later tickets at them. |
 
 ```json
 { "id": "enemies-first-biome", "area": "enemies", "question": "Which enemies in the first biome?",
@@ -63,7 +64,8 @@ settled; each settled item enters the inventory as `answered`).
    Options for a screen or layout are rendered mocks of the real screen in the game's look (gm-image-mock), never
    bare layout sketches ("these are very boring. render as a mock first"). Set `status: asked`, build the recommendation, and continue. A decision
    you discover while building goes into the inventory first, then is raised the same way.
-3. **Answers.** The worker that receives the answer writes `answered`, `answer` and `answered_at` in its next PR. The
+3. **Answers.** The worker that receives the answer writes `answered`, `answer` and `answered_at` in its next PR, and
+   `reuse` when the answer approves work later tickets should extend (`--reuse`, `--generator`, `--reuse-note`). The
    Executor writes `defaulted` when it applies a provisional default.
 
 ## Prototype review
