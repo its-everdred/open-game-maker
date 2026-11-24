@@ -135,7 +135,7 @@ def strip(items, refs, holder, weapons, tiles, spec=DAYLIGHT):
                 contact_shadow(img, x + s.width // 2, line, s.width)
             _paste(img, s, x, line - s.height)
         if name:
-            names.append((name, x + sw // 2))
+            names.append((name, x + sw // 2, sw + GAP))
         x += sw + GAP
     return light(img, spec), names
 
@@ -191,8 +191,9 @@ def main():
         for im, names in rows:
             big.paste(im.convert('RGB').resize((im.width * z, im.height * z), Image.NEAREST), (0, y))
             y += im.height * z
-            for n, cx in names:
-                t = n if len(n) <= 18 else n[:17] + '…'
+            for n, cx, room in names:
+                fit = max(4, room * z // 8)  # ~8 px per character at size 13
+                t = n if len(n) <= fit else n[:fit - 1] + '…'
                 d.text((cx * z - d.textlength(t, font=font(13)) / 2, y + 2), t, fill=(225, 225, 225), font=font(13))
             y += label
         big = big.crop((0, 0, W * z, y))

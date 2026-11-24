@@ -38,7 +38,7 @@ class Lineup(unittest.TestCase):
         h, i = self.columns(img, (250, 0, 0)), self.columns(img, (0, 250, 0))
         self.assertEqual(h[:, 0].max(), i[:, 0].max())  # same feet row
         self.assertEqual((np.ptp(i[:, 0]) + 1, np.ptp(i[:, 1]) + 1), (20, 8))
-        self.assertEqual([n for n, _ in names], ['crate'])
+        self.assertEqual([n[0] for n in names], ['crate'])
 
     def test_weapons_are_held_at_hand_height_not_on_the_ground(self):
         hero, sword = solid(10, 40, (250, 0, 0)), solid(4, 10, (0, 250, 0))
