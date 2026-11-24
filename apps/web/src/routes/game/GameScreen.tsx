@@ -199,6 +199,17 @@ export function GameScreen() {
     () => setFrameState(initialFrameState),
     [gameId, branch, activeSnapshot, linkedSnapshot, activePreview?.accessId, frameAttempt],
   );
+  /*
+   * A frame that never said hello gets one silent reload before "Try again": on a busy host or a slow link the entry
+   * module can outlast the ready timeout once (Dusk Helm, 2026-11-24), and the second load mostly comes from cache.
+   */
+  const [autoRetried, setAutoRetried] = useState(false);
+  const autoRetrying = frameState.errorCode === 'ready-timeout' && !autoRetried;
+  useEffect(() => {
+    if (!autoRetrying) return;
+    setAutoRetried(true);
+    setFrameAttempt((attempt) => attempt + 1);
+  }, [autoRetrying]);
   const stage = useQuery({
     queryKey: ['editor-stage', gameId, jobBranch],
     queryFn: () => getEditorStage(gameId, jobBranch),
@@ -1039,7 +1050,7 @@ export function GameScreen() {
         editor={editorChrome}
       />
       {/* The map maker edits the scene document, not the running build: a game that failed to load waits behind it. */}
-      {(frameState.bridgeState === 'error' || designLoadFailed) && !(mode === 'edit' && mapOpen) ? (
+      {((frameState.bridgeState === 'error' && !autoRetrying) || designLoadFailed) && !(mode === 'edit' && mapOpen) ? (
         <div className="screen-error" role="alert">
           <button
             className="tap-primary"
