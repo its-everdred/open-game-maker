@@ -9,7 +9,7 @@ spec: {"mesh": glb, "rotz": deg, "motion": {"kind": "kaykit"|"bvh"|"handkey"|"no
        "weapon": {"path": glb, "bone": "hand.R", "length": 0.3, "spin": deg, "pitch": deg, "roll": deg}}
        With "rigged" (rigged.py) the body arrives rigged: no fit, no retarget.py, no stance, no IK.
 keys: rows=1,2 (sheet rows E=0 SE=1 S=2 ...)  frames=15  cell=128  height_px=43  origin_row=88  engine=cycles|workbench
-      samples=32 supersample=1 threads=6
+      samples=32 supersample=1 threads=6 filter=1.5 (Cycles pixel filter width; 0.01: no anti-aliasing, finish C)
 Camera, light and scale match gpu_bake_rig.py: orthographic, 60 deg from vertical, yaw 45; the rig's rest pose in the
 S view is scaled to height_px. Writes raw_<row>_<col>.png, feet.json (screen px of each foot's heel and ball per
 frame, scored by score_cell.py), fit.json (landmarks, skinning report, retarget report) and render.json.
@@ -33,7 +33,7 @@ import rigged  # noqa: E402
 argv = sys.argv[sys.argv.index('--') + 1:]
 OUT, SPEC = argv[0], json.load(open(argv[1]))
 P = {'rows': '1,2', 'frames': 15, 'cell': 128, 'height_px': 43.0, 'origin_row': 88.0, 'engine': 'cycles',
-     'samples': 32, 'supersample': 1, 'threads': 6, 'sun_elev': 55.0, 'sun_az': -60.0, 'sun_energy': 4.0, 'sky': 0.35,
+     'samples': 32, 'supersample': 1, 'threads': 6, 'filter': 1.5, 'sun_elev': 55.0, 'sun_az': -60.0, 'sun_energy': 4.0, 'sky': 0.35,
      'mask': 0.0, 'mask_only': 0.0, 'blade_only': 0.0, 'mask_s': 0.16, 'mask_v': 0.5}
 for kv in argv[2:]:
     k, v = kv.split('=', 1)
@@ -54,6 +54,7 @@ def scene():
         sc.cycles.device = 'CPU'
         sc.cycles.samples = int(P['samples'])
         sc.cycles.use_denoising = False
+        sc.cycles.filter_width = P['filter']
     sc.render.threads_mode = 'FIXED'
     sc.render.threads = int(P['threads'])
     sc.render.resolution_x = sc.render.resolution_y = CELL * SS

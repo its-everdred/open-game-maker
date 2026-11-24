@@ -6,7 +6,8 @@ cells.json: {"mesh": glb, "rotz": deg, "pack": {"walk": sheet.png, "attack": she
              "pixel": {"colours": 8, "cloth": 6, "smooth": true} (pack-style pixel finish after the colour pass;
                        "cloth" renders a cloth mask and gives the undergarments their own colours; "weapon": N
                        gives the weapon N colours of its own from the same mask; "body_smooth": N an N x N median
-                       over the skin alone),
+                       over the skin alone; {"finish": "C", "variant": "C1"} gives finish C instead (#1338): crisp
+                       render (filter=0.01), cloth and weapon masks as materials, hard bands, lines, outline),
              "render": {key: value, ...}, "cells": [{"name", "clip": "walk"|"attack", "motion": {...}, "weapon": {...}}]}
 A cell with "rigged" (rigged.py: a body that arrives rigged) skips the fit and faces itself from its feet (its own
 "rotz", default 0, turns it further); its "model", "cost_usd" and "licence" override the top level's for its recipe.
@@ -28,6 +29,10 @@ LICENCE = (('kaykit', 'CC0 (KayKit Character Animations, owned)'), ('/cmu/', 'CM
            ('/bandai/', 'CC BY-NC 4.0 (Bandai Namco Research Motion)'),
            ('/lafan1/', 'CC BY-NC-ND 4.0 (Ubisoft LaFAN1): private use, adapted output not shared'),
            ('handkey', 'own work (hand-keyed script)'), ('quaternius', 'CC0 (Quaternius Universal Animation Library)'))
+
+
+def finish_c(spec):
+    return (spec.get('pixel') or {}).get('finish') == 'C'
 
 
 def fmt(x):
@@ -103,15 +108,17 @@ def main():
         if not a.rescore:
             (d / 'spec.json').write_text(json.dumps(cell, indent=1))
             keys = [f'{k}={v}' for k, v in (spec.get('render', {}) | {'engine': a.engine}).items()]
-            if (spec.get('pixel') or {}).get('cloth'):
+            if (spec.get('pixel') or {}).get('cloth') or finish_c(spec):
                 keys.append('mask=1')
+            if finish_c(spec) and 'filter' not in spec.get('render', {}):
+                keys.append('filter=0.01')  # finish C: no anti-aliasing
             if a.engine == 'workbench':
                 keys.append('supersample=2')
             if not blender(spec, d, keys, 'render.log'):
                 rows.append((c['name'], 'render failed: see render.log'))
                 print(c['name'], 'render failed', flush=True)
                 continue
-        elif (spec.get('pixel') or {}).get('cloth') and \
+        elif ((spec.get('pixel') or {}).get('cloth') or finish_c(spec)) and \
                 len(list(d.glob('mask_*_*.png'))) != len(list(d.glob('raw_*_*.png'))):  # masks only, as rendered
             params = json.loads((d / 'render.json').read_text())['params']
             keys = [f'{k}={v}' for k, v in params.items() if not k.startswith('mask')] + ['mask_only=1']
@@ -123,7 +130,9 @@ def main():
         loop += ['--rows', str(spec.get('render', {}).get('rows', '1,2'))]  # score the rows that were rendered
         if spec.get('finish') == 'base':  # a base body: match the skin to the pack Idle, keep the undergarments white
             loop += ['--skin-ref', spec['pack']['idle']]
-        if spec.get('pixel'):
+        if finish_c(spec):
+            loop += ['--finish-c'] + (['--variant', spec['pixel']['variant']] if spec['pixel'].get('variant') else [])
+        elif spec.get('pixel'):
             px = spec['pixel']
             loop += ['--pixel', str(px['colours'])] + (['--smooth'] if px.get('smooth') else []) + \
                 (['--cloth', str(px['cloth'])] if px.get('cloth') else []) + \

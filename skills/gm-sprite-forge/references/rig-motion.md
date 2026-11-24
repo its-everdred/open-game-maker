@@ -24,6 +24,7 @@ worn gear that bends with the body is not built yet.
 | `scripts/motion/fit_rig.py`, `retarget.py`, `handkey.py` | Blender (modules) | Reached through `render_motion.py`; not commands |
 | `scripts/motion/score_cell.py` | `gm py --` | Finish frames, `score.py` metrics, loop phase, foot slide -> `scores.json` |
 | `scripts/pixel_finish.py` | `gm py --` | Pack-style pixel finish (few colours, cloth on its own ramp); `score_cell.py` runs it for `pixel` |
+| `scripts/pixel_finish_c.py` | `gm py --` | Finish C (#1338): hard bands per material, separation lines, darkened outline; `score_cell.py --finish-c` for `pixel.finish: "C"` |
 | `scripts/motion/matrix_media.py` | `gm py --` (needs ffmpeg with libx264) | Review matrix: pack column plus at most 10 cells, GIF + MP4, 1x and 4x |
 | `scripts/motion/strip.py` | `gm py --` | Quick zoomed strip for looking: `strip.py <cell_dir> <out.png> [rows=1,2] [zoom=3] [ref=<pack sheet>]` |
 | `scripts/motion/fit_accuracy.py` | Blender | Landmark error against rigged characters; exits 1 if any case fails |
@@ -110,9 +111,14 @@ loop, none for an attack, in pixels at the pack cell.
   Hammer slam, which faces the light, the base body's texture showed through as stray dark and light specks (#1282
   round 5; specks per frame 33 to 21). More Cycles samples (128) did not change them: they are texture, not render
   noise. A median across the weapon as well smeared the haft into skin-coloured fragments.
+  `{"finish": "C", "variant": "C1"}` gives the colour pass finish C instead (#1338; `scripts/pixel_finish_c.py`,
+  `presets/finish-c.json`): the cell renders crisp (`filter=0.01` is added unless `render` sets `filter`) with the
+  cloth and weapon masks, which become its materials; hard bands per material, 1 px lines where they meet, a darkened
+  outline, the clip's pack sheet as the `ssi_tone` colour reference. B stays the default until Kevin picks a C variant.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,
-  `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`, `mask_s`, `mask_v` (`mask=1` is added
-  for you when `pixel.cloth` is set). Use the pack class's Stage 1 values
+  `samples`, `supersample`, `threads`, `filter` (Cycles pixel filter width, 1.5; 0.01 renders without anti-aliasing),
+  `sun_elev`, `sun_az`, `sun_energy`, `sky`, `mask_s`, `mask_v` (`mask=1` is added for you when `pixel.cloth` is set or
+  `pixel.finish` is `C`). Use the pack class's Stage 1 values
   for `height_px` and `origin_row` (Warrior 43 and 88).
 - `motion`: `kind` is `kaykit`, `bvh`, `handkey` or `none` (`own` and `copy` for a rigged cell, below). `loop` defaults to true for a walk and false for an attack.
   `foot_ik` defaults to true (false copies rotations only). `frames: [f0, f1]` overrides the automatic cut. For an

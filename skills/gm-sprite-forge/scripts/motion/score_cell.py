@@ -2,13 +2,15 @@
 best matches the pack, and foot slide (#1202 rig spike).
 
 Usage: score_cell.py <cell_dir> <pack_sheet.png> [--rows 1,2] [--loop] [--finish] [--skin-ref <pack Idle sheet>]
-                     [--pixel N [--smooth]]
+                     [--pixel N [--smooth] | --finish-c [--variant C1]]
 --finish runs gpu_bake_finish.py on <cell_dir>/raw_*.png first (colour pass against the pack sheet) -> <cell_dir>/out.
 With --skin-ref (a base body) the pack colour match is skipped and finish_base.py matches only the skin to that sheet;
 the sheet before that pass is kept as out/sheet_finish.png. --pixel N then runs pixel_finish.py (N colours over the
 whole sheet, --smooth for the 3x3 median first, --body-smooth N for an N x N median over the skin alone); the sheet
 before it is kept as out/sheet_colour.png. With --cloth N
 the cell's mask_<row>_<col>.png frames (render_motion.py mask=1) give the cloth its own N colours.
+--finish-c gives the colour pass finish C instead (pixel_finish_c.py with presets/finish-c.json and --variant, #1338): the
+cell's mask frames, when it has them, are its materials (body, cloth, weapon); the pack sheet is its ssi_tone reference.
 A walk is a loop with an arbitrary first frame, so with --loop every cyclic shift of the frames is scored and the best
 motion correlation is kept (its shift is reported); an attack is scored as rendered.
 Foot slide: a foot is in contact on frames where its sole is within 1 px of its lowest height; each contact step
@@ -140,7 +142,11 @@ def main():
     ap.add_argument('--cloth', type=int, help='with --pixel: colours for the cloth, from the mask frames')
     ap.add_argument('--weapon', type=int, help='with --cloth: colours for the weapon, from the same mask frames')
     ap.add_argument('--body-smooth', type=int, help='with --pixel: an N x N median over the skin alone (stray specks)')
+    ap.add_argument('--finish-c', action='store_true', help='with --finish: finish C (crisp bands, lines, outline)')
+    ap.add_argument('--variant', help='with --finish-c: the preset variant (C1, C2, C3)')
     a = ap.parse_args()
+    if a.finish_c and (not a.finish or a.pixel):
+        ap.error('--finish-c is part of the finish pass and replaces --pixel: add --finish, drop --pixel')
     if a.skin_ref and not a.finish:
         ap.error('--skin-ref is part of the finish pass: add --finish')
     if a.weapon and not a.cloth:
@@ -174,6 +180,16 @@ def main():
             colour = np.asarray(Image.open(out / 'sheet_colour.png').convert('RGBA'))
             sheet = pixel_finish(colour, a.pixel, a.smooth, cloth=cloth, cloth_colours=a.cloth or 6, weapon=weapon,
                                  weapon_colours=a.weapon or 4, body_smooth=a.body_smooth)
+            Image.fromarray(sheet).save(out / 'sheet.png')
+        if a.finish_c:
+            from pixel_finish_c import PRESET, finish_c, load_preset
+            (out / 'sheet.png').replace(out / 'sheet_colour.png')
+            colour = np.asarray(Image.open(out / 'sheet_colour.png').convert('RGBA'))
+            ids = None
+            if any(a.cell_dir.glob('mask_*_*.png')):
+                cloth, weapon = mask_sheets(a.cell_dir, colour.shape[:2])
+                ids = np.where(weapon, 2, np.where(cloth, 1, 0))
+            sheet, _ = finish_c(colour, None, None, load_preset(PRESET, a.variant), [a.pack_sheet], ss=1, ids=ids)
             Image.fromarray(sheet).save(out / 'sheet.png')
     tmp = a.cell_dir / '_score'
     tmp.mkdir(exist_ok=True)
