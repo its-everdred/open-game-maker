@@ -41,6 +41,8 @@ describe('crash telemetry to the Executor', () => {
     chmodSync(gh, 0o755);
     const listen = () =>
       execFileSync(LISTENER, ['--db', db, '--state', join(dir, 'state.json'), '--attention', attention, '--once'], {
+        // The listener is a host script: it needs the test's PATH (python3), not app config.
+        // eslint-disable-next-line no-restricted-properties
         env: { ...process.env, OGM_GH: gh, OGM_ENV_DIR: dir },
         encoding: 'utf8',
       });
