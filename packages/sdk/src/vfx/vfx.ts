@@ -204,10 +204,11 @@ export async function createVfx(options: VfxOptions): Promise<Vfx> {
       return loading;
     },
     play(name, x, y, z = 0) {
+      if (destroyed) return null;
       const effect = effects.get(name);
       if (!effect) throw new RangeError(`vfx effect not loaded: ${name}`);
       prune();
-      if (destroyed || playing.length >= cap()) return null;
+      if (playing.length >= cap()) return null;
       const yDown = camera?.yDown ?? true;
       const handle = context.play(effect, x, yDown ? -y : y, z);
       if (!handle) return null;
