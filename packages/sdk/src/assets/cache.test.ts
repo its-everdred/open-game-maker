@@ -23,6 +23,7 @@ afterEach(async () => {
 class MemoryCache {
   readonly entries = new Map<string, Response>();
   readonly quotaUrls = new Set<string>();
+  readonly brokenUrls = new Set<string>();
 
   async match(request: RequestInfo | URL): Promise<Response | undefined> {
     return this.entries.get(String(request))?.clone();
@@ -31,6 +32,7 @@ class MemoryCache {
   async put(request: RequestInfo | URL, response: Response): Promise<void> {
     const url = String(request);
     if (this.quotaUrls.has(url)) throw new DOMException('full', 'QuotaExceededError');
+    if (this.brokenUrls.has(url)) throw new DOMException('Unexpected internal error', 'UnknownError');
     this.entries.set(url, response.clone());
   }
 }
@@ -396,6 +398,21 @@ describe('prepare asset cache', () => {
     ).resolves.toBeDefined();
     expect(context.messages.some((message) => message.t === 'load.done')).toBe(true);
     expect(context.cacheStorage.cache.entries).toHaveLength(0);
+  });
+
+  it('still starts the game when the partitioned cache rejects a write for any other reason', async () => {
+    // A game frame is a third-party iframe; on iOS its Cache API can fail writes, and that must not become "Try again".
+    const ready = entry('a', 10);
+    const context = setup(plan([ready]));
+    context.cacheStorage.cache.brokenUrls.add(new URL(ready.url, 'https://game.test').toString());
+
+    await expect(
+      prepare(
+        { plan: 'https://game.test/g/game/build/assets/cache-plan.json', tier: 'desktop', send: context.send },
+        context,
+      ),
+    ).resolves.toBeDefined();
+    expect(context.messages.some((message) => message.t === 'load.done')).toBe(true);
   });
 
   it('sends no load messages when the build has no cache plan', async () => {

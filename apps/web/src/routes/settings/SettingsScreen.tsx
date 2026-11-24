@@ -1,5 +1,7 @@
 import { Link, Outlet } from 'react-router';
 
+import { currentBuild } from '../../app/app-version';
+
 import './settings.css';
 
 export function SettingsScreen() {
@@ -17,6 +19,7 @@ export function SettingsScreen() {
         </nav>
       </header>
       <Outlet />
+      <p className="settings-build">{currentBuild() ?? 'dev'}</p>
     </div>
   );
 }
