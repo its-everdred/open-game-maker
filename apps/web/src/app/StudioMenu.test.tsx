@@ -503,6 +503,8 @@ describe('StudioMenu', () => {
     view.unmount();
     renderMenu('/g/game-1?mode=edit');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    // In the editor the menu is the paused modal (#1326); game actions wait behind its quiet More row.
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
 
     expect(screen.getByRole('link', { name: 'Versions' })).toHaveAttribute('href', '/g/game-1/versions');
     expect(screen.getByRole('link', { name: 'Publish' })).toHaveAttribute('href', '/g/game-1/releases?action=publish');
@@ -928,7 +930,8 @@ describe('StudioMenu', () => {
     const view = renderMenu(path);
     act(() => pushUpdate('Private build update', 'game-blobs'));
     expect(screen.queryByText('Private build update')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Menu' }).querySelector('.studio-menu-badge')).toHaveTextContent('1');
+    // Play mode carries no tickets or agent context (#1326), so the button over the game shows no count.
+    expect(screen.getByRole('button', { name: 'Menu' }).querySelector('.studio-menu-badge')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     fireEvent.click(screen.getByRole('button', { name: '0 builds running, 1 new update' }));
     expect(screen.getByText('Private build update')).toBeVisible();

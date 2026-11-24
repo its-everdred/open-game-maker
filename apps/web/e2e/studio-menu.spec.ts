@@ -482,19 +482,17 @@ for (const [orientation, viewport] of [
   });
 }
 
-for (const mode of ['play', 'edit'] as const) {
-  test(`opens game actions in ${mode} context`, async ({ page }) => {
-    await installAuthRoutes(page, { signedIn: true });
-    await installGameApi(page);
-    await page.goto(`/g/game?mode=${mode}`);
-    await page.getByRole('button', { name: 'Menu' }).click();
-    if (mode === 'play')
-      await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'More' }).click();
-    await expect(page.getByRole('link', { name: 'Versions' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Publish' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Rollback' })).toBeVisible();
-  });
-}
+// Game actions live behind the editor menu's More row (#1326); play mode keeps only the game's own extras.
+test('opens game actions from the editor menu', async ({ page }) => {
+  await installAuthRoutes(page, { signedIn: true });
+  await installGameApi(page);
+  await page.goto('/g/game?mode=edit');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'More' }).click();
+  await expect(page.getByRole('link', { name: 'Versions' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Publish' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Rollback' })).toBeVisible();
+});
 
 test('keeps the phone menu row clear of style media', async ({ page, isMobile }, testInfo) => {
   testInfo.setTimeout(90_000);

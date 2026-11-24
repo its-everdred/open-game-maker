@@ -117,22 +117,36 @@ describe('StudioMenu inside the pause panel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Menu' })).toHaveFocus());
   });
-  it.each(['/g/game-1?mode=edit', '/g/showcase/example'])(
-    'keeps the trigger available without a pause panel at %s',
-    async (path) => {
-      render(
-        <MemoryRouter initialEntries={[path]}>
-          <GameMenuProvider>
-            <StudioMenu />
-            <PlayControls />
-          </GameMenuProvider>
-        </MemoryRouter>,
-      );
-      const trigger = await screen.findByRole('button', { name: 'Menu' });
-      fireEvent.click(trigger);
-      expect(trigger).toBeVisible();
-    },
-  );
+  // The editor's menu is its own paused modal (#1326), with Resume in its header; see the test below.
+  it.each(['/g/showcase/example'])('keeps the trigger available without a pause panel at %s', async (path) => {
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <GameMenuProvider>
+          <StudioMenu />
+          <PlayControls />
+        </GameMenuProvider>
+      </MemoryRouter>,
+    );
+    const trigger = await screen.findByRole('button', { name: 'Menu' });
+    fireEvent.click(trigger);
+    expect(trigger).toBeVisible();
+  });
+  it('opens the paused modal in the editor and hides the trigger behind it', async () => {
+    render(
+      <MemoryRouter initialEntries={['/g/game-1?mode=edit']}>
+        <GameMenuProvider>
+          <StudioMenu />
+          <PlayControls />
+        </GameMenuProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Menu' }));
+    expect(screen.getByRole('dialog', { name: 'Paused' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible();
+  });
+
   // Kevin, 2026-11-18: the studio circles sprayed over the game's pause panel. On the panel's More page they must
   // render inside it, without repeating what the panel already shows (Leave, Edit, Sound).
   it('moves the tray into the More page and drops the circles the pause panel already offers', async () => {
@@ -146,7 +160,8 @@ describe('StudioMenu inside the pause panel', () => {
 
     const host = screen.getByTestId('more-host');
     expect(host).toContainElement(screen.getByRole('group', { name: 'Menu' }));
-    expect(circleNames()).toEqual(expect.arrayContaining(['Ask for a change', 'Fork', 'Report a problem']));
+    // Play mode carries no tickets or agent context (#1326): More holds only the game's own extras.
+    expect(circleNames()).toEqual(['Fork', 'Invite']);
     expect(circleNames()).not.toContain('Games');
     expect(circleNames()).not.toContain('Edit');
     expect(circleNames()).not.toContain('Mute');

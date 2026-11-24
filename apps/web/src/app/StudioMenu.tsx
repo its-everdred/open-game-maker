@@ -56,9 +56,12 @@ import {
   missingReviewTargets,
 } from '../features/worker-builds/BuildTracker';
 import { useWorkers } from '../features/worker-builds/useWorkers';
+import { commandSource } from '../features/worker-builds/review-command';
 import { useWorkerReviews } from '../features/worker-builds/useWorkerReviews';
 import { useWorkerFinishes, type FinishedWorker } from '../features/worker-builds/useWorkerFinishes';
 import { usePastTickets } from '../features/worker-builds/usePastTickets';
+import { EditMenu } from '../features/game-menu/EditMenu';
+import { reviewCards, workRows } from '../features/game-menu/model';
 
 const RECENT_BUILD_MS = 5 * 60 * 1000;
 const MAX_TRACKED_BUILDS = 100;
@@ -160,6 +163,33 @@ export function StudioMenu() {
     missingReviewTargets(workers, reviews, reviewCommands).length;
   const menuBadge =
     openDecisions + unreadReplies + pendingReviews - reviewCommands.length + visibleFinished.length + unreadUpdates;
+  // In a game's editor the menu is the paused modal (#1326): its badge counts only what is ready for review.
+  const isEdit = gameId !== undefined && new URLSearchParams(location.search).get('mode') === 'edit';
+  const editTargets = isEdit ? [...missingReviewTargets(workers, reviews, reviewCommands), ...coreReview.targets] : [];
+  const editCards = isEdit ? reviewCards(reviews, reviewCommands, editTargets, workers) : [];
+  const editSessions = isEdit ? decisions.sessions.filter((item) => item.game_id === gameId) : [];
+  const editDecisions = isEdit
+    ? decisions.commands.filter(
+        (command) =>
+          commandSource(command) === gameId &&
+          !reviewCommands.some((review) => review.decision_id === command.decision_id),
+      )
+    : [];
+  const editRows = isEdit
+    ? workRows(
+        gameId,
+        workers,
+        builds.jobs,
+        new Set(
+          [...reviewCommands, ...decisions.commands]
+            .filter((command) => commandSource(command) === gameId)
+            .flatMap((command) => (command.ticket ? [command.ticket] : [])),
+        ),
+      )
+    : [];
+  const editBadge = editCards.length + editDecisions.length + editSessions.length;
+  // Play mode carries no tickets or agent context, so the button shows no count over a game.
+  const badge = isEdit ? editBadge : isGameView ? 0 : menuBadge;
   const threadCommands = useMemo(
     // In a game, that game's Commands and the core's; on the library, all of them.
     () =>
@@ -429,7 +459,8 @@ export function StudioMenu() {
   }
   // Game extras can own in-flight operations (for example room creation), so only those controls stay mounted while
   // the tray is folded. The rest of the menu keeps its original open-only DOM lifetime.
-  const renderedCircles = trayOpen ? circles : (controls?.extras ?? []);
+  // The pause panel's More page carries only the game's own extras: play mode shows no tickets or agent context (#1326).
+  const renderedCircles = trayOpen && !inPause ? circles : (controls?.extras ?? []);
   if (session) {
     circles.push(<MenuLink key="credits" label="Credits" icon="credits" to="/settings/credits" close={close} />);
     if (requireAdmin(admin.data ?? null) === 'ok') {
@@ -627,9 +658,6 @@ export function StudioMenu() {
           </span>
         ))}
       </div>
-      {gameId && new URLSearchParams(location.search).get('mode') === 'edit' && (
-        <div id="studio-editor-tools" className="studio-editor-tools" />
-      )}
       {trayOpen && sheetContent ? <div className="studio-menu-sheet">{sheetContent}</div> : null}
     </div>
   );
@@ -667,12 +695,17 @@ export function StudioMenu() {
         ref={trigger}
         type="button"
         className="studio-menu-button"
-        hidden={hasStudioHeader || pausePanelVisible || (controls?.hideButton === true && !open && !blocked)}
+        hidden={
+          hasStudioHeader ||
+          pausePanelVisible ||
+          (isEdit && open) ||
+          (controls?.hideButton === true && !open && !blocked)
+        }
         data-game-play={Boolean(isGameView && controls)}
         data-building={buildingJobs.length > 0}
         data-blocking={blocked}
         aria-label="Menu"
-        aria-describedby={menuBadge > 0 ? 'studio-menu-requests' : undefined}
+        aria-describedby={badge > 0 ? 'studio-menu-requests' : undefined}
         aria-expanded={open}
         aria-controls="studio-menu-panel"
         onClick={() => {
@@ -682,13 +715,17 @@ export function StudioMenu() {
       >
         <span className="studio-menu-ring" aria-hidden="true" />
         <Icon name="menu" />
-        {menuBadge > 0 && !open && !hasStudioHeader ? (
+        {badge > 0 && !open && !hasStudioHeader ? (
           <span className="studio-menu-badge" aria-hidden="true">
-            {menuBadge}
+            {badge}
           </span>
         ) : null}
       </button>
-      {menuBadge > 0 ? (
+      {isEdit && editBadge > 0 ? (
+        <span id="studio-menu-requests" className="sr">
+          {editBadge} ready for review
+        </span>
+      ) : badge > 0 ? (
         <span id="studio-menu-requests" className="sr">
           {[
             openDecisions > 0
@@ -707,7 +744,56 @@ export function StudioMenu() {
         {announcement}
       </span>
       <div ref={traySlot} style={{ display: 'contents' }} />
-      {createPortal(tray, trayHost)}
+      {isEdit && gamePath ? (
+        <EditMenu
+          open={open}
+          onClose={close}
+          cards={editCards}
+          sessions={editSessions}
+          decisions={editDecisions}
+          rows={editRows}
+          inbox={{
+            workers,
+            reviews,
+            commands: reviewCommands,
+            targets: editTargets,
+            error: reviewData.error || gameReview.error || coreReview.error,
+            incomplete:
+              builds.isLoading ||
+              workersLoading ||
+              reviewData.loading ||
+              gameReview.loading ||
+              coreReview.loading ||
+              workerError,
+          }}
+          creatorId={creatorId}
+          gamePath={gamePath}
+          admin={requireAdmin(admin.data ?? null) === 'ok'}
+          signedIn={Boolean(session)}
+          signingOut={signingOut}
+          actions={controls?.actions ?? []}
+          extras={controls?.extras ?? []}
+          onQuestions={(item) => {
+            close();
+            if (creatorId) setQuestions({ creatorId, session: item });
+          }}
+          onDecision={(command) => {
+            close();
+            if (creatorId) setDeck({ creatorId, command });
+          }}
+          onAsk={
+            threadAccess
+              ? () => {
+                  close();
+                  openThread();
+                }
+              : undefined
+          }
+          onSignOut={() => void handleSignOut()}
+        />
+      ) : (
+        createPortal(tray, trayHost)
+      )}
       <JobConversationModal />
       {threadAccess && creatorId ? (
         <ExecutorThread

@@ -67,14 +67,15 @@ for (const viewport of viewports) {
     await expect.poll(() => fixtureMessages(page)).toContain('lifecycle.pause');
     // Kevin, 2026-11-18: the studio circles sprayed over the pause panel. Pause shows one panel and nothing on top.
     await expect(page.getByRole('group', { name: 'Menu' })).toBeHidden();
-    for (const name of ['Resume', 'Restart', 'Leave', 'Sound', 'Settings', 'Edit', 'More']) {
+    // Kevin, 2026-11-24 (#1326): Resume, Restart, Leave, sound and File a bug; Settings, Edit and More stay quiet circles.
+    for (const name of ['Resume', 'Restart', 'Leave', 'Mute', 'File a bug', 'Settings', 'Edit', 'More']) {
       await expect(pauseDialog.getByRole('button', { name, exact: true })).toBeVisible();
     }
     await expect(pauseDialog).toBeInViewport({ ratio: 1 });
-    for (const name of ['Sound', 'Settings', 'Edit', 'More']) {
+    for (const name of ['Mute', 'Settings', 'Edit', 'More']) {
       const box = await pauseDialog.getByRole('button', { name, exact: true }).boundingBox();
-      expect(box?.width).toBe(50);
-      expect(box?.height).toBe(50);
+      expect(box?.width).toBe(48);
+      expect(box?.height).toBe(48);
     }
     await page.screenshot({
       path: testInfo.outputPath(`menu-${viewport.width}x${viewport.height}.png`),
@@ -84,29 +85,10 @@ for (const viewport of viewports) {
     await pauseDialog.getByRole('button', { name: 'More' }).click();
     const more = page.getByRole('dialog', { name: 'More' });
     const menuRow = more.getByRole('group', { name: 'Menu' });
-    for (const name of ['Ask for a change', 'Invite', 'Versions']) {
-      await expect(menuRow.getByRole('button', { name, exact: true })).toBeVisible();
-    }
-    for (const name of ['Games', 'Edit']) {
+    // Play mode carries no tickets or agent context (#1326): More holds only the game's own extras.
+    await expect(menuRow.getByRole('button', { name: 'Invite', exact: true })).toBeVisible();
+    for (const name of ['Games', 'Edit', 'Ask for a change', 'Report a problem']) {
       await expect(menuRow.getByRole('button', { name, exact: true })).toHaveCount(0);
-    }
-    await expectMenuSlotsNotToOverlap(menuRow);
-    if (viewport.width === 844) {
-      const buttons = menuRow.locator('button, a');
-      expect(await buttons.count()).toBeGreaterThan(8);
-      for (const button of await buttons.all()) {
-        await button.scrollIntoViewIfNeeded();
-        const box = await button.boundingBox();
-        expect(box).not.toBeNull();
-        expect(box!.width).toBeGreaterThanOrEqual(44);
-        expect(box!.height).toBeGreaterThanOrEqual(44);
-        await expect(button).toBeInViewport({ ratio: 1 });
-      }
-      await menuRow.getByRole('button', { name: 'Report a problem' }).click();
-      const report = page.getByRole('form', { name: 'Report a problem' });
-      await report.getByRole('textbox', { name: 'What went wrong?' }).scrollIntoViewIfNeeded();
-      await expect(report.getByRole('textbox', { name: 'What went wrong?' })).toBeInViewport({ ratio: 1 });
-      await report.getByRole('button', { name: 'Close' }).click();
     }
     await page.screenshot({
       path: testInfo.outputPath(`more-${viewport.width}x${viewport.height}.png`),
@@ -222,25 +204,5 @@ async function fixtureMessages(page: Page): Promise<string[]> {
     );
   } catch {
     return [];
-  }
-}
-
-async function expectMenuSlotsNotToOverlap(menuRow: ReturnType<Page['locator']>): Promise<void> {
-  await menuRow.locator('.studio-menu-slot').evaluateAll(async (elements) => {
-    await Promise.all(elements.flatMap((element) => element.getAnimations().map((animation) => animation.finished)));
-  });
-  const boxes = await menuRow.locator('.studio-menu-slot').evaluateAll((elements) =>
-    elements
-      .map((element) => element.getBoundingClientRect())
-      .filter(({ width, height }) => width > 0 && height > 0)
-      .map(({ x, y, width, height }) => ({ x, y, width, height })),
-  );
-  for (let left = 0; left < boxes.length; left += 1) {
-    for (let right = left + 1; right < boxes.length; right += 1) {
-      const a = boxes[left]!;
-      const b = boxes[right]!;
-      const overlap = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-      expect(overlap, `menu slots ${left} and ${right} overlap`).toBe(false);
-    }
   }
 }

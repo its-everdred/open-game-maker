@@ -48,6 +48,11 @@ import { annotateGeneratedPalette } from '../../features/editor/palette-generate
 import { starterPalette } from '../../features/editor/starter-palette';
 import { containedStagePoint, mountStagePreview } from '../../features/editor/stage-preview';
 import { admitJob } from '../../features/scope-chat/admit';
+import { sendReport, setBugContext } from '../../features/bug-report';
+import type { FileBug } from '../../features/game-menu/BugComposer';
+import { bugLog } from '../../features/game-menu/bug-log';
+import { fileBug as fileBugRequest } from '../../features/game-menu/file-bug';
+import { useSession } from '../../lib/api/session';
 import { energyRefusalText } from '../../features/energy/api';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
 import {
@@ -63,6 +68,7 @@ import { MapEditor } from '../../features/editor/map/MapEditor';
 import { DiagnosticsOverlay } from '../../net/diagnostics/DiagnosticsOverlay';
 import { RoomLayer } from '../../features/room/RoomLayer';
 import { useRoomRuntime } from '../../features/room/useRoomRuntime';
+import { useMenuRoomPause } from '../../features/room/useMenuRoomPause';
 import { useBranches } from '../games/useBranches';
 import type { GameSummary } from '../games/types';
 import { clearRoomGrant, storeRoomGrant } from '../join/grant-store';
@@ -422,23 +428,13 @@ export function GameScreen() {
   );
   const build = publishedBuildId !== undefined && publishedBuildId === runningBuildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
-  const pauseRequested = useRef(false);
   const wasMatchPaused = useRef(false);
   useEffect(() => {
     const paused = room.snapshot?.matchPause !== undefined;
     if (wasMatchPaused.current && !paused) setMenuOpen(false);
     wasMatchPaused.current = paused;
   }, [room.snapshot?.matchPause, setMenuOpen]);
-  useEffect(() => {
-    if (!menuOpen) {
-      pauseRequested.current = false;
-      return;
-    }
-    if (!pauseRequested.current && roomId !== undefined && room.session && room.snapshot?.status === 'connected') {
-      room.session.send({ t: 'match.pause.request' });
-      pauseRequested.current = true;
-    }
-  }, [menuOpen, room.session, room.snapshot?.status, roomId]);
+  useMenuRoomPause({ menuOpen, mode, roomId, room });
   const reportGameLoad = useCallback(
     (measurement: GameLoadMeasurement, result: 'ok' | 'fail') => {
       void postAnalyticsEvent(gameLoadActivity(gameId, measurement, result)).catch(() => undefined);
@@ -549,6 +545,13 @@ export function GameScreen() {
     frameController?.setMode(mode === 'edit' && editorPlaying ? 'play' : mode);
   }, [frameController, mode, editorPlaying]);
 
+  // The editor's menu pauses a solo game like the play menu does (#1326); a room pauses through the match instead.
+  useEffect(() => {
+    if (mode !== 'edit' || !menuOpen || !frameController || roomId !== undefined) return;
+    frameController.pause();
+    return () => frameController.resume();
+  }, [frameController, menuOpen, mode, roomId]);
+
   useEffect(() => {
     if (mode !== 'edit' || room.snapshot?.role !== 'peer' || room.snapshot.phase !== 'editing') return;
     frameController?.camera(watcherCamera);
@@ -629,6 +632,29 @@ export function GameScreen() {
       setSearchParams(next, { replace: true });
     },
     [searchParams, setSearchParams],
+  );
+  const { data: session } = useSession();
+  const ownsGame = Boolean(session && game.data && game.data.ownerId === session.user?.id);
+  const fileBug = useCallback<FileBug>(
+    async (text, log, attempt) => {
+      const owner = ownsGame && room.snapshot?.role !== 'peer' && jobBranch === 'main';
+      if (!owner) setBugContext({ gameId });
+      const result = await fileBugRequest(
+        { admit: admitJob, report: sendReport },
+        { gameId, branchId: jobBranch, owner },
+        { text, log, attempt },
+      );
+      if (result.jobId) {
+        void queryClient.invalidateQueries({ queryKey: gameJobsQueryKey(gameId) });
+        void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
+      }
+      return result;
+    },
+    [gameId, jobBranch, ownsGame, queryClient, room.snapshot?.role],
+  );
+  const readBugLog = useCallback(
+    () => bugLog({ gameId, buildId: runningBuildId, mode, frame: frameState }),
+    [frameState, gameId, mode, runningBuildId],
   );
   const askForChange = useCallback(() => {
     if (room.snapshot?.role === 'peer') return;
@@ -909,6 +935,8 @@ export function GameScreen() {
             }}
             editDisabled={room.snapshot?.role === 'peer'}
             onMoreHost={setMoreHost}
+            onFileBug={fileBug}
+            bugLog={readBugLog}
             onResume={() => {
               if (roomId !== undefined && room.snapshot?.matchPause) room.session?.send({ t: 'match.resume.request' });
               setMenuOpen(false);

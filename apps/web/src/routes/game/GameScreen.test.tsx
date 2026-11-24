@@ -643,6 +643,20 @@ describe('GameScreen', () => {
     expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
+  // #1326: the editor's menu is a paused modal too, so a solo game must not keep running behind it.
+  it('pauses a solo game behind the editor menu and resumes it when the menu closes', async () => {
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    host.controller.pause.mockClear();
+    host.controller.resume.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    await waitFor(() => expect(host.controller.pause).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    await waitFor(() => expect(host.controller.resume).toHaveBeenCalledOnce());
+  });
+
   it('opens the menu without pausing a room game', async () => {
     renderGame('/g/game?room=room-1&test');
     await readyPlayFrame();

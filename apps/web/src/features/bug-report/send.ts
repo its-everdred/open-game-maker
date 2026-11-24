@@ -6,12 +6,17 @@ import { bugContext, setBugContext, type BugContext } from './slice';
 // the screen's ids and the last error's summary.
 export type ReportError = { type: string; message: string; frames: string[] };
 export type Report = BugContext & { text?: string; error?: ReportError };
-export type ReportResult = { reportId: string; route?: string } | { queued: true };
+export type ReportResult = { reportId: string; route?: string; jobId?: string } | { queued: true };
 
 const QUEUE_KEY = 'ogm.reports.queue';
 const FRAMES = 5;
 
 let lastError: ReportError | undefined;
+
+/** The last uncaught error's summary, for the log a bug report carries. */
+export function lastReportError(): ReportError | undefined {
+  return lastError;
+}
 
 type ErrorContext = { route?: string; gameId?: string };
 
@@ -61,7 +66,7 @@ export function captureError(error: unknown, context: ErrorContext = {}, fallbac
 }
 
 function post(report: Report) {
-  return api<{ reportId: string; route?: string }>('/reports', { method: 'POST', json: report });
+  return api<{ reportId: string; route?: string; jobId?: string }>('/reports', { method: 'POST', json: report });
 }
 
 function unreachable(e: unknown): boolean {

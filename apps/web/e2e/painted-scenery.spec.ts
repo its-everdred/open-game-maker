@@ -90,6 +90,7 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
   await page.mouse.up();
   await expect.poll(async () => (await handle.boundingBox())?.x ?? 0).toBeGreaterThan(handleBox.x);
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'More' }).click();
   await page.getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(page.getByLabel('Scene items')).not.toContainText('tree');
   expect(api.transactions).toHaveLength(0);

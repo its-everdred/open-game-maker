@@ -83,8 +83,9 @@ test('runs the cross-origin editor transaction, undo, and mode flow', async ({ p
   await expect.poll(() => gameState(page).then((state) => state?.saved)).toBe('saved');
 
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'More' }).click();
   await page.getByRole('button', { name: 'Undo' }).click();
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'Resume' }).click();
   await expect.poll(() => api.transactions.length).toBe(2);
   expect(api.transactions[1]?.label).toContain('Undo');
 
@@ -138,9 +139,10 @@ async function openReadyEditor(page: Page, api: GameApiFixture): Promise<void> {
 async function selectSkeleton(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Skeleton' }).click({ force: true });
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'More' }).click();
   await expect(page.getByRole('button', { name: 'place', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText('Place a skeleton', { exact: true })).toBeAttached();
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'Resume' }).click();
 }
 
 function gameState(page: Page): Promise<GameHook | undefined> {

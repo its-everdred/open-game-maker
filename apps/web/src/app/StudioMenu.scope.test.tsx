@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 import { GameMenuProvider } from './GameMenu';
 import { StudioMenu } from './StudioMenu';
-import { pushUpdate, setUpdateOwner } from '../lib/notify/slice';
+import { setUpdateOwner } from '../lib/notify/slice';
 
 const games = [
   { id: 'g_helm', title: 'Dusk Helm', ownerId: 'u_kevin' },
@@ -18,6 +18,10 @@ const command = (game_id: string, title: string) => ({
   title,
   decision_id: `d_${game_id}`,
   ticket: '7',
+  options: [
+    { id: 'a', label: 'A' },
+    { id: 'b', label: 'B' },
+  ],
 });
 
 vi.mock('../features/build-chat/jobs', () => ({
@@ -103,18 +107,35 @@ function openBuilds(path: string) {
   return { hammer, label, badge, panel: screen.getByRole('region', { name: 'Builds' }) };
 }
 
+function openEditor(path: string) {
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter initialEntries={[path]}>
+        <GameMenuProvider>
+          <StudioMenu />
+        </GameMenuProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  const menu = screen.getByRole('button', { name: 'Menu' });
+  const badge = menu.querySelector('.studio-menu-badge')?.textContent;
+  fireEvent.click(menu);
+  return { badge, dialog: screen.getByRole('dialog', { name: 'Paused' }) };
+}
+
 // Kevin (#1296): in Dusk Helm's editor the Builds panel listed Blobs, goblin-cellar and core review tickets, with a
-// count and a hammer badge for every game. In a game it shows that game's work only.
-it("shows only the edited game's builds, reviews and badge in its editor", () => {
-  const { hammer, panel } = openBuilds('/g/g_helm?mode=edit');
-  expect(within(panel).getByText('g_helm build')).toBeTruthy();
-  expect(within(panel).queryByText('g_blobs build')).toBeNull();
-  fireEvent.click(within(panel).getByRole('button', { name: '1 need review' }));
-  expect(within(panel).getByText('Helm sky')).toBeTruthy();
-  expect(within(panel).queryByText('Blobs colours')).toBeNull();
-  expect(within(panel).queryByText('Review the published blobs build')).toBeNull();
-  // One review waiting plus one running build.
-  expect(within(hammer).getByText('2')).toBeTruthy();
+// count and a hammer badge for every game. In a game the menu (#1326) shows that game's reviews and work only, and its
+// badge counts only what is ready for review.
+it("shows only the edited game's work, reviews and badge in its editor", () => {
+  const { badge, dialog } = openEditor('/g/g_helm?mode=edit');
+  const review = within(dialog).getByRole('region', { name: 'Review' });
+  expect(within(review).getByText('Helm sky')).toBeTruthy();
+  expect(within(review).queryByText('Blobs colours')).toBeNull();
+  expect(within(review).queryByText('Review the published blobs build')).toBeNull();
+  const work = within(dialog).getByRole('region', { name: 'Work' });
+  expect(within(work).getByText('g_helm build')).toBeTruthy();
+  expect(within(work).queryByText('g_blobs build')).toBeNull();
+  expect(badge).toBe('1');
 });
 
 it('keeps every game and the core in the app-wide view', () => {
@@ -124,16 +145,11 @@ it('keeps every game and the core in the app-wide view', () => {
   expect(within(panel).getByText('Review the published blobs build')).toBeTruthy();
 });
 
-it("counts only the edited game's updates, and never shows the creator a failed source", () => {
-  setUpdateOwner('u_kevin');
-  pushUpdate('Your build is ready — Blobs', 'g_blobs');
-  pushUpdate('Your build is ready — Dusk Helm', 'g_helm');
+// A source that failed (a daemon or tracker read) leaves the creator what did load, with no failure wording.
+it('keeps what loaded in the editor menu when a source failed', () => {
   workerState.error = true;
-  const { label, badge, panel } = openBuilds('/g/g_helm?mode=edit');
-  expect(within(panel).getByText('Your build is ready — Dusk Helm')).toBeTruthy();
-  expect(within(panel).queryByText('Your build is ready — Blobs')).toBeNull();
-  expect(within(panel).queryByRole('alert')).toBeNull();
-  // One review, one running build and one unread update about this game.
-  expect(label).toBe('1 build running, 1 new update');
-  expect(badge).toBe('3');
+  const { dialog } = openEditor('/g/g_helm?mode=edit');
+  expect(within(within(dialog).getByRole('region', { name: 'Work' })).getByText('g_helm build')).toBeTruthy();
+  expect(within(within(dialog).getByRole('region', { name: 'Review' })).getByText('Helm sky')).toBeTruthy();
+  expect(dialog.textContent).not.toMatch(/fail|error|unavailable/i);
 });

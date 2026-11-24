@@ -1,6 +1,7 @@
 import { workerProgress, type WorkerProgress } from './progress.js';
 
 type WorkerClient = {
+  baseUrl?: string;
   state(signal?: AbortSignal): Promise<{
     running: Record<string, unknown>[];
     idle?: Record<string, unknown>[];
@@ -11,6 +12,14 @@ type WorkerClient = {
     limit?: number,
     signal?: AbortSignal,
   ): Promise<{ progress: { status: string; percent?: number }; phase?: { status: string; value?: string | null } }>;
+  ticketDetail?(
+    ticket: string,
+    signal?: AbortSignal,
+  ): Promise<{ live?: { activity?: string | null } | null; summary?: { text: string } | null }>;
+};
+type ListOptions = {
+  /** The ticket's Agent Workpad comment, for a checklist percent when aiur has no reading. */
+  workpad?(ticket: string): Promise<string>;
 };
 export type Worker = WorkerProgress & {
   ticket: string;
@@ -20,10 +29,55 @@ export type Worker = WorkerProgress & {
   state?: string;
   phase?: string;
   running?: boolean;
+  /** One plain line on where the ticket stands: aiur's live activity, else its summary. */
+  last?: string;
 };
 
+const LAST_TTL_MS = 30_000;
+const LAST_MAX = 500;
+const lastLines = new Map<string, { line: string | undefined; expires: number }>();
+/**
+ * The workpad and the last line only decorate a row, so neither may hold the 5 s poll: past this budget the row goes
+ * without, while the read carries on and fills its cache for the next poll.
+ */
+export const ENRICH_BUDGET_MS = 3_000;
+
+/** Reads still running past the budget, by ticket: the next poll joins one instead of starting another. */
+const inFlight = new Map<string, Promise<unknown>>();
+function shared<T>(key: string, read: () => Promise<T>): Promise<T> {
+  const running = inFlight.get(key) as Promise<T> | undefined;
+  if (running) return running;
+  const started = read().finally(() => inFlight.delete(key));
+  inFlight.set(key, started);
+  return started;
+}
+
+function within<T>(read: Promise<T | undefined>, ms = ENRICH_BUDGET_MS): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), ms);
+  });
+  return Promise.race([read.catch(() => undefined), late]).finally(() => clearTimeout(timer));
+}
+
+// The detail is a larger read than progress; the menu polls every few seconds, so one read per ticket is kept briefly.
+async function lastLine(client: WorkerClient, ticket: string): Promise<string | undefined> {
+  if (!client.ticketDetail) return undefined;
+  const key = `${client.baseUrl ?? ''}\n${ticket}`;
+  const cached = lastLines.get(key);
+  if (cached && cached.expires > Date.now()) return cached.line;
+  const detail = await client.ticketDetail(ticket, AbortSignal.timeout(10_000)).catch(() => undefined);
+  // A failed read is not "no line": leave nothing cached so the next poll asks again.
+  if (!detail) return undefined;
+  const raw = detail?.live?.activity?.trim() || detail?.summary?.text.trim() || '';
+  const line = raw ? raw.split('\n')[0]!.slice(0, 200) : undefined;
+  if (lastLines.size >= LAST_MAX && !lastLines.has(key)) lastLines.delete(lastLines.keys().next().value!);
+  lastLines.set(key, { line, expires: Date.now() + LAST_TTL_MS });
+  return line;
+}
+
 // The daemon belongs to one game. Only expose creator-facing fields, never its workspace or host details.
-export async function listWorkers(client: WorkerClient): Promise<Worker[]> {
+export async function listWorkers(client: WorkerClient, options: ListOptions = {}): Promise<Worker[]> {
   const snapshot = await client.state(AbortSignal.timeout(10_000));
   const seen = new Set<string>();
   const active = [...snapshot.running, ...(snapshot.idle ?? []), ...(snapshot.retrying ?? [])].filter(
@@ -59,6 +113,17 @@ export async function listWorkers(client: WorkerClient): Promise<Worker[]> {
       const state = String(entry.state ?? '').replace(/^[^:]+:/, '');
       const waiting = !snapshot.running.includes(entry) && ['human-review', 'ci-wait', 'merging'].includes(state);
       const phase = reading?.phase?.status === 'known' ? reading.phase.value : undefined;
+      // Only aiur's own "unknown" answer hands progress to the checklist; a failed read stays unknown, so a timeout
+      // never shows an old checklist's 100%.
+      const unknown = reading?.progress.status === 'unknown';
+      const [workpad, last] = await Promise.all([
+        waiting || !unknown || !options.workpad
+          ? undefined
+          : within(shared(`workpad\n${client.baseUrl ?? ''}\n${ticket}`, () => options.workpad!(ticket))),
+        waiting
+          ? undefined
+          : within(shared(`last\n${client.baseUrl ?? ''}\n${ticket}`, () => lastLine(client, ticket))),
+      ]);
       return {
         ticket,
         title,
@@ -69,7 +134,8 @@ export async function listWorkers(client: WorkerClient): Promise<Worker[]> {
           : {}),
         ...(state ? { state } : {}),
         ...(phase ? { phase } : {}),
-        ...workerProgress({ percent: waiting ? undefined : percent, runtimeSeconds }),
+        ...(last ? { last } : {}),
+        ...workerProgress({ percent: waiting ? undefined : percent, runtimeSeconds, workpad }),
       };
     }),
   );
