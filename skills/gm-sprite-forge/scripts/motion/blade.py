@@ -13,27 +13,44 @@ import json
 import math
 import sys
 
-import numpy as np
+
+def _dot(a, b):
+    return sum(x * y for x, y in zip(a, b))
+
+
+def _sub(a, b):
+    return [x - y for x, y in zip(a, b)]
+
+
+def _scale(a, k):
+    return [x * k for x in a]
+
+
+def _unit(a):
+    n = math.sqrt(_dot(a, a))
+    return _scale(a, 1 / n)
+
+
+def _cross(a, b):
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 
 
 def spin_delta(frames):
     """Degrees to turn the blade about the haft (right hand) so it faces the head's motion, and the share of the
     motion it then faces (1 = every step's motion across the haft lies along the blade, by speed squared; 0 = it never
     moves across the haft)."""
-    head = np.array([f['head'] for f in frames], float)
-    haft = np.array([f['haft'] for f in frames], float)
-    blade = np.array([f['blade'] for f in frames], float)
-    v = head[1:] - head[:-1]  # the step from each frame to the next, scored against the blade at its start
-    a, b = haft[:-1], blade[:-1]
-    a /= np.linalg.norm(a, axis=1, keepdims=True)
-    b = b - a * np.sum(a * b, axis=1, keepdims=True)  # keep the blade across the haft
-    b /= np.linalg.norm(b, axis=1, keepdims=True)
-    c = np.cross(a, b)  # b turned 90 degrees about the haft
-    vp = v - a * np.sum(a * v, axis=1, keepdims=True)  # only motion across the haft can be faced
-    w = np.linalg.norm(vp, axis=1, keepdims=True)  # each step weighted by its own speed once more
-    # b(t) = b cos t + c sin t, so sum w v.b(t) = C cos t + S sin t peaks at t = atan2(S, C)
-    C, S = float(np.sum(w * vp * b)), float(np.sum(w * vp * c))
-    total = float(np.sum(w ** 2))
+    C = S = total = 0.0
+    for f, g in zip(frames, frames[1:]):  # the step from each frame to the next, scored against the blade at its start
+        a = _unit(f['haft'])
+        b = _unit(_sub(f['blade'], _scale(a, _dot(a, f['blade']))))  # keep the blade across the haft
+        c = _cross(a, b)  # b turned 90 degrees about the haft
+        v = _sub(g['head'], f['head'])
+        vp = _sub(v, _scale(a, _dot(a, v)))  # only motion across the haft can be faced
+        w = math.sqrt(_dot(vp, vp))  # each step weighted by its own speed once more
+        # b(t) = b cos t + c sin t, so the sum of w vp.b(t) = C cos t + S sin t peaks at t = atan2(S, C)
+        C += w * _dot(vp, b)
+        S += w * _dot(vp, c)
+        total += w * w
     return math.degrees(math.atan2(S, C)), (math.hypot(C, S) / total if total else 0.0)
 
 
