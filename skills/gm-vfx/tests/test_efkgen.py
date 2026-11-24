@@ -33,13 +33,14 @@ class StarterEffects(unittest.TestCase):
         self.assertEqual([p.name for p in self.written],
                          ['campfire.efkproj', 'cast.efkproj', 'legendary.efkproj', 'torch.efkproj'])
 
-    def test_textures_ship_with_the_effects(self):
-        # The runtime loads textures relative to the .efk: a missing one draws nothing, with no error.
+    def test_textures_land_beside_the_projects(self):
+        # The export and the runtime load textures relative to the effect: a missing one draws nothing, with no error.
         for path in self.written:
             _, nodes = emitters(path)
             for node in nodes:
                 texture = node.find('RendererCommonValues/ColorTexture').text
-                self.assertTrue((SKILL / 'effects' / texture).is_file(), f'{path.name}: {texture}')
+                self.assertTrue((self.out / texture).is_file(), f'{path.name}: {texture}')
+                self.assertTrue((SKILL / 'effects' / texture).is_file(), f'starter {texture} not shipped')
 
     def test_cast_is_one_shot_and_campfire_burns_forever(self):
         # A cast that never ended would keep its slot under the scene's effect cap for good.

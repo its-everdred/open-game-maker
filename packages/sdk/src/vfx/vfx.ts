@@ -70,7 +70,6 @@ const MAX_STEP_MS = 100;
 
 interface Playing {
   handle: EffekseerHandle;
-  yDown: boolean;
 }
 
 function overlay(game: HTMLCanvasElement): HTMLCanvasElement {
@@ -123,6 +122,10 @@ export async function createVfx(options: VfxOptions): Promise<Vfx> {
   context.init(gl, { instanceMaxCount: maxInstances, squareMaxCount: options.maxSprites ?? DEFAULTS.maxSprites });
 
   const effects = new Map<string, EffekseerEffect>();
+  /** Loads by name: a second load of a name shares the first, so effects are never loaded twice or orphaned. */
+  const loads = new Map<string, Promise<void>>();
+  /** Loads still waiting on textures: the native context outlives them, or their callbacks would touch freed memory. */
+  const inflight = new Set<Promise<unknown>>();
   const playing: Playing[] = [];
   const governor = createFrameGovernor(options.budget ?? DEFAULT_FRAME_BUDGET);
   const maxEffects = options.maxEffects ?? DEFAULTS.maxEffects;
@@ -142,23 +145,63 @@ export async function createVfx(options: VfxOptions): Promise<Vfx> {
     canvas.style.visibility = quality === 'off' ? 'hidden' : '';
   };
 
+  async function loadEffect(name: string, url: string, scale: number): Promise<void> {
+    // The runtime's loader ignores HTTP status and never settles on a file it cannot parse, so fetch and check here.
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`vfx ${name}: ${response.status} ${url}`);
+    const buffer = await response.arrayBuffer();
+    if (destroyed) throw new Error(`vfx ${name}: destroyed while loading`);
+    const base = new URL(url, canvas.ownerDocument.baseURI);
+    let done!: () => void;
+    let fail!: (error: Error) => void;
+    const textures = new Promise<void>((resolve, reject) => {
+      done = resolve;
+      fail = reject;
+    });
+    const effect = context.loadEffect(
+      buffer,
+      scale,
+      () => done(),
+      (reason, path) => fail(new Error(`vfx ${name}: ${reason} (${path})`)),
+      // Textures resolve next to the .efk, as they do when the runtime fetches it by URL.
+      (path) => new URL(path, base).href,
+    );
+    if (!effect.nativeptr) throw new Error(`vfx ${name}: not an Effekseer effect (${url})`);
+    inflight.add(textures);
+    try {
+      await textures;
+    } finally {
+      inflight.delete(textures);
+    }
+    // destroy() releases the context only after in-flight loads settle, so this effect can still be released.
+    if (destroyed) {
+      context.releaseEffect(effect);
+      throw new Error(`vfx ${name}: destroyed while loading`);
+    }
+    effects.set(name, effect);
+  }
+
+  const releaseNative = () => {
+    for (const effect of effects.values()) context.releaseEffect(effect);
+    effects.clear();
+    runtime.releaseContext(context);
+    finish.dispose();
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+  };
+
   const vfx: Vfx = {
     canvas,
     get quality() {
       return quality;
     },
     load(name, url, scale = 1) {
-      return new Promise((resolve, reject) => {
-        const effect = context.loadEffect(
-          url,
-          scale,
-          () => {
-            effects.set(name, effect);
-            resolve();
-          },
-          (reason, path) => reject(new Error(`vfx ${name}: ${reason} (${path})`)),
-        );
-      });
+      let loading = loads.get(name);
+      if (!loading) {
+        loading = loadEffect(name, url, scale);
+        loads.set(name, loading);
+        loading.catch(() => loads.delete(name));
+      }
+      return loading;
     },
     play(name, x, y, z = 0) {
       const effect = effects.get(name);
@@ -168,22 +211,23 @@ export async function createVfx(options: VfxOptions): Promise<Vfx> {
       const yDown = camera?.yDown ?? true;
       const handle = context.play(effect, x, yDown ? -y : y, z);
       if (!handle) return null;
-      const entry = { handle, yDown };
+      const entry = { handle };
       playing.push(entry);
       return {
         get alive() {
           return !destroyed && playing.includes(entry) && handle.exists;
         },
         moveTo(nx, ny, nz = 0) {
-          if (handle.exists) handle.setLocation(nx, yDown ? -ny : ny, nz);
+          if (!destroyed && handle.exists) handle.setLocation(nx, yDown ? -ny : ny, nz);
         },
         stop() {
-          handle.stop();
+          if (!destroyed) handle.stop();
         },
       };
     },
     setCamera(next) {
       camera = next;
+      if (destroyed) return;
       context.setProjectionMatrix(next.projection);
       context.setCameraMatrix(next.view);
     },
@@ -206,6 +250,7 @@ export async function createVfx(options: VfxOptions): Promise<Vfx> {
       drawMs = performance.now() - updated;
     },
     stats() {
+      if (destroyed) return { quality, effects: 0, instances: 0, updateMs: 0, drawMs: 0 };
       prune();
       return {
         quality,
@@ -216,6 +261,7 @@ export async function createVfx(options: VfxOptions): Promise<Vfx> {
       };
     },
     stopAll() {
+      if (destroyed) return;
       context.stopAll();
       playing.length = 0;
     },
@@ -224,12 +270,9 @@ export async function createVfx(options: VfxOptions): Promise<Vfx> {
       destroyed = true;
       context.stopAll();
       playing.length = 0;
-      for (const effect of effects.values()) context.releaseEffect(effect);
-      effects.clear();
-      runtime.releaseContext(context);
-      finish.dispose();
-      gl.getExtension('WEBGL_lose_context')?.loseContext();
       canvas.remove();
+      if (inflight.size) void Promise.allSettled([...inflight]).then(releaseNative);
+      else releaseNative();
     },
   };
   return vfx;

@@ -1,4 +1,6 @@
-"""The starter effects: python effects.py <outdir> writes their .efkproj files (textures resolve from <outdir>/Texture)."""
+"""The starter effects: python effects.py <outdir> writes their .efkproj files and copies the textures they use into
+<outdir>/Texture, where the export and the runtime look for them."""
+import shutil
 import sys
 from pathlib import Path
 
@@ -6,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from efkgen import Generator  # noqa: E402
 
 T = 'Texture/'
+TEXTURES = Path(__file__).resolve().parent.parent / 'effects' / 'Texture'
 
 
 def campfire(g, size=1.0, sparks=2.5):
@@ -57,6 +60,10 @@ def legendary(g):
 def write_all(outdir):
     g = Generator()
     out = Path(outdir)
+    out.mkdir(parents=True, exist_ok=True)
+    # A texture missing at export or in the game draws nothing, with no error.
+    if (out / 'Texture').resolve() != TEXTURES:
+        shutil.copytree(TEXTURES, out / 'Texture', dirs_exist_ok=True)
     g.project(out / 'campfire.efkproj', campfire(g), end=240)
     # A torch: a smaller, quicker flame with fewer sparks.
     g.project(out / 'torch.efkproj', campfire(g, size=0.55, sparks=6), end=240)

@@ -41,4 +41,6 @@ Only pixelfx's reviewed `src/` tree is consumed. The excluded gallery font is no
 ## Effekseer for WebGL
 
 Effekseer for WebGL 1.80.8 is used under the MIT License. Copyright (c) 2011 Effekseer Project. `@gm/sdk/vfx` ships its
-script and `effekseer.wasm` from `third_party/effekseer`, loaded only when a scene creates effects.
+script and `effekseer.wasm` from `third_party/effekseer`, loaded only when a scene creates effects. Its star-rule
+exception: the EffekseerForWebGL repository has under 1,000 stars, but the files come from the release of the main
+Effekseer repository (over 2,000 stars), which builds and publishes them.

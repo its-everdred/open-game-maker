@@ -2,6 +2,8 @@
 declare module 'effekseer-runtime' {
   export interface EffekseerEffect {
     readonly isLoaded: boolean;
+    /** 0 when the file did not parse: the runtime then never calls onload or onerror. */
+    readonly nativeptr: number;
   }
 
   export interface EffekseerHandle {
@@ -20,10 +22,11 @@ declare module 'effekseer-runtime' {
     setProjectionMatrix(matrix: Float32Array): void;
     setCameraMatrix(matrix: Float32Array): void;
     loadEffect(
-      path: string,
+      data: string | ArrayBuffer,
       scale?: number,
       onload?: () => void,
       onerror?: (reason: string, path: string) => void,
+      redirect?: (path: string) => string,
     ): EffekseerEffect;
     releaseEffect(effect: EffekseerEffect): void;
     play(effect: EffekseerEffect, x: number, y: number, z: number): EffekseerHandle | null;

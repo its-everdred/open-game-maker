@@ -1,6 +1,6 @@
 ---
 name: gm-vfx
-description: Load when a game needs an authored effect (fire, torch, spell cast, hit, aura, explosion) or tunes the effects budget. Effects are Effekseer files written by script and exported headless, drawn by @gm/sdk/vfx.
+description: Load when a game needs an authored effect (fire, torch, spell cast, item aura, hit) or tunes the effects budget. Effects are Effekseer files written by script and exported headless, drawn by @gm/sdk/vfx.
 ---
 
 # Effects with Effekseer
@@ -18,7 +18,8 @@ effects, and `destroy()` it when the scene ends.
 import { createVfx, phaserCamera } from '@gm/sdk/vfx';
 import wasmUrl from '@gm/sdk/vfx/effekseer.wasm?url';
 
-const vfx = await createVfx({ canvas: game.canvas, wasmUrl, pixelSize: 3, palette: FIRE_PALETTE });
+const palette = ['#3a1408', '#a8320c', '#f07818', '#ffc040', '#fff0c0']; // from the game's art
+const vfx = await createVfx({ canvas: game.canvas, wasmUrl, pixelSize: 3, palette });
 await vfx.load('campfire', 'vfx/campfire.efk', 24); // 24 world pixels per authored unit
 const fire = vfx.play('campfire', camp.x, camp.y); // world pixels; null when off or at the cap
 // every frame, after the camera moves:
@@ -28,6 +29,8 @@ vfx.frame(deltaMs);
 vfx.destroy();
 ```
 
+- **Files:** copy each `.efk` and the `Texture/` folder it uses into the game's public files, side by side. For a
+  starter: `cp -r .claude/skills/gm-vfx/effects/{campfire.efk,Texture} public/vfx/`.
 - **Positions:** Phaser worlds use world pixels (y down); `handle.moveTo(x, y)` follows a moving thing, such as a
   weapon. In three.js pass `threeCamera(camera)` and world units.
 - **Pixel games:** set `pixelSize` to the art's scale, so effects render that coarse and upscale with hard pixels. Add a
@@ -43,24 +46,27 @@ vfx.destroy();
   cap Effekseer's particles for the scene.
 - **Governor:** slow frames step quality from high to low (half the effects; the oldest stop) to off (canvas hidden).
   It uses the same 30 fps budget as HD-2D. Start phones at `pickQuality(...)` from `@gm/sdk/hd2d`.
-- **Cost:** `vfx.stats()` gives effects, instances and the last frame's `updateMs` and `drawMs`. The SDK spec measured
-  campfire, cast and legendary together at about 0.4 ms of simulation per frame under a 4x CPU slowdown.
+- **Cost:** `vfx.stats()` gives effects, instances and the last frame's `updateMs` and `drawMs`. Campfire, cast and
+  legendary together simulate in about 0.4 ms per frame under a 4x CPU slowdown.
 - **WebKit:** WebKit is Kevin's phone. Before shipping a scene with effects, run its scenario in WebKit (gm-qa) for
   at least 30 s and check it does not freeze.
 
 ## Author an effect
 
 Effects are written as `.efkproj` XML by Python and exported to `.efk` by the editor's command line, with no GUI and
-no display. Generate them only on the host, never from a paid pack's textures.
+no display. Never use a paid pack's textures. The starters need none of this and work offline; a new effect needs the
+editor, which `fetch` downloads, so author on a host with network (or one where `GM_EFFEKSEER_HOME` already holds it).
+Paths below are from a game repo; in the Game Maker repo drop `.claude/`.
 
 1. Once per host, fetch the pinned editor (Effekseer 1.80.8 Linux, checksum verified):
-   `skills/gm-vfx/scripts/effekseer.sh fetch`.
+   `.claude/skills/gm-vfx/scripts/effekseer.sh fetch`.
 2. Write the effect with `Generator` from `scripts/efkgen.py`: each `node()` is one sprite emitter (lifetime, spawn
    rate, spawn shape, velocity, size, colour ramp, fades, blend). Start from `scripts/effects.py`, which builds the
    starters, and keep each effect a function there.
 3. Write the projects and export them:
-   `python skills/gm-vfx/scripts/effects.py <dir>`, then `skills/gm-vfx/scripts/effekseer.sh export <dir>/*.efkproj`.
-   Keep the `.efkproj` out of the game; ship the `.efk` and the `Texture/` files it names, side by side.
+   `python3 -I .claude/skills/gm-vfx/scripts/effects.py <dir>`, then
+   `.claude/skills/gm-vfx/scripts/effekseer.sh export <dir>/*.efkproj`. `effects.py` copies the textures into
+   `<dir>/Texture`. Keep the `.efkproj` out of the game; ship the `.efk` and `Texture/` side by side.
 4. Look at it in the game at phone size (gm-verify) and tune. Times are frames at 60 fps; one unit is what `scale`
    makes it at load.
 

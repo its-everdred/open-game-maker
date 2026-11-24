@@ -8,16 +8,16 @@ const vendored = resolve(dirname(fileURLToPath(import.meta.url)), '../../../thir
 export const EFFEKSEER_WASM = resolve(vendored, 'effekseer.wasm');
 
 /**
- * Resolves `effekseer-runtime` to the vendored Effekseer for WebGL script. The script is a classic script that defines
- * a global `effekseer`; exporting it from a module keeps the runtime out of the page until a scene imports it. Its
- * Node-only branches call `require('fs')`; shadowing `require` and `module` keeps the bundler from following them.
- */
-/**
  * Names the sloppy-mode script assigns without declaring. A module is strict, where those writes throw, so the wrapper
  * declares them. src/vfx/runtime-wrapper.test.ts fails when an upgrade leaks a new one.
  */
 export const IMPLICIT_GLOBALS = ['exports', 'moduleOrPromise', 'setImmediate', 'splitted_path', 'upvecVector'];
 
+/**
+ * Resolves `effekseer-runtime` to the vendored Effekseer for WebGL script. The script is a classic script that defines
+ * a global `effekseer`; exporting it from a module keeps the runtime out of the page until a scene imports it. Its
+ * Node-only branches call `require('fs')`; shadowing `require` and `module` keeps the bundler from following them.
+ */
 export const effekseerRuntime = {
   name: 'effekseer-runtime',
   setup(build) {

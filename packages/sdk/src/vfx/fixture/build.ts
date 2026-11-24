@@ -2,7 +2,7 @@ import { copyFile, cp, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
-import { EFFEKSEER_WASM, effekseerRuntime } from '../../../scripts/effekseer-runtime.mjs';
+import { effekseerRuntime } from '../../../scripts/effekseer-runtime.mjs';
 
 const packageRoot = fileURLToPath(new URL('../../..', import.meta.url));
 const fixtureRoot = fileURLToPath(new URL('.', import.meta.url));
@@ -25,5 +25,6 @@ await build({
   logLevel: 'info',
 });
 await copyFile(`${fixtureRoot}/index.html`, `${outdir}/index.html`);
-await copyFile(EFFEKSEER_WASM, `${outdir}/effekseer.wasm`);
+// The wasm the package exports (`@gm/sdk/vfx/effekseer.wasm`), so a build that stops shipping it fails here.
+await copyFile(`${packageRoot}/dist/vfx/effekseer.wasm`, `${outdir}/effekseer.wasm`);
 await cp(effects, `${outdir}/effects`, { recursive: true, filter: (path) => !path.endsWith('.efkproj') });

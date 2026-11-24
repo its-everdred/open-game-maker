@@ -5,6 +5,7 @@ const UNIT = 32;
 
 interface StartOptions extends Pick<VfxOptions, 'pixelSize' | 'palette' | 'maxEffects' | 'budget'> {
   effects: string[];
+  wasmUrl?: string;
 }
 
 const game = document.querySelector<HTMLCanvasElement>('#game')!;
@@ -24,9 +25,24 @@ window.__vfx = {
     await Promise.all(options.effects.map((name) => vfx!.load(name, `/vfx/effects/${name}.efk`, UNIT)));
     vfx.setCamera(orthoCamera({ x: 0, y: 0, width: game.width, height: game.height }));
   },
+  /** Settles a load: `ok`, or the error message. */
+  load: (name: string, url: string) =>
+    vfx!.load(name, url, UNIT).then(
+      () => 'ok',
+      (error: Error) => error.message,
+    ),
+  /** Starts a load, destroys the layer before it finishes, and reports how the load settled. */
+  async destroyWhileLoading(name: string) {
+    const loading = vfx!.load(name, `/vfx/effects/${name}.efk`, UNIT).then(
+      () => 'ok',
+      (error: Error) => error.message,
+    );
+    vfx!.destroy();
+    return loading;
+  },
   play: (name: string, x: number, y: number) => vfx!.play(name, x, y) !== null,
   step,
-  /** Draws the current state (no advance) and reads the effects canvas back, top row first. */
+  /** Draws the current state (no advance) and reads the effects canvas back as base64 RGBA, top row first. */
   capture() {
     vfx!.frame(0);
     const canvas = vfx!.canvas;
@@ -35,9 +51,13 @@ window.__vfx = {
     const { width, height } = canvas;
     const raw = new Uint8Array(width * height * 4);
     gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, raw);
-    const data: number[] = [];
-    for (let y = height - 1; y >= 0; y--) data.push(...raw.subarray(y * width * 4, (y + 1) * width * 4));
-    return { width, height, data };
+    const rows = new Uint8Array(raw.length);
+    for (let y = 0; y < height; y++)
+      rows.set(raw.subarray((height - 1 - y) * width * 4, (height - y) * width * 4), y * width * 4);
+    // A string crosses into the test far faster than a million-element array.
+    let binary = '';
+    for (let i = 0; i < rows.length; i += 0x8000) binary += String.fromCharCode(...rows.subarray(i, i + 0x8000));
+    return { width, height, rgba: btoa(binary) };
   },
   /** Median and 95th-percentile main-thread ms per frame, simulating and drawing, over `frames` frames. */
   cost(frames: number) {
@@ -74,9 +94,11 @@ declare global {
     __vfx?: {
       ready: boolean;
       start(options: StartOptions): Promise<void>;
+      load(name: string, url: string): Promise<string>;
+      destroyWhileLoading(name: string): Promise<string>;
       play(name: string, x: number, y: number): boolean;
       step(frames: number, ms: number): void;
-      capture(): { width: number; height: number; data: number[] };
+      capture(): { width: number; height: number; rgba: string };
       cost(frames: number): { update: Cost; draw: Cost; instances: number };
       stats(): ReturnType<Vfx['stats']>;
       rects(): [DOMRectReadOnly, DOMRectReadOnly];
