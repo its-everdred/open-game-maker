@@ -98,8 +98,7 @@ export class HostBridge {
         this.fatal('bridge-connect', error instanceof Error ? error.message : 'bridge connection failed');
       }
     });
-    const timeoutMs = options.readyTimeoutMs ?? 30_000;
-    this.readyTimer = setTimeout(() => this.fatal('ready-timeout', 'game did not become ready in time'), timeoutMs);
+    this.armReadyTimer();
     const monitorIntervalMs = options.monitorIntervalMs ?? 250;
     if (monitorIntervalMs > 0) {
       this.monitorTimer = setInterval(() => this.monitorDrops(), monitorIntervalMs);
@@ -222,8 +221,19 @@ export class HostBridge {
       this.resolveReady(parsed.data.payload);
       for (const queued of this.queued.splice(0)) this.transport.send(queued);
     }
+    /*
+     * A game still downloading its startup assets reports load.progress before ready. Each report restarts the
+     * deadline, so a slow phone link only fails when the frame goes silent (Dusk Helm on iPhone, 2026-11-24).
+     */
+    if (parsed.data.t === 'load.progress' && !this.readyPayload) this.armReadyTimer();
     if (parsed.data.t === 'error') this.report(parsed.data.payload);
     for (const callback of this.handlers.get(parsed.data.t) ?? []) callback(parsed.data.payload);
+  }
+
+  private armReadyTimer(): void {
+    if (this.readyTimer) clearTimeout(this.readyTimer);
+    const timeoutMs = this.options.readyTimeoutMs ?? 30_000;
+    this.readyTimer = setTimeout(() => this.fatal('ready-timeout', 'game did not become ready in time'), timeoutMs);
   }
 
   private monitorDrops(): void {

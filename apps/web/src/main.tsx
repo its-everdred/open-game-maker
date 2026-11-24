@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { App } from './app/App';
+import { watchForNewDeploy } from './app/app-version';
 import { applyHashRedirect } from './app/hashRedirect';
 import { queryClient } from './app/query';
 import { createAppRouter } from './app/router';
@@ -18,6 +19,7 @@ applyHashRedirect();
 const router = createAppRouter();
 installTestHook(router);
 registerServiceWorker();
+if (import.meta.env.PROD) watchForNewDeploy();
 installErrorCapture();
 void flushQueue();
 initFocus();

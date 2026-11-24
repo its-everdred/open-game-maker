@@ -263,6 +263,25 @@ describe('HostBridge', () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it('keeps waiting while the game reports startup download progress, then fails once it goes silent', () => {
+    // A phone on a slow link spends longer than the deadline downloading startup assets; that is not a dead frame.
+    vi.useFakeTimers();
+    const onFatal = vi.fn();
+    const { inbound } = harness(() => 'owner', { readyTimeoutMs: 10, onFatal });
+    for (let loaded = 1; loaded <= 5; loaded += 1) {
+      vi.advanceTimersByTime(8);
+      inbound({
+        v: 1,
+        id: `p${loaded}`,
+        t: 'load.progress',
+        payload: { phase: 'ready', loaded, total: 9, cachedBytes: 0 },
+      });
+    }
+    expect(onFatal).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(11);
+    expect(onFatal).toHaveBeenCalledWith(expect.objectContaining({ code: 'ready-timeout' }));
+  });
+
   it('still disposes after an error callback throws', () => {
     vi.useFakeTimers();
     const onFatal = vi.fn();
