@@ -158,14 +158,16 @@ export function workRows(
 /** Provider readings (Claude, Codex, …) when the API has them, else the day/week/month windows. */
 export function energyCards(view: EnergyView | undefined): EnergyCard[] {
   if (!view) return [];
-  if (view.sources.length > 0)
-    return view.sources.map((source) => ({
+  /* Bundles written before #1217 carry no sources, and the client doesn't parse the response. */
+  const sources = view.sources ?? [];
+  if (sources.length > 0)
+    return sources.map((source) => ({
       key: source.id,
       name: source.label,
       usedPercent: source.stale ? null : source.usedPercent,
       resetsAt: source.resetsAt,
     }));
-  return view.windows.map((window) => ({
+  return (view.windows ?? []).map((window) => ({
     key: window.window,
     name: WINDOW_LABELS[window.window],
     usedPercent: window.usedPercent,

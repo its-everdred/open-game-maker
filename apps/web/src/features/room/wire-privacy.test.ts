@@ -19,6 +19,7 @@ it('keeps room sends on the reviewed literal-message allowlist', () => {
     'src/features/room/session.ts: send: (message) => client.send(message),',
     "src/features/room/useRoomRuntime.ts: play: () => session.send({ t: 'phase', to: 'playing' }),",
     "src/features/room/useRoomRuntime.ts: edit: () => session.send({ t: 'phase', to: 'editing' }),",
+    "src/routes/game/GameScreen.tsx: room.session?.send({ t: 'match.resume.request' });",
     "src/routes/game/GameScreen.tsx: room.session.send({ t: 'match.pause.request' });",
     "src/routes/game/GameScreen.tsx: room.session?.send({ t: 'phase', to: nextMode === 'play' ? 'playing' : 'editing' });",
     "src/routes/game/GameScreen.tsx: if (roomId !== undefined && room.snapshot?.matchPause) room.session?.send({ t: 'match.resume.request' });",

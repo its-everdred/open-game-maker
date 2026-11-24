@@ -199,4 +199,14 @@ describe('edit menu energy (#1326)', () => {
     ]);
     expect(energyCards(undefined)).toEqual([]);
   });
+
+  it('reads an Energy payload written before provider sources existed', () => {
+    /* The client doesn't parse the response, so an older API's payload reaches the menu without `sources`; the editor
+       crashed on it. */
+    const legacy: Partial<EnergyView> = { ...base };
+    delete legacy.sources;
+    expect(energyCards(legacy as EnergyView)).toEqual([
+      { key: 'week', name: 'This week', usedPercent: 40, resetsAt: '2026-11-27T09:00:00Z' },
+    ]);
+  });
 });
