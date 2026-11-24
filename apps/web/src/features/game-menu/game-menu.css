@@ -77,6 +77,11 @@
   color: var(--action-primary-text);
 }
 
+/* The mock's Resume triangle is solid. */
+.icon.is-solid path {
+  fill: currentColor;
+}
+
 .game-menu-circle.is-stop {
   background: var(--action-danger);
   color: var(--action-danger-text);

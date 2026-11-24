@@ -11,7 +11,7 @@ import type { ReviewCommand, ReviewTarget } from '../worker-builds/review-comman
 import { ReviewInbox } from '../worker-builds/ReviewInbox';
 import { TicketDetail } from '../worker-builds/TicketDetail';
 import type { WorkerReview } from '../worker-builds/useWorkerReviews';
-import { energyCards, resetText, type ReviewCard, type WorkRow, type WorkState } from './model';
+import { decisionSub, energyCards, resetText, type ReviewCard, type WorkRow, type WorkState } from './model';
 import './game-menu.css';
 
 const STATE_LABEL: Record<WorkState, string> = { wait: 'Waiting on you', work: 'Working', done: 'Done' };
@@ -93,7 +93,7 @@ export function EditMenu({
         <div className="game-menu-head">
           <h2>Paused</h2>
           <button ref={resume} type="button" className="game-menu-circle is-go" aria-label="Resume" onClick={onClose}>
-            <Icon name="play" />
+            <Icon name="play" className="is-solid" />
           </button>
         </div>
         <div className="game-menu-body is-edit">
@@ -143,11 +143,7 @@ export function EditMenu({
                   </span>
                   <span className="game-menu-rev-text">
                     <span className="game-menu-rev-title">{command.summary || command.title}</span>
-                    <span className="game-menu-rev-sub">
-                      {[command.ticket ? `#${command.ticket}` : undefined, `${command.options.length} options`]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </span>
+                    <span className="game-menu-rev-sub">{decisionSub(command)}</span>
                   </span>
                   <span className="game-menu-rev-go">Review</span>
                 </button>

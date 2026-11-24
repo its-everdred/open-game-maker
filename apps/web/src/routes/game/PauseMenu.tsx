@@ -66,7 +66,7 @@ export function PauseMenu({
             onClick={onResume}
             disabled={countdown !== undefined}
           >
-            <Icon name="play" />
+            <Icon name="play" className="is-solid" />
             Resume
           </button>
           {onRestart ? (

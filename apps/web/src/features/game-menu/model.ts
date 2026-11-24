@@ -52,6 +52,13 @@ function commandImage(command: ReviewCommand): string | undefined {
   return undefined;
 }
 
+/** "#969 · 2 options" under a decision's title. */
+export function decisionSub(command: { ticket: string | null; options: readonly unknown[] }): string {
+  return [command.ticket ? `#${command.ticket}` : undefined, `${command.options.length} options`]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 export function reviewCards(
   reviews: readonly WorkerReview[],
   commands: readonly ReviewCommand[],
@@ -78,9 +85,7 @@ export function reviewCards(
     ...commands.map((command): ReviewCard => ({
       key: `${commandSource(command)}:${command.decision_id}`,
       title: command.summary || command.title,
-      sub: [command.ticket ? `#${command.ticket}` : undefined, `${command.options.length} options`]
-        .filter(Boolean)
-        .join(' · '),
+      sub: decisionSub(command),
       image: commandImage(command),
       command,
     })),

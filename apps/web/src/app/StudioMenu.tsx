@@ -165,14 +165,8 @@ export function StudioMenu() {
     openDecisions + unreadReplies + pendingReviews - reviewCommands.length + visibleFinished.length + unreadUpdates;
   // In a game's editor the menu is the paused modal (#1326): its badge counts only what is ready for review.
   const isEdit = gameId !== undefined && new URLSearchParams(location.search).get('mode') === 'edit';
-  const editCards = isEdit
-    ? reviewCards(
-        reviews,
-        reviewCommands,
-        [...missingReviewTargets(workers, reviews, reviewCommands), ...coreReview.targets],
-        workers,
-      )
-    : [];
+  const editTargets = isEdit ? [...missingReviewTargets(workers, reviews, reviewCommands), ...coreReview.targets] : [];
+  const editCards = isEdit ? reviewCards(reviews, reviewCommands, editTargets, workers) : [];
   const editSessions = isEdit ? decisions.sessions.filter((item) => item.game_id === gameId) : [];
   const editDecisions = isEdit
     ? decisions.commands.filter(
@@ -762,7 +756,7 @@ export function StudioMenu() {
             workers,
             reviews,
             commands: reviewCommands,
-            targets: [...missingReviewTargets(workers, reviews, reviewCommands), ...coreReview.targets],
+            targets: editTargets,
             error: reviewData.error || gameReview.error || coreReview.error,
             incomplete:
               builds.isLoading ||
