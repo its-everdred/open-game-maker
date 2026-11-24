@@ -36,8 +36,8 @@ export const TOUCH_ICON_SVG: Record<TouchIcon, string> = {
 
 /** First match wins, so the narrower words (counter-clockwise, hard drop, heavy attack) come before the broader ones. */
 const BY_NAME: [RegExp, TouchIcon][] = [
-  [/\bccw\b|counter|anti/u, 'rotate-ccw'],
-  [/rotate|turn|\bcw\b|spin/u, 'rotate-cw'],
+  [/\bccw\b|counter ?clockwise|anti ?clockwise/u, 'rotate-ccw'],
+  [/rotate|\bturn\b|\bcw\b|\bspin\b/u, 'rotate-cw'],
   [/hard drop|slam/u, 'hard-drop'],
   [/heavy|charge|smash|power/u, 'heavy-attack'],
   [/attack|strike|slash|melee|\bhit\b|punch|sword/u, 'attack'],
@@ -49,7 +49,7 @@ const BY_NAME: [RegExp, TouchIcon][] = [
   [/inventory|\bbag\b|items/u, 'inventory'],
   [/\buse\b|interact|talk|grab|pick|open|take/u, 'use'],
   [/confirm|accept|\bok\b|select|start/u, 'confirm'],
-  [/back|cancel|close|exit/u, 'back'],
+  [/back|cancel|close|exit|return/u, 'back'],
   [/pause|menu/u, 'pause'],
   [/hold|swap|switch/u, 'swap'],
   [/drop|down|crouch/u, 'down'],

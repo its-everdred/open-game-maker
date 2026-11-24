@@ -476,7 +476,7 @@ that both match the `@ogm/contracts` schemas the publisher and API read. It also
 (`@gm/sdk/vite`): the manifest from `src/manifest.ts`, and the design folded from every design-doc `design/*.json`
 (a key defined in two files fails the build). The creator feedback ledger `design/feedback.json` is skipped, so a game
 that carries one still builds. Exits 1 naming each missing or invalid file. Warns, without failing, for each host-drawn
-touch button with no icon in the manifest's `inputs.icons`.
+touch button with no icon in the manifest's `inputs.icons` (stderr `warning ...` lines; `warnings` in `--json`).
 
 ## Pause, resume and inspect build tickets
 

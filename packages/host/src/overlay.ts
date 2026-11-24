@@ -25,7 +25,9 @@ export function actionLabel(action: string): string {
 
 /** The game's declared icon for a button, else one picked from the action's words; never a letter or the raw id. */
 export function actionIcon(action: string, declared?: GameManifest['inputs']['icons']): TouchIcon {
-  return declared?.[action] ?? iconForWords(actionLabel(action));
+  return (
+    (declared && Object.hasOwn(declared, action) ? declared[action] : undefined) ?? iconForWords(actionLabel(action))
+  );
 }
 
 export interface TouchOverlayOptions {

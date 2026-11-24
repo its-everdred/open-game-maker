@@ -69,7 +69,7 @@ export const command: GmCommand = {
       const tail = `${result.stdout}${result.stderr}`.trimEnd().split('\n').slice(-20);
       for (const line of tail) ctx.err(line);
       const problem = `pnpm build failed with exit ${result.status ?? result.signal}`;
-      if (ctx.json) ctx.out(JSON.stringify({ ok: false, problems: [problem] }));
+      if (ctx.json) ctx.out(JSON.stringify({ ok: false, problems: [problem], warnings: [] }));
       else ctx.err(problem);
       return EXIT.failed;
     }

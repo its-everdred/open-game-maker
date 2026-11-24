@@ -249,6 +249,27 @@ describe('TouchOverlay', () => {
     expect(actionIcon('zorp')).toBe('action');
   });
 
+  it.each([
+    ['fire', 'cast'],
+    ['shoot', 'cast'],
+    ['heavyAttack', 'heavy-attack'],
+    ['dodge', 'roll'],
+    ['heal', 'potion'],
+    ['jump', 'jump'],
+    ['moveLeft', 'left'],
+    ['moveRight', 'right'],
+    ['pause', 'pause'],
+    ['cancel', 'back'],
+    ['counterattack', 'attack'],
+    ['returnHome', 'back'],
+  ] as const)('guesses the %s button as the %s icon', (action, icon) => {
+    expect(actionIcon(action)).toBe(icon);
+  });
+
+  it('ignores inherited object keys when a game declares icons', () => {
+    expect(actionIcon('constructor', { attack: 'attack' })).toBe('action');
+  });
+
   it('draws the declared icon over the name guess, with no letter on any button', () => {
     const layer = document.createElement('div');
     const overlay = new TouchOverlay({

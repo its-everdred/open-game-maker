@@ -63,6 +63,13 @@ describe('gm build', () => {
     expect(result.err).toEqual([
       'warning touch button roll has no icon in inputs.icons; the overlay picks one from its name',
     ]);
+    const six = {
+      ...manifest,
+      inputs: { actions: { a: 'button', b: 'button', c: 'button', d: 'button', e: 'button', f: 'button' }, icons: {} },
+    };
+    const capped = await gm(['build'], { cwd: game({ 'manifest.json': six, 'design/design.json': design }) });
+    expect(capped.err).toHaveLength(5);
+    expect(capped.err.join('\n')).not.toContain('button f ');
     const self = { ...guessed, inputs: { ...guessed.inputs, touch: 'self' } };
     const drawn = await gm(['build'], { cwd: game({ 'manifest.json': self, 'design/design.json': design }) });
     expect(drawn.err).toEqual([]);
@@ -100,7 +107,11 @@ describe('gm build', () => {
     const result = await gm(['build', '--json'], { cwd: game({}, true) });
     expect(result.code).toBe(1);
     expect(result.err.join('\n')).toContain('bundle exploded');
-    expect(JSON.parse(result.out[0] ?? '')).toEqual({ ok: false, problems: ['pnpm build failed with exit 1'] });
+    expect(JSON.parse(result.out[0] ?? '')).toEqual({
+      ok: false,
+      problems: ['pnpm build failed with exit 1'],
+      warnings: [],
+    });
   }, 60_000);
 
   it('rejects stale publish files when the new build omits them', async () => {
