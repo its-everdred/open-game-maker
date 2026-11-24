@@ -580,6 +580,25 @@ describe('GameScreen', () => {
     );
   });
 
+  it('reloads a frame that never said hello once before showing Try again', async () => {
+    // On a busy host the entry module can outlast the ready timeout once; Kevin saw Try again before the title.
+    renderGame();
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalledTimes(1));
+    const timeout = {
+      bridgeState: 'error' as const,
+      dropped: 0,
+      error: 'game did not become ready in time',
+      errorCode: 'ready-timeout',
+    };
+    act(() => host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.(timeout));
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+
+    act(() => host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.(timeout));
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeVisible();
+    expect(host.mountGameFrame).toHaveBeenCalledTimes(2);
+  });
+
   it('shows Try again for a stalled load and remounts the frame', async () => {
     renderGame();
     await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalledTimes(1));
