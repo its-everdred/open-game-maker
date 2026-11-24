@@ -18,6 +18,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rigged  # noqa: E402
 C = json.load(open(a[0]))
 spec = next(c for c in C['cells'] if c['name'] == a[1])
+spec['motion'] = {'stance': C.get('stance')} | spec['motion'] | {'clip': spec['clip']}  # as run_cells.py builds it
+spec['weapon'] = spec.get('weapon', C.get('weapon'))
 spec.pop('rotz', None)  # measure in the body's own frame (facing -Y)
 bpy.ops.wm.read_factory_settings(use_empty=True)
 flips = {}

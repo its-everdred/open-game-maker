@@ -149,7 +149,7 @@ def main():
         weapon = weapon if a.weapon else None
         if weapon is not None and not weapon.any():
             sys.exit(f'{a.cell_dir.name}: --weapon but no weapon in the masks (rendered before the weapon was red?): '
-                     'delete mask_*.png and --rescore')
+                     'render the cell again with run_cells.py (no --rescore)')
         if a.skin_ref:
             import finish_base
             (out / 'sheet.png').replace(out / 'sheet_finish.png')

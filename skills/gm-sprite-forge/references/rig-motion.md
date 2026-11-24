@@ -244,8 +244,8 @@ ranks one-cycle windows by forward lean, a low head and both hands up in front, 
 toes along it; the three fight takes give 69 such cycles.
 
 ```sh
-<blender wrapper> --python scripts/motion/bvh_track.py -- tracks.json fight1_subject2.bvh fight1_subject5.bvh
-gm py -- scripts/motion/guard_walk.py tracks.json cycles.json   # prints the best: take, f0, f1, v, lean, hands, score
+<blender wrapper> --python skills/gm-sprite-forge/scripts/motion/bvh_track.py -- tracks.json fight1_subject2.bvh fight1_subject5.bvh
+gm py -- skills/gm-sprite-forge/scripts/motion/guard_walk.py tracks.json cycles.json [--top 12]   # every field in cycles.json
 ```
 
 A cycle's `f0` and `f1` are the take's own frame numbers: play it as `kind: copy` with `path` the take,
@@ -254,8 +254,8 @@ onto the Meshy rig by name (Shoulder/Elbow are the upper arm and forearm, Ankle 
 
 100STYLE (CC BY 4.0, Geno skeleton from `orangeduck/100style-retarget`) uses the same names but 60 fps and `ToeBase`,
 and its BVH zip is 4.7 GB: fetch only the styles you need (`<Style>_FW.bvh` is the forward walk) with HTTP range reads
-of the zip, then `motion/trim_bvh.py <in> <out> 1200 2400` cuts a window at 30 fps with LaFAN1 toe names, so
-`bvh_track.py`, `guard_walk.py` and the LaFAN1 `map` work unchanged.
+of the zip. Then `gm py -- skills/gm-sprite-forge/scripts/motion/trim_bvh.py <in> <out> 1200 2400` cuts a window
+at 30 fps with LaFAN1 toe names, so `bvh_track.py`, `guard_walk.py` and the LaFAN1 `map` work unchanged.
 
 Check every cell frame by frame against the pack clip: `gm py -- skills/gm-sprite-forge/scripts/motion/pose_overlay.py
 <out.png> <pack sheet> <cell_dir> ... [--rows 1,2] [--zoom 3]` lays each frame's silhouette over the pack's (pack red,
@@ -303,8 +303,8 @@ the axe passes through every frame, one way. Write the full pose at key 0; later
 - Two opposite directions in neighbouring keys fail: add a key between them to say which way round the swing goes.
 - Check the keys with `swing_curves.py` before rendering (seconds, no render): a swing that reverses, or a bone that
   turns more than about 130 degrees in a frame, needs a key between.
-  `<blender wrapper> --python scripts/motion/swing_curves.py -- cells.json <cell name> <out>.json` per cell, then
-  `gm py -- scripts/motion/swing_chart.py chart.png <out>.json ...` draws them side by side.
+  `<blender wrapper> --python skills/gm-sprite-forge/scripts/motion/swing_curves.py -- cells.json <cell name> <out>.json` per cell, then
+  `gm py -- skills/gm-sprite-forge/scripts/motion/swing_chart.py chart.png <out>.json ...` draws them side by side.
 - Block the arc in `workbench` and look at a 3x strip beside the pack before Cycles. The S camera looks down the
   forward axis: a strike or follow-through pointed forward is foreshortened and hides in front of the body. Swing it
   out to the side (as the pack's wide sweeps), with straight elbows through the strike.

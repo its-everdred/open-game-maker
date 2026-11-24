@@ -37,7 +37,7 @@ def fmt(x):
 def write_recipe(d, spec, c, scores):
     """recipe.json beside the cell: what the review page prints under it (kind, model, cost, skill, arm, motion)."""
     mo = c['motion']
-    key = mo.get('path', (c.get('rigged') or {}).get('path', '')) if mo['kind'] != 'handkey' else 'handkey'
+    key = 'handkey' if mo['kind'] in ('handkey', 'pose') else mo.get('path', (c.get('rigged') or {}).get('path', ''))
     lic = c.get('licence') or next((v for k, v in LICENCE if k in key or k == mo['kind']), 'unknown')
     fit = json.loads((d / 'fit.json').read_text())
     render = json.loads((d / 'render.json').read_text())
@@ -145,4 +145,5 @@ def main():
         sys.exit(1)
 
 
-main()
+if __name__ == '__main__':
+    main()
