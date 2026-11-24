@@ -132,6 +132,9 @@ for (const scenario of scenarios) {
           route.fulfill({ json: { commands: [], targets: [] } }),
         );
         await page.route('**/api/v1/notifications?*', (route) => route.fulfill({ json: [] }));
+        await page.route('**/api/v1/telemetry/client-events', (route) =>
+          route.fulfill({ status: 202, json: { stored: 1 } }),
+        );
         await page.route('**/api/v1/me/executor/thread', (route) => route.fulfill({ status: 403, json: {} }));
         const masks = await test.step('prepare app and prototype', () => scenario.prepare(page, reference));
         if (scenario.name === 'editor') {
