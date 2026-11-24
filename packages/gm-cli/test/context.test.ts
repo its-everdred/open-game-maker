@@ -176,7 +176,10 @@ if ((m = /issues\\/(\\d+)\\/timeline/.exec(path))) {
   if (process.env.FAIL_TIMELINE === m[1]) (process.stderr.write('TLS handshake timeout'), process.exit(1));
   for (const c of comments[m[1]] ?? []) line({ comment: c });
   for (const p of pulls) if (new RegExp('#' + m[1] + '\\\\b').test(p.body)) line({ pull: { number: p.number, title: p.title, body: p.body, repo: p.repo } });
-} else if ((m = /pulls\\/(\\d+)\\/files/.exec(path))) for (const f of pulls.find((p) => p.number === Number(m[1])).files) line(f);
+} else if ((m = /pulls\\/(\\d+)\\/files/.exec(path))) {
+  if (process.env.FAIL_FILES === m[1]) process.exit(1);
+  for (const f of pulls.find((p) => p.number === Number(m[1])).files) line(f);
+}
 else if ((m = /issues\\?labels=([^&]+)/.exec(path))) {
   const label = decodeURIComponent(m[1]);
   for (const i of Object.values(issues)) if (i.labels.some((l) => l.name === label)) line(issue(i));
@@ -243,6 +246,16 @@ describe('gm context', () => {
     expect(result.code).toBe(0);
     expect(result.err.join('\n')).toContain('skipped #16');
     expect(result.out.join('\n')).toContain('Decision `ui-kit` (#16)');
+  });
+
+  it("keeps a ticket's approval when one of its PRs' files cannot be read", async () => {
+    const { root, env } = fixture();
+    const result = await gm(['context', '41'], { cwd: root, env: { ...env, FAIL_FILES: '907' } });
+    expect(result.code).toBe(0);
+    expect(result.err.join('\n')).toContain('no files for PR #907');
+    expect(result.out.join('\n')).toContain(
+      '#40 Biome direction: lush fields, reusable compositions and natural boundaries — approved',
+    );
   });
 
   it('lists a defaulted decision with the recommendation that stands', async () => {

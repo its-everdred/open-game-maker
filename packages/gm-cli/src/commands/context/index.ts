@@ -52,8 +52,11 @@ async function api<T>(ctx: GmContext, path: string, jq: string): Promise<T[]> {
       timeout: TIMEOUT_MS,
     }));
   } catch (error) {
-    const err = (error as { stderr?: string; message?: string }).stderr?.trim() || (error as Error).message;
-    throw new CommandError(`gh api ${route} failed: ${err.split('\n')[0] || 'no output'}`);
+    const failed = error as { stderr?: string; killed?: boolean; code?: unknown };
+    const err = failed.killed
+      ? `timed out after ${TIMEOUT_MS / 1000} s`
+      : failed.stderr?.trim() || `exit ${String(failed.code)}`;
+    throw new CommandError(`gh api ${route} failed: ${err.split('\n')[0]}`);
   }
   try {
     return stdout
@@ -79,11 +82,17 @@ async function history(ctx: GmContext, ticket: number, repo: string): Promise<Hi
   const pulls = await Promise.all(
     latest.map(async (pull) => ({
       ...pull,
+      /* A PR whose files cannot be read is still listed: its ticket's verdicts matter more than its file list. */
       files: await api<string>(
         ctx,
         `repos/{owner}/{repo}/pulls/${pull.number}/files?per_page=100`,
         '.[].filename | tojson',
-      ),
+      ).catch((error: unknown) => {
+        ctx.err(
+          `gm context: no files for PR #${pull.number}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return [];
+      }),
     })),
   );
   return { verdicts: verdicts(items.flatMap(({ comment }) => (comment ? [comment] : []))), pulls };
