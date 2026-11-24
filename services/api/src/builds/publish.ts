@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { creditsDocumentSchema, DesignDocSchema, gameManifestSchema } from '@ogm/contracts';
 import { schema } from '@ogm/db';
-import { buildDir, markComplete } from '@ogm/games-host/layout';
+import { buildDir, markComplete, precompressBuild } from '@ogm/games-host/layout';
 import { and, eq, inArray } from 'drizzle-orm';
 
 import { budgetDefaults } from '../admin/family.js';
@@ -163,6 +163,9 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
     });
     const displayTarget = buildDir(deps.config.gamesRoot, job.gameId, published.buildId);
     scheduleDisplayImages(deps, displayTarget, displayMarker(deps, published.buildId), manifest.data);
+    void precompressBuild(deps.config.gamesRoot, displayTarget).catch((error: unknown) =>
+      deps.log({ event: 'build_precompress_failed', buildId: published.buildId, reason: errorName(error) }),
+    );
     design.stream.publish(published.branchId, published.switchTx.transaction);
     await updateBuild(deps, release, published.buildId, 'tested');
 

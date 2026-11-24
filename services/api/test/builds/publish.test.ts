@@ -68,6 +68,23 @@ describe('publishing a merged build', () => {
     }
   });
 
+  // Live Brotli of a game bundle took seconds on a loaded host and games missed their ready timeout (#1319).
+  it('writes a Brotli copy of every shared code file once the build is live', async () => {
+    const { deps, app } = world();
+    completeRun(deps);
+    const { buildId } = (await (await upload(app, archiveOf(builtFiles()))).json()) as { buildId: string };
+
+    const plan = JSON.parse(
+      readFileSync(join(deps.config.gamesRoot, ids.game, buildId, 'assets', 'cache-plan.json'), 'utf8'),
+    ) as { entries: { url: string; kind: string }[] };
+    const code = plan.entries.filter(({ url, kind }) => kind === 'code' && url.startsWith('/a/'));
+    expect(code.length).toBeGreaterThan(0);
+    await vi.waitFor(() => {
+      for (const { url } of code)
+        expect(existsSync(join(deps.config.gamesRoot, '_a', `${url.slice('/a/'.length)}.br`))).toBe(true);
+    });
+  });
+
   it('stages an upload that lands before the merge and publishes it when the run completes', async () => {
     const { deps, app } = world();
 
