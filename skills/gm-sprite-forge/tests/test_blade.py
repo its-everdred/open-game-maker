@@ -42,6 +42,11 @@ class SpinDelta(unittest.TestCase):
         d, _ = spin_delta(frames)
         self.assertAlmostEqual(d, -90, places=3)
 
+    def test_symmetric_head_fails_loudly(self):
+        # a double-bit axe's head has no single edge: an angle from a zero vector would be noise
+        with self.assertRaises(ValueError):
+            spin_delta(swing([0.5], blade=(0, 0, 0)))
+
 
 if __name__ == '__main__':
     unittest.main()

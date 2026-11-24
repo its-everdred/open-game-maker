@@ -423,4 +423,7 @@ gm py -- skills/gm-sprite-forge/scripts/motion/blade.py <dir>/blade.json   # "sp
 
 `blade.py` points the edge along the head's motion, each step weighted by its speed squared so the fast strike decides
 and the slower wind-up, which runs the other way, cannot turn the axe round. The spin is per clip: Big chop -106,
-Hammer slam -45, Quick chop -21 on the Meshy rig with the KayKit `axe_1handed`.
+Hammer slam -45, Quick chop -21 on the Meshy rig with the KayKit `axe_1handed`. Measuring again with the new `spin`
+should print about 0 (Quick chop: +1). `blade_only` keeps a cell's frames, so it can run in the cell's own directory. A
+head that is symmetric about its haft (double-bit axe, sword) has no single edge, and the measure stops with an error:
+set `spin` by eye for those.

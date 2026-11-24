@@ -258,6 +258,8 @@ def blade_frames(rig, wob, goto):
     head = v[t / far > 0.7]
     across = head - np.outer(head @ np.array(h), np.array(h))
     b = Vector(across.mean(0))
+    if b.length < 0.05 * float(np.abs(t).max()):  # a double-bit axe or a sword: no one edge to turn toward the swing
+        sys.exit('blade_only: the weapon head is symmetric about its haft, so it has no single edge to face the swing')
     frames = []
     for col in range(N):
         goto(col)
@@ -313,6 +315,9 @@ def main():
     root.scale = (s, s, s)
     rig.data.pose_position = 'POSE'
     os.makedirs(OUT, exist_ok=True)
+    if P['blade_only']:  # no render, and the cell's frames stay: where the weapon's edge points, for blade.py
+        blade_frames(rig, wob, goto)
+        return
     rows = [int(r) for r in str(P['rows']).split(',')]
     masks = P['mask'] or P['mask_only']
     for old in os.listdir(OUT):
@@ -321,9 +326,6 @@ def main():
     if masks:
         mask_frames(sc, root, rows, ob, wob, goto)
     if P['mask_only']:  # the colour frames, feet and reports from the full render stay as they were
-        return
-    if P['blade_only']:  # no render: where the weapon's head and edge point on each frame, for blade.py
-        blade_frames(rig, wob, goto)
         return
     feet = {}
     for row in rows:

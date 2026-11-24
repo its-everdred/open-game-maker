@@ -28,6 +28,8 @@ def _scale(a, k):
 
 def _unit(a):
     n = math.sqrt(_dot(a, a))
+    if n < 1e-9:
+        raise ValueError('a zero haft or blade vector: the weapon head has no single edge to face the swing')
     return _scale(a, 1 / n)
 
 
