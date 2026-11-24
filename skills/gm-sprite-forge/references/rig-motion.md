@@ -397,3 +397,30 @@ Kevin rejected every cell of the round: hand-keyed, KayKit, Bandai and CMU, walk
 ("none move like humans at all"). No rig or motion source in this step is approved, and its correlation and foot-slide
 scores did not predict his verdict. Do not post another round from these tools; the next step is the dedicated
 rigging and animation bake-off in #1282, which waits on his approval. The static base bodies and finish B stay approved.
+
+## Creator verdict on round 3 (2026-11-24): the first approved motion
+
+Kevin liked all three round 3 attacks on the Warrior male ("movement is good"): Big chop (Kevin Iglesias free sampler
+`Attack2H01`), Quick chop (Meshy library 4 `Attack`) and Hammer slam (Meshy library 128 `Heavy_Hammer_Swing`). They
+are the Warrior's attack set: light = Quick chop, main = Big chop, heavy = Hammer slam.
+
+**What made it work, and the pipeline for every later move:** professional animator or mocap clips, played on the
+Meshy-rigged base body through the plain name-mapped retarget (`kind: copy`, or `kind: own` for the rig's own library
+clips), sampled evenly as delivered. No stance layer, no foot lock, no IK, no retime and no hand-keyed poses. Every
+earlier round that added our own layers (stance, IK, hand keys, key-pose resampling) was rejected. Pick the clip, not
+the tuning: when a move is wrong, find another clip.
+
+His note on the same verdict, "axe model and angle is bad": the weapon is a separate fix that does not touch the
+motion. The pack Barbarian holds the haft near its end along the forearm line, blade facing the swing. For an attack,
+set the weapon's `"pitch": 90` and `"roll": 0` (the haft continues the hand bone), then measure the blade's turn about
+the haft and add it to `spin`:
+
+```sh
+<blender wrapper> --python skills/gm-sprite-forge/scripts/motion/render_motion.py -- <dir> <dir>/spec.json \
+  frames=60 blade_only=1 engine=workbench          # writes <dir>/blade.json, renders nothing
+gm py -- skills/gm-sprite-forge/scripts/motion/blade.py <dir>/blade.json   # "spin -106 deg (faces 0.82 of the swing)"
+```
+
+`blade.py` points the edge along the head's motion, each step weighted by its speed squared so the fast strike decides
+and the slower wind-up, which runs the other way, cannot turn the axe round. The spin is per clip: Big chop -106,
+Hammer slam -45, Quick chop -21 on the Meshy rig with the KayKit `axe_1handed`.
