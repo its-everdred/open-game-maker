@@ -227,8 +227,8 @@ describe('build tracker', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Newer · Completed' }));
     expect(screen.getByText('Detail: Newer g/2')).toBeVisible();
   });
-  // From a detail, Conversation goes to the job's build chat when a job filed the ticket, else to a closed ticket's
-  // creator-visible discussion; a running ticket no job owns has none to offer.
+  // From a detail, Conversation goes to the job's build chat when a job filed the ticket, else to the ticket's own
+  // creator-visible discussion: an Executor-filed running ticket has no job but must still open a chat (#1110).
   it('hands a detail over to the right conversation', () => {
     const past = {
       gameId: 'g',
@@ -256,7 +256,8 @@ describe('build tracker', () => {
     fireEvent.click(screen.getByRole('button', { name: /Running/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Details' }));
     expect(screen.getByText('Detail: Running g/12')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Conversation' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Conversation' }));
+    expect(screen.getByText('Conversation: Running')).toBeVisible();
   });
 
   it('opens progress for a worker without a game identifier', () => {

@@ -9,6 +9,7 @@ import { openConversation } from '../build-chat/conversation';
 import { TicketConversation } from './TicketConversation';
 import { TicketDetail } from './TicketDetail';
 import type { PastTicket } from './usePastTickets';
+import type { ConversationTarget } from './TicketConversation';
 import type { WorkerReview } from './useWorkerReviews';
 import type { FinishedWorker } from './useWorkerFinishes';
 import { readUpdates, useNotify, type Update } from '../../lib/notify/slice';
@@ -181,11 +182,10 @@ export function BuildPanel({
   const [selectedCommand, setSelectedCommand] = useState<ReviewCommand>();
   const [selectedTarget, setSelectedTarget] = useState<ReviewTarget>();
   const [expandedWorker, setExpandedWorker] = useState<string>();
-  const [conversation, setConversation] = useState<PastTicket>();
+  const [conversation, setConversation] = useState<ConversationTarget>();
   const [detail, setDetail] = useState<DetailTarget>();
   const missingTargets = missingReviewTargets(workers, reviews, commands);
   const reviewCount = reviews.length + commands.length + missingTargets.length + coreTargets.length;
-  const talk = detail && conversationOf(detail, jobs);
   return (
     <section className="worker-tracker-panel" id={id} aria-label="Builds">
       <div className="worker-tracker-heading">
@@ -411,15 +411,12 @@ export function BuildPanel({
           title={detail.title}
           creatorId={creatorId}
           onClose={() => setDetail(undefined)}
-          onConversation={
-            talk === undefined
-              ? undefined
-              : () => {
-                  setDetail(undefined);
-                  if (typeof talk === 'string') openConversation(talk);
-                  else setConversation(talk);
-                }
-          }
+          onConversation={() => {
+            const talk = conversationOf(detail, jobs);
+            setDetail(undefined);
+            if (typeof talk === 'string') openConversation(talk);
+            else setConversation(talk);
+          }}
         />
       )}
       {conversation && (
@@ -445,14 +442,14 @@ function WorkerRow({ worker, expanded, onToggle }: { worker: WorkerBuild; expand
   );
 }
 
-// A ticket's conversation from its detail: its job's build chat when a job filed it, else a closed ticket's
-// creator-visible discussion. A running ticket no job owns has none.
-function conversationOf(target: DetailTarget, jobs: readonly Job[]): string | PastTicket | undefined {
+// A ticket's conversation from its detail: its job's build chat when a job filed it, else the ticket's own
+// creator-visible discussion, running or closed.
+function conversationOf(target: DetailTarget, jobs: readonly Job[]): string | ConversationTarget {
   const past = 'outcome' in target ? target : undefined;
   const job =
     (past?.jobId ? jobs.find((item) => item.id === past.jobId) : undefined) ??
     jobs.find((item) => item.gameId === target.gameId && String(item.aiurIssueNumber) === target.ticket);
-  return job?.id ?? past;
+  return job?.id ?? target;
 }
 
 export function missingReviewTargets(
