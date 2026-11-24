@@ -35,6 +35,7 @@ import { getCredits } from '../settings/credits';
 import { SharedSettings } from './SharedSettings';
 import { assignableKey } from './control-keys';
 import { PauseMenu } from './PauseMenu';
+import { BugComposer, type FileBug } from '../../features/game-menu/BugComposer';
 
 export type PlatformSaveApi = {
   list(gameId: string, query?: SaveListQuery): Promise<OptionalCapability<{ slots: SaveSlot[] }>>;
@@ -78,6 +79,10 @@ type PlatformHudProps = {
   editDisabled?: boolean;
   /** Receives the More page's container, where the studio menu shows the rest of the actions. */
   onMoreHost?(host: HTMLElement | null): void;
+  /** Files a bug from the play menu; without it the menu offers none. */
+  onFileBug?: FileBug;
+  /** The host's log that rides along with a bug. */
+  bugLog?(): string;
   onResume(): void;
 };
 
@@ -170,10 +175,15 @@ export function PlatformHud({
   onEdit,
   editDisabled,
   onMoreHost,
+  onFileBug,
+  bugLog,
   onResume,
 }: PlatformHudProps) {
   const visible = open ?? paused;
-  const setPausePanelVisible = useOptionalGameMenu()?.setPausePanelVisible;
+  const gameMenu = useOptionalGameMenu();
+  const setPausePanelVisible = gameMenu?.setPausePanelVisible;
+  // More holds only the game's own extras (a room invite); play mode carries no tickets or agent context (#1326).
+  const hasMore = (gameMenu?.controls?.extras.length ?? 0) > 0;
   useLayoutEffect(() => {
     setPausePanelVisible?.(visible);
     return () => setPausePanelVisible?.(false);
@@ -184,7 +194,8 @@ export function PlatformHud({
   const loadingSaveRef = useRef(false);
   const [selectedSlot, setSelectedSlot] = useState<SaveSlotId>('auto');
   const [settings, setSettings] = useState<PlayerSettings>(() => loadSettings());
-  const [page, setPage] = useState<'pause' | 'settings' | 'more'>('pause');
+  const [page, setPage] = useState<'pause' | 'settings' | 'more' | 'bug'>('pause');
+  const [log, setLog] = useState('');
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [optionValues, setOptionValues] = useState<Record<string, boolean | string | number>>(() =>
     loadGameOptions(gameId, gameOptions ?? []),
@@ -304,7 +315,8 @@ export function PlatformHud({
   ]);
 
   useEffect(() => {
-    if (visible) (page !== 'pause' ? backRef : resumeRef).current?.focus();
+    /* The bug page focuses its own text box. */
+    if (visible && page !== 'bug') (page !== 'pause' ? backRef : resumeRef).current?.focus();
   }, [page, visible]);
 
   useEffect(() => {
@@ -383,11 +395,21 @@ export function PlatformHud({
       {visible ? (
         <div className="platform-pause-shade" data-gm-overlay-allowed>
           <div
-            className="platform-pause-dialog"
+            className={page === 'pause' || page === 'bug' ? 'platform-pause-dialog game-menu' : 'platform-pause-dialog'}
             data-studio-menu-boundary
             role="dialog"
             aria-modal="true"
-            aria-label={page === 'pause' ? (paused ? 'Paused' : 'Game menu') : page === 'more' ? 'More' : 'Settings'}
+            aria-label={
+              page === 'pause'
+                ? paused
+                  ? 'Paused'
+                  : 'Game menu'
+                : page === 'more'
+                  ? 'More'
+                  : page === 'bug'
+                    ? 'File a bug'
+                    : 'Settings'
+            }
           >
             {page === 'settings' ? (
               <SharedSettings
@@ -480,6 +502,8 @@ export function PlatformHud({
                   </div>
                 </details>
               </SharedSettings>
+            ) : page === 'bug' && onFileBug ? (
+              <BugComposer backRef={backRef} log={log} fileBug={onFileBug} onBack={() => setPage('pause')} />
             ) : page === 'more' ? (
               <div className="pause-more">
                 <button
@@ -499,15 +523,25 @@ export function PlatformHud({
                 pauseName={pauseName}
                 countdown={resumeAt ? Math.max(1, Math.ceil((resumeAt - (now + serverOffsetMs)) / 1000)) : undefined}
                 muted={settings.mute}
+                volume={settings.volume}
                 resumeRef={resumeRef}
                 editDisabled={editDisabled}
                 onResume={resume}
                 onRestart={onRestart}
                 onLeave={onLeave}
                 onMute={(mute) => setSettings((current) => ({ ...current, mute }))}
+                onVolume={(volume) => setSettings((current) => ({ ...current, volume }))}
+                onBug={
+                  onFileBug
+                    ? () => {
+                        setLog(bugLog?.() ?? '');
+                        setPage('bug');
+                      }
+                    : undefined
+                }
                 onSettings={() => setPage('settings')}
                 onEdit={onEdit}
-                onMore={() => setPage('more')}
+                onMore={hasMore ? () => setPage('more') : undefined}
               />
             )}
           </div>

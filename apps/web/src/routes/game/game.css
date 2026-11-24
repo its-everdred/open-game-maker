@@ -419,7 +419,7 @@
   pointer-events: auto;
 }
 
-.platform-pause-dialog {
+.platform-pause-dialog:not(.game-menu) {
   width: min(420px, calc(100vw - 32px));
   max-height: calc(100svh - 32px);
   overflow: auto;
@@ -515,7 +515,7 @@
   margin-block: 6px;
 }
 
-.platform-pause-dialog button,
+.platform-pause-dialog:not(.game-menu) button,
 .reapply-card button {
   border: 1px solid var(--rule);
   border-radius: 12px;
@@ -523,7 +523,7 @@
   color: var(--action-secondary-text);
 }
 
-.platform-pause-dialog .tap-primary,
+.platform-pause-dialog:not(.game-menu) .tap-primary,
 .reapply-card > .tap-primary {
   border-color: transparent;
   background: var(--action-primary);

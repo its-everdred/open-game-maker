@@ -1,0 +1,55 @@
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { BugComposer } from './BugComposer';
+
+const openConversation = vi.hoisted(() => vi.fn());
+vi.mock('../build-chat/conversation', () => ({ openConversation }));
+
+afterEach(() => {
+  cleanup();
+  openConversation.mockClear();
+});
+
+function describeIssue(text: string) {
+  fireEvent.change(screen.getByRole('textbox', { name: 'Describe the issue' }), { target: { value: text } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+}
+
+describe('File a bug (#1326)', () => {
+  it('sends the description with the log, then offers the agent or close', async () => {
+    const fileBug = vi.fn().mockResolvedValue({ jobId: 'job-7' });
+    const onBack = vi.fn();
+    render(<BugComposer log="game g1" fileBug={fileBug} onBack={onBack} />);
+    expect(screen.getByText('game.log')).toBeInTheDocument();
+    await act(async () => describeIssue('The goblin froze'));
+    expect(fileBug).toHaveBeenCalledWith('The goblin froze', 'game g1');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep talking to the agent' }));
+    expect(openConversation).toHaveBeenCalledWith('job-7');
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  it('offers only Close when no agent took the bug', async () => {
+    render(<BugComposer log="" fileBug={vi.fn().mockResolvedValue({})} onBack={vi.fn()} />);
+    await act(async () => describeIssue('Sound cuts out'));
+    expect(screen.queryByRole('button', { name: 'Keep talking to the agent' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+
+  it('keeps a failed bug on screen with Retry', async () => {
+    const fileBug = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({});
+    render(<BugComposer log="log" fileBug={fileBug} onBack={vi.fn()} />);
+    await act(async () => describeIssue('Stuck on the gate'));
+    expect(screen.getByText('Not sent')).toBeInTheDocument();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry' })));
+    expect(fileBug).toHaveBeenLastCalledWith('Stuck on the gate', 'log');
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+
+  it('does not send an empty description', () => {
+    const fileBug = vi.fn();
+    render(<BugComposer log="" fileBug={fileBug} onBack={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(fileBug).not.toHaveBeenCalled();
+  });
+});

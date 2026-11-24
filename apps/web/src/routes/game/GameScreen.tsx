@@ -48,6 +48,10 @@ import { annotateGeneratedPalette } from '../../features/editor/palette-generate
 import { starterPalette } from '../../features/editor/starter-palette';
 import { containedStagePoint, mountStagePreview } from '../../features/editor/stage-preview';
 import { admitJob } from '../../features/scope-chat/admit';
+import { sendReport, setBugContext } from '../../features/bug-report';
+import type { FileBug } from '../../features/game-menu/BugComposer';
+import { bugLog } from '../../features/game-menu/bug-log';
+import { useSession } from '../../lib/api/session';
 import { energyRefusalText } from '../../features/energy/api';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
 import {
@@ -549,6 +553,13 @@ export function GameScreen() {
     frameController?.setMode(mode === 'edit' && editorPlaying ? 'play' : mode);
   }, [frameController, mode, editorPlaying]);
 
+  // The editor's menu pauses the game like the play menu does (#1326); play mode pauses through the pause panel.
+  useEffect(() => {
+    if (mode !== 'edit' || !menuOpen || !frameController) return;
+    frameController.pause();
+    return () => frameController.resume();
+  }, [frameController, menuOpen, mode]);
+
   useEffect(() => {
     if (mode !== 'edit' || room.snapshot?.role !== 'peer' || room.snapshot.phase !== 'editing') return;
     frameController?.camera(watcherCamera);
@@ -629,6 +640,39 @@ export function GameScreen() {
       setSearchParams(next, { replace: true });
     },
     [searchParams, setSearchParams],
+  );
+  const { data: session } = useSession();
+  const ownsGame = Boolean(session && game.data && game.data.ownerId === session.user?.id);
+  /*
+   * A bug from the play menu (#1326). The owner's goes to an agent as a fix request, so they can keep talking to it;
+   * anyone else's goes to the report route, which may hand it to a repair job.
+   */
+  const fileBug = useCallback<FileBug>(
+    async (text, log) => {
+      if (ownsGame && room.snapshot?.role !== 'peer' && jobBranch === 'main') {
+        const request = editJobRequest(
+          { gameId, branchId: jobBranch },
+          `Bug: ${text}\n\nLog:\n${log}`,
+          'now',
+          `bug:${crypto.randomUUID()}`,
+        );
+        const line = `Bug: ${text.replace(/\s+/g, ' ').trim()}`;
+        request.plan.title = line.length > 120 ? `${line.slice(0, 119)}…` : line;
+        const result = await admitJob(request);
+        if (result.kind !== 'accepted') throw new Error('bug_not_admitted');
+        void queryClient.invalidateQueries({ queryKey: gameJobsQueryKey(gameId) });
+        void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
+        return { jobId: result.jobId };
+      }
+      setBugContext({ gameId });
+      const result = await sendReport({ text: `${text}\n\n${log}`.slice(0, 2000) });
+      return { jobId: 'jobId' in result ? result.jobId : undefined };
+    },
+    [gameId, jobBranch, ownsGame, queryClient, room.snapshot?.role],
+  );
+  const readBugLog = useCallback(
+    () => bugLog({ gameId, buildId: runningBuildId, mode, frame: frameState }),
+    [frameState, gameId, mode, runningBuildId],
   );
   const askForChange = useCallback(() => {
     if (room.snapshot?.role === 'peer') return;
@@ -909,6 +953,8 @@ export function GameScreen() {
             }}
             editDisabled={room.snapshot?.role === 'peer'}
             onMoreHost={setMoreHost}
+            onFileBug={fileBug}
+            bugLog={readBugLog}
             onResume={() => {
               if (roomId !== undefined && room.snapshot?.matchPause) room.session?.send({ t: 'match.resume.request' });
               setMenuOpen(false);
