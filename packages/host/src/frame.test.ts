@@ -356,6 +356,35 @@ describe('createGameFrame', () => {
     frame.dispose();
   });
 
+  /* An uncaught error inside a game is reported, but must not turn into the fatal "Try again" overlay. */
+  it('forwards game faults without failing the frame', () => {
+    const container = document.createElement('div');
+    const onFault = vi.fn();
+    const onError = vi.fn();
+    const frame = createGameFrame({
+      container,
+      gamesOrigin: 'https://games.test',
+      appOrigin: 'https://app.test',
+      gameId: 'g',
+      buildId: 'b',
+      build: 'published',
+      mode: 'play',
+      playerIndex: 0,
+      capabilities: [],
+      role: () => 'player',
+      onFault,
+      onError,
+    });
+    const receive = (frame.bridge as unknown as { receive(message: unknown): void }).receive.bind(frame.bridge);
+    const fault = { kind: 'error', message: 'TypeError: helm is undefined', stack: 'at tick (helm.js:4:2)' };
+
+    receive({ v: 1, id: 'game-fault-1', t: 'fault', payload: fault });
+
+    expect(onFault).toHaveBeenCalledWith(fault);
+    expect(onError).not.toHaveBeenCalled();
+    frame.dispose();
+  });
+
   it('selects controls from the manifest while honoring self-drawn controls and explicit mappings', () => {
     const readyWith = (
       actions: Record<string, 'stick' | 'button'>,

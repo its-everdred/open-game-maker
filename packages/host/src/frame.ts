@@ -47,6 +47,8 @@ export interface GameFrameOptions {
   onAudioRelay?: (payload: AudioRelayPayload) => void;
   onRawKey?: (code: string, down: boolean) => void;
   onError?: (failure: HostFailure) => void;
+  /** A non-fatal failure inside the game frame (uncaught error, CSP block, failed asset, lost WebGL context). */
+  onFault?: (fault: GamePayload<'fault'>) => void;
   readyTimeoutMs?: number;
 }
 
@@ -207,6 +209,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   bridge.on('haptics.pulse', ({ pattern }) => haptics.pulse(pattern));
   bridge.on('save.write', (payload) => options.onSaveWrite?.(payload));
   bridge.on('event', ({ kind, payload }) => options.onEvent?.(kind, payload));
+  bridge.on('fault', (payload) => options.onFault?.(payload));
   bridge.on('load.progress', (payload) => options.onLoad?.({ t: 'load.progress', payload }));
   bridge.on('load.frame', (payload) => {
     overlay.setLoading(false);
