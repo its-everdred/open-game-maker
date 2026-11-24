@@ -371,6 +371,12 @@
   pointer-events: none;
 }
 
+/* The previous art, kept over the changed art until that has loaded. */
+.game-cover-image.is-held {
+  position: absolute;
+  inset: 0;
+}
+
 .game-cover-image {
   object-fit: cover;
   transition: transform 0.8s var(--games-ease);

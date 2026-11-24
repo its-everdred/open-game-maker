@@ -9,11 +9,13 @@ import type { GameSummary } from './types';
 export function GameCell({
   game,
   selected,
+  eager = false,
   tile,
   spotlight,
 }: {
   game: GameSummary;
   selected: boolean;
+  eager?: boolean;
   tile: ReactNode;
   spotlight: ReactNode;
 }) {
@@ -87,7 +89,7 @@ export function GameCell({
       )}
       {createPortal(
         <>
-          <Cover game={game} hero={selected} />
+          <Cover game={game} hero={selected} eager={eager} />
           {game.trailerUrl && selected && showTrailer && (
             <span className={`game-trailer-layer${selected ? '' : ' is-closing'}`}>
               <GameTrailer game={game} transparentPoster />

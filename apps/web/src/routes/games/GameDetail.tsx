@@ -232,6 +232,8 @@ export function GameDetail({
               src={game.logoUrl}
               image={game.logoImage}
               sizes="(max-width: 600px) 80vw, 560px"
+              priority
+              keepShown
             />
           )}
         </span>

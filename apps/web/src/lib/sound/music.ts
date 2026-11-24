@@ -43,9 +43,13 @@ export function load(dir: 'music' | 'sfx', name: string): Promise<AudioBuffer | 
   return file;
 }
 
-// fetched and decoded at once (a suspended context can still decode), so the first tap plays it straight away
-export const titleReady: Promise<AudioBuffer | null> = load('music', MUSIC.title.file);
-void load('music', MUSIC.menu.file);
+// On the title screen both tracks are fetched and decoded at once (a suspended context can still decode), so the first tap
+// plays straight away. Elsewhere they wait until music is wanted: 5 MB of audio would hold back the games list's art.
+const startsOnTitle = location.pathname === '/';
+export const titleReady: Promise<AudioBuffer | null> = startsOnTitle
+  ? load('music', MUSIC.title.file)
+  : Promise.resolve(null);
+if (startsOnTitle) void load('music', MUSIC.menu.file);
 
 function end(layer: Track, s: number): void {
   ramp(layer.g, 0, s);
