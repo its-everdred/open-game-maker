@@ -220,7 +220,8 @@ export function rank(input: RankInput): Related[] {
     if (decision.ticket != null && keptNumbers.has(decision.ticket)) score += 3;
     if (decision.ticket === target.number) score += 3;
     /* A kit, skin, style or palette pick holds for every screen of the game, named or not (#31 rebuilt #16's kit). */
-    if (visual && (decision.area === 'look' || LOOK.test(`${decision.id} ${decision.question ?? ''}`))) score += 3;
+    if (visual && LOOK.test(`${decision.id} ${decision.question ?? ''}`)) score += 5;
+    else if (visual && decision.area === 'look') score += 2;
     if (score === 0) continue;
     if (decision.reuse) score += 2;
     related.push({
