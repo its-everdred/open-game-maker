@@ -55,6 +55,7 @@ PACKS = (
     "smallscaleint-fantasy-tileset-2d-isometric", "smallscaleint-free-character-16-bit-thug-outlined",
     "smallscaleint-free-character-hd-survivor-w-bike", "smallscaleint-knight-demo-character",
     "smallscaleint-projectiles-2d-hd-character-pack-1", "smallscaleint-projectiles-barbarian-pack-hd",
+    "smallscaleint-character-creator-fantasy",
 )
 MODERN = {
     "smallscaleint-2d-hd-enemy-pack-1", "smallscaleint-2d-hd-zombie-individual-sprites",
