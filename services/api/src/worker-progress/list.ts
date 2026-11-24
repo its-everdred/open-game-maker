@@ -1,6 +1,7 @@
 import { workerProgress, type WorkerProgress } from './progress.js';
 
 type WorkerClient = {
+  baseUrl?: string;
   state(signal?: AbortSignal): Promise<{
     running: Record<string, unknown>[];
     idle?: Record<string, unknown>[];
@@ -11,6 +12,14 @@ type WorkerClient = {
     limit?: number,
     signal?: AbortSignal,
   ): Promise<{ progress: { status: string; percent?: number }; phase?: { status: string; value?: string | null } }>;
+  ticketDetail?(
+    ticket: string,
+    signal?: AbortSignal,
+  ): Promise<{ live?: { activity?: string | null } | null; summary?: { text: string } | null }>;
+};
+type ListOptions = {
+  /** The ticket's Agent Workpad comment, for a checklist percent when aiur has no reading. */
+  workpad?(ticket: string): Promise<string>;
 };
 export type Worker = WorkerProgress & {
   ticket: string;
@@ -20,10 +29,30 @@ export type Worker = WorkerProgress & {
   state?: string;
   phase?: string;
   running?: boolean;
+  /** One plain line on where the ticket stands: aiur's live activity, else its summary. */
+  last?: string;
 };
 
+const LAST_TTL_MS = 30_000;
+const LAST_MAX = 500;
+const lastLines = new Map<string, { line: string | undefined; expires: number }>();
+
+// The detail is a larger read than progress; the menu polls every few seconds, so one read per ticket is kept briefly.
+async function lastLine(client: WorkerClient, ticket: string): Promise<string | undefined> {
+  if (!client.ticketDetail) return undefined;
+  const key = `${client.baseUrl ?? ''}\n${ticket}`;
+  const cached = lastLines.get(key);
+  if (cached && cached.expires > Date.now()) return cached.line;
+  const detail = await client.ticketDetail(ticket, AbortSignal.timeout(10_000)).catch(() => undefined);
+  const raw = detail?.live?.activity?.trim() || detail?.summary?.text.trim() || '';
+  const line = raw ? raw.split('\n')[0]!.slice(0, 200) : undefined;
+  if (lastLines.size >= LAST_MAX && !lastLines.has(key)) lastLines.delete(lastLines.keys().next().value!);
+  lastLines.set(key, { line, expires: Date.now() + LAST_TTL_MS });
+  return line;
+}
+
 // The daemon belongs to one game. Only expose creator-facing fields, never its workspace or host details.
-export async function listWorkers(client: WorkerClient): Promise<Worker[]> {
+export async function listWorkers(client: WorkerClient, options: ListOptions = {}): Promise<Worker[]> {
   const snapshot = await client.state(AbortSignal.timeout(10_000));
   const seen = new Set<string>();
   const active = [...snapshot.running, ...(snapshot.idle ?? []), ...(snapshot.retrying ?? [])].filter(
@@ -59,6 +88,11 @@ export async function listWorkers(client: WorkerClient): Promise<Worker[]> {
       const state = String(entry.state ?? '').replace(/^[^:]+:/, '');
       const waiting = !snapshot.running.includes(entry) && ['human-review', 'ci-wait', 'merging'].includes(state);
       const phase = reading?.phase?.status === 'known' ? reading.phase.value : undefined;
+      const workpad =
+        waiting || percent !== undefined || !options.workpad
+          ? undefined
+          : await options.workpad(ticket).catch(() => undefined);
+      const last = waiting ? undefined : await lastLine(client, ticket);
       return {
         ticket,
         title,
@@ -69,7 +103,8 @@ export async function listWorkers(client: WorkerClient): Promise<Worker[]> {
           : {}),
         ...(state ? { state } : {}),
         ...(phase ? { phase } : {}),
-        ...workerProgress({ percent: waiting ? undefined : percent, runtimeSeconds }),
+        ...(last ? { last } : {}),
+        ...workerProgress({ percent: waiting ? undefined : percent, runtimeSeconds, workpad }),
       };
     }),
   );

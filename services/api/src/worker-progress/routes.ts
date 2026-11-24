@@ -79,7 +79,11 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
   let daemonError: string | undefined;
   const workers = await deps
     .aiurClientForGame(game.id)
-    .then((client) => listWorkers(client))
+    .then((client) =>
+      listWorkers(client, {
+        workpad: deps.registry.workerWorkpad ? (ticket) => deps.registry.workerWorkpad!(ticket, repo) : undefined,
+      }),
+    )
     .catch((error: unknown) => {
       daemonError = sourceError(error);
       daemonUnavailable = !(

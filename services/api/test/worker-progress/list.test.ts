@@ -72,3 +72,59 @@ describe('game workers', () => {
     ]);
   });
 });
+
+describe('menu rows (#1326)', () => {
+  const running = (ticket: string) => ({
+    state: vi.fn().mockResolvedValue({
+      running: [{ issue_identifier: ticket, title: 'Forest road', runtime_seconds: 5, work_state: 'working' }],
+    }),
+  });
+
+  it('reads the workpad checklist only when aiur has no progress reading', async () => {
+    const workpad = vi.fn(async () => '## Agent Workpad\n- [x] Road\n- [x] Trees\n- [ ] Stills\n- [ ] Crop');
+    const unknown = {
+      ...running('41'),
+      progress: vi.fn().mockResolvedValue({ progress: { status: 'unknown' } }),
+    };
+    expect((await listWorkers(unknown, { workpad }))[0]).toMatchObject({ percent: 50, source: 'workpad' });
+    expect(workpad).toHaveBeenCalledWith('41');
+
+    workpad.mockClear();
+    const known = {
+      ...running('42'),
+      progress: vi.fn().mockResolvedValue({ progress: { status: 'known', percent: 75 } }),
+    };
+    expect((await listWorkers(known, { workpad }))[0]).toMatchObject({ percent: 75, source: 'daemon' });
+    expect(workpad).not.toHaveBeenCalled();
+  });
+
+  it('carries one plain line on where the ticket stands, cached between polls', async () => {
+    const ticketDetail = vi.fn().mockResolvedValue({
+      live: { running: true, activity: 'Placing tree clusters from the forests\nsecond line' },
+      summary: { text: 'A road through the forest' },
+    });
+    const client = {
+      baseUrl: 'http://daemon-a',
+      ...running('43'),
+      progress: vi.fn().mockResolvedValue({ progress: { status: 'known', percent: 55 } }),
+      ticketDetail,
+    };
+    expect((await listWorkers(client))[0]!.last).toBe('Placing tree clusters from the forests');
+    await listWorkers(client);
+    expect(ticketDetail).toHaveBeenCalledTimes(1);
+
+    const summaryOnly = {
+      ...client,
+      baseUrl: 'http://daemon-b',
+      ticketDetail: vi.fn().mockResolvedValue({ live: null, summary: { text: 'A road through the forest' } }),
+    };
+    expect((await listWorkers(summaryOnly))[0]!.last).toBe('A road through the forest');
+
+    const failing = {
+      ...client,
+      baseUrl: 'http://daemon-c',
+      ticketDetail: vi.fn().mockRejectedValue(new Error('down')),
+    };
+    expect((await listWorkers(failing))[0]).not.toHaveProperty('last');
+  });
+});

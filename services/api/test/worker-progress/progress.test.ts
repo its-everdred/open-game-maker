@@ -12,12 +12,25 @@ describe('worker progress', () => {
     expect(workerProgress({ percent: 100, runtimeSeconds: 60 }).etaSeconds).toBeNull();
   });
 
-  it('does not turn a workpad checklist into progress', () => {
-    expect(workerProgress({ runtimeSeconds: 60, workpad: '- [x] First\n- [ ] Second' })).toEqual({
-      percent: null,
+  // Kevin (#1326): with no aiur reading, the menu's bar still moves as the agent ticks its plan off.
+  it('falls back to the workpad checklist when aiur has no reading', () => {
+    expect(
+      workerProgress({ runtimeSeconds: 60, workpad: '- [x] First\n- [ ] Second\n  * [X] Nested\n- [ ] Last' }),
+    ).toEqual({
+      percent: 50,
       etaSeconds: null,
-      source: 'unknown',
+      source: 'workpad',
     });
+  });
+
+  it('stays unknown when neither aiur nor a checklist says anything', () => {
+    for (const workpad of [undefined, '', '## Agent Workpad\n\nNo plan yet.', '- not a box']) {
+      expect(workerProgress({ runtimeSeconds: 60, workpad })).toEqual({
+        percent: null,
+        etaSeconds: null,
+        source: 'unknown',
+      });
+    }
   });
 });
 
