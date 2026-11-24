@@ -1,0 +1,18 @@
+[Unit]
+Description=OGM telemetry listener: crashes and app opens to the Executor
+After=ogm-api.service
+
+[Service]
+Type=simple
+Slice=ogm.slice
+# OGM_QA_ATTENTION names the file the Executor listens on; telemetry.env may set HS_ATTENTION or OGM_TELEMETRY_REPO.
+EnvironmentFile=-%h/.config/ogm/env/qa-hook.env
+EnvironmentFile=-%h/.config/ogm/env/telemetry.env
+ExecStart=@REPO@/ops/bin/ogm-telemetry-listen
+Restart=always
+RestartSec=10
+NoNewPrivileges=yes
+UMask=0077
+
+[Install]
+WantedBy=default.target

@@ -4,6 +4,7 @@ import type { ActionFrame } from '@ogm/contracts/input';
 import { openGameBridge } from '@ogm/iframe-bridge';
 
 import { EventRing } from './events.js';
+import { installFaultRelay } from './faults.js';
 import { linkedHd2d, watchHd2d } from './hd2d-link.js';
 import { SdkHostApi, type SendEnvelope } from './host-api.js';
 import { RuntimeImpl, type BuildKind, type Runtime } from './runtime.js';
@@ -150,6 +151,10 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     throw new Error('published build cannot enable test mode');
   }
 
+  const stopFaults =
+    typeof window !== 'undefined' && !options.headless
+      ? installFaultRelay(window, (fault) => send('fault', fault))
+      : () => undefined;
   const host = new SdkHostApi(send, (kind, payload) => events.push(++eventCursor, kind, payload));
   const designState: { current?: D } = {};
   try {
@@ -167,6 +172,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       () => bridge.close(),
     );
     runtime.attachSender(send);
+    runtime.addCleanup(stopFaults);
     runtime.addCleanup(installQa(instance));
     runtime.setLocalPlayerIndex(hello.payload.playerIndex);
     runtimeState.current = runtime;
@@ -282,6 +288,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     if (!options.headless && !trailerCapture) runtime.startLiveLoop();
     return runtime;
   } catch (error) {
+    stopFaults();
     try {
       send('error', { code: 'boot_failed', message: String(error) });
     } catch {

@@ -111,7 +111,9 @@ else
   mkdir -p "$CACHE"
   timed typecheck pnpm --dir "$ROOT/apps/web" exec tsc --noEmit --incremental --tsBuildInfoFile "$CACHE/web.tsbuildinfo"
 fi
+# VITE_APP_VERSION tags every telemetry event with the commit that is live (#1318).
 timed web-build env VITE_GAMES_ORIGIN="$GAMES_ORIGIN" VITE_INSTANCE_LOGO_URL="$INSTANCE_LOGO_URL" \
+  VITE_APP_VERSION="$(git -C "$ROOT" rev-parse --short HEAD)" \
   pnpm --dir "$ROOT/apps/web" exec vite build
 
 PROTO_STATUS=0
