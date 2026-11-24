@@ -42,6 +42,16 @@ const lastLines = new Map<string, { line: string | undefined; expires: number }>
  */
 export const ENRICH_BUDGET_MS = 3_000;
 
+/** Reads still running past the budget, by ticket: the next poll joins one instead of starting another. */
+const inFlight = new Map<string, Promise<unknown>>();
+function shared<T>(key: string, read: () => Promise<T>): Promise<T> {
+  const running = inFlight.get(key) as Promise<T> | undefined;
+  if (running) return running;
+  const started = read().finally(() => inFlight.delete(key));
+  inFlight.set(key, started);
+  return started;
+}
+
 function within<T>(read: Promise<T | undefined>, ms = ENRICH_BUDGET_MS): Promise<T | undefined> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<undefined>((resolve) => {
@@ -57,6 +67,8 @@ async function lastLine(client: WorkerClient, ticket: string): Promise<string | 
   const cached = lastLines.get(key);
   if (cached && cached.expires > Date.now()) return cached.line;
   const detail = await client.ticketDetail(ticket, AbortSignal.timeout(10_000)).catch(() => undefined);
+  // A failed read is not "no line": leave nothing cached so the next poll asks again.
+  if (!detail) return undefined;
   const raw = detail?.live?.activity?.trim() || detail?.summary?.text.trim() || '';
   const line = raw ? raw.split('\n')[0]!.slice(0, 200) : undefined;
   if (lastLines.size >= LAST_MAX && !lastLines.has(key)) lastLines.delete(lastLines.keys().next().value!);
@@ -105,8 +117,12 @@ export async function listWorkers(client: WorkerClient, options: ListOptions = {
       // never shows an old checklist's 100%.
       const unknown = reading?.progress.status === 'unknown';
       const [workpad, last] = await Promise.all([
-        waiting || !unknown || !options.workpad ? undefined : within(options.workpad(ticket)),
-        waiting ? undefined : within(lastLine(client, ticket)),
+        waiting || !unknown || !options.workpad
+          ? undefined
+          : within(shared(`workpad\n${client.baseUrl ?? ''}\n${ticket}`, () => options.workpad!(ticket))),
+        waiting
+          ? undefined
+          : within(shared(`last\n${client.baseUrl ?? ''}\n${ticket}`, () => lastLine(client, ticket))),
       ]);
       return {
         ticket,

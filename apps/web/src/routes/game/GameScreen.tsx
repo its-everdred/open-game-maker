@@ -104,6 +104,9 @@ type GameTestState = {
 
 type TestHost = OgmHost & { game?: GameTestState };
 
+/** How long the editor menu's room pause may still land after the menu closed and be lifted. */
+const PAUSE_LIFT_WINDOW_MS = 5_000;
+
 export function GameScreen() {
   const queryClient = useQueryClient();
   const { gameId = '' } = useParams();
@@ -428,6 +431,7 @@ export function GameScreen() {
   const build = publishedBuildId !== undefined && publishedBuildId === runningBuildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
   const pauseRequested = useRef(false);
+  const liftBy = useRef(0);
   const wasMatchPaused = useRef(false);
   useEffect(() => {
     const paused = room.snapshot?.matchPause !== undefined;
@@ -441,13 +445,23 @@ export function GameScreen() {
        * asked for is lifted here or the other players stay paused.
        */
       if (pauseRequested.current && mode === 'edit') {
-        // Closed before the pause landed: keep the request pending and lift the pause when it arrives.
-        if (!room.snapshot?.matchPause) return;
-        room.session?.send({ t: 'match.resume.request' });
+        /*
+         * Closed before the pause landed: keep the request pending a few seconds and lift the pause when it arrives.
+         * Past that, a pause is someone else's and stays.
+         */
+        liftBy.current ||= Date.now() + PAUSE_LIFT_WINDOW_MS;
+        if (!room.snapshot?.matchPause && Date.now() < liftBy.current) return;
+        if (room.snapshot?.matchPause && Date.now() < liftBy.current) {
+          room.session?.send({ t: 'match.resume.request' });
+        }
       }
       pauseRequested.current = false;
+      liftBy.current = 0;
       return;
     }
+    // Reopened after a request that never landed: ask again.
+    if (liftBy.current !== 0 && Date.now() >= liftBy.current) pauseRequested.current = false;
+    liftBy.current = 0;
     if (!pauseRequested.current && roomId !== undefined && room.session && room.snapshot?.status === 'connected') {
       room.session.send({ t: 'match.pause.request' });
       pauseRequested.current = true;

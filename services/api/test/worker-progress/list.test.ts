@@ -162,6 +162,46 @@ describe('menu rows stay live when enrichment fails (#1326)', () => {
     }
   });
 
+  // A stalled GitHub or aiur read outlives the budget; without sharing, every 5 s poll would start one more per ticket.
+  it('joins a read still running from the last poll instead of starting another', async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<never>(() => undefined);
+      const workpad = vi.fn(() => never);
+      const ticketDetail = vi.fn(() => never);
+      const client = {
+        baseUrl: 'http://daemon-stalled',
+        ...running('54'),
+        progress: vi.fn().mockResolvedValue({ progress: { status: 'unknown' } }),
+        ticketDetail,
+      };
+      for (let poll = 0; poll < 3; poll += 1) {
+        const listed = listWorkers(client, { workpad });
+        await vi.advanceTimersByTimeAsync(ENRICH_BUDGET_MS);
+        await listed;
+      }
+      expect(workpad).toHaveBeenCalledOnce();
+      expect(ticketDetail).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('asks again after a failed detail read rather than caching it as no line', async () => {
+    const ticketDetail = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('503'))
+      .mockResolvedValue({ live: { activity: 'Rendering stills' } });
+    const client = {
+      baseUrl: 'http://daemon-flaky',
+      ...running('55'),
+      progress: vi.fn().mockResolvedValue({ progress: { status: 'known', percent: 40 } }),
+      ticketDetail,
+    };
+    expect((await listWorkers(client))[0]?.last).toBeUndefined();
+    expect((await listWorkers(client))[0]?.last).toBe('Rendering stills');
+  });
+
   it('skips both reads for a ticket waiting on review', async () => {
     const workpad = vi.fn(async () => '- [x] Done');
     const ticketDetail = vi.fn();
