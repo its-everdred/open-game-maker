@@ -37,3 +37,8 @@ Only pixelfx's reviewed `src/` tree is consumed. The excluded gallery font is no
 ## ZzFX
 
 `zzfx` 1.4.0 is used under the MIT License. Its recorded dependency exception covers the package's sub-1,000-star repository.
+
+## Effekseer for WebGL
+
+Effekseer for WebGL 1.80.8 is used under the MIT License. Copyright (c) 2011 Effekseer Project. `@gm/sdk/vfx` ships its
+script and `effekseer.wasm` from `third_party/effekseer`, loaded only when a scene creates effects.
