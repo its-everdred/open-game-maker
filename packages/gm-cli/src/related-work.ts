@@ -8,7 +8,8 @@ export type Pull = { number: number; title: string; body: string; files: string[
 /** What one ticket's timeline holds: creator verdicts and the merged PRs that belong to it. */
 export type History = { verdicts: Verdict[]; pulls: Pull[] };
 export type Verdict = { text: string; at: string; positive: boolean };
-export type Comment = { body: string; createdAt: string };
+/** A ticket comment; `association` is GitHub's `author_association` (OWNER, MEMBER, COLLABORATOR, NONE, …). */
+export type Comment = { body: string; createdAt: string; association: string };
 export type Reuse = { paths?: string[]; generator?: string; notes?: string };
 /** A `docs/<slug>/decisions.json` entry, read leniently: instance files carry fields the strict contract rejects. */
 export type Decision = {
@@ -19,6 +20,7 @@ export type Decision = {
   answer?: string | null;
   answered_at?: string | null;
   ticket?: number | null;
+  recommendation?: string;
   options?: { label?: string; media?: string }[];
   reuse?: Reuse;
 };
@@ -96,17 +98,30 @@ function dirs(paths: Iterable<string>): Set<string> {
 const NEGATIVE = /\b(dislike|dislikes|revise|revision|reject|rejected|changes|terrible|bad|wrong|no)\b/i;
 const POSITIVE = /\b(like|likes|liked|love|loved|approve|approved|good|great|perfect|yes|keep)\b/i;
 
+/** Comment authors whose words can reach a worker's prompt: the repos are public, so anyone else could plant one. */
+const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
+/**
+ * A review-page verdict approves something when one of its per-option answers (`Riverbank: Like`) is a like, or, for
+ * free text, when it likes or approves and says nothing negative (`not good` is no approval).
+ */
+function reviewPositive(text: string): boolean {
+  const options = [...text.matchAll(/:\s*(like|dislike)\b/gi)].map((m) => m[1]!.toLowerCase());
+  if (options.length > 0) return options.includes('like');
+  return POSITIVE.test(text) && !NEGATIVE.test(text) && !/\b(not|never|don't|dont)\b/i.test(text);
+}
+
 /**
  * Creator verdicts the review relay writes on a ticket: `Kevin's review-page verdict, his words: …` lines and
- * `## Answered decision` blocks. A verdict is positive when it likes or approves something; an answered pick is
- * positive unless it asks for a revision.
+ * `## Answered decision` blocks, from trusted authors only. An answered pick is positive unless it asks for a revision.
  */
 export function verdicts(comments: Comment[]): Verdict[] {
   const out: Verdict[] = [];
   for (const comment of comments) {
+    if (!TRUSTED.has(comment.association)) continue;
     for (const match of comment.body.matchAll(/review-page verdict, his words:\s*(.+)/g)) {
       const text = match[1]!.trim();
-      out.push({ text, at: comment.createdAt, positive: POSITIVE.test(text) });
+      out.push({ text, at: comment.createdAt, positive: reviewPositive(text) });
     }
     if (/^## Answered decision/m.test(comment.body)) {
       const answer = /\*\*Answer:\*\*\s*(.+)/.exec(comment.body)?.[1]?.trim();
@@ -183,12 +198,17 @@ export function rank(input: RankInput): Related[] {
     ...[...target.body.matchAll(/(?:^|[\s`(])((?:games|packages|src|docs|review)\/[\w./-]+)/g)].map((m) => m[1]!),
   ]);
   const visual = target.labels.includes('role:visual');
-  const answered = decisions.filter((d) => (d.status === 'answered' || d.status === 'defaulted') && d.answer);
+  /* A defaulted decision keeps a null answer: its recommendation is what stands. */
+  const answered = decisions
+    .map((d) => ({ ...d, answer: d.answer ?? (d.status === 'defaulted' ? (d.recommendation ?? null) : null) }))
+    .filter((d) => (d.status === 'answered' || d.status === 'defaulted') && d.answer);
   const tickets: RelatedTicket[] = [];
   for (const candidate of input.candidates) {
     const number = candidate.issue.number;
     const history = input.history.get(number) ?? { verdicts: [], pulls: [] };
-    const verdict = [...history.verdicts].reverse().find((v) => v.positive) ?? null;
+    /* The latest verdict stands: a later rejection revokes an earlier like. */
+    const latest = history.verdicts.at(-1);
+    const verdict = latest?.positive ? latest : null;
     const hasDecision = answered.some((d) => d.ticket === number);
     const hasScreen = screens.some((s) => new RegExp(`(^|/)review/${number}(?:[-/]|$)`).test(s.target));
     if (!verdict && !hasDecision && !hasScreen && history.pulls.length === 0) continue;
@@ -286,9 +306,9 @@ export function renderRelated(ticket: number, items: Related[]): string[] {
         : item.pulls.length > 0
           ? ' — merged'
           : '';
-      lines.push(`- #${item.number} ${item.title}${verdict}`);
+      lines.push(`- #${item.number} ${clip(item.title, 160)}${verdict}`);
       for (const pull of item.pulls.slice(0, 3))
-        lines.push(`  - PR #${pull.number} ${pull.title}: ${fileList(pull.files)}`);
+        lines.push(`  - PR #${pull.number} ${clip(pull.title, 160)}: ${fileList(pull.files)}`);
       if (item.media.length > 0) lines.push(`  - Media: ${item.media.join(', ')}`);
       if (item.generators.length > 0) lines.push(`  - Generators: ${item.generators.join(', ')}`);
     } else if (item.kind === 'decision') {

@@ -428,15 +428,16 @@ gm context [ticket] [--inject <skills dir>] [--json] [--limit <n>]
 ```
 
 `gm context` runs in an instance repository and lists the earlier work in the ticket's game (`game:<slug>` label) that
-the ticket should build on: sibling tickets with a creator approval (a liked review-page verdict or an answered
-decision on the ticket), their merged PRs and the files they touched, their review folders under
-`games/<slug>/review/` and `assets-local/review/<slug>/` with any generator scripts, answered or defaulted entries in
-`docs/<slug>/decisions.json` with their picked media and `reuse` record, and approved screens in
+the ticket should build on: sibling tickets with a creator approval (the latest review-page verdict or answered
+decision on the ticket, from an owner, member or collaborator, likes or approves something), their merged PRs and the files they touched, their review folders under
+`games/<slug>/review/` and `assets-local/review/<slug>/` with any generator scripts, answered entries in `docs/<slug>/decisions.json`
+with their picked media and `reuse` record, defaulted entries with the recommendation that stands, and approved screens in
 `review/decisions.json`. It ranks siblings by shared `role:*` and `feature:*` labels, rare words shared in titles and
 bodies, and folders touched; tickets with only rejections and no merged work are left out. The ticket defaults to the
 workspace's own (`AIUR_HOOK_TICKET_IDENTIFIER` or `.gm/context/ticket`); it reads GitHub through `gh`.
 `--inject <dir>` writes the list as a **Build on this approved work** block at the end of `<dir>/gm-core/SKILL.md`,
-replacing an earlier block. A game daemon's `before_run` hook runs `gm context <ticket> --limit 5 --inject .claude/skills`
+replacing an earlier block; until the run finishes the block says it did not, so a failed or timed-out refresh never
+leaves an old list standing. A sibling whose timeline cannot be read is skipped with a warning. A game daemon's `before_run` hook runs `gm context <ticket> --limit 5 --inject .claude/skills`
 (bounded to five minutes), so aiur's skill preload inlines the block in the worker's prompt; a failure never stops the
 turn. `--limit` caps the tickets and the decisions listed (default 10).
 

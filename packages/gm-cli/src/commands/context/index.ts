@@ -31,7 +31,7 @@ const PULL_READS = 3;
 const GENERATOR = /\.(py|mjs|cjs|js|ts|sh)$/;
 const ISSUE = '{number, title, body: (.body // ""), labels: [.labels[].name], repo: .repository_url} | tojson';
 const TIMELINE =
-  '.[] | if .event == "commented" then {comment: {body: (.body // ""), createdAt: .created_at}} ' +
+  '.[] | if .event == "commented" then {comment: {body: (.body // ""), createdAt: .created_at, association: .author_association}} ' +
   'elif .event == "cross-referenced" and .source.issue.pull_request.merged_at != null then ' +
   '{pull: {number: .source.issue.number, title: .source.issue.title, body: (.source.issue.body // ""), repo: .source.issue.repository_url}} ' +
   'else empty end | tojson';
@@ -166,49 +166,81 @@ export const command: GmCommand = {
     const root = workspaceRoot(ctx.cwd);
     const skill = typeof flags.inject === 'string' ? resolve(ctx.cwd, flags.inject, 'gm-core', 'SKILL.md') : null;
     if (skill !== null && !existsSync(skill)) throw new CommandError(`no gm-core skill at ${skill}`);
-    const [target] = await api<RawIssue>(ctx, `repos/{owner}/{repo}/issues/${ticket}`, ISSUE);
-    if (!target) throw new CommandError(`gh api found no issue #${ticket}`);
-    const slug = target.labels.find((label) => label.startsWith('game:'))?.slice('game:'.length);
-    if (!slug) throw new UsageError(`#${ticket} has no game:<slug> label`, 'run gm context on a game ticket');
-    const siblings = await api<Issue>(
-      ctx,
-      `repos/{owner}/{repo}/issues?labels=${encodeURIComponent(`game:${slug}`)}&state=all&per_page=100`,
-      `.[] | select(.pull_request == null) | ${ISSUE}`,
-    );
-    const ranked = candidates(target, siblings);
-    const numbers = [target.number, ...ranked.slice(0, HISTORY_READS).map((c) => c.issue.number)];
-    const histories = await Promise.all(numbers.map((number) => history(ctx, number, target.repo)));
-    const read = new Map(numbers.map((number, index) => [number, histories[index]!] as const));
-
-    const gameRoot = existsSync(join(root, 'games', slug)) ? join(root, 'games', slug) : root;
-    const items = rank({
-      target,
-      candidates: ranked,
-      history: read,
-      decisions: readDecisions(join(root, 'docs', slug, 'decisions.json')),
-      screens: readScreens(join(gameRoot, 'review', 'decisions.json')),
-      folders: (number) =>
-        folders(
-          root,
-          [join(gameRoot, 'review'), join(root, 'review'), join(root, 'assets-local', 'review', slug)],
-          number,
-        ),
-      gamePrefix: gameRoot === root ? '' : `${relative(root, gameRoot)}/`,
-      limit: ctx.limit,
-    });
-
-    if (skill !== null) {
-      writeFileSync(skill, injectBlock(readFileSync(skill, 'utf8'), renderRelated(target.number, items)));
-      ctx.out(`gm context: ${items.length} related item(s) for #${ticket} written to ${relative(ctx.cwd, skill)}`);
-      return EXIT.ok;
+    /* Until this run finishes, the block says so: a failed or timed-out refresh never leaves an earlier list standing. */
+    const write = (block: string[]) => skill && writeFileSync(skill, injectBlock(readFileSync(skill, 'utf8'), block));
+    write([
+      '## Build on this approved work',
+      '',
+      `\`gm context ${ticket}\` did not finish. Run it yourself before making a new asset, UI kit, biome or system.`,
+    ]);
+    try {
+      return await collect(ctx, ticket, root, skill, write);
+    } catch (error) {
+      if (error instanceof UsageError) write([]);
+      throw error;
     }
-    if (ctx.json) {
-      for (const item of items) printJson(ctx, item);
-      return EXIT.ok;
-    }
-    const block = renderRelated(target.number, items);
-    if (block.length === 0) ctx.out(`no approved work in game:${slug} relates to #${ticket}`);
-    block.forEach((line) => ctx.out(line));
-    return EXIT.ok;
   },
 };
+
+async function collect(
+  ctx: GmContext,
+  ticket: string,
+  root: string,
+  skill: string | null,
+  write: (block: string[]) => unknown,
+): Promise<number> {
+  const [target] = await api<RawIssue>(ctx, `repos/{owner}/{repo}/issues/${ticket}`, ISSUE);
+  if (!target) throw new CommandError(`gh api found no issue #${ticket}`);
+  const slug = target.labels.find((label) => label.startsWith('game:'))?.slice('game:'.length);
+  if (!slug) throw new UsageError(`#${ticket} has no game:<slug> label`, 'run gm context on a game ticket');
+  const siblings = await api<Issue>(
+    ctx,
+    `repos/{owner}/{repo}/issues?labels=${encodeURIComponent(`game:${slug}`)}&state=all&per_page=100`,
+    `.[] | select(.pull_request == null) | ${ISSUE}`,
+  );
+  const ranked = candidates(target, siblings);
+  const numbers = [target.number, ...ranked.slice(0, HISTORY_READS).map((c) => c.issue.number)];
+  /* A sibling whose timeline cannot be read is left out; only the target and the sibling list are required. */
+  const histories = await Promise.all(
+    numbers.map((number) =>
+      number === target.number
+        ? history(ctx, number, target.repo)
+        : history(ctx, number, target.repo).catch((error: unknown) => {
+            ctx.err(`gm context: skipped #${number}: ${error instanceof Error ? error.message : String(error)}`);
+            return { verdicts: [], pulls: [] };
+          }),
+    ),
+  );
+  const read = new Map(numbers.map((number, index) => [number, histories[index]!] as const));
+
+  const gameRoot = existsSync(join(root, 'games', slug)) ? join(root, 'games', slug) : root;
+  const items = rank({
+    target,
+    candidates: ranked,
+    history: read,
+    decisions: readDecisions(join(root, 'docs', slug, 'decisions.json')),
+    screens: readScreens(join(gameRoot, 'review', 'decisions.json')),
+    folders: (number) =>
+      folders(
+        root,
+        [join(gameRoot, 'review'), join(root, 'review'), join(root, 'assets-local', 'review', slug)],
+        number,
+      ),
+    gamePrefix: gameRoot === root ? '' : `${relative(root, gameRoot)}/`,
+    limit: ctx.limit,
+  });
+
+  if (skill !== null) {
+    write(renderRelated(target.number, items));
+    ctx.out(`gm context: ${items.length} related item(s) for #${ticket} written to ${relative(ctx.cwd, skill)}`);
+    return EXIT.ok;
+  }
+  if (ctx.json) {
+    for (const item of items) printJson(ctx, item);
+    return EXIT.ok;
+  }
+  const block = renderRelated(target.number, items);
+  if (block.length === 0) ctx.out(`no approved work in game:${slug} relates to #${ticket}`);
+  block.forEach((line) => ctx.out(line));
+  return EXIT.ok;
+}
