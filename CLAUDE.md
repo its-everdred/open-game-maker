@@ -58,7 +58,7 @@ use. Work here the way those agents will work: dogfood the skills.
   Every audit: `executor/stack-health.sh` (silent when healthy: the four stack ports, the auto-update loop and its DOWN/FAILED lines, repeating
   errors in `~/ogm-stack.api.log`). The API sat down for 5 h on 2026-11-09 with "DOWN after restart" in a log no check read: `tsc -b` leaves the
   output of a renamed source in `dist/` and the API imports every route file there, so `executor/prune-stale-dist.sh` now runs before each restart.
-  A game daemon the app reads needs `events.export.enabled: true` in its `.aiur/config` (restart to apply; without it the feed token route is 404).
+  Every daemon the app reads, the core's included, needs `events.export.enabled: true` in its `.aiur/config` (restart to apply; without it the feed routes are 404; core lacked it until 2026-11-24, core #1349).
   Every audit: `aiur-main commands --filter open` (never through `| head`; check its count against `status` DECISIONS open N: a truncated list hid six Commands on paused #366 for 12 h, 2026-11-14); a worker's "Needs you" question idles its ticket until Kevin answers, and the
   CLI refuses an Executor answer, so first give Kevin each open Command as a pick page with its media within the hour (`executor/pick-page.sh <out> <key> <title> 'a|Label|img[,img]'…`, then publish with the Artifact tool and `db`; #803 sat 23 h unseen, 2026-11-16), and relay Kevin's standing words with `operator-relay-answer <id> --expected-version 1 --option
   <id> --quote "<his words>" --relayed-by nuc-ogm-executor --idempotency-key <k>` (three QA-path workers sat 40–75 min on 2026-11-02).
