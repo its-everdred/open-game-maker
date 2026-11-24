@@ -323,6 +323,15 @@
           "text_only": {
             "type": "boolean"
           },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "mock",
+              "prototype",
+              "build",
+              "polish"
+            ]
+          },
           "game_id": {
             "type": "string",
             "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"

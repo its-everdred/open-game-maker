@@ -13,6 +13,7 @@ import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js
 import { logReviewFeedRefresh } from '../review-rounds/feed-log.js';
 import { optionMediaFromAiur } from './aiur-media.js';
 import { toGameCommand } from './aiur.js';
+import { currentRung, deliverAdvance, withPhases } from './advance.js';
 import {
   bindReviewEpisode,
   beginReviewAnswer,
@@ -99,7 +100,7 @@ export default new Hono<ApiBindings>()
             daemonUnavailable = true;
             return [];
           }
-          return Promise.all(
+          const listed = await Promise.all(
             decisions.filter(open).map(async (decision) => {
               const command = toGameCommand(
                 decision,
@@ -113,6 +114,11 @@ export default new Hono<ApiBindings>()
               );
               return command ? { ...command, source: 'core' as const, daemon: id } : null;
             }),
+          );
+          return withPhases(
+            deps,
+            repo,
+            listed.filter((command) => command !== null),
           );
         }),
       )
@@ -167,15 +173,26 @@ export default new Hono<ApiBindings>()
       const problem = reviewProblem(command.options, body.review);
       if (problem) throw new HttpError(400, 'command_review_invalid', problem);
     }
-    const fields = body.review ? reviewDecisionFields(command.options, body.review, body.option_id) : undefined;
+    const deps = c.get('deps');
+    const phase = body.advance ? await currentRung(deps, repo, command.ticket, body.advance) : undefined;
+    // An advance with no other answer is the answer itself: an empty map that carries it.
+    const fields =
+      body.review || body.advance
+        ? reviewDecisionFields(
+            command.options,
+            body.review ?? { likes: [], dislikes: [] },
+            body.option_id,
+            body.advance,
+          )
+        : undefined;
     const singlePick =
+      body.advance === undefined &&
       body.review !== undefined &&
       body.review.likes.length === 1 &&
       body.review.likes[0] === body.option_id &&
       body.review.dislikes.length === 0 &&
       body.review.liked_notes === undefined &&
       body.review.notes === undefined;
-    const deps = c.get('deps');
     const guard = body.review
       ? beginReviewAnswer(deps.db, daemon, command.ticket, `command:${id}:${body.version}`)
       : undefined;
@@ -212,7 +229,10 @@ export default new Hono<ApiBindings>()
       ]);
       if (guard) bindReviewEpisode(deps.db, daemon, command.ticket, guard, episode);
     }
-    return c.json({ status: 'answered' });
+    const advanced = phase
+      ? await deliverAdvance(deps, { client, repo: repo!, ticket: command.ticket, phase, key: `${id}:${body.version}` })
+      : undefined;
+    return c.json({ status: 'answered', ...(advanced === undefined ? {} : { advanced }) });
   })
   .post('/core/tickets/:ticket/missing-review', async (c) => {
     const { client, daemon, repo } = owner(c);

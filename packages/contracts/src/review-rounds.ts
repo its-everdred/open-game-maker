@@ -8,6 +8,7 @@ const Ticket = z.string().regex(/^[1-9]\d{0,15}$/u);
 const ReviewTicket = z.union([Ticket, z.literal('publish')]);
 
 export const FidelityPhase = z.enum(['mock', 'prototype', 'build', 'polish']);
+export type FidelityPhase = z.infer<typeof FidelityPhase>;
 export const ReviewEffort = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
 export const fidelityEffort = { mock: 'low', prototype: 'medium', build: 'xhigh', polish: 'high' } as const;
 export function phaseEffort(phase: { id: string; effort?: z.infer<typeof ReviewEffort> }, index: number) {

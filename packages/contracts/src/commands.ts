@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Id, IsoTime } from './api.js';
 import { ChatMedia, OptionPlayable } from './chat.js';
 import { MediaMeta, MediaLayout } from './media-meta.js';
+import { FidelityPhase } from './review-rounds.js';
 
 // The per-game Commands inbox (M3, A2a): one game's open aiur Commands in the shape the embeddable
 // `<aiur-commands>` component consumes (aiur#7487). A Command is one open aiur decision; a job's Command is answered
@@ -69,6 +70,8 @@ export const GameCommand = z.object({
   review_number: z.number().int().positive().optional(),
   // A product question (`CREATOR_TEXT_ONLY_MARKER`): it waits in its game's queue for a voice session.
   text_only: z.boolean().optional(),
+  // The ticket's `phase:` rung when the Command was listed: the card shows the phase strip and its Approve button.
+  phase: FidelityPhase.optional(),
 });
 
 export const MissingMediaCommand = z.object({ game_id: Id, decision_id: z.string().min(1) });

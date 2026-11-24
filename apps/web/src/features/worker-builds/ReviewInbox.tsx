@@ -498,6 +498,7 @@ function sentSummary(command: ReviewCommand, review: SentReview | undefined): st
       ? `disliked ${review.dislikes.map(({ option_id: id, reason }) => `${label(id)}${reason ? `: ${reason}` : ''}`).join(', ')}`
       : '',
     review.notes ?? '',
+    review.advance ? `Approved → ${review.advance[0]!.toUpperCase()}${review.advance.slice(1)}` : '',
   ]
     .filter(Boolean)
     .join(' · ');

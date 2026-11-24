@@ -1272,3 +1272,99 @@ it('does not list or answer another game’s decision on a shared daemon', async
   expect(answer.status).toBe(404);
   expect(answerAsCreator).not.toHaveBeenCalled();
 });
+
+// Kevin should never have to type "move to the next phase": one button on the card approves the rung (#1124). The
+// worker's next turn must read the new rung, so the labels change after the answer and before the rework.
+describe('approving a phase ticket’s rung from a review card', () => {
+  async function phaseApp(phaseLabels: string[]) {
+    const calls: string[] = [];
+    const answerAsCreator = vi.fn(async () => {
+      calls.push('answer');
+    });
+    const { app, deps } = await appWithAiur([decision()], answerAsCreator);
+    const ticket = (repo: { name: string }) => ({
+      ticket: '478',
+      title: 'Ticket',
+      labels: [`game:${repo.name}`, ...phaseLabels],
+      closedAt: null,
+      updatedAt: AT,
+      outcome: 'Closed',
+      url: 'https://example.test/issue',
+    });
+    deps.registry.trackerTickets = async (repo) => ({ stale: false, tickets: [ticket(repo)] });
+    deps.registry.trackerTicket = async (repo) => ticket(repo);
+    const setFidelity = vi.fn(async () => {
+      calls.push('labels');
+    });
+    deps.registry.fidelityWriter = { setFidelity };
+    const rework = vi.fn(async () => {
+      calls.push('rework');
+    });
+    const base = deps.aiurClientForGame;
+    deps.aiurClientForGame = async (id) => ({ ...(await base(id)), rework }) as AiurClient;
+    const answer = (body: Record<string, unknown>) =>
+      app.request(`/api/v1/games/${ids.game}/commands/d_aiur_1/answer`, {
+        method: 'POST',
+        headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+        body: JSON.stringify({ option_id: 'round', version: 2, ...body }),
+      });
+    return { app, calls, answerAsCreator, setFidelity, rework, answer };
+  }
+  const sentPayload = (answerAsCreator: ReturnType<typeof vi.fn>) =>
+    JSON.parse((answerAsCreator.mock.calls[0]![1] as { response: string }).response) as Record<string, unknown>;
+
+  it('shows the rung from the ticket’s phase label, and none for a build-order phase number', async () => {
+    const mock = await phaseApp(['phase:mock']);
+    expect(((await (await get(mock.app, ids.game)).json()) as { commands: unknown[] }).commands[0]).toMatchObject({
+      phase: 'mock',
+    });
+    const order = await phaseApp(['phase:3']);
+    expect(
+      ((await (await get(order.app, ids.game)).json()) as { commands: Record<string, unknown>[] }).commands[0],
+    ).not.toHaveProperty('phase');
+  });
+
+  it('keeps the card’s votes, then moves a mock ticket to prototype before reworking it', async () => {
+    const { calls, answerAsCreator, setFidelity, rework, answer } = await phaseApp(['phase:mock', 'model:low']);
+    const response = await answer({ advance: 'prototype', review: { likes: ['round'], dislikes: [] } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: 'answered', advanced: true });
+    expect(sentPayload(answerAsCreator)).toMatchObject({
+      answers: [{ option_id: 'round', verdict: 'like' }],
+      advance: 'prototype',
+    });
+    expect(setFidelity).toHaveBeenCalledWith('fixture/game-1', '478', 'prototype', 'medium');
+    expect(rework).toHaveBeenCalledWith('478', expect.stringContaining('phase:prototype'), 'advance:d_aiur_1:2');
+    expect(calls).toEqual(['answer', 'labels', 'rework']);
+  });
+
+  it('takes the advance alone as the answer when the card has nothing else', async () => {
+    const { answerAsCreator, setFidelity, answer } = await phaseApp(['phase:prototype']);
+    expect((await answer({ advance: 'build', review: { likes: [], dislikes: [] } })).status).toBe(200);
+    expect(sentPayload(answerAsCreator)).toEqual({ kind: 'question_answers', answers: [], advance: 'build' });
+    expect(setFidelity).toHaveBeenCalledWith('fixture/game-1', '478', 'build', 'xhigh');
+  });
+
+  it('refuses an advance from a card shown before the ticket moved, without answering', async () => {
+    const { answerAsCreator, setFidelity, rework, answer } = await phaseApp(['phase:prototype']);
+    const response = await answer({ advance: 'prototype', review: { likes: ['round'], dislikes: [] } });
+    expect(response.status).toBe(409);
+    expect(answerAsCreator).not.toHaveBeenCalled();
+    expect(setFidelity).not.toHaveBeenCalled();
+    expect(rework).not.toHaveBeenCalled();
+  });
+
+  it('moves an approved build to polish, and ships an approved polish without relabelling', async () => {
+    const build = await phaseApp(['phase:build']);
+    expect((await build.answer({ advance: 'ship', review: { likes: [], dislikes: [] } })).status).toBe(200);
+    expect(build.setFidelity).toHaveBeenCalledWith('fixture/game-1', '478', 'polish', 'high');
+    const polish = await phaseApp(['phase:polish']);
+    expect((await polish.answer({ advance: 'ship', review: { likes: [], dislikes: [] } })).status).toBe(200);
+    expect(polish.setFidelity).not.toHaveBeenCalled();
+    expect(polish.rework).toHaveBeenCalledWith(
+      '478',
+      expect.stringContaining('close the ticket'),
+      'advance:d_aiur_1:2',
+    );
+  });
+});

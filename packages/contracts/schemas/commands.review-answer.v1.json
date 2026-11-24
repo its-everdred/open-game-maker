@@ -73,6 +73,14 @@
         "dislikes"
       ],
       "additionalProperties": false
+    },
+    "advance": {
+      "type": "string",
+      "enum": [
+        "prototype",
+        "build",
+        "ship"
+      ]
     }
   },
   "required": [

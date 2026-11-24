@@ -45,3 +45,24 @@
 .worker-review-submit {
   flex-wrap: wrap;
 }
+
+.worker-review-phases {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.worker-review-phases li + li::before {
+  content: '›';
+  margin-right: 6px;
+}
+
+.worker-review-phases li[aria-current='step'] {
+  color: var(--green-b);
+  font-weight: 800;
+}
