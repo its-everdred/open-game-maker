@@ -28,6 +28,8 @@ worn gear that bends with the body is not built yet.
 | `scripts/motion/strip.py` | `gm py --` | Quick zoomed strip for looking: `strip.py <cell_dir> <out.png> [rows=1,2] [zoom=3] [ref=<pack sheet>]` |
 | `scripts/motion/fit_accuracy.py` | Blender | Landmark error against rigged characters; exits 1 if any case fails |
 | `scripts/motion/rigged.py`, `sampling.py` | Blender module / plain | A body that arrives rigged (#1282): its own clip or a plain copy retarget, sampled evenly or on key poses |
+| `scripts/motion/handpose.py`, `posekey.py` | Blender module / plain | Hand-keyed key poses on a rigged body (`kind: pose`), eased over every sheet frame |
+| `scripts/motion/swing_curves.py`, `swing_chart.py` | Blender / `gm py --` | The swinging arm per frame (rotation step, swing angle, reversals) and its chart |
 | `scripts/motion/pose_overlay.py` | `gm py --` | Frame-by-frame silhouettes over the pack clip (pack red, ours cyan) with per-frame IoU |
 
 Blender 4.3 needs the `gm py setup` environment's NumPy and SciPy (the glTF importer needs NumPy too). Use a wrapper
@@ -99,7 +101,10 @@ loop, none for an attack, in pixels at the pack cell.
   palette over the whole sheet, `colours` for everything but the cloth and `cloth` for the cloth (14 in all) (the same colours in every frame), a 3x3 median first with `smooth`. This is Kevin's
   pick "B" (hero-finish1-warrior, 2026-11-22: fewer shades, less detail, as the pack). `cloth` renders a cloth mask
   per frame (`mask_<row>_<col>.png`: white where the base-colour texture is pale and unsaturated) and gives the
-  undergarments their own colours: on one palette they merge into pale skin. The sheet before it is kept as
+  undergarments their own colours: on one palette they merge into pale skin. `"weapon": 4` gives the weapon 4
+  colours of its own from the same mask frames (the weapon renders red there), and the skin pass leaves it as
+  rendered: on the body's palette the Warrior's lit axe blade and wooden haft turned skin and read as a flesh stick
+  (#1282 round 2). Masks rendered before this change have no red: delete a cell's `mask_*.png` and `--rescore`. The sheet before it is kept as
   `out/sheet_colour.png`. `render` keys `mask_s` and `mask_v` (0.16, 0.5) set the cloth thresholds; stricter ones
   lose the briefs.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,
@@ -114,8 +119,10 @@ loop, none for an attack, in pixels at the pack cell.
   pack Archer QuickShot) and `step`.
 - `stance` (top level, or in a cell's `motion` to override it for that cell): a name in `retarget.STANCES`.
 - `weapon` (per cell or top level): `{"path": glb, "bone": "hand.R", "length": 0.3, "grip": 0.25, "spin": 0, "roll": 0}`
-  puts a separate weapon mesh on a hand bone, its long axis across the fist. `spin` turns it about that axis, `roll`
-  about the hand bone (a bow needs `"roll": 90` to stand upright). Shape keys are dropped (the KayKit bow's `Draw` key
+  puts a separate weapon mesh on a hand bone, its long axis across the fist. `spin` turns it about that axis, `pitch`
+  tips its head toward the fingers, `roll` turns it about the hand bone (a bow needs `"roll": 90` to stand upright).
+  The Warrior's walk axe hangs down and out like the pack Walk's at `"pitch": 45` and the rig's auto roll plus 40
+  (Kevin, 2026-11-23: the forward-pointing axe sat "too high"). Shape keys are dropped (the KayKit bow's `Draw` key
   otherwise kept it in its import pose).
 
 Run from the repository root:
@@ -217,9 +224,90 @@ OGM_FAL_LEDGER=<costs.json> OGM_FAL_STOP_USD=<cap> gm py -- skills/gm-sprite-for
   <out>/gen 0.80 model_url=@<base body>.glb skeleton_template=mixamo height_meters=1.8 enable_animation=true animation_action_id=92
 ```
 
+**Many library clips in one call (#1282 round 3).** `fal-ai/meshy/rigging/multi-animation` rigs once and returns up to
+10 library clips (`animation_action_ids`, request order, files `animations_<i>_animation_glb.glb`, action
+`Armature|<Name>|baselayer_Armature`): $0.20 plus $0.12 a clip on the model page, $0.80 in `fal3d.py price`; book the
+higher ($1.40 for 10). Ten clips took 90 s. Names and ids come from the library table
+(https://docs.meshy.ai/en/api/animation-library); guarded walks: 21 Walk_Fight_Forward, 119 Slow_Orc_Walk,
+559 Sneaky_Walk, 560 Spear_Walk, 112 Monster_Walk, 524 Cautious_Crouch_Walk_Forward; weapon attacks: 4 Attack,
+92 Double_Combo_Attack, 105 Triple_Combo_Attack, 128 Heavy_Hammer_Swing, 237 Charged_Axe_Chop, 238 Axe_Spin_Attack,
+242 Charged_Slash.
+
+```sh
+... fal3d.py run fal-ai/meshy/rigging/multi-animation <out>/gen 1.40 model_url=@<base body>.glb skeleton_template=mixamo \
+  height_meters=1.8 'animation_action_ids=[21,119,559,560,112,4,128,237,242,105]'
+```
+
+Guarded stepping in long mocap takes (LaFAN1 joint names, centimetres, 30 fps; the fight takes are
+`fight1_subject{2,3,5}.bvh` in the LaFAN1 zip): `motion/bvh_track.py` dumps their joints and `motion/guard_walk.py`
+ranks one-cycle windows by forward lean, a low head and both hands up in front, keeping steady forward travel with the
+toes along it; the three fight takes give 69 such cycles.
+
+```sh
+<blender wrapper> --python skills/gm-sprite-forge/scripts/motion/bvh_track.py -- tracks.json fight1_subject2.bvh fight1_subject5.bvh
+gm py -- skills/gm-sprite-forge/scripts/motion/guard_walk.py tracks.json cycles.json [--top 12]   # every field in cycles.json
+```
+
+A cycle's `f0` and `f1` are the take's own frame numbers: play it as `kind: copy` with `path` the take,
+`frames: [f0, f1]`, `in_place` and the LaFAN1 names in `map` (mixamo `LeftToeBase` is LaFAN1 `LeftToe`). The Synty Goblin Locomotion walk (owned, local only) maps
+onto the Meshy rig by name (Shoulder/Elbow are the upper arm and forearm, Ankle the foot, Ball the toe).
+
+100STYLE (CC BY 4.0, Geno skeleton from `orangeduck/100style-retarget`) uses the same names but 60 fps and `ToeBase`,
+and its BVH zip is 4.7 GB: fetch only the styles you need (`<Style>_FW.bvh` is the forward walk) with HTTP range reads
+of the zip. Then `gm py -- skills/gm-sprite-forge/scripts/motion/trim_bvh.py <in> <out> 1200 2400` cuts a window
+at 30 fps with LaFAN1 toe names, so `bvh_track.py`, `guard_walk.py` and the LaFAN1 `map` work unchanged.
+
 Check every cell frame by frame against the pack clip: `gm py -- skills/gm-sprite-forge/scripts/motion/pose_overlay.py
 <out.png> <pack sheet> <cell_dir> ... [--rows 1,2] [--zoom 3]` lays each frame's silhouette over the pack's (pack red,
 ours cyan, both white) and writes the per-frame IoU to `<out>.json`.
+
+## Hand-keyed attacks (#1282 round 2)
+
+Kevin (2026-11-23) on every round-1 attack: they "glitch back and forth instead of being a large swing with follow
+through". What caused it, measured on the swinging arm (world rotation per sheet frame and the hand's swing about the
+shoulder):
+
+- **Not quaternion sign flips in the sources:** the Quaternius clip has no keys on flipped hemispheres. The plain copy
+  did key consecutive frames on opposite hemispheres; with constant keys that changes nothing on screen, but every
+  keyed quaternion now takes the previous key's side (`sampling.compatible`), so no interpolation can spin the long way.
+- **A strike drawn in one frame.** Even sampling of a 30 fps clip on 15 frames put the arm's 150-200 degree strike
+  between two sheet frames: the axe pops from overhead to the ground with nothing between.
+- **Twist from rest (round 2's own first keys).** Aiming an arm by the shortest rotation from its rest direction
+  (hanging down) has no stable axis when the arm is raised overhead, nearly opposite: the swing curves showed the
+  forearm turning 162 degrees in one frame. `handpose.py` aims each bone from its previous frame instead, and the
+  hand turns at most 128 degrees in the strike frame. A haft keyed nearly along the forearm is unstable the same way
+  (it is squared to the forearm): turn the axe through the side between wind-up and strike, not end over end.
+- **Replayed poses.** Key-pose stepping replayed the wind-up for the pack's second swing, so the axe snapped strike,
+  wind-up, strike; the Quaternius clip's own recovery also lifts the hand back up through the front.
+
+So an attack is hand-keyed as **one continuous arc**: `motion.kind: pose` on a rigged body (no mocap, no retarget). Key
+poses sit on the sheet's own frames (`t` 0-14) and every frame between two keys is drawn from them with the segment's
+easing (`in` into the strike, `out` into the wind-up and the follow-through, `io` for the draw and the recovery), so
+the axe passes through every frame, one way. Write the full pose at key 0; later keys name only what changes.
+
+```json
+"motion": {"kind": "pose", "bones": {"hips": "mixamorig:Hips", "spine": ["mixamorig:Spine", "mixamorig:Spine1", "mixamorig:Spine2"], "...": "..."},
+           "keys": [{"t": 0, "pelvis": 10, "torso": [5, 15, 0], "hips": [0, 0, -0.07], "foot_l": [-0.06, 0.16, 0],
+                     "foot_r": [0.06, -0.14, 0], "arm_r": [0.3, 0.45, -0.85], "fore_r": [0.1, 0.85, -0.45],
+                     "axe": [-0.5, 0.6, -0.6], "arm_l": [-0.35, 0.2, -0.9], "fore_l": [-0.2, 0.6, -0.75]},
+                    {"t": 4, "ease": "out", "torso": [35, -14, -10], "arm_r": [0.25, -0.3, 0.9], "...": "..."}]},
+"rotz": -45
+```
+
+- Directions are `[right, forward, up]` in the body's frame; arms and the axe turn with the torso. `axe` sets the
+  hand so the weapon points that way, wrist straight along the forearm. `pelvis`, `torso` ([turn right, lean
+  forward, lean right]) and `head` are degrees; `hips` and `foot_*` are metres for a 1.8 m body. The feet hold the
+  stance and the legs reach them by a two-bone solve (knees forward), so a crouch or lunge does not slide them.
+- `bones` maps every role (`handpose.ROLES`) to the rig's bones. A cell's `rotz` turns the keyed body afterwards:
+  the pack's Attack1 faces 45 degrees right of its row (`-45`).
+- Two opposite directions in neighbouring keys fail: add a key between them to say which way round the swing goes.
+- Check the keys with `swing_curves.py` before rendering (seconds, no render): a swing that reverses, or a bone that
+  turns more than about 130 degrees in a frame, needs a key between.
+  `<blender wrapper> --python skills/gm-sprite-forge/scripts/motion/swing_curves.py -- cells.json <cell name> <out>.json` per cell, then
+  `gm py -- skills/gm-sprite-forge/scripts/motion/swing_chart.py chart.png <out>.json ...` draws them side by side.
+- Block the arc in `workbench` and look at a 3x strip beside the pack before Cycles. The S camera looks down the
+  forward axis: a strike or follow-through pointed forward is foreshortened and hides in front of the body. Swing it
+  out to the side (as the pack's wide sweeps), with straight elbows through the strike.
 
 ## Files stay local
 
@@ -239,7 +327,7 @@ Keep mocap under `assets-local/experiments/sprite-pipeline/hero-s2/mocap/` in fo
 | CMU mocap (BVH mirror `una-dinosauria/cmu-mocap`) | free for any use | 120 fps; the cycle is picked automatically |
 | Bandai Namco Research Motion | CC BY-NC 4.0 | styled walks (giant, proud, ...) and slashes; rest pose along +X |
 | LaFAN1 (Ubisoft) | CC BY-NC-ND 4.0 | ND: retargeted output stays private, never in shared media |
-| 100STYLE | CC BY 4.0 | 1.5 GB zip; not downloaded in #1202 |
+| 100STYLE | CC BY 4.0 | walk styles only; retargeted BVH zip 4.7 GB, range-fetch single styles (#1282) |
 | Hand-keyed (`handkey.py`) | own | the only source tuned to the pack's timing |
 
 ## Findings (#1202, Stage 1 Warrior mesh as test subject)
