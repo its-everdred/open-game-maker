@@ -36,6 +36,19 @@ export type Worker = WorkerProgress & {
 const LAST_TTL_MS = 30_000;
 const LAST_MAX = 500;
 const lastLines = new Map<string, { line: string | undefined; expires: number }>();
+/**
+ * The workpad and the last line only decorate a row, so neither may hold the 5 s poll: past this budget the row goes
+ * without, while the read carries on and fills its cache for the next poll.
+ */
+export const ENRICH_BUDGET_MS = 3_000;
+
+function within<T>(read: Promise<T | undefined>, ms = ENRICH_BUDGET_MS): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), ms);
+  });
+  return Promise.race([read.catch(() => undefined), late]).finally(() => clearTimeout(timer));
+}
 
 // The detail is a larger read than progress; the menu polls every few seconds, so one read per ticket is kept briefly.
 async function lastLine(client: WorkerClient, ticket: string): Promise<string | undefined> {
@@ -88,11 +101,13 @@ export async function listWorkers(client: WorkerClient, options: ListOptions = {
       const state = String(entry.state ?? '').replace(/^[^:]+:/, '');
       const waiting = !snapshot.running.includes(entry) && ['human-review', 'ci-wait', 'merging'].includes(state);
       const phase = reading?.phase?.status === 'known' ? reading.phase.value : undefined;
-      const workpad =
-        waiting || percent !== undefined || !options.workpad
-          ? undefined
-          : await options.workpad(ticket).catch(() => undefined);
-      const last = waiting ? undefined : await lastLine(client, ticket);
+      // Only aiur's own "unknown" answer hands progress to the checklist; a failed read stays unknown, so a timeout
+      // never shows an old checklist's 100%.
+      const unknown = reading?.progress.status === 'unknown';
+      const [workpad, last] = await Promise.all([
+        waiting || !unknown || !options.workpad ? undefined : within(options.workpad(ticket)),
+        waiting ? undefined : within(lastLine(client, ticket)),
+      ]);
       return {
         ticket,
         title,
