@@ -67,6 +67,7 @@ This directory: `~/.aiur/repo/its-everdred/open-game-maker-2000/executor/` (scri
 - **Loops:** `host-steps.sh` (merge, publish, stills, audits, follow-up triage), `auto-update.sh` (stack, web deploy, aiur pin), `command-listener.sh` (wakes the Executor).
 - **Helpers:** `file-ticket.sh`, `pick-page.sh`, `tell-aiur.sh`, `og-merge.sh`, `og-publish.sh`, `decide.sh` (Executor pick decisions: comment + rework; `pc:*` tickets via `pc-rework.sh`), `og-cpu-split.sh` (70/30 cgroup split), `og-dispatch-watchdog.sh` (restart a stalled open-games dispatch; both run from host-steps).
 - **Mock broker:** `mock-broker.py` (one copy, flock) generates workers' image mocks; references may come from `assets-local/packs/` (any licence), `sets/` and `review/` so mocks match the real kit (Kevin 2026-11-19); the rest of the private library is refused.
+- **Humble watch:** systemd user `ogm-humble-watch.timer` (every 3 h, random delay) runs `~/.local/bin/humble-watch.py` on the public humblebundle.com/bundles page; new bundles go to the scratchpad `aiur-replies.md` (`humble-new:`), review cards `scratchpad-cards/humble.jsonl` (images in `assets-local/review/humble/`) and, relevant ones, `~/.local/state/ogm/humble-watch/notify.txt` (state `seen.json`).
 - **Kevin's personal skills** (not workers' unless vendored): `its-everdred/skills`, where `external-skills.json` installs into `~/.agents/skills`.
 
 **Open moves** (host glue that belongs in a layer; from `docs/meta/layer-audit-2026-11-11.md` and later):
