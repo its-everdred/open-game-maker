@@ -43,6 +43,17 @@ describe('display images', () => {
     expect([...container.querySelectorAll('img')]).toEqual([imgs[0]]);
   });
 
+  it('keeps the shown art through a second change made before the first one loaded', () => {
+    const { container, rerender } = render(<DisplayImage className="game-logo" src="/a.png" sizes="100vw" keepShown />);
+    const shown = container.querySelector('img')!;
+    load(shown);
+    rerender(<DisplayImage className="game-logo" src="/b.png" sizes="100vw" keepShown />);
+    rerender(<DisplayImage className="game-logo" src="/c.png" sizes="100vw" keepShown />);
+    const imgs = [...container.querySelectorAll('img')];
+    expect(imgs.map((img) => img.getAttribute('src'))).toEqual(['/c.png', '/a.png']);
+    expect(imgs[1]).toBe(shown);
+  });
+
   it('keeps nothing extra when the art was never shown', () => {
     const { container, rerender } = render(
       <DisplayImage className="game-logo" src="/old.png" sizes="100vw" keepShown />,

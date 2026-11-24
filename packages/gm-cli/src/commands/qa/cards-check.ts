@@ -4,7 +4,15 @@ import { join, relative, resolve } from 'node:path';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson } from '../../context.js';
-import { cardFailures, expectedParts, probeCardPart, type CardPart } from '../../qa-cards-check.js';
+import {
+  cardFailures,
+  cardList,
+  expectedParts,
+  probeCardPart,
+  staleCards,
+  type CardPart,
+} from '../../qa-cards-check.js';
+import { matchesConfiguredOrigin } from '../../qa-games-cache.js';
 import { readEnvFile } from '../publish/index.js';
 
 /*
@@ -33,17 +41,21 @@ export const command: GmCommand = {
     if (!(holdMs > 0 && loadMs > 0))
       throw new UsageError('--hold and --load must be positive', 'gm help qa cards-check');
     const envDir = ctx.env?.OGM_ENV_DIR || join(ctx.home ?? homedir(), '.config', 'ogm', 'env');
+    const api = readEnvFile(join(envDir, 'api.env'));
+    // The QA session cookie goes only to the configured app.
+    if (!matchesConfiguredOrigin(app, api.OGM_APP_ORIGIN))
+      throw new UsageError('--app must match OGM_APP_ORIGIN in api.env', 'gm help qa cards-check');
     // Without a file, every game's real card comes from the host's API (the internal QA route).
     let body: string;
     if (args[0]) body = readFileSync(resolve(ctx.cwd, args[0]), 'utf8');
     else {
-      const api = readEnvFile(join(envDir, 'api.env'));
       if (!(api.OGM_INTERNAL_TOKEN && api.OGM_API_PORT)) {
         ctx.err(`qa cards-check: OGM_INTERNAL_TOKEN and OGM_API_PORT must be set in ${envDir}/api.env`);
         return EXIT.failed;
       }
       const response = await fetch(`http://127.0.0.1:${api.OGM_API_PORT}/internal/qa/cards`, {
         headers: { 'x-ogm-internal': api.OGM_INTERNAL_TOKEN },
+        signal: AbortSignal.timeout(30_000),
       });
       if (!response.ok) {
         ctx.err(`qa cards-check: the API answered ${response.status} for the cards`);
@@ -51,7 +63,8 @@ export const command: GmCommand = {
       }
       body = await response.text();
     }
-    const expected = expectedParts(JSON.parse(body) as unknown);
+    const games = cardList(JSON.parse(body) as unknown);
+    const expected = expectedParts(games);
     const qa = readEnvFile(join(envDir, 'qa.env'));
     if (!(qa.OGM_QA_SESSION_COOKIE_NAME && qa.OGM_QA_SESSION_COOKIE)) {
       ctx.err(`qa cards-check: missing the QA session in ${envDir}/qa.env; run ops/bin/ogm-qa-session`);
@@ -75,30 +88,85 @@ export const command: GmCommand = {
       await context.addCookies([{ name: qa.OGM_QA_SESSION_COOKIE_NAME, value: qa.OGM_QA_SESSION_COOKIE, url: app }]);
       const page = await context.newPage();
       page.on('pageerror', (error) => errors.push(error.message.slice(0, 300)));
-      // The QA account owns no creator's games: its list shows the given cards instead.
-      await page.route(`${app}/api/v1/games`, (route) =>
-        route.request().method() === 'GET'
-          ? route.fulfill({ status: 200, contentType: 'application/json', body })
-          : route.continue(),
-      );
+      // The QA account owns no creator's games: its list shows the given cards instead. The first visit lists them
+      // as cached before their variants existed; the reload then shows that cached list until the live one arrives.
+      let served = JSON.stringify(staleCards(games));
+      let held: Promise<void> = Promise.resolve();
+      let release = () => {};
+      await page.route(`${app}/api/v1/games`, async (route) => {
+        if (route.request().method() !== 'GET') return route.continue();
+        await held;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: served });
+      });
+      const shown = (gameId: string, part: 'cover' | 'logo') =>
+        page.evaluate(probeCardPart, [gameId, part] as [string, 'cover' | 'logo']);
       await page.goto(`${app}/all`, { timeout: loadMs });
       await page.waitForSelector('[data-game-id]', { timeout: loadMs }).catch(() => undefined);
+      for (const { gameId, part } of expected) {
+        await page
+          .locator(`[data-game-id="${gameId}"]`)
+          .scrollIntoViewIfNeeded({ timeout: 5_000 })
+          .catch(() => undefined);
+        for (const end = Date.now() + 10_000; Date.now() < end; await page.waitForTimeout(200))
+          if ((await shown(gameId, part)) === 'shown') break;
+      }
+      // Revisit: the cached cards show first; the live list is held until the first screen's cached art is on screen.
+      served = body;
+      held = new Promise((done) => (release = done));
+      await page.reload({ timeout: loadMs });
+      await page.waitForSelector('[data-game-id]', { timeout: loadMs }).catch(() => undefined);
+      // The first screen's cards, once their cached art shows, must keep showing art from the moment the live list lands.
+      let first: CardPart[] = [];
+      for (const end = Date.now() + loadMs; Date.now() < end; await page.waitForTimeout(200)) {
+        first = [];
+        for (const item of expected) {
+          const box = await page.locator(`[data-game-id="${item.gameId}"]`).boundingBox();
+          if (box && box.y < 844 && box.y + box.height > 0)
+            first.push({ ...item, shownAt: null, lostAt: null, state: await shown(item.gameId, item.part) });
+        }
+        if (first.every((part) => part.state === 'shown')) break;
+      }
+      // From here each new image takes as long as a phone on 4G, so a card that blanks while art changes shows it.
+      await page.route('**/*', async (route) =>
+        route.request().resourceType() === 'image'
+          ? new Promise<void>((done) => setTimeout(done, 2_000)).then(() => route.fallback())
+          : route.fallback(),
+      );
+      release();
+      const released = Date.now();
+      for (const part of first) if (part.state === 'shown') part.shownAt = 0;
+      parts.push(...first);
+      while (Date.now() - released < loadMs + holdMs) {
+        const now = Date.now() - released;
+        for (const part of first) {
+          const state = await shown(part.gameId, part.part);
+          if (part.lostAt === null) part.state = state;
+          if (state === 'shown') part.shownAt ??= now;
+          else if (part.shownAt !== null) part.lostAt ??= now - part.shownAt;
+        }
+        if (first.some((part) => part.shownAt === null) && now > loadMs) break;
+        if (first.every((part) => part.shownAt !== null && now - part.shownAt >= holdMs)) break;
+        await page.waitForTimeout(100);
+      }
+      // Then every other card, scrolled into view one at a time: its art has to show, then stay for the hold.
+      const checked = new Set(first.map((part) => `${part.gameId} ${part.part}`));
       for (const gameId of [...new Set(expected.map((part) => part.gameId))]) {
         const mine = expected
-          .filter((part) => part.gameId === gameId)
+          .filter((part) => part.gameId === gameId && !checked.has(`${part.gameId} ${part.part}`))
           .map((part): CardPart => ({ ...part, shownAt: null, lostAt: null, state: 'missing' }));
+        if (!mine.length) continue;
         parts.push(...mine);
         await page
           .locator(`[data-game-id="${gameId}"]`)
           .scrollIntoViewIfNeeded({ timeout: 5_000 })
           .catch(() => undefined);
         const start = Date.now();
-        // Each piece first has to show, then keep showing for the hold.
         while (Date.now() - start < loadMs + holdMs) {
           const now = Date.now() - start;
           for (const part of mine) {
-            part.state = await page.evaluate(probeCardPart, [gameId, part.part] as [string, 'cover' | 'logo']);
-            if (part.state === 'shown') part.shownAt ??= now;
+            const state = await shown(gameId, part.part);
+            if (part.lostAt === null) part.state = state;
+            if (state === 'shown') part.shownAt ??= now;
             else if (part.shownAt !== null) part.lostAt ??= now - part.shownAt;
           }
           if (mine.some((part) => part.shownAt === null) && now > loadMs) break;
@@ -111,7 +179,7 @@ export const command: GmCommand = {
     } finally {
       await browser.close();
     }
-    const failures = cardFailures(parts, loadMs);
+    const failures = cardFailures(parts, loadMs, games.length);
     writeFileSync(
       join(out, 'cards-check.json'),
       `${JSON.stringify({ viewport: '390x844', failures, parts, errors }, null, 2)}\n`,

@@ -11,16 +11,22 @@ export type CardPart = {
   state: string;
 };
 
-/** The art a list response promises for each card: a cover for a coverUrl, a logo for a logoUrl. */
-export function expectedParts(games: unknown): Array<Pick<CardPart, 'gameId' | 'title' | 'part'>> {
-  const list = Array.isArray(games)
-    ? games
-    : games && typeof games === 'object' && Array.isArray((games as { games?: unknown }).games)
-      ? (games as { games: unknown[] }).games
+/** The games of a list response, in either shape the API has used: an array or `{ games: [...] }`. */
+export function cardList(value: unknown): Array<Record<string, unknown>> {
+  const list = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && Array.isArray((value as { games?: unknown }).games)
+      ? (value as { games: unknown[] }).games
       : null;
   if (!list) throw new Error('the cards file is not a games list');
-  return list.flatMap((value) => {
-    const game = value as { id?: unknown; title?: unknown; coverUrl?: unknown; logoUrl?: unknown };
+  return list.filter((game): game is Record<string, unknown> => !!game && typeof game === 'object');
+}
+
+/** The art a list response promises for each card: a cover for a coverUrl, a logo for a logoUrl. */
+export function expectedParts(
+  games: Array<Record<string, unknown>>,
+): Array<Pick<CardPart, 'gameId' | 'title' | 'part'>> {
+  return games.flatMap((game) => {
     if (typeof game.id !== 'string') return [];
     const title = typeof game.title === 'string' ? game.title : game.id;
     return [
@@ -30,8 +36,22 @@ export function expectedParts(games: unknown): Array<Pick<CardPart, 'gameId' | '
   });
 }
 
+/**
+ * The same cards as a list cached before their display variants existed: originals only. The check shows these
+ * first, so the reload swaps every card from cached art to the live list's, the change that blanked Kevin's logos.
+ */
+export function staleCards(games: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return games.map((game) => {
+    const stale = { ...game };
+    for (const key of ['coverImage', 'logoImage', 'slotImages']) delete stale[key];
+    return stale;
+  });
+}
+
 /** Every piece of art that never showed, or showed and then went away (#1312: logos appeared, then vanished). */
-export function cardFailures(parts: CardPart[], loadMs: number): string[] {
+export function cardFailures(parts: CardPart[], loadMs: number, games: number): string[] {
+  // A list of games whose cards declare no art at all checks nothing; that is not a pass.
+  if (games > 0 && parts.length === 0) return [`none of the ${games} games has a thumbnail or logo to check`];
   return parts.flatMap((part) => {
     const name = `${part.title} ${part.part}`;
     if (part.shownAt === null) return [`${name}: not shown within ${Math.round(loadMs / 1000)} s (${part.state})`];

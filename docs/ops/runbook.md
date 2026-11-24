@@ -539,7 +539,9 @@ after every upload.
 
 Next, `gm qa cards-check --app <app origin> --out <dir>` opens the games list in WebKit at 390x844 with the QA session,
 showing every game's real card (the API's internal `/internal/qa/cards`, QA and delisted games left out), and requires
-each card's thumbnail and logo to load within 30 s and stay visible for 5 s (#1312). It runs in every mode, including
+each card's thumbnail and logo to load within 30 s and stay visible for 5 s (#1312). It visits twice, as a returning
+phone does: first with the cards' originals only, then a reload that shows that cached list until the live list (with
+its display variants, images slowed to a phone's pace) lands, so a card that blanks while its art changes fails. It runs in every mode, including
 `--frames-only`; a failure is checked once more, then appends one `qa-cards-check failed` line naming the card, the
 image and what it did, with `cards-check.json` and a still under `assets-local/review/app/cards-check/`.
 

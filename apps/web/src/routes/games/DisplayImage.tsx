@@ -164,6 +164,7 @@ function renderImage({ image, variants, src, sizes, priority = false }: Props, {
             width={320}
             height={180}
             loading={priority ? 'eager' : 'lazy'}
+            fetchPriority={priority ? 'high' : 'auto'}
           />
         )}
       </picture>
@@ -180,6 +181,7 @@ function renderImage({ image, variants, src, sizes, priority = false }: Props, {
         width={320}
         height={180}
         loading={priority ? 'eager' : 'lazy'}
+        fetchPriority={priority ? 'high' : 'auto'}
       />
     );
   return (
