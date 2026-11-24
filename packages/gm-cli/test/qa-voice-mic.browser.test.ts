@@ -110,10 +110,13 @@ it("refuses the microphone under Safari's playback audio session, as an iPhone d
       session.type = 'playback';
       const playback = await open();
       session.type = 'play-and-record';
-      return { playback, recording: await open() };
+      const recording = await open();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      session.type = 'playback';
+      return { playback, recording, afterSwitch: stream.getAudioTracks().map((track) => track.readyState) };
     });
     // Chromium has no audio session, so without this the post-deploy voice check passed while iPhones failed (#1325).
-    expect(outcomes).toEqual({ playback: 'InvalidStateError', recording: 'open' });
+    expect(outcomes).toEqual({ playback: 'InvalidStateError', recording: 'open', afterSwitch: ['ended'] });
   } finally {
     await context.close();
   }

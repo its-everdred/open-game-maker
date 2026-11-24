@@ -19,10 +19,12 @@ function safariNavigator(type: string) {
 }
 
 class FakeContext {
+  resume(): Promise<void> {
+    return Promise.resolve();
+  }
   sampleRate = 48_000;
   state = 'running';
   destination = {};
-  resume = vi.fn(async () => undefined);
   close = vi.fn(async () => undefined);
   createMediaStreamSource = () => ({ connect: vi.fn(), disconnect: vi.fn() });
   createScriptProcessor = () => ({ addEventListener: vi.fn(), connect: vi.fn(), disconnect: vi.fn() });
@@ -83,6 +85,32 @@ describe('capture audio session', () => {
 
     await expect(startCapture(() => undefined)).rejects.toMatchObject({ name: 'NotAllowedError' });
 
+    expect(nav.audioSession.type).toBe('playback');
+  });
+
+  it('closes the microphone and restores the session when audio setup fails after it opened', async () => {
+    const resume = vi.spyOn(FakeContext.prototype, 'resume').mockRejectedValueOnce(new Error('interrupted'));
+
+    await expect(startCapture(() => undefined)).rejects.toThrow('interrupted');
+
+    expect(resume).toHaveBeenCalledOnce();
+    expect(nav.tracks[0]!.stop).toHaveBeenCalled();
+    expect(nav.audioSession.type).toBe('playback');
+  });
+
+  it('closes the microphone and restores the session when the audio context cannot be created', async () => {
+    vi.stubGlobal(
+      'AudioContext',
+      class {
+        constructor() {
+          throw new DOMException('too many contexts', 'NotSupportedError');
+        }
+      },
+    );
+
+    await expect(startCapture(() => undefined)).rejects.toMatchObject({ name: 'NotSupportedError' });
+
+    expect(nav.tracks[0]!.stop).toHaveBeenCalled();
     expect(nav.audioSession.type).toBe('playback');
   });
 

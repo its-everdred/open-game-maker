@@ -197,20 +197,37 @@ export function installFakeMic(clips: Record<string, string>): void {
       },
     },
   });
+  // Safari also loses the microphone when the session leaves recording while a capture is open: end the open tracks.
+  const recordable = (type: string) => type === 'auto' || type === 'play-and-record';
+  const open = new Set<MediaStreamTrack>();
+  let sessionType = 'auto';
+  const emulated = {
+    get type() {
+      return sessionType;
+    },
+    set type(value: string) {
+      sessionType = value;
+      if (recordable(value)) return;
+      for (const track of open) track.stop();
+      open.clear();
+    },
+  };
   const nav = navigator as Navigator & { audioSession?: { type: string } };
-  if (!nav.audioSession) Object.defineProperty(nav, 'audioSession', { value: { type: 'auto' } });
+  if (!nav.audioSession) Object.defineProperty(nav, 'audioSession', { value: emulated });
   const session = nav.audioSession!;
   // On the prototype: WebKit can run this before the page's navigator.mediaDevices exists (a routed document).
   if (typeof MediaDevices === 'undefined') return;
   MediaDevices.prototype.getUserMedia = async () => {
     mic.requested += 1;
-    if (session.type !== 'auto' && session.type !== 'play-and-record') {
+    if (!recordable(session.type)) {
       throw new DOMException('AudioSession category is not compatible with audio capture.', 'InvalidStateError');
     }
     const { context, destination } = ensure();
     await context.resume();
     // Each caller gets its own tracks: the app stops them when a capture ends, which must not mute the next capture.
-    return new MediaStream(destination.stream.getAudioTracks().map((track) => track.clone()));
+    const tracks = destination.stream.getAudioTracks().map((track) => track.clone());
+    for (const track of tracks) open.add(track);
+    return new MediaStream(tracks);
   };
 }
 

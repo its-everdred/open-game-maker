@@ -41,7 +41,14 @@ export async function startCapture(onChunk: (dataBase64: string) => void): Promi
     releaseSession();
     throw error;
   }
-  const context = new AudioContext();
+  let context: AudioContext;
+  try {
+    context = new AudioContext();
+  } catch (error) {
+    for (const track of stream.getTracks()) track.stop();
+    releaseSession();
+    throw error;
+  }
   const nodes: AudioNode[] = [];
   let stopped = false;
 
