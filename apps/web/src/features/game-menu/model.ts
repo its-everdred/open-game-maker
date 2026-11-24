@@ -110,13 +110,14 @@ export function workRows(
   const rows: WorkRow[] = [];
   const shown = new Set<string>();
   for (const worker of workers) {
-    if (worker.state === 'human-review') continue;
     const separator = worker.ticket.lastIndexOf(':');
     const owner = worker.ticket.slice(0, separator);
     if (separator < 0 || owner !== gameId) continue;
     const ticket = worker.ticket.slice(separator + 1);
     const job = jobFor(ticket);
     if (job) shown.add(job.id);
+    // A ticket waiting for review is a Review card; its job must not come back as a row below either.
+    if (worker.state === 'human-review') continue;
     rows.push({
       key: worker.ticket,
       ticket,

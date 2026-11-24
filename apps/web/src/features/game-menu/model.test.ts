@@ -52,6 +52,17 @@ describe('edit menu work rows (#1326)', () => {
     expect(rows.map((row) => row.ticket)).toEqual(['7']);
   });
 
+  it('keeps a ticket in review out of the work list even when a job owns it', () => {
+    const rows = workRows(
+      'g1',
+      [worker('16', { state: 'human-review' })],
+      [job('j16', { aiurIssueNumber: 16, stageText: 'Ready for review' })],
+      new Set(),
+      NOW,
+    );
+    expect(rows).toEqual([]);
+  });
+
   it("opens the owning job's chat and shows its stage when aiur has no line", () => {
     const rows = workRows(
       'g1',

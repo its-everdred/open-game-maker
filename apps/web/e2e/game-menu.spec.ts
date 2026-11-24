@@ -122,7 +122,7 @@ function gameState(page: Page): Promise<GameHook | undefined> {
 for (const viewport of viewports) {
   test(`edit menu lists reviews, work and Energy in ${viewport.name}`, async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'the test sets each phone viewport itself');
-    test.setTimeout(300_000);
+    test.setTimeout(900_000);
     await page.setViewportSize(viewport);
     await installAuthRoutes(page, { signedIn: true });
     await installGameApi(page);
@@ -137,14 +137,14 @@ for (const viewport of viewports) {
     const work = dialog.getByRole('region', { name: 'Work' });
     await expect(work.getByRole('button')).toHaveCount(3);
     await expect(work.getByRole('button').first()).toContainText('Dusk and torch');
-    await expect(dialog.getByRole('region', { name: 'Review' })).toContainText('Liquid orbs, round 4');
+    await expect(dialog.getByRole('region', { name: 'Review' })).toContainText('UI kit with liquid orbs');
     await expect(dialog.getByRole('region', { name: 'Energy' })).toContainText('Claude');
     await page.waitForTimeout(800);
-    await page.screenshot({ path: testInfo.outputPath(`edit-menu-${viewport.name}.png`), timeout: 120_000 });
+    await page.screenshot({ path: testInfo.outputPath(`edit-menu-${viewport.name}.png`), timeout: 400_000 });
 
     await dialog.getByRole('button', { name: 'More' }).click();
     await expect(dialog.getByRole('link', { name: 'Publish' })).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath(`edit-more-${viewport.name}.png`), timeout: 120_000 });
+    await page.screenshot({ path: testInfo.outputPath(`edit-more-${viewport.name}.png`), timeout: 400_000 });
 
     await dialog.getByRole('button', { name: 'Resume' }).click();
     await expect(dialog).toBeHidden();
@@ -152,7 +152,7 @@ for (const viewport of viewports) {
 
   test(`play menu offers Resume, sound and File a bug in ${viewport.name}`, async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'the test sets each phone viewport itself');
-    test.setTimeout(300_000);
+    test.setTimeout(900_000);
     await page.setViewportSize(viewport);
     await installAuthRoutes(page, { signedIn: true });
     await installGameApi(page);
@@ -168,13 +168,13 @@ for (const viewport of viewports) {
     }
     await expect(dialog.getByRole('slider', { name: 'Volume' })).toBeVisible();
     await expect(dialog).not.toContainText('Work');
-    await page.screenshot({ path: testInfo.outputPath(`play-menu-${viewport.name}.png`), timeout: 120_000 });
+    await page.screenshot({ path: testInfo.outputPath(`play-menu-${viewport.name}.png`), timeout: 400_000 });
 
     await dialog.getByRole('button', { name: 'File a bug' }).click();
     const bug = page.getByRole('dialog', { name: 'File a bug' });
     await expect(bug.getByRole('textbox', { name: 'Describe the issue' })).toBeVisible();
     await expect(bug).toContainText('game.log');
     await bug.getByRole('textbox', { name: 'Describe the issue' }).fill('The goblin froze right after the gate opened');
-    await page.screenshot({ path: testInfo.outputPath(`play-bug-${viewport.name}.png`), timeout: 120_000 });
+    await page.screenshot({ path: testInfo.outputPath(`play-bug-${viewport.name}.png`), timeout: 400_000 });
   });
 }

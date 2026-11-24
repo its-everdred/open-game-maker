@@ -51,6 +51,7 @@ import { admitJob } from '../../features/scope-chat/admit';
 import { sendReport, setBugContext } from '../../features/bug-report';
 import type { FileBug } from '../../features/game-menu/BugComposer';
 import { bugLog } from '../../features/game-menu/bug-log';
+import { fileBug as fileBugRequest } from '../../features/game-menu/file-bug';
 import { useSession } from '../../lib/api/session';
 import { energyRefusalText } from '../../features/energy/api';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
@@ -435,6 +436,13 @@ export function GameScreen() {
   }, [room.snapshot?.matchPause, setMenuOpen]);
   useEffect(() => {
     if (!menuOpen) {
+      /*
+       * The play panel's Resume lifts the room pause itself; the editor's menu (#1326) only closes, so the pause it
+       * asked for is lifted here or the other players stay paused.
+       */
+      if (pauseRequested.current && mode === 'edit' && room.snapshot?.matchPause) {
+        room.session?.send({ t: 'match.resume.request' });
+      }
       pauseRequested.current = false;
       return;
     }
@@ -442,7 +450,7 @@ export function GameScreen() {
       room.session.send({ t: 'match.pause.request' });
       pauseRequested.current = true;
     }
-  }, [menuOpen, room.session, room.snapshot?.status, roomId]);
+  }, [menuOpen, mode, room.session, room.snapshot?.matchPause, room.snapshot?.status, roomId]);
   const reportGameLoad = useCallback(
     (measurement: GameLoadMeasurement, result: 'ok' | 'fail') => {
       void postAnalyticsEvent(gameLoadActivity(gameId, measurement, result)).catch(() => undefined);
@@ -553,12 +561,12 @@ export function GameScreen() {
     frameController?.setMode(mode === 'edit' && editorPlaying ? 'play' : mode);
   }, [frameController, mode, editorPlaying]);
 
-  // The editor's menu pauses the game like the play menu does (#1326); play mode pauses through the pause panel.
+  // The editor's menu pauses a solo game like the play menu does (#1326); a room pauses through the match instead.
   useEffect(() => {
-    if (mode !== 'edit' || !menuOpen || !frameController) return;
+    if (mode !== 'edit' || !menuOpen || !frameController || roomId !== undefined) return;
     frameController.pause();
     return () => frameController.resume();
-  }, [frameController, menuOpen, mode]);
+  }, [frameController, menuOpen, mode, roomId]);
 
   useEffect(() => {
     if (mode !== 'edit' || room.snapshot?.role !== 'peer' || room.snapshot.phase !== 'editing') return;
@@ -643,30 +651,20 @@ export function GameScreen() {
   );
   const { data: session } = useSession();
   const ownsGame = Boolean(session && game.data && game.data.ownerId === session.user?.id);
-  /*
-   * A bug from the play menu (#1326). The owner's goes to an agent as a fix request, so they can keep talking to it;
-   * anyone else's goes to the report route, which may hand it to a repair job.
-   */
   const fileBug = useCallback<FileBug>(
-    async (text, log) => {
-      if (ownsGame && room.snapshot?.role !== 'peer' && jobBranch === 'main') {
-        const request = editJobRequest(
-          { gameId, branchId: jobBranch },
-          `Bug: ${text}\n\nLog:\n${log}`,
-          'now',
-          `bug:${crypto.randomUUID()}`,
-        );
-        const line = `Bug: ${text.replace(/\s+/g, ' ').trim()}`;
-        request.plan.title = line.length > 120 ? `${line.slice(0, 119)}…` : line;
-        const result = await admitJob(request);
-        if (result.kind !== 'accepted') throw new Error('bug_not_admitted');
+    async (text, log, attempt) => {
+      const owner = ownsGame && room.snapshot?.role !== 'peer' && jobBranch === 'main';
+      if (!owner) setBugContext({ gameId });
+      const result = await fileBugRequest(
+        { admit: admitJob, report: sendReport },
+        { gameId, branchId: jobBranch, owner },
+        { text, log, attempt },
+      );
+      if (result.jobId) {
         void queryClient.invalidateQueries({ queryKey: gameJobsQueryKey(gameId) });
         void queryClient.invalidateQueries({ queryKey: myJobsQueryKey });
-        return { jobId: result.jobId };
       }
-      setBugContext({ gameId });
-      const result = await sendReport({ text: `${text}\n\n${log}`.slice(0, 2000) });
-      return { jobId: 'jobId' in result ? result.jobId : undefined };
+      return result;
     },
     [gameId, jobBranch, ownsGame, queryClient, room.snapshot?.role],
   );

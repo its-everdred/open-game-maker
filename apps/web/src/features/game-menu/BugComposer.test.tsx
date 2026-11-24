@@ -23,7 +23,7 @@ describe('File a bug (#1326)', () => {
     render(<BugComposer log="game g1" fileBug={fileBug} onBack={onBack} />);
     expect(screen.getByText('game.log')).toBeInTheDocument();
     await act(async () => describeIssue('The goblin froze'));
-    expect(fileBug).toHaveBeenCalledWith('The goblin froze', 'game g1');
+    expect(fileBug).toHaveBeenCalledWith('The goblin froze', 'game g1', expect.any(String));
     fireEvent.click(screen.getByRole('button', { name: 'Keep talking to the agent' }));
     expect(openConversation).toHaveBeenCalledWith('job-7');
     expect(onBack).toHaveBeenCalled();
@@ -42,7 +42,8 @@ describe('File a bug (#1326)', () => {
     await act(async () => describeIssue('Stuck on the gate'));
     expect(screen.getByText('Not sent')).toBeInTheDocument();
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Retry' })));
-    expect(fileBug).toHaveBeenLastCalledWith('Stuck on the gate', 'log');
+    // The retry is the same bug, so it carries the same attempt and cannot file twice.
+    expect(fileBug.mock.calls[1]).toEqual(fileBug.mock.calls[0]);
     expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
   });
 

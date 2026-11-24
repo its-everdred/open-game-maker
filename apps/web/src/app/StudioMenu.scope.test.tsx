@@ -145,8 +145,11 @@ it('keeps every game and the core in the app-wide view', () => {
   expect(within(panel).getByText('Review the published blobs build')).toBeTruthy();
 });
 
-it('never shows the creator a failed source in the editor menu', () => {
+// A source that failed (a daemon or tracker read) leaves the creator what did load, with no failure wording.
+it('keeps what loaded in the editor menu when a source failed', () => {
   workerState.error = true;
   const { dialog } = openEditor('/g/g_helm?mode=edit');
-  expect(within(dialog).queryByRole('alert')).toBeNull();
+  expect(within(within(dialog).getByRole('region', { name: 'Work' })).getByText('g_helm build')).toBeTruthy();
+  expect(within(within(dialog).getByRole('region', { name: 'Review' })).getByText('Helm sky')).toBeTruthy();
+  expect(dialog.textContent).not.toMatch(/fail|error|unavailable/i);
 });

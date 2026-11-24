@@ -9,9 +9,7 @@
 
 /* The play menu takes the game menu's sheet (ticket 1326); other pages keep the panel card. */
 .platform-pause-shade:has(.game-menu) {
-  background: color-mix(in srgb, var(--surface-page) 50%, transparent);
-  -webkit-backdrop-filter: blur(5px);
-  backdrop-filter: blur(5px);
+  background: color-mix(in srgb, var(--surface-page) 62%, transparent);
 }
 
 /* The studio's round buttons keep their own shape inside the pause panel. */

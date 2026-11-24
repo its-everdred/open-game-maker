@@ -4,7 +4,8 @@ import { Icon } from '../../components/Icon';
 import { openConversation } from '../build-chat/conversation';
 import './game-menu.css';
 
-export type FileBug = (text: string, log: string) => Promise<{ jobId?: string }>;
+/** `attempt` names one bug: a retry sends the same one, so it never files twice. */
+export type FileBug = (text: string, log: string, attempt: string) => Promise<{ jobId?: string }>;
 
 type Sent = { text: string; jobId?: string };
 
@@ -27,13 +28,14 @@ export function BugComposer({
   const [state, setState] = useState<'compose' | 'sending' | 'failed' | 'sent'>('compose');
   const [sent, setSent] = useState<Sent>();
   const attempt = useRef<string>('');
+  const [bugId] = useState(() => crypto.randomUUID());
 
   const send = async (text: string) => {
     attempt.current = text;
     setSent({ text });
     setState('sending');
     try {
-      const result = await fileBug(text, log);
+      const result = await fileBug(text, log, bugId);
       if (attempt.current !== text) return;
       setSent({ text, jobId: result.jobId });
       setState('sent');
