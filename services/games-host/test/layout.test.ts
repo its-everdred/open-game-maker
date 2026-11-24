@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { brotliDecompressSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { linkMock } = vi.hoisted(() => ({ linkMock: vi.fn() }));
@@ -19,6 +20,7 @@ import {
   gcBlobs,
   isComplete,
   markComplete,
+  precompressBuild,
   putBlob,
   resolveFile,
 } from '../src/layout.js';
@@ -192,5 +194,59 @@ describe('games-host layout', () => {
     await expect(gcBlobs(root, [build])).rejects.toBeInstanceOf(SyntaxError);
     await expect(readFile(blobPath(root, kept), 'utf8')).resolves.toBe('kept');
     await expect(readFile(blobPath(root, removed), 'utf8')).resolves.toBe('removed');
+  });
+
+  // A loaded host spent seconds compressing a game bundle on each uncached request and the game missed its ready
+  // timeout (#1319); publishing writes each served text file's Brotli once so the host only streams it.
+  it('precompresses the files a build serves, once, and collects the Brotli of a dead blob', async () => {
+    const bundle = `${'f'.repeat(64)}.js`;
+    const dead = `${'e'.repeat(64)}.js`;
+    const source = 'globalThis.game = "boot";\n'.repeat(50);
+    await mkdir(join(root, '_a'));
+    await writeFile(blobPath(root, bundle), source);
+    await writeFile(join(build, 'main.js'), source);
+    await writeFile(blobPath(root, dead), 'dead');
+    await writeFile(`${blobPath(root, dead)}.br`, 'stale');
+    const empty = { boot: { bytes: 0, files: 0 }, ready: { bytes: 0, files: 0 }, stream: { bytes: 0, files: 0 } };
+    await writeFile(
+      join(build, 'assets', 'cache-plan.json'),
+      JSON.stringify({
+        version: 1,
+        gameId: 'demo',
+        buildId: 'b1',
+        built: '2026-11-23T20:00:00.000Z',
+        sdkVersion: '1.0.0',
+        tiers: ['desktop'],
+        entries: [
+          {
+            sha256: 'f'.repeat(64),
+            url: `/a/${bundle}`,
+            sourcePath: 'main.js',
+            bytes: source.length,
+            kind: 'code',
+            phase: 'boot',
+            tiers: ['*'],
+          },
+        ],
+        totals: { desktop: empty, mobile: empty, low: empty },
+      }),
+    );
+
+    await precompressBuild(root, build);
+
+    expect(brotliDecompressSync(await readFile(`${blobPath(root, bundle)}.br`)).toString()).toBe(source);
+    expect(brotliDecompressSync(await readFile(join(build, 'index.html.br'))).toString()).toBe('<h1>demo</h1>');
+    expect(brotliDecompressSync(await readFile(join(build, 'assets', 'cache-plan.json.br'))).length).toBeGreaterThan(0);
+    // The build's copy of a bundle served from /a/ is never requested, and images are already compressed.
+    await expect(readFile(join(build, 'main.js.br'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(join(build, 'assets', 'x.webp.br'))).rejects.toMatchObject({ code: 'ENOENT' });
+
+    await writeFile(join(build, 'index.html.br'), 'kept');
+    await precompressBuild(root, build);
+    await expect(readFile(join(build, 'index.html.br'), 'utf8')).resolves.toBe('kept');
+
+    await gcBlobs(root, [build]);
+    await expect(readFile(`${blobPath(root, bundle)}.br`)).resolves.toBeInstanceOf(Buffer);
+    await expect(readFile(`${blobPath(root, dead)}.br`)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

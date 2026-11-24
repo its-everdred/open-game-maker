@@ -14,6 +14,19 @@ ops/bin/ogm-host-setup.sh --stop      # disable and stop them all
 Units are rendered from `ops/systemd/` with this checkout's path; re-run after pulling unit changes. A service whose
 build is missing runs `ops/bin/ogm-run`'s placeholder instead (see Placeholders).
 
+## CPU and IO priority
+
+Prod serving (API, games host, rooms, commit, voice host) runs in `ogm-prod.slice` (CPUWeight=10000, IOWeight=1000),
+so a busy agent fleet can't starve it. systemd nests dashed slice names, so it sits inside `ogm.slice` with the
+background services and `ogm-agents.slice` (builder daemons and their agents, CPUWeight=50, IOWeight=10), and wins
+there. `ogm.slice` itself must outweigh `app.slice`, where terminal sessions and their builds run. A host that runs the stack from a checkout without these units starts
+each service with `ops/bin/ogm-prod-start <api|games|rooms|commit>`. It installs the slice, replaces the previous
+`ogm-prod-<service>` unit, and logs to `~/ogm-stack.<service>.log`. Check placement with
+`systemd-cgls --user-unit ogm-prod.slice`.
+
+The API writes `<file>.br` beside each text file a build serves right after the build goes live, so the games host
+streams it instead of compressing on request.
+
 ## Start, stop, logs
 
 ```

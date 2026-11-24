@@ -3,6 +3,7 @@
 Usage: blender -b --factory-startup --python render_motion.py -- <out_dir> <spec.json> [key=value ...]
 mask=1 also renders mask_<row>_<col>.png (white where the base-colour texture is cloth: pale and unsaturated, the
 undergarments) through the same camera and frames, for the pixel finish's cloth ramp; mask_only=1 renders only those.
+blade_only=1 renders nothing and writes blade.json for blade.py (which way the weapon's edge faces per frame).
 spec: {"mesh": glb, "rotz": deg, "motion": {"kind": "kaykit"|"bvh"|"handkey"|"none", "path", "action",
        "frames": [f0, f1] | "auto", "loop": true, "foot_ik": true, "clip": "walk"|"attack"},
        "weapon": {"path": glb, "bone": "hand.R", "length": 0.3, "spin": deg, "pitch": deg, "roll": deg}}
@@ -33,7 +34,7 @@ argv = sys.argv[sys.argv.index('--') + 1:]
 OUT, SPEC = argv[0], json.load(open(argv[1]))
 P = {'rows': '1,2', 'frames': 15, 'cell': 128, 'height_px': 43.0, 'origin_row': 88.0, 'engine': 'cycles',
      'samples': 32, 'supersample': 1, 'threads': 6, 'sun_elev': 55.0, 'sun_az': -60.0, 'sun_energy': 4.0, 'sky': 0.35,
-     'mask': 0.0, 'mask_only': 0.0, 'mask_s': 0.16, 'mask_v': 0.5}
+     'mask': 0.0, 'mask_only': 0.0, 'blade_only': 0.0, 'mask_s': 0.16, 'mask_v': 0.5}
 for kv in argv[2:]:
     k, v = kv.split('=', 1)
     P[k] = v if k in ('rows', 'engine') else float(v)
@@ -244,6 +245,31 @@ def mask_frames(sc, root, rows, ob, wob, goto):
             o.data.materials[i] = m
 
 
+def blade_frames(rig, wob, goto):
+    """blade.json: per frame, the weapon head's centroid, the haft direction (the axis `spin` turns about) and the
+    blade direction (haft -> edge), in world space. The head is the far end from the grip; the blade is its vertices'
+    mean offset across the haft."""
+    w = SPEC['weapon']
+    h = (Matrix.Rotation(math.radians(w.get('roll', 0)), 3, 'Y') @
+         Matrix.Rotation(math.radians(w.get('pitch', 0)), 3, 'Z') @ Vector((1, 0, 0)))
+    v = np.array([tuple(p.co) for p in wob.data.vertices])
+    t = v @ np.array(h)
+    far = t.max() if t.max() >= -t.min() else t.min()
+    head = v[t / far > 0.7]
+    across = head - np.outer(head @ np.array(h), np.array(h))
+    b = Vector(across.mean(0))
+    if b.length < 0.05 * float(np.abs(t).max()):  # a double-bit axe or a sword: no one edge to turn toward the swing
+        sys.exit('blade_only: the weapon head is symmetric about its haft, so it has no single edge to face the swing')
+    frames = []
+    for col in range(N):
+        goto(col)
+        bpy.context.view_layer.update()
+        M = wob.matrix_world
+        frames.append({'head': list(M @ Vector(head.mean(0))), 'haft': list(M.to_3x3() @ h),
+                       'blade': list(M.to_3x3() @ b)})
+    json.dump({'weapon': w, 'blade_offset': b.length, 'frames': frames}, open(f'{OUT}/blade.json', 'w'), indent=1)
+
+
 def main():
     t0 = time.time()
     sc = scene()
@@ -289,6 +315,9 @@ def main():
     root.scale = (s, s, s)
     rig.data.pose_position = 'POSE'
     os.makedirs(OUT, exist_ok=True)
+    if P['blade_only']:  # no render, and the cell's frames stay: where the weapon's edge points, for blade.py
+        blade_frames(rig, wob, goto)
+        return
     rows = [int(r) for r in str(P['rows']).split(',')]
     masks = P['mask'] or P['mask_only']
     for old in os.listdir(OUT):

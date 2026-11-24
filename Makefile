@@ -22,6 +22,7 @@ test-py:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_posekey.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_guard_walk.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_trim_bvh.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_blade.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_recipe.py
 	$(MAKE) py-compile
 

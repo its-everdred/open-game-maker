@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# (Re)start one prod service as the transient user unit ogm-prod-<service> in ogm-prod.slice, so it keeps CPU and
+# IO priority over agents, builds and renders. For hosts that run the stack from a checkout without the
+# ogm-host-setup.sh units. Env: ~/.config/ogm/env/<service>.env; log: ~/ogm-stack.<service>.log.
+
+set -euo pipefail
+
+[[ $# -eq 1 ]] || { printf 'usage: ogm-prod-start <api|games|rooms|commit>\n' >&2; exit 64; }
+service=$1
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo=$(cd -- "$script_dir/../.." && pwd)
+systemctl=${OGM_SYSTEMCTL:-systemctl}
+systemd_run=${OGM_SYSTEMD_RUN:-systemd-run}
+unit_dir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
+unit=ogm-prod-$service
+case $service in
+  api | rooms | commit) package=$service ;;
+  games) package=games-host ;;
+  *) printf 'ogm-prod-start: unknown service %s\n' "$service" >&2; exit 64 ;;
+esac
+
+install -d -m 0755 "$unit_dir"
+if ! cmp -s "$repo/ops/systemd/ogm-prod.slice" "$unit_dir/ogm-prod.slice"; then
+  install -m 0644 "$repo/ops/systemd/ogm-prod.slice" "$unit_dir/ogm-prod.slice"
+  "$systemctl" --user daemon-reload
+fi
+
+"$systemctl" --user stop "$unit.service" 2>/dev/null || true
+"$systemctl" --user reset-failed "$unit.service" 2>/dev/null || true
+exec "$systemd_run" --user --quiet --collect --unit="$unit" --slice=ogm-prod.slice \
+  -p KillMode=mixed -p TimeoutStopSec=30 -p UMask=0077 -p NoNewPrivileges=yes \
+  -p "WorkingDirectory=$repo/services/$package" -p "EnvironmentFile=-$HOME/.config/ogm/env/$service.env" \
+  -p "StandardOutput=append:$HOME/ogm-stack.$service.log" -p "StandardError=append:$HOME/ogm-stack.$service.log" \
+  --setenv=OGM_REPO="$repo" --setenv=PATH="$PATH" \
+  "$repo/ops/bin/ogm-run" "$service"

@@ -58,7 +58,10 @@ for spec in \
   env_name=${spec#*:}
   file=$unit_dir/ogm-$unit.service
   assert_grep 'Type=simple' "$file"
-  assert_grep 'Slice=ogm.slice' "$file"
+  case $unit in
+    api | rooms | games | commit | voice-host) assert_grep 'Slice=ogm-prod.slice' "$file" ;;
+    *) assert_grep 'Slice=ogm.slice' "$file" ;;
+  esac
   assert_grep "Environment=OGM_REPO=$repo" "$file"
   assert_grep "EnvironmentFile=-%h/.config/ogm/env/$env_name.env" "$file"
   assert_grep "ExecStart=$repo/ops/bin/ogm-run $unit" "$file"
@@ -77,6 +80,11 @@ assert_grep 'ProtectHome=read-only' "$unit_dir/ogm-commit.service"
 assert_grep 'ReadWritePaths=-%h/.local/share/ogm' "$unit_dir/ogm-commit.service"
 
 assert_grep 'CPUWeight=200' "$unit_dir/ogm.slice"
+# Prod serving must win CPU and IO under fleet load (#1319): inside ogm.slice it outweighs the agents slice and a
+# host's game-builder fleet slice (default weight 100).
+assert_grep 'CPUWeight=10000' "$unit_dir/ogm-prod.slice"
+assert_grep 'IOWeight=1000' "$unit_dir/ogm-prod.slice"
+assert_grep 'IOWeight=10' "$unit_dir/ogm-agents.slice"
 assert_grep 'CPUWeight=50' "$unit_dir/ogm-agents.slice"
 assert_grep 'MemoryMax=16G' "$unit_dir/ogm-agents.slice"
 assert_grep 'TasksMax=4096' "$unit_dir/ogm-agents.slice"

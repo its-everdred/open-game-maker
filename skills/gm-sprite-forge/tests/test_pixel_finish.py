@@ -85,6 +85,32 @@ class PixelFinishTest(unittest.TestCase):
         self.assertTrue(shared(pixel_finish(a, 8, smooth=True)))  # the bug: blade and skin share colours
         self.assertFalse(shared(pixel_finish(a, 8, smooth=True, weapon=blade, weapon_colours=4)))
 
+    def test_body_smooth_clears_skin_specks_and_spares_the_weapon(self):
+        # Kevin saw "a lot of random stray pixels" on the Hammer slam (#1282): the base body's texture showed through
+        # the 3x3 median as dark and light specks over the lit skin. body_smooth medians the skin alone; a median across
+        # the weapon too had smeared the thin haft into skin-coloured fragments.
+        a = render_like()
+        body = a[..., 3] > 0
+        rng = np.random.default_rng(3)
+        specks = body & (rng.random(body.shape) < 0.12)  # texture blotches: 2 x 2 dark spots
+        specks |= np.roll(specks, 1, 0) | np.roll(specks, 1, 1)
+        a[specks & body, :3] = (a[specks & body, :3] * 0.55).astype(np.uint8)
+        y, x = np.mgrid[0:128, 0:192]
+        haft = (np.abs(x % 64 - 26) < 1) & body  # a 1 px haft across the body
+        a[haft, :3] = [90, 70, 50]
+
+        def speckle(out):
+            # skin pixels whose colour matches none of their 4 neighbours
+            rgb = out[..., :3].astype(int) @ [65536, 256, 1]
+            c, nb = rgb[1:-1, 1:-1], [rgb[:-2, 1:-1], rgb[2:, 1:-1], rgb[1:-1, :-2], rgb[1:-1, 2:]]
+            inner = (body & ~haft)[1:-1, 1:-1]
+            return int((inner & np.all([c != n for n in nb], axis=0)).sum())
+        plain = pixel_finish(a, 8, smooth=True, weapon=haft, weapon_colours=4)
+        clean = pixel_finish(a, 8, smooth=True, weapon=haft, weapon_colours=4, body_smooth=5)
+        self.assertLess(speckle(clean), 0.6 * speckle(plain))
+        np.testing.assert_array_equal(clean[haft], plain[haft])  # the haft is not mixed into the skin
+        np.testing.assert_array_equal(clean[..., 3], a[..., 3])
+
 
 if __name__ == '__main__':
     unittest.main()
