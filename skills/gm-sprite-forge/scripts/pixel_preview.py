@@ -31,7 +31,7 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from finish import finish  # noqa: E402
 from pixel_finish import pixel_finish  # noqa: E402
-from pixel_finish_c import PRESET, finish_c, load_preset  # noqa: E402
+from pixel_finish_c import PRESET, finish_c, load_preset, needs_ssi  # noqa: E402
 
 RIG = Path(__file__).with_name('pixel_preview_rig.py')
 EXT = {'.glb': 0, '.gltf': 1, '.fbx': 2, '.obj': 3}
@@ -174,6 +174,10 @@ def main():
     crisp = a.finish == 'C'
     SS = 4
     P = load_preset(a.preset, a.variant) | ({'cloth_split': True} if a.cloth_split else {}) if crisp else None
+    if crisp and needs_ssi(P) and not a.ssi:
+        ap.error(f"finish C {a.variant or 'defaults'} uses the {P['palette']} palette: add --ssi <pack sprites of the "
+                 'same kind> (or --variant C3, the model\'s own colours)')
+    a.ssi = [p.resolve() for p in a.ssi]  # the recipe is replayed by pixel_lineup from any directory
     models = collect(a.inputs)
     if not models:
         ap.error('no .glb/.gltf/.fbx/.obj models found')

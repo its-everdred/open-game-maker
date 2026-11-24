@@ -112,7 +112,7 @@ loop, none for an attack, in pixels at the pack cell.
   round 5; specks per frame 33 to 21). More Cycles samples (128) did not change them: they are texture, not render
   noise. A median across the weapon as well smeared the haft into skin-coloured fragments.
   `{"finish": "C", "variant": "C1"}` gives the colour pass finish C instead (#1338; `scripts/pixel_finish_c.py`,
-  `presets/finish-c.json`): the cell renders crisp (`filter=0.01` is added unless `render` sets `filter`) with the
+  `presets/finish-c.json`): the cell renders crisp (`filter=0.01` and `supersample=1` are added unless `render` sets them: `gpu_bake_finish.py` would box-average a supersample first) with the
   cloth and weapon masks, which become its materials; hard bands per material, 1 px lines where they meet, a darkened
   outline, the clip's pack sheet as the `ssi_tone` colour reference. B stays the default until Kevin picks a C variant.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,

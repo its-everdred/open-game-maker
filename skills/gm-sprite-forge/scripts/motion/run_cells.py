@@ -31,7 +31,7 @@ LICENCE = (('kaykit', 'CC0 (KayKit Character Animations, owned)'), ('/cmu/', 'CM
            ('handkey', 'own work (hand-keyed script)'), ('quaternius', 'CC0 (Quaternius Universal Animation Library)'))
 
 
-def finish_c(spec):
+def uses_finish_c(spec):
     return (spec.get('pixel') or {}).get('finish') == 'C'
 
 
@@ -108,17 +108,17 @@ def main():
         if not a.rescore:
             (d / 'spec.json').write_text(json.dumps(cell, indent=1))
             keys = [f'{k}={v}' for k, v in (spec.get('render', {}) | {'engine': a.engine}).items()]
-            if (spec.get('pixel') or {}).get('cloth') or finish_c(spec):
+            if (spec.get('pixel') or {}).get('cloth') or uses_finish_c(spec):
                 keys.append('mask=1')
-            if finish_c(spec) and 'filter' not in spec.get('render', {}):
-                keys.append('filter=0.01')  # finish C: no anti-aliasing
-            if a.engine == 'workbench':
+            if uses_finish_c(spec):  # crisp at the cell size: gpu_bake_finish box-averages any supersample first
+                keys += [k for k in ('filter=0.01', 'supersample=1') if k.split('=')[0] not in spec.get('render', {})]
+            elif a.engine == 'workbench':
                 keys.append('supersample=2')
             if not blender(spec, d, keys, 'render.log'):
                 rows.append((c['name'], 'render failed: see render.log'))
                 print(c['name'], 'render failed', flush=True)
                 continue
-        elif ((spec.get('pixel') or {}).get('cloth') or finish_c(spec)) and \
+        elif ((spec.get('pixel') or {}).get('cloth') or uses_finish_c(spec)) and \
                 len(list(d.glob('mask_*_*.png'))) != len(list(d.glob('raw_*_*.png'))):  # masks only, as rendered
             params = json.loads((d / 'render.json').read_text())['params']
             keys = [f'{k}={v}' for k, v in params.items() if not k.startswith('mask')] + ['mask_only=1']
@@ -130,7 +130,7 @@ def main():
         loop += ['--rows', str(spec.get('render', {}).get('rows', '1,2'))]  # score the rows that were rendered
         if spec.get('finish') == 'base':  # a base body: match the skin to the pack Idle, keep the undergarments white
             loop += ['--skin-ref', spec['pack']['idle']]
-        if finish_c(spec):
+        if uses_finish_c(spec):
             loop += ['--finish-c'] + (['--variant', spec['pixel']['variant']] if spec['pixel'].get('variant') else [])
         elif spec.get('pixel'):
             px = spec['pixel']

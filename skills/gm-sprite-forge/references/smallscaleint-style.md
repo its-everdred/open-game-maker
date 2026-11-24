@@ -19,7 +19,7 @@ The visual verdict does not imply the quantitative gates passed. Round 74 measur
 `spritemetrics.crispness` on the Idle frame 0 of 6Barbarian, 3Wizard and 5BarbArcher (S, SE, E; the hero references):
 alpha is binary; 46-69% of neighbouring object pixel pairs share a colour; of the pairs that differ, 13-52% step by
 CIE76 dE >= 20 (hard steps; Barbarian 13-18%, Wizard 30-39%, Archer 46-52%); the rim averages 0.2-4.5 L* darker than the
-pixel inside it, a darkened local colour rather than a black outline. Finish B on the Warrior base body: 49% shared,
+pixel inside it, a darkened local colour rather than a black outline (the "no outline pass" above means no black line). Finish B on the Warrior base body: 49% shared,
 1% hard steps, the fuzz Kevin saw. Finish C is tuned to these.
 
 ## Additional measured examples

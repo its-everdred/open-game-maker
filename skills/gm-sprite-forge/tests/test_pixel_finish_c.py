@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import spritemetrics as sm  # noqa: E402
 from pixel_finish import pixel_finish  # noqa: E402
-from pixel_finish_c import PRESET, finish_c, load_preset, pick_resize  # noqa: E402
+from pixel_finish_c import PRESET, finish_c, fold_orphans, load_preset, pick_resize  # noqa: E402
 
 SS = 4
 SKIN, WHITE = np.array([240, 216, 199]), np.array([240, 240, 236])  # pale skin, briefs: dE 13.3 < merge_de 14
@@ -114,6 +114,43 @@ class FinishC(unittest.TestCase):
         self.assertTrue((lab[..., 0][rim] < labp[..., 0][rim]).all())
         self.assertGreater(lab[..., 0][rim].min(), 15)  # never black
         self.assertGreater(np.hypot(lab[..., 1], lab[..., 2])[rim].mean(), 3)  # keeps the skin's warmth
+
+
+    def test_pack_tone_palette_takes_the_reference_colours(self):
+        # C1/C2 (ssi_tone) re-colour each material in the hue of the nearest pack colour group: a warm skin render
+        # next to a cooler, ruddier pack skin must come out in the pack's hue, not its own
+        import tempfile
+        raw, alb, dep, _ = body()
+        ref = np.zeros((32, 32, 4), np.uint8)
+        ref[4:28, 8:24] = [200, 140, 125, 255]
+        ref[4:16, 8:24] = [170, 110, 100, 255]
+        with tempfile.TemporaryDirectory() as d:
+            path = str(Path(d) / 'ref.png')
+            Image.fromarray(ref).save(path)
+            P = load_preset(PRESET, 'C1') | {'line_dark': 0, 'outline_dark': 0, 'ssi_max_de': 40}
+            own, _ = finish_c(raw, alb, dep, P)  # no reference: the render's own hue
+            tone, _ = finish_c(raw, alb, dep, P, [path])
+        on = tone[..., 3] > 0
+        hue = lambda o: np.degrees(np.arctan2(*rgb2lab(o[..., :3] / 255)[on][:, [2, 1]].T)).mean()  # noqa: E731
+        pack = np.degrees(np.arctan2(*rgb2lab(ref[4:28, 8:24, :3] / 255).reshape(-1, 3)[:, [2, 1]].T)).mean()
+        self.assertLess(abs(hue(tone) - pack), abs(hue(own) - pack) - 5)
+
+    def test_orphan_pixels_fold_into_their_neighbours(self):
+        # the Hammer slam speckle (#1282): a lone band pixel inside another band is noise, not shading
+        mid = np.zeros((5, 5), int)
+        band = np.zeros((5, 5), int)
+        band[2, 2] = 2
+        _, out = fold_orphans(mid, band, 1)
+        self.assertEqual(out[2, 2], 0)
+        band[2, 3] = 2  # two together are a shape, and stay
+        _, out = fold_orphans(mid, band, 1)
+        self.assertEqual(out[2, 2], 2)
+
+    def test_an_empty_render_gives_an_empty_sprite(self):
+        # one model with a transparent material must not abort a whole pack preview
+        out, info = finish_c(np.zeros((64, 64, 4), np.uint8), None, None, preset(cloth_split=False))
+        self.assertEqual(out.shape, (16, 16, 4))
+        self.assertFalse(out[..., 3].any())
 
 
 class PickResize(unittest.TestCase):

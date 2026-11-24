@@ -49,6 +49,8 @@ def scene():
         sc.render.engine = 'BLENDER_WORKBENCH'
         sc.display.shading.light = 'FLAT'
         sc.display.shading.color_type = 'TEXTURE'
+        if P['filter'] < 0.1:  # finish C: workbench has no pixel filter, only its own anti-aliasing
+            sc.display.render_aa = 'OFF'
     else:
         sc.render.engine = 'CYCLES'
         sc.cycles.device = 'CPU'

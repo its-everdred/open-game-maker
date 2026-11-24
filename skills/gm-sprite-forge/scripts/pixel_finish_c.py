@@ -236,6 +236,8 @@ def finish_c(raw, alb, depth, P, ssi=(), ss=4, ids=None):
     ids: optional int material ids at ss x (<0 outside), used instead of the albedo clustering.
     Returns RGBA uint8 at 1x and debug maps."""
     m4 = raw[..., 3] >= 128
+    if not m4.any():  # nothing rendered (a transparent material): an empty sprite, not a crash for the whole batch
+        return np.zeros((raw.shape[0] // ss, raw.shape[1] // ss, 4), np.uint8), {'materials': 0, 'line_px': 0, 'rim_px': 0}
     alb = raw[..., :3] if alb is None else alb
     alb_lab = rgb2lab(alb[..., :3] / 255)
     if ids is not None:
@@ -301,8 +303,13 @@ def pick_resize(raw, w, h, *extra):
 PRESET = Path(__file__).resolve().parent.parent / 'presets' / 'finish-c.json'
 
 
+def needs_ssi(P):
+    """The pack-palette variants need --ssi sprites: without them finish_c keeps the render's own colours, unstretched."""
+    return P['palette'] in ('ssi', 'ssi_tone', 'snap')
+
+
 def load_preset(path, variant):
-    pre = json.load(open(path))
+    pre = json.loads(Path(path).read_text())
     P = dict(pre['defaults'])
     if variant:
         P.update(pre['variants'][variant])
