@@ -115,11 +115,14 @@ for (const scenario of scenarios) {
         const expectedMissingGameResource =
           response.status() === 404 && ['/api/v1/games/game/published', '/api/v1/games/game/saves'].includes(pathname);
         const expectedThreadRefusal = response.status() === 403 && pathname === '/api/v1/me/executor/thread';
+        // A pagehide beacon can bypass the route stub; telemetry failures are silent in the app by design.
+        const telemetry = pathname === '/api/v1/telemetry/client-events';
         if (
           response.status() >= 400 &&
           !expectedVoiceFallback &&
           !expectedMissingGameResource &&
-          !expectedThreadRefusal
+          !expectedThreadRefusal &&
+          !telemetry
         ) {
           failedResponses.push(`${response.status()} ${response.url()}`);
         }
