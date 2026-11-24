@@ -11,6 +11,7 @@ export function saveOptions(
   menu: { current: boolean },
   away?: AwaySnapshot,
   awayHold?: { current: boolean },
+  onRestoreError?: (error: unknown) => void,
 ) {
   return {
     startupRestore: async (manifest: GameManifest) => {
@@ -31,7 +32,10 @@ export function saveOptions(
       const save = await getSave(gameId, 'auto');
       return room.current === undefined ? save : undefined;
     },
-    onStartupRestoreError: () => pushToast('Could not restore save; saving is off'),
+    onStartupRestoreError: (error: unknown) => {
+      pushToast('Could not restore save; saving is off');
+      onRestoreError?.(error);
+    },
     resumeAfterStartup: () => !awayHold?.current && !menu.current && document.visibilityState !== 'hidden',
   };
 }

@@ -75,6 +75,7 @@ import { PlatformHud } from './PlatformHud';
 import { roomFacts } from './room-facts';
 import { recordPlay } from './recordPlay';
 import { saveOptions } from './startup-save';
+import { usePlayTelemetry } from './play-telemetry';
 import { useReadyBuild } from './use-ready-build';
 import { UpdateIndicator } from './UpdateIndicator';
 import { gameExtras, type GameExtraProps } from './extras';
@@ -485,11 +486,14 @@ export function GameScreen() {
               ...(framePreview ? { preview: true } : {}),
               mode: mode === 'edit' ? 'play' : mode,
               ...(scenario === null ? {} : { params: { scenario } }),
-              ...(restoreOnStart ? saveOptions(gameId, roomIdRef, menuOpenRef, away, awayHold) : {}),
+              ...(restoreOnStart
+                ? saveOptions(gameId, roomIdRef, menuOpenRef, away, awayHold, reportRestoreError)
+                : {}),
               design: framePreview ? previewDesign.data! : snapshot,
               build,
               onState: setFrameState,
               onSaveWrite: () => setLastSaveAt(new Date().toISOString()),
+              onFault: reportFault,
               onRoomMessage: room.handleGameMessage,
               onLoadDone: (measurement) => reportGameLoad(measurement, 'ok'),
               onLoadStalled: (measurement) => reportGameLoad(measurement, 'fail'),
@@ -766,6 +770,14 @@ export function GameScreen() {
   const openScene = searchParams.get('scene');
   /** The lighting panel edits the running game, so it hides while the map covers it. */
   const [mapOpen, setMapOpen] = useState(false);
+  const playFailed = (frameState.bridgeState === 'error' || designLoadFailed) && !(mode === 'edit' && mapOpen);
+  const { reportFault, reportRestoreError } = usePlayTelemetry({
+    gameId,
+    buildId: runningBuildId,
+    frameState,
+    failed: playFailed,
+    designLoadFailed,
+  });
   const gameStage = (
     <div className="game-stage-area" data-edit-frame={mode === 'edit' ? '' : undefined}>
       {mode === 'edit' && (
@@ -1039,7 +1051,7 @@ export function GameScreen() {
         editor={editorChrome}
       />
       {/* The map maker edits the scene document, not the running build: a game that failed to load waits behind it. */}
-      {(frameState.bridgeState === 'error' || designLoadFailed) && !(mode === 'edit' && mapOpen) ? (
+      {playFailed ? (
         <div className="screen-error" role="alert">
           <button
             className="tap-primary"

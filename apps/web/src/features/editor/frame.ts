@@ -2,6 +2,7 @@ import { createGameFrame, type GameFrame, type GameFrameOptions, type GameLoadEv
 import type {
   DesignDoc,
   Envelope,
+  GameFault,
   GameManifest,
   GameToHost,
   HostToGame,
@@ -103,12 +104,14 @@ export type MountGameFrameOptions = {
   params?: Readonly<Record<string, string>>;
   /** Load an initial save while a compatible SDK holds simulation. */
   startupRestore?(manifest: GameManifest): Promise<SaveData<unknown> | undefined>;
-  onStartupRestoreError?(): void;
+  onStartupRestoreError?(error: unknown): void;
   resumeAfterStartup?(): boolean;
   create?(options: GameFrameOptions): FrameLike;
   onState?(state: GameFrameState): void;
   onSaveWrite?(payload: { saveSchemaVersion: number; data: unknown }): void;
   onEvent?(kind: 'achievement' | 'analytics' | 'checkpoint', payload: unknown): void;
+  /** A non-fatal failure inside the game frame; the game keeps running. */
+  onFault?(fault: GameFault): void;
   onRoomMessage?(envelope: Envelope<string, unknown>): void;
   onLoadDone?(measurement: GameLoadDone): void;
   onLoadStalled?(measurement: GameLoadMeasurement): void;
@@ -300,7 +303,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
           });
         });
         void Promise.race([restore, deadline])
-          .catch(() => {
+          .catch((error: unknown) => {
             if (!disposed) {
               current = {
                 ...current,
@@ -309,7 +312,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
               };
               startupWrites.length = 0;
               startupWriteWindow = false;
-              options.onStartupRestoreError?.();
+              options.onStartupRestoreError?.(error);
             }
           })
           .finally(() => {
@@ -322,6 +325,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       onLoad: handleLoad,
       onSaveWrite: options.onSaveWrite,
       onEvent: options.onEvent,
+      onFault: options.onFault,
       onError: (failure) => {
         /* The game declined an optional command (a camera mode, selection) or an HD-2D edit, and keeps running. */
         if (failure.code === 'unsupported' || failure.code === 'hd2d_rejected') return;
