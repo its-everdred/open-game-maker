@@ -6,7 +6,8 @@ Usage: score_cell.py <cell_dir> <pack_sheet.png> [--rows 1,2] [--loop] [--finish
 --finish runs gpu_bake_finish.py on <cell_dir>/raw_*.png first (colour pass against the pack sheet) -> <cell_dir>/out.
 With --skin-ref (a base body) the pack colour match is skipped and finish_base.py matches only the skin to that sheet;
 the sheet before that pass is kept as out/sheet_finish.png. --pixel N then runs pixel_finish.py (N colours over the
-whole sheet, --smooth for the 3x3 median first); the sheet before it is kept as out/sheet_colour.png. With --cloth N
+whole sheet, --smooth for the 3x3 median first, --body-smooth N for an N x N median over the skin alone); the sheet
+before it is kept as out/sheet_colour.png. With --cloth N
 the cell's mask_<row>_<col>.png frames (render_motion.py mask=1) give the cloth its own N colours.
 A walk is a loop with an arbitrary first frame, so with --loop every cyclic shift of the frames is scored and the best
 motion correlation is kept (its shift is reported); an attack is scored as rendered.
@@ -138,12 +139,13 @@ def main():
     ap.add_argument('--smooth', action='store_true', help='with --pixel: 3x3 Lab median before the palette')
     ap.add_argument('--cloth', type=int, help='with --pixel: colours for the cloth, from the mask frames')
     ap.add_argument('--weapon', type=int, help='with --cloth: colours for the weapon, from the same mask frames')
+    ap.add_argument('--body-smooth', type=int, help='with --pixel: an N x N median over the skin alone (stray specks)')
     a = ap.parse_args()
     if a.skin_ref and not a.finish:
         ap.error('--skin-ref is part of the finish pass: add --finish')
     if a.weapon and not a.cloth:
         ap.error('--weapon reads the mask frames: add --cloth')
-    if (a.pixel or a.smooth or a.cloth) and not (a.finish and a.pixel):
+    if (a.pixel or a.smooth or a.cloth or a.body_smooth) and not (a.finish and a.pixel):
         ap.error('--pixel is part of the finish pass: add --finish (and --pixel N for --smooth or --cloth)')
     if empty_render(a.cell_dir):
         sys.exit(f'{a.cell_dir.name}: every raw frame is empty: the body is outside the camera (in_place on a clip that '
@@ -171,7 +173,7 @@ def main():
             (out / 'sheet.png').replace(out / 'sheet_colour.png')
             colour = np.asarray(Image.open(out / 'sheet_colour.png').convert('RGBA'))
             sheet = pixel_finish(colour, a.pixel, a.smooth, cloth=cloth, cloth_colours=a.cloth or 6, weapon=weapon,
-                                 weapon_colours=a.weapon or 4)
+                                 weapon_colours=a.weapon or 4, body_smooth=a.body_smooth)
             Image.fromarray(sheet).save(out / 'sheet.png')
     tmp = a.cell_dir / '_score'
     tmp.mkdir(exist_ok=True)
