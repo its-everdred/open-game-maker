@@ -22,7 +22,7 @@ import { registerBuild, updateBuild } from '../releases/service.js';
 import { withArtifactMutation } from './artifact-lock.js';
 import { BuildCacheError, completeBuildCache, sharedBuildFileUrls, storeDisplayImageBlobs } from './cache-plan.js';
 import { untarGz } from './untar.js';
-import { makeDisplayImages } from './display-images.js';
+import { makeDisplayImages, type DisplayImage } from './display-images.js';
 
 // Jobs whose merged PR must become a playable build before the job is done; a scope job ships no build.
 export const BUILD_KINDS = ['new_game', 'feature', 'repair'] as const;
@@ -249,22 +249,56 @@ async function retryDisplayImages(deps: AppDeps, attempted = new Set<string>()):
     const metadata = await readJson(join(target, '.ogm-display.json'));
     if (metadata && typeof metadata === 'object' && 'pending' in metadata && metadata.pending === true)
       scheduleDisplayImages(deps, target, marker, metadata as DisplayManifest, attempted);
-    else if (metadata && typeof metadata === 'object' && 'images' in metadata) await rm(marker, { force: true });
+    else if (metadata && typeof metadata === 'object' && 'partial' in metadata && metadata.partial === true) {
+      // A partial sidecar keeps the manifest's slot images under slotImages; `images` there is the display media.
+      const { slotImages, ...rest } = metadata as DisplayManifest & { slotImages?: DisplayManifest['images'] };
+      scheduleDisplayImages(deps, target, marker, { ...rest, images: slotImages }, attempted);
+    } else if (metadata && typeof metadata === 'object' && 'images' in metadata) await rm(marker, { force: true });
   }
 }
 
 // Publish the metadata atomically only after every referenced variant exists. Until then readers use originals.
+// The list's card art (thumbnail and logo) is published first: a build's loading screens can take the encoder many
+// minutes, and until its card art has variants every phone downloads the multi-megabyte originals.
 async function writeDisplayImages(deps: AppDeps, target: string, manifest: DisplayManifest): Promise<void> {
-  const images = await makeDisplayImages(
+  const current = await readJson(join(target, '.ogm-display.json'));
+  let cards =
+    current && typeof current === 'object' && 'partial' in current && current.partial === true && 'images' in current
+      ? (current.images as Record<string, DisplayImage>)
+      : undefined;
+  if (!cards) {
+    cards = await publishDisplayImages(
+      deps,
+      target,
+      manifest,
+      {},
+      await makeDisplayImages(target, manifest.logo),
+      true,
+    );
+  }
+  const rest = await makeDisplayImages(
     target,
     manifest.logo,
     manifest.loading ? [manifest.loading.portrait, manifest.loading.landscape] : [],
     Object.values(manifest.images ?? {}).flatMap((slot) => Object.values(slot.variants ?? {})),
+    Object.keys(cards),
   );
-  await withArtifactMutation(() => storeDisplayImageBlobs(deps.config.gamesRoot, target, images));
-  for (const image of Object.values(images))
+  await publishDisplayImages(deps, target, manifest, cards, rest, false);
+}
+
+async function publishDisplayImages(
+  deps: AppDeps,
+  target: string,
+  manifest: DisplayManifest,
+  published: Record<string, DisplayImage>,
+  fresh: Record<string, DisplayImage>,
+  partial: boolean,
+): Promise<Record<string, DisplayImage>> {
+  await withArtifactMutation(() => storeDisplayImageBlobs(deps.config.gamesRoot, target, fresh));
+  for (const image of Object.values(fresh))
     for (const format of ['avif', 'webp', 'png'] as const)
       for (const entry of image.sources[format]) entry.path = `/a/${entry.path.split('/').at(-1)}`;
+  const images = { ...published, ...fresh };
   const temporary = join(target, `.ogm-display-${randomUUID()}.tmp`);
   try {
     await writeFile(
@@ -278,12 +312,14 @@ async function writeDisplayImages(deps: AppDeps, target: string, manifest: Displ
         sharedUrls: manifest.sharedUrls,
         slotImages: manifest.images,
         images,
+        ...(partial ? { partial: true } : {}),
       }),
     );
     await rename(temporary, join(target, '.ogm-display.json'));
   } finally {
     await rm(temporary, { force: true });
   }
+  return images;
 }
 
 // A creator's edit landing while the switch computes moves the branch head; recompute against the new head.

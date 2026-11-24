@@ -537,6 +537,12 @@ only an instance with no tested build skips it. WebKit comes from the setup's
 `playwright install --with-deps chromium webkit`. `apps/web/tools/deploy.sh` runs `ogm-qa-game-play --frames-only`
 after every upload.
 
+Next, `gm qa cards-check --app <app origin> --out <dir>` opens the games list in WebKit at 390x844 with the QA session,
+showing every game's real card (the API's internal `/internal/qa/cards`, QA and delisted games left out), and requires
+each card's thumbnail and logo to load within 30 s and stay visible for 5 s (#1312). It runs in every mode, including
+`--frames-only`; a failure is checked once more, then appends one `qa-cards-check failed` line naming the card, the
+image and what it did, with `cards-check.json` and a still under `assets-local/review/app/cards-check/`.
+
 `ops/bin/ogm-qa-game-play` plays each published game's latest tested build the way a player on a phone reaches it
 (#1272). For each game it runs `gm qa play-check <game id> <build id>`: production's app shell at 390×844, signed in as
 the QA creator (`qa.env`), waits for the bridge handshake and the game's `load.frame`, takes the game's first tap path

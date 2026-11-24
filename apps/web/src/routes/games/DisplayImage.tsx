@@ -1,3 +1,4 @@
+import { Fragment, useState, type CSSProperties, type SyntheticEvent } from 'react';
 import { preload } from 'react-dom';
 import type { ViewportId } from '@ogm/contracts';
 import type { DisplayImage } from './types';
@@ -9,6 +10,16 @@ type Props = {
   className: string;
   sizes: string;
   priority?: boolean;
+  /** Paint the image's smallest variant behind it until it loads (opaque covers only). */
+  placeholder?: boolean;
+  /** Keep the art on screen until changed art has loaded (positioned layers: covers and list logos). */
+  keepShown?: boolean;
+};
+
+type Layer = {
+  className: string;
+  onLoad?: (event: SyntheticEvent<HTMLImageElement>) => void;
+  style?: CSSProperties;
 };
 
 const srcSet = (entries: DisplayImage['sources']['avif']) =>
@@ -65,7 +76,48 @@ const viewportMedia: Record<ViewportId, string> = {
 
 const formats = ['avif', 'webp', 'png'] as const;
 
-export function DisplayImage({ image, variants, src, className, sizes, priority = false }: Props) {
+// A list refresh can point a card at a new build's art. The art already on screen stays until the new art has loaded,
+// so a logo or cover never blanks out while it changes.
+export function DisplayImage(props: Props) {
+  const key = sourceKey(props);
+  const [loaded, setLoaded] = useState<{ key: string; props: Props } | null>(null);
+  const settled = loaded?.key === key;
+  const onLoad = (event: SyntheticEvent<HTMLImageElement>) => {
+    if (event.currentTarget.naturalWidth > 0 && !settled) setLoaded({ key, props });
+  };
+  const tiny = props.placeholder && !settled ? smallest(props) : undefined;
+  const current = renderImage(props, {
+    className: props.className,
+    onLoad,
+    style: tiny
+      ? { backgroundImage: `url("${tiny}")`, backgroundSize: 'cover', backgroundPosition: 'center' }
+      : undefined,
+  });
+  if (!props.keepShown) return current;
+  // Keyed by source, so the element already showing the old art is the one kept (no reload, no flash).
+  return (
+    <>
+      <Fragment key={key}>{current}</Fragment>
+      {loaded && !settled && (
+        <Fragment key={loaded.key}>
+          {renderImage(loaded.props, { className: `${loaded.props.className} is-held` })}
+        </Fragment>
+      )}
+    </>
+  );
+}
+
+function sourceKey({ image, variants, src }: Props): string {
+  const first = (entry?: DisplayImage | null) => entry?.sources.webp[0]?.path ?? '';
+  return [src, first(image), ...Object.values(variants ?? {}).map(first)].join(' ');
+}
+
+function smallest({ image, variants }: Props): string | undefined {
+  const source = image ?? Object.values(variants ?? {}).find(Boolean);
+  return source?.sources.webp.reduce((best, entry) => (entry.width < best.width ? entry : best)).path;
+}
+
+function renderImage({ image, variants, src, sizes, priority = false }: Props, { className, onLoad, style }: Layer) {
   if (variants && Object.keys(variants).length > 0) {
     return (
       <picture className="game-display-picture">
@@ -91,6 +143,8 @@ export function DisplayImage({ image, variants, src, className, sizes, priority 
         {image ? (
           <img
             className={className}
+            onLoad={onLoad}
+            style={style}
             src={image.sources.webp[0]!.path}
             srcSet={srcSet(image.sources.webp)}
             sizes={sizes}
@@ -101,14 +155,32 @@ export function DisplayImage({ image, variants, src, className, sizes, priority 
             fetchPriority={priority ? 'high' : 'auto'}
           />
         ) : (
-          <img className={className} src={src} alt="" width={320} height={180} loading={priority ? 'eager' : 'lazy'} />
+          <img
+            className={className}
+            onLoad={onLoad}
+            style={style}
+            src={src}
+            alt=""
+            width={320}
+            height={180}
+            loading={priority ? 'eager' : 'lazy'}
+          />
         )}
       </picture>
     );
   }
   if (!image)
     return (
-      <img className={className} src={src} alt="" width={320} height={180} loading={priority ? 'eager' : 'lazy'} />
+      <img
+        className={className}
+        onLoad={onLoad}
+        style={style}
+        src={src}
+        alt=""
+        width={320}
+        height={180}
+        loading={priority ? 'eager' : 'lazy'}
+      />
     );
   return (
     <picture className="game-display-picture">
@@ -116,6 +188,8 @@ export function DisplayImage({ image, variants, src, className, sizes, priority 
       <source type="image/webp" srcSet={srcSet(image.sources.webp)} sizes={sizes} />
       <img
         className={className}
+        onLoad={onLoad}
+        style={style}
         src={image.sources.webp[0]!.path}
         srcSet={srcSet(image.sources.webp)}
         sizes={sizes}

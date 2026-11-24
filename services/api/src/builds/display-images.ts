@@ -18,6 +18,7 @@ export async function makeDisplayImages(
   logo?: string,
   loading: readonly string[] = [],
   variants: readonly string[] = [],
+  skip: readonly string[] = [],
 ): Promise<Record<string, DisplayImage>> {
   const media = join(root, 'media');
   const output = join(media, 'ogm-variants');
@@ -36,6 +37,7 @@ export async function makeDisplayImages(
   for (const entry of entries) {
     if (
       !entry.isFile ||
+      skip.includes(`media/${entry.name}`) ||
       (entry.name !== 'thumbnail.png' &&
         `media/${entry.name}` !== logo &&
         !loading.includes(`media/${entry.name}`) &&

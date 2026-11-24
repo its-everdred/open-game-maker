@@ -100,7 +100,9 @@ The publish host's `api.env` supplies `OGM_GAMES_ORIGIN` so the review link open
 
 The post-publish check runs through `ops/bin/ogm-qa-review-hook`; it also plays the published game in the production
 shell with `gm qa play-check <game id> <build id> --out <dir>` (first frame, first tap path, one input; see the ops
-runbook), after `gm qa frame-check <frame url> --app <origin>...` frames that build in WebKit on every app domain. For a direct check, use
+runbook), after `gm qa frame-check <frame url> --app <origin>...` frames that build in WebKit on every app domain and
+`gm qa cards-check [<cards.json>] --app <origin> --out <dir>` checks every games-list card's thumbnail and logo load
+and stay visible for 5 s (`--hold`) in WebKit. For a direct check, use
 `gm qa publish-review-check <slug> <build-id>`; `gm qa publish-review-check --all` lists any published builds still
 waiting for a round. The host timer runs the sweep every ten minutes and records gaps in the configured QA attention file.
 
