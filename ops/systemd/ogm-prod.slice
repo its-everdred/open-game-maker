@@ -1,0 +1,9 @@
+# Prod serving (API, games host, rooms, commit, voice host). systemd nests it in ogm.slice (the dash), beside
+# ogm-agents.slice and a host's game-builder fleet slice, and under CPU or IO pressure it outranks them there.
+# Prod idles light, so the weight costs the fleets nothing when it is quiet.
+[Unit]
+Description=OGM prod services
+
+[Slice]
+CPUWeight=10000
+IOWeight=1000

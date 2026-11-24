@@ -6,7 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-Slice=ogm.slice
+Slice=ogm-prod.slice
 Environment=OGM_REPO=@REPO@
 EnvironmentFile=-%h/.config/ogm/env/games.env
 ExecStart=@REPO@/ops/bin/ogm-run games

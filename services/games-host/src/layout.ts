@@ -1,13 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
+import { constants, createReadStream, createWriteStream } from 'node:fs';
 import { copyFile, link, mkdir, open, readFile, readdir, realpath, rename, rm, stat } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, sep } from 'node:path';
 import { pid } from 'node:process';
+import { pipeline } from 'node:stream/promises';
+import { constants as zlibConstants, createBrotliCompress } from 'node:zlib';
 
 import { cachePlanSchema, StableIdSchema } from '@ogm/contracts';
 
+import { isCompressiblePath } from './mime.js';
+
 const LEGACY_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
 const BLOB_FILE_RE = /^[0-9a-f]{64}\.[a-z0-9]{1,12}$/u;
+const BLOB_BROTLI_RE = /^[0-9a-f]{64}\.[a-z0-9]{1,12}\.br$/u;
 
 /* The API's ULID ids (StableIdSchema), plus the lowercase ids (build hashes) already on disk. */
 export function isServableId(id: string): boolean {
@@ -93,7 +98,12 @@ export async function gcBlobs(root: string, liveBuilds: readonly string[]): Prom
   });
   await Promise.all(
     entries
-      .filter((entry) => entry.isFile() && BLOB_FILE_RE.test(entry.name) && !live.has(entry.name.slice(0, 64)))
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          (BLOB_FILE_RE.test(entry.name) || BLOB_BROTLI_RE.test(entry.name)) &&
+          !live.has(entry.name.slice(0, 64)),
+      )
       .map((entry) => rm(join(directory, entry.name))),
   );
 }
@@ -177,6 +187,58 @@ export async function markComplete(directory: string): Promise<void> {
     await syncDirectory(directory);
   } finally {
     await rm(temporaryMarker, { force: true });
+  }
+}
+
+/**
+ * Write `<file>.br` beside every compressible file a complete build serves: its shared `/a/` blobs and the build files
+ * its cache plan doesn't route to them. The host then streams those instead of compressing on each uncached request,
+ * which took seconds for a game bundle on a loaded host (#1319). Files that already have one are skipped.
+ */
+export async function precompressBuild(root: string, directory: string): Promise<void> {
+  const raw = await readFile(join(directory, 'assets', 'cache-plan.json'), 'utf8').catch(() => null);
+  const entries = raw === null ? [] : cachePlanSchema.parse(JSON.parse(raw) as unknown).entries;
+  const shared = entries.filter(({ url }) => url.startsWith('/a/'));
+  const routed = new Set(shared.flatMap(({ sourcePath }) => (sourcePath === undefined ? [] : [sourcePath])));
+  const files = [
+    ...shared.map(({ url }) => blobPath(root, url.slice('/a/'.length))),
+    ...(await buildFiles(directory)).filter((path) => !routed.has(path)).map((path) => join(directory, path)),
+  ];
+  // One file at a time, so a publish never takes more than one core from serving.
+  for (const file of files) if (isCompressiblePath(file)) await writeBrotli(file);
+}
+
+async function buildFiles(directory: string, prefix = ''): Promise<string[]> {
+  const entries = await readdir(join(directory, prefix), { withFileTypes: true });
+  const nested = await Promise.all(
+    entries
+      .filter(({ name }) => !name.startsWith('.'))
+      .map((entry) =>
+        entry.isDirectory()
+          ? buildFiles(directory, join(prefix, entry.name))
+          : Promise.resolve(entry.isFile() ? [join(prefix, entry.name).split(sep).join('/')] : []),
+      ),
+  );
+  return nested.flat();
+}
+
+async function writeBrotli(file: string): Promise<void> {
+  const destination = `${file}.br`;
+  if (await isFile(destination)) return;
+  const temporary = `${file}.${pid}.${randomUUID()}.br.tmp`;
+  try {
+    const { size } = await stat(file);
+    await pipeline(
+      createReadStream(file),
+      // Quality 9 is 3% smaller than the host's live quality 5, at ~10 s for a 5 MB bundle on a loaded host; 11 is far slower.
+      createBrotliCompress({
+        params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 9, [zlibConstants.BROTLI_PARAM_SIZE_HINT]: size },
+      }),
+      createWriteStream(temporary, { flags: 'wx' }),
+    );
+    await rename(temporary, destination);
+  } finally {
+    await rm(temporary, { force: true });
   }
 }
 
