@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { Link } from 'react-router';
 
-import type { QuestionSession } from '@ogm/contracts/browser';
+import type { CreatorCommand, QuestionSession } from '@ogm/contracts/browser';
 
 import { Icon } from '../../components/Icon';
 import { openConversation } from '../build-chat/conversation';
@@ -23,6 +23,8 @@ type EditMenuProps = {
   onClose(): void;
   cards: readonly ReviewCard[];
   sessions: readonly QuestionSession[];
+  /** This game's open decisions that are not review requests; each opens the decision deck. */
+  decisions: readonly CreatorCommand[];
   rows: readonly WorkRow[];
   /** What the review inbox needs beyond the opened card. */
   inbox: {
@@ -41,6 +43,9 @@ type EditMenuProps = {
   actions: readonly EditMenuAction[];
   extras: readonly ReactElement[];
   onQuestions(session: QuestionSession): void;
+  onDecision(command: CreatorCommand): void;
+  /** Opens the owner's thread with the Executor; absent when the creator has none. */
+  onAsk?: () => void;
   onSignOut(): void;
 };
 
@@ -54,6 +59,7 @@ export function EditMenu({
   onClose,
   cards,
   sessions,
+  decisions,
   rows,
   inbox,
   creatorId,
@@ -64,13 +70,15 @@ export function EditMenu({
   actions,
   extras,
   onQuestions,
+  onDecision,
+  onAsk,
   onSignOut,
 }: EditMenuProps) {
   const resume = useRef<HTMLButtonElement>(null);
   const [more, setMore] = useState(false);
   const [review, setReview] = useState<ReviewCard>();
   const [detail, setDetail] = useState<WorkRow>();
-  const reviewCount = cards.length + sessions.length;
+  const reviewCount = cards.length + decisions.length + sessions.length;
   const ask = actions.find((action) => action.id === 'ask-change');
 
   useEffect(() => {
@@ -119,6 +127,27 @@ export function EditMenu({
                   <span className="game-menu-rev-text">
                     <span className="game-menu-rev-title">{card.title}</span>
                     <span className="game-menu-rev-sub">{card.sub}</span>
+                  </span>
+                  <span className="game-menu-rev-go">Review</span>
+                </button>
+              ))}
+              {decisions.map((command) => (
+                <button
+                  key={`decision:${command.decision_id}`}
+                  type="button"
+                  className="game-menu-rev"
+                  onClick={() => onDecision(command)}
+                >
+                  <span className="game-menu-rev-blank">
+                    <Icon name="chat" />
+                  </span>
+                  <span className="game-menu-rev-text">
+                    <span className="game-menu-rev-title">{command.summary || command.title}</span>
+                    <span className="game-menu-rev-sub">
+                      {[command.ticket ? `#${command.ticket}` : undefined, `${command.options.length} options`]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
                   </span>
                   <span className="game-menu-rev-go">Review</span>
                 </button>
@@ -215,6 +244,19 @@ export function EditMenu({
                     {action.label}
                   </button>
                 ))}
+              {onAsk ? (
+                <button
+                  type="button"
+                  className="game-menu-mi"
+                  onClick={() => {
+                    onClose();
+                    onAsk();
+                  }}
+                >
+                  <Icon name="speak" />
+                  Ask
+                </button>
+              ) : null}
               <Link className="game-menu-mi" to={`${gamePath}/releases?action=publish`} onClick={onClose}>
                 <Icon name="publish" />
                 Publish

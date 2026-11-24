@@ -174,6 +174,13 @@ export function StudioMenu() {
       )
     : [];
   const editSessions = isEdit ? decisions.sessions.filter((item) => item.game_id === gameId) : [];
+  const editDecisions = isEdit
+    ? decisions.commands.filter(
+        (command) =>
+          commandSource(command) === gameId &&
+          !reviewCommands.some((review) => review.decision_id === command.decision_id),
+      )
+    : [];
   const editRows = isEdit
     ? workRows(
         gameId,
@@ -186,7 +193,7 @@ export function StudioMenu() {
         ),
       )
     : [];
-  const editBadge = editCards.length + editSessions.length;
+  const editBadge = editCards.length + editDecisions.length + editSessions.length;
   // Play mode carries no tickets or agent context, so the button shows no count over a game.
   const badge = isEdit ? editBadge : isGameView ? 0 : menuBadge;
   const threadCommands = useMemo(
@@ -749,6 +756,7 @@ export function StudioMenu() {
           onClose={close}
           cards={editCards}
           sessions={editSessions}
+          decisions={editDecisions}
           rows={editRows}
           inbox={{
             workers,
@@ -775,6 +783,18 @@ export function StudioMenu() {
             close();
             if (creatorId) setQuestions({ creatorId, session: item });
           }}
+          onDecision={(command) => {
+            close();
+            if (creatorId) setDeck({ creatorId, command });
+          }}
+          onAsk={
+            threadAccess
+              ? () => {
+                  close();
+                  openThread();
+                }
+              : undefined
+          }
           onSignOut={() => void handleSignOut()}
         />
       ) : (

@@ -440,7 +440,9 @@ export function GameScreen() {
        * The play panel's Resume lifts the room pause itself; the editor's menu (#1326) only closes, so the pause it
        * asked for is lifted here or the other players stay paused.
        */
-      if (pauseRequested.current && mode === 'edit' && room.snapshot?.matchPause) {
+      if (pauseRequested.current && mode === 'edit') {
+        // Closed before the pause landed: keep the request pending and lift the pause when it arrives.
+        if (!room.snapshot?.matchPause) return;
         room.session?.send({ t: 'match.resume.request' });
       }
       pauseRequested.current = false;

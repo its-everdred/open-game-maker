@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { CreatorCommand } from '@ogm/contracts/browser';
+
 import type { WorkerReview } from '../worker-builds/useWorkerReviews';
 import { EditMenu } from './EditMenu';
 import type { ReviewCard, WorkRow } from './model';
@@ -78,7 +80,9 @@ function renderMenu(props: Partial<Parameters<typeof EditMenu>[0]> = {}) {
         signingOut={false}
         actions={[{ id: 'ask-change', label: 'Ask for a change', icon: 'speak', onSelect: ask }]}
         extras={[]}
+        decisions={[]}
         onQuestions={vi.fn()}
+        onDecision={vi.fn()}
         onSignOut={vi.fn()}
         {...props}
       />
@@ -138,6 +142,37 @@ describe('edit menu (#1326)', () => {
     expect(screen.getByRole('link', { name: 'Publish' })).toHaveAttribute('href', '/g/g1/releases?action=publish');
     expect(screen.getByRole('link', { name: 'Versions' })).toHaveAttribute('href', '/g/g1/versions');
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  // The editor menu replaced the tray's Decisions and Ask circles: an agent's open question and the Executor thread
+  // must stay reachable from the editor, or a build that waits on the creator stalls with no way to answer it.
+  it("lists the game's open decisions with the reviews and opens one", () => {
+    const decision = {
+      decision_id: 'd-7',
+      title: 'Which torch?',
+      summary: 'Torch colour',
+      ticket: '969',
+      options: [{}, {}],
+    } as unknown as CreatorCommand;
+    const onDecision = vi.fn();
+    renderMenu({ decisions: [decision], onDecision });
+    const reviewRegion = screen.getByRole('region', { name: 'Review' });
+    expect(reviewRegion).toHaveTextContent('Review2');
+    fireEvent.click(within(reviewRegion).getByRole('button', { name: /Torch colour/ }));
+    expect(onDecision).toHaveBeenCalledWith(decision);
+  });
+
+  it('offers Ask behind More only when the creator has an Executor thread', () => {
+    const onAsk = vi.fn();
+    const { onClose } = renderMenu({ onAsk });
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    expect(onClose).toHaveBeenCalled();
+    expect(onAsk).toHaveBeenCalled();
+    cleanup();
+    renderMenu();
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.queryByRole('button', { name: 'Ask' })).toBeNull();
   });
 
   it('resumes from the header and stays mounted while closed', () => {
