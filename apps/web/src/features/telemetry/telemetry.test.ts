@@ -90,6 +90,20 @@ describe('telemetry', () => {
     expect(ClientEventBatch.safeParse(sent[0]).success).toBe(true);
   });
 
+  /* A crash storm is when the first crash matters most: no batch may exceed the API's 64 KB body limit. */
+  it('splits a burst of large crashes into batches the API accepts', () => {
+    for (let i = 0; i < 20; i += 1) {
+      for (let crumb = 0; crumb < 20; crumb += 1) breadcrumb(`${i}-${crumb} ${'ä'.repeat(100)}`);
+      reportCrash({ crash: 'game_error', message: `burst ${i}`, stack: 'ü'.repeat(4000), gameId: 'g_1' });
+    }
+    flush();
+    expect(sent.flatMap((batch) => batch.events)).toHaveLength(20);
+    for (const batch of sent) {
+      expect(new TextEncoder().encode(JSON.stringify(batch)).length).toBeLessThan(64 * 1024);
+      expect(ClientEventBatch.safeParse(batch).success).toBe(true);
+    }
+  });
+
   it('reports a failed lazy chunk load', () => {
     uninstall = installTelemetry();
     window.dispatchEvent(

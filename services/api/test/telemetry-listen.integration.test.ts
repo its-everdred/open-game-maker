@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { schema } from '@ogm/db';
 import { describe, expect, it } from 'vitest';
 
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
@@ -49,6 +50,24 @@ describe('crash telemetry to the Executor', () => {
     deps.sqlite
       .prepare('INSERT INTO user (id, name, email, email_verified, created_at, updated_at) VALUES (?, ?, ?, 1, 0, 0)')
       .run(kevin.userId, kevin.displayName, kevin.email);
+    const createdAt = new Date().toISOString();
+    deps.db
+      .insert(schema.families)
+      .values({ id: kevin.familyId, name: 'Family', ownerUserId: kevin.userId, createdAt })
+      .run();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: 'g_proof',
+        familyId: kevin.familyId,
+        ownerId: kevin.userId,
+        title: 'Proof',
+        slug: 'proof',
+        visibility: 'listed',
+        repoVisibility: 'private',
+        createdAt,
+      })
+      .run();
     const { app } = await makeApp(deps);
     await deps.sqlite.backup(db);
     listen(); // first pass: starts from now
@@ -100,12 +119,12 @@ describe('crash telemetry to the Executor', () => {
     const lines = readFileSync(attention, 'utf8').trim().split('\n');
     expect(Date.now() - crashedAt).toBeLessThan(60_000);
     expect(lines).toEqual([
-      expect.stringContaining('telemetry: crash game_error in g_proof build b_proof'),
-      expect.stringContaining('telemetry: crash csp_violation in g_proof build b_proof'),
+      expect.stringContaining('telemetry: crash game_error in proof build b_proof'),
+      expect.stringContaining('telemetry: crash csp_violation in proof build b_proof'),
       expect.stringContaining('telemetry: app opened by Kevin on iPhone Safari at https://gm.example (app abc1234)'),
     ]);
     const filed = readFileSync(calls, 'utf8');
-    expect(filed).toContain('issue create -R its-everdred/open-game-maker --title Crash: game_error in g_proof');
-    expect(filed).toContain('--title Crash: csp_violation in g_proof');
+    expect(filed).toContain('issue create -R its-everdred/open-game-maker --title Crash: game_error in proof');
+    expect(filed).toContain('--title Crash: csp_violation in proof');
   });
 });

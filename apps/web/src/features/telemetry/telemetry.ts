@@ -5,6 +5,9 @@ import type { ClientEvent, CrashKind, PlayStep } from '@ogm/contracts/browser';
 
 const ENDPOINT = '/api/v1/telemetry/client-events';
 const MAX_BATCH = 20;
+const MAX_BATCH_BYTES = 48 * 1024;
+const encoder = new TextEncoder();
+const bytes = (value: unknown) => encoder.encode(JSON.stringify(value)).length;
 const MAX_BREADCRUMBS = 20;
 const MAX_CRASHES_PER_LOAD = 30;
 const FLUSH_DELAY_MS = 1_000;
@@ -72,8 +75,16 @@ export function flush(beacon = false): void {
   if (timer !== undefined) clearTimeout(timer);
   timer = undefined;
   while (queue.length) {
-    const body = JSON.stringify({ events: queue.slice(0, MAX_BATCH) });
-    queue = queue.slice(MAX_BATCH);
+    // Bounded by count and by size: the API takes 64 KB and a keepalive or beacon body has the same browser quota.
+    let count = 1;
+    let size = bytes(queue[0]);
+    while (count < Math.min(queue.length, MAX_BATCH)) {
+      size += bytes(queue[count]) + 1;
+      if (size > MAX_BATCH_BYTES) break;
+      count += 1;
+    }
+    const body = JSON.stringify({ events: queue.slice(0, count) });
+    queue = queue.slice(count);
     if (beacon && sendBeacon(body)) continue;
     try {
       void fetch(ENDPOINT, {

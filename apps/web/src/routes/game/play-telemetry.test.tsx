@@ -50,6 +50,29 @@ describe('usePlayTelemetry', () => {
     ]);
   });
 
+  /* The old build's state lingers until the new frame publishes; it must not vouch for or blame the new build. */
+  it('reports nothing for a new build from the previous build’s frame state', () => {
+    const hook = renderHook(
+      (props: { buildId: string; frameState: GameFrameState; failed: boolean }) =>
+        usePlayTelemetry({ gameId, designLoadFailed: false, ...props }),
+      { initialProps: { buildId: 'b_old', frameState: inWorld, failed: false } },
+    );
+    const broken: GameFrameState = { ...playing, bridgeState: 'error', errorCode: 'boot_failed' };
+    hook.rerender({ buildId: 'b_old', frameState: broken, failed: true });
+    vi.clearAllMocks();
+
+    hook.rerender({ buildId: 'b_new', frameState: broken, failed: true });
+    expect(telemetry.track).not.toHaveBeenCalled();
+    expect(telemetry.reportCrash).not.toHaveBeenCalled();
+
+    hook.rerender({ buildId: 'b_new', frameState: connecting, failed: false });
+    hook.rerender({ buildId: 'b_new', frameState: inWorld, failed: false });
+    expect(telemetry.track.mock.calls.map(([event]) => event)).toEqual([
+      { kind: 'first_frame', gameId, buildId: 'b_new' },
+      { kind: 'in_world', gameId, buildId: 'b_new' },
+    ]);
+  });
+
   it('reports the "Try again" overlay with the step the player reached', () => {
     const hook = render(playing);
     hook.rerender({

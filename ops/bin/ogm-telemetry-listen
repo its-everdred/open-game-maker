@@ -6,7 +6,8 @@ by (game, build, signature) in SQLite. Every --interval seconds this reads the d
 since its last pass:
   - each new crash group appends one attention line, and opens one issue per new signature (priority:1, deduplicated:
     the same signature in a new build comments on the existing issue). A crash in a published build names the release,
-    its git tag and the merged PR that carried its commit.
+    its git tag and the merged PR that carried its commit. Crashes naming no known game get no issue, and GitHub
+    writes are capped at 10 an hour: any signed-in account can post crashes.
   - each app open appends one attention line with who, device, domain and app version, plus the crash groups seen in the
     last day, so background agents can check the live path before the player gets there. Opens from a headless
     browser (the post-deploy play check) are skipped; their crashes are not.
@@ -35,6 +36,8 @@ from datetime import datetime, timedelta, timezone
 
 DEFAULT_REPO = 'its-everdred/open-game-maker'
 ISSUE_LABELS = ['priority:1']
+# Any signed-in account can post crashes, so GitHub writes (issues and comments) are capped; the rest stay attention lines.
+GITHUB_WRITES_PER_HOUR = 10
 
 
 def env_file(path):
@@ -51,8 +54,16 @@ def env_file(path):
 
 
 def clean(text, limit=300):
-    """Client-sent text is untrusted: one line, no control characters, bounded, so it cannot forge attention lines."""
-    return re.sub(r'[\x00-\x1f\x7f]+', ' ', str(text if text is not None else ''))[:limit]
+    """Client-sent text is untrusted: one line, no control characters, bounded, so it cannot forge attention lines. No
+    backticks (it cannot leave a code span) and no bare @ (it cannot mention anyone on GitHub)."""
+    text = re.sub(r'[\x00-\x1f\x7f]+', ' ', str(text if text is not None else ''))[:limit]
+    return text.replace('`', "'").replace('@', '@\u200b')
+
+
+def web_origin(text):
+    """The origin the client claims, only if it is one: anything else could be a link or text in an issue."""
+    text = str(text or '')
+    return text if re.fullmatch(r'https?://[a-z0-9.-]+(:\d{1,5})?', text, re.I) else 'an unknown origin'
 
 
 def fenced(text, limit=4000):
@@ -83,6 +94,7 @@ def load_state(path):
         return None
     state.setdefault('issues', {})
     state.setdefault('pending', [])
+    state.setdefault('writes', [])
     return state
 
 
@@ -124,7 +136,7 @@ def release_for(conn, build_id):
     if not build_id:
         return None
     row = conn.execute(
-        """select r.version, r.git_tag, r.published_at, b.git_sha, g.github_repo
+        """select r.version, r.git_tag, r.published_at, b.git_sha, g.github_owner, g.github_repo
              from builds b join games g on g.id = b.game_id
              left join releases r on r.build_id = b.id
             where b.id = ? order by r.seq desc limit 1""",
@@ -134,11 +146,11 @@ def release_for(conn, build_id):
 
 
 def pr_for(release, gh):
-    if not release or not release.get('git_sha') or not release.get('github_repo'):
+    if not release or not release.get('git_sha') or not release.get('github_owner') or not release.get('github_repo'):
         return None
     try:
         run = subprocess.run(
-            [*gh, 'pr', 'list', '-R', release['github_repo'], '--state', 'merged', '--search', release['git_sha'],
+            [*gh, 'pr', 'list', '-R', f"{release['github_owner']}/{release['github_repo']}", '--state', 'merged', '--search', release['git_sha'],
              '--json', 'url', '--limit', '1'],
             capture_output=True, text=True, timeout=60,
         )
@@ -155,20 +167,20 @@ def publish_note(release, pr):
     return f'{note}, PR {pr}' if pr else note
 
 
-def new_groups(conn, cursor):
+def new_groups(conn, cursor, upto):
     return conn.execute(
         """select g.*, e.user_id, e.origin, e.app_version, e.device, e.detail_json, e.at
              from crash_groups g join client_events e on e.id = g.first_event_id
-            where g.first_event_id > ? order by g.first_event_id""",
-        (cursor,),
+            where g.first_event_id > ? and g.first_event_id <= ? order by g.first_event_id""",
+        (cursor, upto),
     ).fetchall()
 
 
-def app_opens(conn, cursor):
+def app_opens(conn, cursor, upto):
     return conn.execute(
         """select e.*, u.name from client_events e left join user u on u.id = e.user_id
-            where e.kind = 'app_open' and e.id > ? order by e.id""",
-        (cursor,),
+            where e.kind = 'app_open' and e.id > ? and e.id <= ? order by e.id""",
+        (cursor, upto),
     ).fetchall()
 
 
@@ -179,7 +191,7 @@ def recent_crash_groups(conn, now):
 
 def issue_body(conn, group, detail, game, note):
     breadcrumbs = '\n'.join(clean(crumb, 120) for crumb in detail.get('breadcrumbs') or []) or 'none'
-    origin = clean(group['origin'], 200)
+    origin = web_origin(group['origin'])
     path = f"{origin}/g/{clean(group['game_id'], 128)}" if group['game_id'] else origin
     return '\n'.join([
         f'A player hit a new crash in {game}. Filed by ogm-telemetry-listen from client telemetry (#1318).',
@@ -226,9 +238,18 @@ def comment_issue(gh, repo, number, body):
         raise RuntimeError(clean(run.stderr, 200))
 
 
-def raise_issue(conn, gh, repo, state, key):
-    """Open or comment on the issue for one crash group; True once GitHub has it."""
+def raise_issue(conn, gh, repo, state, key, now):
+    """Open or comment on the issue for one crash group; True once it needs no more (filed, or deliberately skipped)."""
     game_id, build_id, signature = key
+    if game_id and conn.execute('select 1 from games where id = ?', (game_id,)).fetchone() is None:
+        print(f'ogm-telemetry-listen: no issue for {signature[:12]}: unknown game', file=sys.stderr)
+        return True
+    hour_ago = now.timestamp() - 3600
+    state['writes'] = [at for at in state['writes'] if at > hour_ago]
+    if len(state['writes']) >= GITHUB_WRITES_PER_HOUR:
+        print(f'ogm-telemetry-listen: no issue for {signature[:12]}: {GITHUB_WRITES_PER_HOUR} GitHub writes this hour',
+              file=sys.stderr)
+        return True
     group = conn.execute(
         """select g.*, e.origin, e.app_version, e.device, e.detail_json
              from crash_groups g join client_events e on e.id = g.first_event_id
@@ -252,13 +273,18 @@ def raise_issue(conn, gh, repo, state, key):
     except (RuntimeError, subprocess.TimeoutExpired, OSError) as error:
         print(f'ogm-telemetry-listen: issue for {signature[:12]} deferred: {error}', file=sys.stderr)
         return False
+    state['writes'].append(now.timestamp())
     return True
 
 
-def run_pass(conn, state, opts, now):
+def run_pass(conn, state, opts, now, save):
+    """One pass. State is saved as soon as the lines are out and after each GitHub write, so a failure later in the pass
+    neither repeats lines nor files an issue twice."""
     lines = []
     cursor = state['cursor']
-    for group in new_groups(conn, cursor):
+    # Read the bound first: rows the API commits during the pass belong to the next one.
+    upto = max_event_id(conn)
+    for group in new_groups(conn, cursor, upto):
         detail = json.loads(group['detail_json'] or '{}')
         game = game_label(conn, group['game_id'])
         release = release_for(conn, group['build_id'])
@@ -269,7 +295,7 @@ def run_pass(conn, state, opts, now):
             f"{clean(group['message'], 160)} [sig {group['signature'][:12]}]"
         )
         state['pending'].append([group['game_id'], group['build_id'], group['signature']])
-    opens = app_opens(conn, cursor)
+    opens = app_opens(conn, cursor, upto)
     if opens:
         crashes = recent_crash_groups(conn, now)
         for event in opens:
@@ -280,30 +306,32 @@ def run_pass(conn, state, opts, now):
             lines.append(
                 f"- {stamp(now)} telemetry: app {'resumed' if detail.get('resumed') else 'opened'} by "
                 f"{clean(event['name'] or event['user_id'], 60)} on {device_name(event['device'])} at "
-                f"{clean(event['origin'], 80)} (app {clean(event['app_version'], 20)}); "
+                f"{web_origin(event['origin'])} (app {clean(event['app_version'], 20)}); "
                 f'crash groups seen in the last day: {crashes}'
             )
-    state['cursor'] = max(cursor, max_event_id(conn))
+    state['cursor'] = max(cursor, upto)
+    if not opts['issues']:
+        state['pending'] = []
     append_attention(opts['attention'], lines)
+    save()
     for line in lines:
         print(line, flush=True)
-    if opts['issues']:
-        state['pending'] = [key for key in state['pending'] if not raise_issue(conn, opts['gh'], opts['repo'], state, tuple(key))]
-    else:
-        state['pending'] = []
+    for key in list(state['pending']):
+        if raise_issue(conn, opts['gh'], opts['repo'], state, tuple(key), now):
+            state['pending'].remove(key)
+            save()
 
 
 def listen(opts):
     state = load_state(opts['state'])
     if state is None:
         with connect(opts['db']) as conn:
-            state = {'cursor': max_event_id(conn), 'issues': {}, 'pending': []}
+            state = {'cursor': max_event_id(conn), 'issues': {}, 'pending': [], 'writes': []}
         save_state(opts['state'], state)
     while True:
         try:
             with connect(opts['db']) as conn:
-                run_pass(conn, state, opts, datetime.now(timezone.utc))
-            save_state(opts['state'], state)
+                run_pass(conn, state, opts, datetime.now(timezone.utc), lambda: save_state(opts['state'], state))
         except sqlite3.Error as error:
             # The API creates the tables; until it has migrated, there is nothing to read.
             print(f'ogm-telemetry-listen: pass failed: {error}', file=sys.stderr, flush=True)

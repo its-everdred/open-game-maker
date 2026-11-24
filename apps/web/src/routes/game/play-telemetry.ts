@@ -22,7 +22,7 @@ export function playStep(state: Pick<GameFrameState, 'bridgeState' | 'firstFrame
 }
 
 /**
- * Reports one game's play: first-frame and in-world heartbeats per mount, the "Try again" overlay, and the faults the
+ * Reports one game's play: first-frame and in-world heartbeats once per game build, the "Try again" overlay, and the faults the
  * game frame relays. `failed` is the overlay's own condition.
  */
 export function usePlayTelemetry(input: {
@@ -42,6 +42,14 @@ export function usePlayTelemetry(input: {
 
   const sent = useRef({ key: '', firstFrame: false, inWorld: false });
   if (sent.current.key !== idsKey) sent.current = { key: idsKey, firstFrame: false, inWorld: false };
+  /*
+   * When the game or build changes, the first renders still carry the previous frame's state until the new frame
+   * publishes. Until frameState changes, it belongs to the old build: no heartbeat or crash is reported from it.
+   */
+  const owner = useRef<{ key: string; stale?: GameFrameState }>({ key: '' });
+  if (owner.current.key !== idsKey) owner.current = { key: idsKey, stale: frameState };
+  else if (owner.current.stale !== frameState) owner.current.stale = undefined;
+  const live = owner.current.stale === undefined;
 
   useEffect(() => {
     if (gameId) breadcrumb(`open game ${gameId} build ${buildId ?? 'none'}`);
@@ -53,7 +61,7 @@ export function usePlayTelemetry(input: {
 
   const current = step.current;
   useEffect(() => {
-    if (!gameId) return;
+    if (!gameId || !live) return;
     if ((current === 'play' || current === 'in-world') && !sent.current.firstFrame) {
       sent.current.firstFrame = true;
       breadcrumb('first frame');
@@ -65,10 +73,10 @@ export function usePlayTelemetry(input: {
       track({ kind: 'in_world', ...ids });
     }
     // `ids` is derived from gameId/buildId, both covered by idsKey.
-  }, [current, idsKey]);
+  }, [current, idsKey, live]);
 
   useEffect(() => {
-    if (!failed || !gameId) return;
+    if (!failed || !gameId || !(live || designLoadFailed)) return;
     const code = designLoadFailed ? 'design-load-failed' : (frameState.errorCode ?? 'frame-error');
     reportCrash({
       crash: BRIDGE_TIMEOUTS.has(code) ? 'bridge_timeout' : 'try_again',
@@ -77,7 +85,7 @@ export function usePlayTelemetry(input: {
       ...ids,
     });
     // Report each time the overlay appears, not on unrelated state changes while it shows.
-  }, [failed, idsKey]);
+  }, [failed, idsKey, live]);
 
   const reportFault = useCallback(
     (fault: GameFault) =>

@@ -23,11 +23,11 @@ import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
 c.executescript(open(sys.argv[2]).read().replace('--> statement-breakpoint', ''))
 c.execute('create table user (id text, name text)')
-c.execute('create table games (id text, slug text, title text, github_repo text)')
+c.execute('create table games (id text, slug text, title text, github_owner text, github_repo text)')
 c.execute('create table builds (id text, game_id text, git_sha text)')
 c.execute('create table releases (build_id text, seq integer, version text, git_tag text, published_at text)')
 c.execute("insert into user values ('u_kevin', 'Kevin')")
-c.execute("insert into games values ('g_dusk', 'dusk-helm', 'Dusk Helm', 'its-everdred/open-games')")
+c.execute("insert into games values ('g_dusk', 'dusk-helm', 'Dusk Helm', 'its-everdred', 'open-games')")
 c.executemany('insert into builds values (?, ?, ?)', [('b_1', 'g_dusk', 'abc123'), ('b_2', 'g_dusk', 'def456')])
 c.execute("insert into releases values ('b_1', 3, '1.3.0', 'dusk-helm/v1.3.0', '2026-11-24T01:00:00Z')")
 c.commit()
@@ -97,11 +97,18 @@ OGM_TEST_UA='Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/131.0 Safari/537.36'
 run > /dev/null
 assert_eq 2 "$(wc -l < "$attention")" 'a headless app open is not announced'
 
+# A crash naming no known game is announced, but files nothing: any account can post one.
+: > "$OGM_TEST_CALLS"
+event crash 'g_`x` @someone' b_1 sig-fake 'made up'
+run > /dev/null
+assert_grep "crash game_error in g_'x' @"$'\u200b'"someone" "$attention"
+[[ ! -s $OGM_TEST_CALLS ]] || fail 'an unknown game filed an issue'
+
 # A repeat of a known group is counted by the API, not raised again.
 : > "$OGM_TEST_CALLS"
 event crash g_dusk b_1 sig-a 'TypeError: helm is undefined'
 run > /dev/null
-assert_eq 2 "$(wc -l < "$attention")" 'a repeat of a known crash group is not raised again'
+assert_eq 3 "$(wc -l < "$attention")" 'a repeat of a known crash group is not raised again'
 [[ ! -s $OGM_TEST_CALLS ]] || fail 'a repeat filed or commented'
 
 # The same signature in a new build comments on the issue already filed.
@@ -122,9 +129,18 @@ assert_grep 'issue create -R its-everdred/open-game-maker --title Crash: game_er
 run > /dev/null
 assert_eq 1 "$(grep -c 'issue create' "$OGM_TEST_CALLS")" 'a filed issue is not filed again'
 
+# GitHub writes are capped at 10 an hour; past that, crashes are attention lines only.
+: > "$OGM_TEST_CALLS"
+for n in $(seq 1 12); do event crash g_dusk b_1 "sig-flood-$n" "flood $n"; done
+run > /dev/null 2> "$scratch/err"
+# Three writes this hour already: two issues and a comment.
+assert_eq 7 "$(grep -c 'issue create' "$OGM_TEST_CALLS")" 'GitHub writes stop at 10 in an hour'
+assert_grep 'GitHub writes this hour' "$scratch/err"
+assert_grep 'flood 12' "$attention"
+
 # Per game and build: sessions, crashes and the in-world rate.
 "$listen" stats --db "$db" > "$scratch/stats"
 assert_grep 'app opens in the last 7 days:' "$scratch/stats"
-assert_grep $'dusk-helm\tb_1\t1\t1\t4\t0\t0%' "$scratch/stats"
+assert_grep $'dusk-helm\tb_1\t1\t1\t16\t0\t0%' "$scratch/stats"
 
 printf 'telemetry-listen: ok\n'
