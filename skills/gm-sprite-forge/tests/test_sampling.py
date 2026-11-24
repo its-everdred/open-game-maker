@@ -61,6 +61,15 @@ class InPlace(unittest.TestCase):
         self.assertEqual([round(y, 9) for _, y in held], [0, 0, 0])  # no forward travel left
         self.assertEqual([x for x, _ in held], [0.0, 0.05, 0.0])  # the sway is still there
 
+    def test_a_window_deep_in_a_take_is_held_at_the_origin(self):
+        # 100STYLE and LaFAN1 cycles start tens of seconds into a walk, metres away: the camera frames the origin
+        def track(t):
+            return (12.0, 30.0 + t / 10)
+        ts = [600, 610, 620]
+        held = [(track(t)[0] + o[0], track(t)[1] + o[1]) for t, o in zip(ts, in_place(track, ts, 600, 620))]
+        self.assertEqual([(round(x, 9), round(y, 9)) for x, y in held], [(0, 0)] * 3)
+
+
 
 class InPlaceKeyed(unittest.TestCase):
     def test_a_held_key_pose_stays_put_through_its_hold(self):
