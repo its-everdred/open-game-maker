@@ -34,6 +34,10 @@ so all three reach every mechanic and every screen's way forward:
 - Phone: the host draws up to two declared sticks and five buttons, including for games with no stick. The first
   declared button is the 64 px primary. Declare a `move` stick and keep button actions to five, most-used first.
   A game that already draws its own controls must declare `inputs.touch: 'self'` to suppress the host overlay.
+- Buttons show icons, never letters. Map each button action to a shared icon in `inputs.icons`, e.g.
+  `{ attack: 'attack', charge: 'heavy-attack', block: 'block', roll: 'roll', use: 'use' }` (the full set is
+  `touchIconSchema` in `@ogm/contracts/input`). An undeclared button gets an icon guessed from its name and `gm build`
+  warns. A game that draws its own controls (`touch: 'self'`) draws icons too.
 - Use `stick` or `button` for anything a player must reach: `axis` actions get no touch or gamepad default.
 - Keyboard: the default map binds WASD and arrows to `move`, Space to `jump`, and E or Enter to `use`. Give every
   other action a key: pass `{ keyboard: { KeyF: 'fire' } }` as the second argument to `defaultInputMapping`.

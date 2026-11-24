@@ -1,5 +1,7 @@
 import type { GameManifest } from '@ogm/contracts/game';
-import type { ActionFrame, ActionValue, ControlsLayout, RigInputMapping } from '@ogm/contracts/input';
+import type { ActionFrame, ActionValue, ControlsLayout, RigInputMapping, TouchIcon } from '@ogm/contracts/input';
+
+import { iconForWords, TOUCH_ICON_SVG } from './touch-icons.js';
 
 type TouchMode = RigInputMapping['touch'];
 
@@ -21,25 +23,9 @@ export function actionLabel(action: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** First match wins, so the narrower words (counter-clockwise, hard drop) come before the broader ones. */
-const ICONS: [RegExp, string][] = [
-  [/\bccw\b|counter|anti/u, '\u21BA'],
-  [/rotate|turn|\bcw\b|spin/u, '\u21BB'],
-  [/hard drop|slam/u, '\u2913'],
-  [/drop|down|crouch/u, '\u2193'],
-  [/jump|\bup\b/u, '\u2191'],
-  [/\bleft\b/u, '\u2190'],
-  [/\bright\b/u, '\u2192'],
-  [/hold|swap/u, '\u21C4'],
-  [/fire|shoot|attack/u, '\u2726'],
-  [/pause/u, '\u23F8\uFE0E'],
-];
-
-/** A glyph for the action's own words, else the first letter of its spoken label; never the raw id. */
-export function actionIcon(action: string): string {
-  const label = actionLabel(action);
-  const words = label.toLowerCase();
-  return ICONS.find(([pattern]) => pattern.test(words))?.[1] ?? label.charAt(0);
+/** The game's declared icon for a button, else one picked from the action's words; never a letter or the raw id. */
+export function actionIcon(action: string, declared?: GameManifest['inputs']['icons']): TouchIcon {
+  return declared?.[action] ?? iconForWords(actionLabel(action));
 }
 
 export interface TouchOverlayOptions {
@@ -241,9 +227,12 @@ export class TouchOverlay {
     const size = index === 0 ? 64 : 44;
     const icon = this.hostDocument.createElement('span');
     icon.setAttribute('aria-hidden', 'true');
-    icon.textContent = actionIcon(action);
-    icon.style.fontSize = `${Math.round(size * 0.45)}px`;
-    icon.style.lineHeight = '1';
+    const name = actionIcon(action, this.inputs.icons);
+    icon.dataset.icon = name;
+    icon.innerHTML = TOUCH_ICON_SVG[name];
+    icon.style.display = 'block';
+    icon.style.width = `${Math.round(size * 0.5)}px`;
+    icon.style.height = `${Math.round(size * 0.5)}px`;
     button.append(icon);
     const inset = (64 - size) / 2;
     Object.assign(button.style, {

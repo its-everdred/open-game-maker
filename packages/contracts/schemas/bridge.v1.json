@@ -3232,6 +3232,40 @@
                         "touch": {
                           "type": "string",
                           "const": "self"
+                        },
+                        "icons": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 32
+                          },
+                          "additionalProperties": {
+                            "type": "string",
+                            "enum": [
+                              "attack",
+                              "heavy-attack",
+                              "block",
+                              "roll",
+                              "use",
+                              "cast",
+                              "potion",
+                              "map",
+                              "inventory",
+                              "jump",
+                              "confirm",
+                              "back",
+                              "rotate-cw",
+                              "rotate-ccw",
+                              "down",
+                              "hard-drop",
+                              "left",
+                              "right",
+                              "swap",
+                              "pause",
+                              "action"
+                            ]
+                          }
                         }
                       },
                       "required": [

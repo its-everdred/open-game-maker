@@ -157,8 +157,8 @@ describe('TouchOverlay', () => {
     expect(buttons).toHaveLength(3);
     for (const button of buttons) {
       const icon = button.querySelector('[aria-hidden="true"]');
-      expect(icon?.textContent).toBe(button.textContent);
-      expect(icon?.textContent).toHaveLength(1);
+      expect(icon?.querySelector('svg')).not.toBeNull();
+      expect(button.textContent).toBe('');
     }
     for (const action of Object.keys(actions)) expect(layer.textContent).not.toContain(action);
     expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
@@ -223,9 +223,58 @@ describe('TouchOverlay', () => {
   // Identical marks would leave a player guessing which circle rotates and which drops.
   it('gives each of a falling-block game’s actions its own icon', () => {
     const actions = ['rotateCCW', 'rotateCW', 'softDrop', 'hardDrop', 'hold'];
-    const icons = actions.map(actionIcon);
-    expect(icons).toEqual(['\u21BA', '\u21BB', '\u2193', '\u2913', '\u21C4']);
-    expect(actionIcon('interact')).toBe('I');
+    expect(actions.map((action) => actionIcon(action))).toEqual([
+      'rotate-ccw',
+      'rotate-cw',
+      'down',
+      'hard-drop',
+      'swap',
+    ]);
+  });
+
+  it('picks a fighting icon for each Dusk Helm button and a neutral one for an unknown action', () => {
+    const actions = ['attack', 'block', 'charge', 'use', 'roll', 'map', 'inventory', 'confirm', 'back'];
+    expect(actions.map((action) => actionIcon(action))).toEqual([
+      'attack',
+      'block',
+      'heavy-attack',
+      'use',
+      'roll',
+      'map',
+      'inventory',
+      'confirm',
+      'back',
+    ]);
+    expect(actionIcon('interact')).toBe('use');
+    expect(actionIcon('zorp')).toBe('action');
+  });
+
+  it('draws the declared icon over the name guess, with no letter on any button', () => {
+    const layer = document.createElement('div');
+    const overlay = new TouchOverlay({
+      layer,
+      inputs: {
+        actions: { move: 'stick', attack: 'button', charge: 'button', zorp: 'button', x: 'button' },
+        icons: { charge: 'cast', x: 'potion' },
+      },
+      touch: 'stick',
+      playerIndex: 0,
+      onFrame: vi.fn(),
+      coarsePointer: () => true,
+    });
+    const buttons = [...layer.querySelectorAll<HTMLButtonElement>('button')];
+    expect(buttons.map((button) => button.querySelector<HTMLElement>('[data-icon]')!.dataset.icon)).toEqual([
+      'attack',
+      'cast',
+      'action',
+      'potion',
+    ]);
+    for (const button of buttons) {
+      expect(button.textContent).toBe('');
+      expect(button.querySelector('svg')).not.toBeNull();
+    }
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Attack', 'Charge', 'Zorp', 'X']);
+    overlay.dispose();
   });
 
   it.each([
