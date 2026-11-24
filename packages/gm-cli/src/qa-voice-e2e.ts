@@ -148,6 +148,8 @@ export function costLine(cost: VoiceCost): string {
  * Replaces the page's microphone with one that is silent until `__ogmFakeMic.play(name)`, then plays that clip once.
  * The app's own capture code reads it through `getUserMedia`, exactly as it reads a phone's microphone. It also counts
  * the seconds of audio the page itself plays (`playedSeconds`), so a reply passes only once it reached the speaker path.
+ * It keeps Safari's audio-session rule, which Chromium lacks: the microphone is refused while
+ * `navigator.audioSession.type` is neither 'auto' nor 'play-and-record' (#1325: 'playback' broke voice on iPhones).
  */
 export function installFakeMic(clips: Record<string, string>): void {
   type Mic = {
@@ -195,10 +197,16 @@ export function installFakeMic(clips: Record<string, string>): void {
       },
     },
   });
-  const devices = navigator.mediaDevices;
-  if (!devices) return;
-  devices.getUserMedia = async () => {
+  const nav = navigator as Navigator & { audioSession?: { type: string } };
+  if (!nav.audioSession) Object.defineProperty(nav, 'audioSession', { value: { type: 'auto' } });
+  const session = nav.audioSession!;
+  // On the prototype: WebKit can run this before the page's navigator.mediaDevices exists (a routed document).
+  if (typeof MediaDevices === 'undefined') return;
+  MediaDevices.prototype.getUserMedia = async () => {
     mic.requested += 1;
+    if (session.type !== 'auto' && session.type !== 'play-and-record') {
+      throw new DOMException('AudioSession category is not compatible with audio capture.', 'InvalidStateError');
+    }
     const { context, destination } = ensure();
     await context.resume();
     // Each caller gets its own tracks: the app stops them when a capture ends, which must not mute the next capture.

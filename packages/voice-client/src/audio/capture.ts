@@ -1,3 +1,5 @@
+import { holdRecordingSession } from './session.js';
+
 const TARGET_RATE = 16_000;
 
 export interface CaptureHandle {
@@ -29,9 +31,16 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 export async function startCapture(onChunk: (dataBase64: string) => void): Promise<CaptureHandle> {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: true },
-  });
+  const releaseSession = holdRecordingSession();
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true },
+    });
+  } catch (error) {
+    releaseSession();
+    throw error;
+  }
   const context = new AudioContext();
   const nodes: AudioNode[] = [];
   let stopped = false;
@@ -72,6 +81,7 @@ export async function startCapture(onChunk: (dataBase64: string) => void): Promi
     await context.resume();
   } catch (error) {
     for (const track of stream.getTracks()) track.stop();
+    releaseSession();
     await context.close();
     throw error;
   }
@@ -83,6 +93,7 @@ export async function startCapture(onChunk: (dataBase64: string) => void): Promi
       stopped = true;
       for (const node of nodes) node.disconnect();
       for (const track of stream.getTracks()) track.stop();
+      releaseSession();
       void context.close();
     },
   };

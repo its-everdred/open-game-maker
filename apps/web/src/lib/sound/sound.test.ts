@@ -66,6 +66,17 @@ describe('unlock', () => {
     expect(ctx.resume).toHaveBeenCalledOnce();
   });
 
+  it('leaves an open microphone recording when the creator taps during voice', async () => {
+    await loadSound();
+    const session = (navigator as unknown as { audioSession: { type: string } }).audioSession;
+    session.type = 'play-and-record';
+
+    window.dispatchEvent(new Event('pointerup'));
+
+    // Safari stops capture under 'playback': releasing the hold-to-dictate button would end the dictation (#1325).
+    expect(session.type).toBe('play-and-record');
+  });
+
   it('runs on the first tap release, the event iOS accepts', async () => {
     const { ctx } = await loadSound();
 
