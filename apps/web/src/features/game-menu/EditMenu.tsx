@@ -82,8 +82,14 @@ export function EditMenu({
   const ask = actions.find((action) => action.id === 'ask-change');
 
   useEffect(() => {
-    if (open) resume.current?.focus();
-    else setMore(false);
+    if (open) {
+      resume.current?.focus();
+      return;
+    }
+    // Whatever closes the menu (a room's resume included) takes its review and ticket layers with it.
+    setMore(false);
+    setReview(undefined);
+    setDetail(undefined);
   }, [open]);
 
   const empty = reviewCount === 0 && rows.length === 0;

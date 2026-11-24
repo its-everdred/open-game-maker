@@ -65,30 +65,31 @@ const rows: WorkRow[] = [
 function renderMenu(props: Partial<Parameters<typeof EditMenu>[0]> = {}) {
   const onClose = vi.fn();
   const ask = vi.fn();
-  render(
+  const base: Parameters<typeof EditMenu>[0] = {
+    open: true,
+    onClose,
+    cards: [card],
+    sessions: [],
+    rows,
+    inbox: { workers: [], reviews: [review], commands: [], targets: [], error: false, incomplete: false },
+    gamePath: '/g/g1',
+    admin: false,
+    signedIn: true,
+    signingOut: false,
+    actions: [{ id: 'ask-change', label: 'Ask for a change', icon: 'speak', onSelect: ask }],
+    extras: [],
+    decisions: [],
+    onQuestions: vi.fn(),
+    onDecision: vi.fn(),
+    onSignOut: vi.fn(),
+  };
+  const view = (next: Partial<Parameters<typeof EditMenu>[0]>) => (
     <MemoryRouter>
-      <EditMenu
-        open
-        onClose={onClose}
-        cards={[card]}
-        sessions={[]}
-        rows={rows}
-        inbox={{ workers: [], reviews: [review], commands: [], targets: [], error: false, incomplete: false }}
-        gamePath="/g/g1"
-        admin={false}
-        signedIn
-        signingOut={false}
-        actions={[{ id: 'ask-change', label: 'Ask for a change', icon: 'speak', onSelect: ask }]}
-        extras={[]}
-        decisions={[]}
-        onQuestions={vi.fn()}
-        onDecision={vi.fn()}
-        onSignOut={vi.fn()}
-        {...props}
-      />
-    </MemoryRouter>,
+      <EditMenu {...base} {...props} {...next} />
+    </MemoryRouter>
   );
-  return { onClose, ask };
+  const { rerender } = render(view({}));
+  return { onClose, ask, rerender: (next: Partial<Parameters<typeof EditMenu>[0]>) => rerender(view(next)) };
 }
 
 describe('edit menu (#1326)', () => {
@@ -173,6 +174,16 @@ describe('edit menu (#1326)', () => {
     renderMenu();
     fireEvent.click(screen.getByRole('button', { name: 'More' }));
     expect(screen.queryByRole('button', { name: 'Ask' })).toBeNull();
+  });
+
+  it('drops an open review when the menu closes, so it does not float over the game or come back on reopen', () => {
+    const { rerender } = renderMenu();
+    fireEvent.click(screen.getByRole('button', { name: /UI kit/ }));
+    expect(screen.getByRole('dialog', { name: 'Review inbox' })).toBeInTheDocument();
+    rerender({ open: false });
+    expect(screen.queryByRole('dialog', { name: 'Review inbox' })).toBeNull();
+    rerender({ open: true });
+    expect(screen.queryByRole('dialog', { name: 'Review inbox' })).toBeNull();
   });
 
   it('resumes from the header and stays mounted while closed', () => {
