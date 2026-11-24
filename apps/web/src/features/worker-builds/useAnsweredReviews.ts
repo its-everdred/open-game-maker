@@ -8,7 +8,12 @@ import type { WorkerReview } from './useWorkerReviews';
 const storageKey = 'ogm:answered-review-commands';
 const gameIdsStorageKey = 'ogm:answered-review-game-ids';
 export type AnsweredCommand = { id: string; gameId: string; review: CommandReviewEntry };
-export type SentReview = { likes: string[]; dislikes: { option_id: string; reason?: string }[]; notes?: string };
+export type SentReview = {
+  likes: string[];
+  dislikes: { option_id: string; reason?: string }[];
+  notes?: string;
+  advance?: 'prototype' | 'build' | 'ship';
+};
 export type SessionAnsweredCommand = { command: ReviewCommand; review?: SentReview };
 
 export function useAnsweredReviews(_reviews: readonly WorkerReview[], commands: readonly ReviewCommand[]) {

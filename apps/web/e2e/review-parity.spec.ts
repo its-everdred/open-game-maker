@@ -78,6 +78,8 @@ const inventoryCommand = () => ({
   ],
   recommend: 'iron',
   opened_at: '2026-11-22T09:05:00.000Z',
+  // A `phase:mock` ticket: the card carries the phase strip and its Approve button (#1124).
+  phase: 'mock',
 });
 
 // The NUC core daemon's matrix: each row leads with the original, and the knight's row is a pipeline.
@@ -380,6 +382,29 @@ test('answered cards collapse to the title and the saved answer, and reopen to c
     dialog.getByRole('region', { name: 'Answered reviews' }).getByRole('button', { name: /^Clone variants/ }),
   ).toContainText('disliked Short tower · Keep the tall one only');
   expect(api.answers).toHaveLength(2);
+});
+
+// #1124: Kevin no longer types "move on to prototyping"; the card names the rung and approves it in one tap.
+test('a phase ticket card shows its rung and approves it in one tap', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const api = await install(page);
+  const dialog = await openReviewDeck(page, 20_000, 'HUD font');
+  await reopen(page, 'Torch style');
+  const card = dialog.getByRole('region', { name: 'Torch style' });
+  const strip = card.getByRole('list', { name: 'Phase' });
+  await expect(strip.getByRole('listitem')).toHaveText(['Mock', 'Prototype', 'Build']);
+  await expect(strip.locator('[aria-current="step"]')).toHaveText('Mock');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await capture(page, testInfo, 'phase-strip');
+  await card.getByRole('button', { name: 'Approve → Prototype' }).click();
+  await expect(card.getByRole('status')).toContainText('Saved');
+  expect(api.answers.find(({ path }) => path.endsWith('/commands/d_torch/answer'))!.body).toEqual({
+    option_id: 'iron',
+    version: 1,
+    review: { likes: [], dislikes: [] },
+    advance: 'prototype',
+  });
+  await capture(page, testInfo, 'phase-approved');
 });
 
 test('a prototype card shows the play link, the clip, works now, limitations and what to weigh in on (item 7)', async ({

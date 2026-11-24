@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { Id, IsoTime } from './api.js';
+import { FidelityPhase } from './review-rounds.js';
 
 // The review deck (A3): a Command whose options carry media is reviewed one card at a time. The creator swipes or
 // taps thumbs up/down on each card, may give a reason on a dislike, and the answer carries the whole like/dislike map
@@ -51,12 +52,29 @@ export const CommandReview = z
     }
   });
 
+// The creator approves a phase ticket's rung from any of its review cards (#1124): mock moves to prototype, prototype to
+// build, and build or polish ships. The app swaps the ticket's `phase:` label after the answer reaches the worker.
+export const CommandAdvance = z.enum(['prototype', 'build', 'ship']);
+export function nextRung(phase: FidelityPhase): CommandAdvance {
+  return phase === 'mock' ? 'prototype' : phase === 'prototype' ? 'build' : 'ship';
+}
+// The ticket's rung from its labels. Core's `phase:1..9` build-order labels are not rungs.
+export function rungOfLabels(labels: readonly string[]): FidelityPhase | undefined {
+  const rungs = labels.flatMap((label) => {
+    const parsed = FidelityPhase.safeParse(label.startsWith('phase:') ? label.slice(6) : '');
+    return parsed.success ? [parsed.data] : [];
+  });
+  return rungs.length === 1 ? rungs[0] : undefined;
+}
+
 // POST /api/v1/jobs/:jobId/commands/:commandId/answer body. `review` is present only for a deck answer; the
 // option id is the Command's pick (the tapped shortlist card, or the first like when the Command asks for many).
 export const CommandAnswerBody = z
   .object({
     option_id: z.string().regex(/^[a-z0-9_-]{1,32}$/),
     review: CommandReview.optional(),
+    // Set when the creator approved the ticket's rung with this answer; it must be the ticket's next rung.
+    advance: CommandAdvance.optional(),
   })
   .strict();
 
@@ -108,6 +126,7 @@ export const ReviewAnswerPayload = z
       )
       .max(MAX_REVIEW_CARDS),
     notes: ReviewNotes.optional(),
+    advance: CommandAdvance.optional(),
   })
   .strict();
 
@@ -123,6 +142,7 @@ export type ReviewLedgerDislike = z.infer<typeof ReviewLedgerDislike>;
 export type CommandReviewEntry = z.infer<typeof CommandReviewEntry>;
 export type CommandReviewsPage = z.infer<typeof CommandReviewsPage>;
 export type ReviewAnswerPayload = z.infer<typeof ReviewAnswerPayload>;
+export type CommandAdvance = z.infer<typeof CommandAdvance>;
 
 // The emit script picks up `<lowercase>Schemas` maps, so the multiword family follows `design-decisions.ts`'s pattern:
 // the lowercase name is what gets emitted and the readable name is the alias.

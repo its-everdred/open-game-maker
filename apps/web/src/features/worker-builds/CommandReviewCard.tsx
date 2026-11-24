@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { CommandOption } from '@ogm/contracts';
+import type { CommandAdvance, CommandOption, FidelityPhase } from '@ogm/contracts';
 import { commandPath, commandSource, ticketStatePath, type ReviewCommand } from './review-command';
 import { api } from '../../lib/api/client';
 import { queryClient } from '../../app/query';
@@ -16,6 +16,10 @@ import './command-review-card.css';
 type Option = CommandOption;
 const PIPELINE = ['original', '3d', '2d'] as const;
 const isOriginal = (option: Option) => option.layout?.stage === 'original';
+// Mirrors `nextRung` in the contracts, which the web bundle does not import at runtime.
+const nextRung = (phase: FidelityPhase): CommandAdvance =>
+  phase === 'mock' ? 'prototype' : phase === 'prototype' ? 'build' : 'ship';
+const RUNG_LABEL = { mock: 'Mock', prototype: 'Prototype', build: 'Build', polish: 'Polish', ship: 'Ship' } as const;
 
 // Options laid out in rows become a matrix. A row whose stages are all original, 3D and 2D is a pipeline row and reads
 // in that order; in any other row the original leads. A deck whose options lack a still or clip keeps the paged card,
@@ -66,7 +70,12 @@ export function CommandReviewCard({
   onSendingChange,
 }: {
   command: ReviewCommand;
-  onAnswered(review: { likes: string[]; dislikes: { option_id: string; reason?: string }[]; notes?: string }): void;
+  onAnswered(review: {
+    likes: string[];
+    dislikes: { option_id: string; reason?: string }[];
+    notes?: string;
+    advance?: CommandAdvance;
+  }): void;
   ticketState?: string;
   onSendingChange?(sending: boolean): void;
 }) {
@@ -77,6 +86,7 @@ export function CommandReviewCard({
   const [sending, setSending] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(false);
+  const [advanceFailed, setAdvanceFailed] = useState(false);
   const [zoom, setZoom] = useState<{ url: string; label: string }>();
   const [picking, setPicking] = useState<{ id: string; label: string; version: number }>();
   const drag = useRef<{ id: number; x: number; y: number } | undefined>(undefined);
@@ -111,25 +121,31 @@ export function CommandReviewCard({
       liked_notes?: { option_id: string; reason: string }[];
       notes?: string;
     },
+    advance?: CommandAdvance,
   ) => {
     setSending(true);
     setError(false);
     try {
-      await api(commandPath(command, `/${encodeURIComponent(command.decision_id)}/answer`), {
-        method: 'POST',
-        json: {
-          option_id: optionId,
-          version: command.version,
-          review,
+      const result = await api<{ advanced?: boolean }>(
+        commandPath(command, `/${encodeURIComponent(command.decision_id)}/answer`),
+        {
+          method: 'POST',
+          json: {
+            option_id: optionId,
+            version: command.version,
+            review,
+            ...(advance ? { advance } : {}),
+          },
         },
-      });
+      );
+      setAdvanceFailed(result?.advanced === false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: creatorCommandsQueryKey }),
         queryClient.invalidateQueries({ queryKey: gameCommandsQueryKey(commandSource(command)) }),
       ]);
       setSaved(true);
       setPicking(undefined);
-      onAnswered(review);
+      onAnswered(advance ? { ...review, advance } : review);
     } catch {
       setError(true);
     } finally {
@@ -143,7 +159,8 @@ export function CommandReviewCard({
   const dislikes = candidates.filter(({ id }) => votes[id] === 'dislike');
   const optionId = likes[0] ?? command.recommend ?? candidates[0]?.id ?? command.options[0]?.id ?? '';
   const canSend = likes.length > 0 || dislikes.length > 0 || Boolean(note.trim());
-  const sendReview = (none = false) => {
+  const advance = command.phase ? nextRung(command.phase) : undefined;
+  const sendReview = (none = false, approve?: CommandAdvance) => {
     const review = {
       likes: none ? [] : likes,
       dislikes: (none ? candidates : dislikes).map(({ id }) => ({
@@ -159,7 +176,7 @@ export function CommandReviewCard({
         : {}),
       ...(note.trim() ? { notes: note.trim() } : {}),
     };
-    void send(optionId, review);
+    void send(optionId, review, approve);
   };
   const startPaging = (event: PointerEvent<HTMLDivElement>) => {
     if (event.isPrimary === false) {
@@ -203,6 +220,17 @@ export function CommandReviewCard({
   };
   return (
     <section className="review-deck" aria-label={command.summary ?? command.title}>
+      {command.phase && (
+        <ol className="worker-review-phases" aria-label="Phase">
+          {(['mock', 'prototype', 'build', ...(command.phase === 'polish' ? (['polish'] as const) : [])] as const).map(
+            (rung) => (
+              <li key={rung} aria-current={rung === command.phase ? 'step' : undefined}>
+                {RUNG_LABEL[rung]}
+              </li>
+            ),
+          )}
+        </ol>
+      )}
       <p>{withoutLinks(command.question)}</p>
       {!('source' in command) && command.ticket && <TicketScenes gameId={command.game_id} ticket={command.ticket} />}
       {command.recommend ? (
@@ -408,6 +436,16 @@ export function CommandReviewCard({
         >
           None of these
         </button>
+        {advance && (
+          <button
+            className="worker-review-change worker-review-advance"
+            disabled={sending || saved}
+            type="button"
+            onClick={() => sendReview(false, advance)}
+          >
+            Approve → {RUNG_LABEL[advance]}
+          </button>
+        )}
       </div>
       {saved && (
         <p role="status">
@@ -416,6 +454,7 @@ export function CommandReviewCard({
         </p>
       )}
       {error && <p role="alert">That answer did not send. Try again.</p>}
+      {advanceFailed && <p role="alert">Answer sent, but the ticket did not move to the next phase.</p>}
       {picking && picking.version === command.version && (
         <div onKeyDown={(event) => event.stopPropagation()}>
           <Dialog

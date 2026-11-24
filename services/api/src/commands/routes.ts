@@ -12,6 +12,7 @@ import { authorizedGame } from '../games/authorize.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
 import { tryRecordReview } from '../reviews/store.js';
 import { toGameCommand } from './aiur.js';
+import { currentRung, deliverAdvance } from './advance.js';
 import coreRoutes, { hasMissingDeclaredMedia } from './core.js';
 import { findCommand, parseCommand } from '../build-chat/store.js';
 import { isForCreator } from '../job-commands/correlate.js';
@@ -131,9 +132,13 @@ export default new Hono<ApiBindings>()
       const problem = reviewProblem(command.options, review);
       if (problem !== null) throw new HttpError(400, 'command_review_invalid', problem);
     }
+    const advance = body.advance;
+    const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
+    const phase = advance ? await currentRung(deps, repo, canonical.ticket, advance) : undefined;
     const key = decisionKeyFromMarker(decision.context?.long_context_markdown);
     const round = key ? getRound(deps.db, game.id, key) : null;
     const keyedChange =
+      !advance &&
       body.change_request &&
       review &&
       review.likes.length === 0 &&
@@ -144,9 +149,13 @@ export default new Hono<ApiBindings>()
       !round.verdict &&
       canonical.options.some((option) => option.id === 'needs_work');
     const decisionReview = keyedChange ? { likes: ['needs_work'], dislikes: [], notes: review.notes } : review;
+    // An advance with no other answer is the answer itself: an empty map that carries it.
     const fields =
-      decisionReview === undefined ? undefined : reviewDecisionFields(command.options, decisionReview, body.option_id);
+      decisionReview === undefined && !advance
+        ? undefined
+        : reviewDecisionFields(command.options, decisionReview ?? { likes: [], dislikes: [] }, body.option_id, advance);
     const singlePick =
+      advance === undefined &&
       review !== undefined &&
       review.likes.length === 1 &&
       review.likes[0] === body.option_id &&
@@ -218,8 +227,22 @@ export default new Hono<ApiBindings>()
       );
       if (guard) bindReviewEpisode(deps.db, game.id, canonical.ticket, guard, episode);
     }
+    const advanced = phase
+      ? await deliverAdvance(deps, {
+          client,
+          repo: repo!,
+          ticket: canonical.ticket,
+          phase,
+          key: `${decisionId}:${body.version}`,
+        })
+      : undefined;
     return c.json(
-      { status: 'answered' as const, decision_id: decisionId, option_id: keyedChange ? 'needs_work' : body.option_id },
+      {
+        status: 'answered' as const,
+        decision_id: decisionId,
+        option_id: keyedChange ? 'needs_work' : body.option_id,
+        ...(advanced === undefined ? {} : { advanced }),
+      },
       200,
     );
   });

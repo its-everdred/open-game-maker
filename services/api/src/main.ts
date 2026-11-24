@@ -189,6 +189,7 @@ deps.registry.trackerTicket = createTicketLookup(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.reviewEpisode = createReviewEpisodeReader(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.ticketConversation = createTicketConversationReader(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.issueStateWriter = issues;
+deps.registry.fidelityWriter = createReviewIssues(env.OGM_INTAKE_GITHUB_TOKEN);
 startPreviewRelay(deps, previewTicketVerifier(env.OGM_INTAKE_GITHUB_TOKEN));
 
 const budgetDefaults = {

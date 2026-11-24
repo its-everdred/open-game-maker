@@ -1,4 +1,4 @@
-import type { CommandReview, ReviewAnswerPayload } from '@ogm/contracts';
+import type { CommandAdvance, CommandReview, ReviewAnswerPayload } from '@ogm/contracts';
 
 // What a review deck's answer gives aiur's decision, shared by the two routes that can take one: a job's Command
 // route and the game's own route for a registered game's Command (#573). Both call aiur's canonical Decision API, so
@@ -35,7 +35,7 @@ export function reviewProblem(cards: readonly { id: string }[], review: CommandR
 
 // The map as JSON text for aiur's `custom_response`. The worker reads it off the decision's answer, so it stays a flat
 // object with no card labels (the option ids name the cards).
-export function reviewPayload(review: CommandReview): string {
+export function reviewPayload(review: CommandReview, advance?: CommandAdvance): string {
   const payload: ReviewAnswerPayload = {
     kind: 'question_answers',
     answers: [
@@ -50,6 +50,7 @@ export function reviewPayload(review: CommandReview): string {
       })),
     ],
     ...(review.notes === undefined ? {} : { notes: review.notes }),
+    ...(advance === undefined ? {} : { advance }),
   };
   return JSON.stringify(payload);
 }
@@ -60,6 +61,7 @@ export function reviewDecisionFields(
   cards: readonly { id: string; label: string }[],
   review: CommandReview,
   optionId: string,
+  advance?: CommandAdvance,
 ): ReviewDecisionFields {
   const label = (id: string) => cards.find(({ id: candidate }) => candidate === id)?.label ?? id;
   const liked = review.likes
@@ -73,8 +75,8 @@ export function reviewDecisionFields(
     .join(', ');
   const alternatives = review.likes.filter((id) => id !== optionId);
   return {
-    rationale: `Reviewed the deck: liked ${liked === '' ? 'nothing' : liked}; disliked ${disliked === '' ? 'nothing' : disliked}`,
+    rationale: `Reviewed the deck: liked ${liked === '' ? 'nothing' : liked}; disliked ${disliked === '' ? 'nothing' : disliked}${advance === undefined ? '' : `; approved the rung, advance to ${advance}`}`,
     ...(alternatives.length === 0 ? {} : { alternatives_considered: alternatives }),
-    response: reviewPayload(review),
+    response: reviewPayload(review, advance),
   };
 }

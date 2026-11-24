@@ -18,6 +18,7 @@ open on the page, which retires the page (#1124's Done).
 | 7 | Prototype cards: play link, clip, works now, known limitations, weigh in | Pass after fix | [prototype](review-parity/parity-prototype.png) | Kevin |
 | 8 | Phone-first at 390×844; the Recommended line at the top | Pass | Recommended sits under the question, above the options; nothing scrolls sideways; every button is at least 32 px tall | Kevin |
 | 9 | Commands from the NUC games daemons, the NUC core daemon and the PC core daemon, plus inventory decisions, in one deck; answers reach the worker in Kevin's words within about a minute | App side passes; the minute is not timed yet | [all sources answered](review-parity/parity-sources-answered.png); all five sources list in one deck; each answer posts in Kevin's exact words to its own route (game, `/core/commands`, `/core/commands?daemon=pc`) within a second of the tap. The time from the server to the worker's ticket needs a live answer on a real Command | Kevin, with a live timing |
+| 10 | Phase strip and one Approve → next rung button on every phase ticket's card (#1124, 2026-11-21 comment) | Pass | [strip](review-parity/phase-strip.png); `Mock › Prototype › Build` with the current rung lit (Polish only on a polish ticket); the button sends the card's answers plus `advance`; the server checks the rung, answers, swaps `phase:`/`model:` and reworks the ticket | Kevin |
 
 ## Fixed here
 
@@ -31,6 +32,4 @@ open on the page, which retires the page (#1124's Done).
 
 ## Not covered
 
-- The phase strip and the advance-phase answer Kevin asked for in a #1124 comment on 2026-11-21 are not in items
-  1–9, so this check leaves them out. No ticket covers them yet.
 - The per-card link to the ticket's agent chat is #1110.

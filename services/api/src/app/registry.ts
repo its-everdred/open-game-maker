@@ -122,6 +122,8 @@ export interface Registry {
       ) => Promise<{ text: string }[]>)
     | null;
   issueStateWriter: IssueStateWriter | null;
+  // Swaps a ticket's `phase:`/`model:` labels when the creator approves its rung from a review card (#1124).
+  fidelityWriter: Pick<import('../review-rounds/issues.js').ReviewIssues, 'setFidelity'> | null;
   // Provider readings for Energy (#1217); null leaves them out (tests, or no host to read).
   energyReadings: import('../energy/providers.js').ProviderReadings | null;
   // The production deploy log `deploy.sh` appends to (#1219); null leaves Netlify unknown.
@@ -149,6 +151,7 @@ export function createRegistry(): Registry {
     reviewEpisode: null,
     ticketConversation: null,
     issueStateWriter: null,
+    fidelityWriter: null,
     energyReadings: null,
     energyNetlifyLog: null,
   };
