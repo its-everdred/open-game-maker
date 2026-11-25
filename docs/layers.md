@@ -82,3 +82,4 @@ This directory: `~/.aiur/repo/its-everdred/open-game-maker-2000/executor/` (scri
 | Executor raising a prototype review by hand after a publish; `REVIEW_QUEUE` counts in `scripts/meta/review-loop-metric.py` | core #1057 (post-publish review) and #1055 (`gm decisions`, counts from the API) |
 | decide.sh (decision delivery as rework) | aiur: an Executor decision on a Command should resume the worker |
 | mock broker reference policy | core gm-image-mock / a core mock service |
+| PC (everdred@100.89.62.105, RTX 4080): 3D render studio, renders only, `~/ogm-render` | Executor host step (no game, aiur or Claude work there) |
