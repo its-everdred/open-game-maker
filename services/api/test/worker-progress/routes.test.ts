@@ -253,6 +253,12 @@ describe('worker progress route', () => {
     });
     expect(await ownConversation.json()).toEqual({ messages: [{ text: 'A creator message' }] });
     expect(conversation).toHaveBeenCalledWith({ owner: 'owner', name: 'shared' }, '11', ['test-game'], false);
+    // An Executor-filed ticket still running has no job, yet its review card must open its conversation (#1110).
+    const runningConversation = await app.request(`/api/v1/games/${game}/tickets/12/conversation`, {
+      headers: asUser(user),
+    });
+    expect(runningConversation.status).toBe(200);
+    expect(conversation).toHaveBeenLastCalledWith({ owner: 'owner', name: 'shared' }, '12', ['test-game'], false);
     state.mockResolvedValue({
       running: [],
       idle: [{ issue_identifier: '12', title: 'Forest backdrop', runtime_seconds: 10, state: 'agent:ci-wait' }],

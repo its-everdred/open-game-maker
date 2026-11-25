@@ -263,10 +263,10 @@ routes.get('/games/:gameId/tickets/:ticket/conversation', async (c) => {
   if (!repo || !game.slug || !deps.registry.trackerTickets || !deps.registry.ticketConversation)
     throw new HttpError(503, 'ticket_conversation_unavailable');
   const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
-  const snapshot = await deps.registry.trackerTickets(repo, 'closed');
-  if (snapshot.stale) throw new HttpError(503, 'ticket_scope_unavailable');
-  if (!snapshot.tickets.some((ticket) => ticket.ticket === ticketId && belongsToGame(ticket, scope)))
-    throw new HttpError(404, 'ticket_not_found');
+  const owned = await ownsTicket(deps, repo, scope, ticketId).catch(() => {
+    throw new HttpError(503, 'ticket_scope_unavailable');
+  });
+  if (!owned) throw new HttpError(404, 'ticket_not_found');
   return c.json({
     messages: await deps.registry.ticketConversation(repo, ticketId, [...scope.slugs], scope.owned.has(ticketId)),
   });

@@ -1,6 +1,6 @@
 type Repository = { owner: string; name: string };
 
-// A ticket without a job has no creator-facing chat projection. Only explicitly marked comments may leave the operator discussion.
+// A ticket without a job, open or closed, has no creator-facing chat projection. Only explicitly marked comments may leave the operator discussion.
 export function createTicketConversationReader(token: string, fetcher: typeof fetch = globalThis.fetch) {
   return async (repo: Repository, ticket: string, slugs: string[], owned: boolean) => {
     if (!/^[1-9]\d*$/.test(ticket)) throw new Error('invalid_ticket');
@@ -13,14 +13,7 @@ export function createTicketConversationReader(token: string, fetcher: typeof fe
     const issueResponse = await fetcher(path, { headers, signal: AbortSignal.timeout(15_000) });
     if (!issueResponse.ok) throw new Error(`Ticket request failed (${issueResponse.status})`);
     const issue: unknown = await issueResponse.json();
-    if (
-      !issue ||
-      typeof issue !== 'object' ||
-      !('labels' in issue) ||
-      !Array.isArray(issue.labels) ||
-      !('state' in issue) ||
-      issue.state !== 'closed'
-    )
+    if (!issue || typeof issue !== 'object' || !('labels' in issue) || !Array.isArray(issue.labels))
       throw new Error('ticket_not_found');
     const games = issue.labels.flatMap((label: { name?: unknown }) =>
       typeof label?.name === 'string' && label.name.startsWith('game:') ? [label.name.slice(5)] : [],

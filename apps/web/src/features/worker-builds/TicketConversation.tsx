@@ -1,15 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
 import { Dialog } from '../../components/Dialog';
 import { api } from '../../lib/api/client';
-import type { PastTicket } from './usePastTickets';
 import '../build-chat/conversation-modal.css';
+
+export type ConversationTarget = { gameId: string; ticket: string; title: string };
 
 export function TicketConversation({
   ticket,
   creatorId,
   onClose,
 }: {
-  ticket: PastTicket;
+  ticket: ConversationTarget;
   creatorId?: string;
   onClose(): void;
 }) {
