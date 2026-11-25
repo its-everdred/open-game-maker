@@ -21,8 +21,8 @@ afterEach(async () => {
   await Promise.all(temporary.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-async function modelFixture(directory: string): Promise<string> {
-  const path = join(directory, 'triangle.glb');
+async function modelFixture(directory: string, padBytes = 0): Promise<string> {
+  const path = join(directory, padBytes ? 'large.glb' : 'triangle.glb');
   const document = new Document();
   const buffer = document.createBuffer();
   const positions = document
@@ -43,6 +43,13 @@ async function modelFixture(directory: string): Promise<string> {
     .setMaterial(material);
   const mesh = document.createMesh('triangle').addPrimitive(primitive);
   document.createScene('scene').addChild(document.createNode('triangle').setMesh(mesh));
+  // Unreferenced filler data in the same binary buffer makes the file large without changing what renders.
+  if (padBytes)
+    document
+      .createAccessor('padding')
+      .setType('SCALAR')
+      .setArray(new Float32Array(padBytes / 4))
+      .setBuffer(buffer);
   await new NodeIO().write(path, document);
   return path;
 }
@@ -109,6 +116,20 @@ describe.skipIf(process.env.GM_PREVIEWS_BROWSER !== '1')('renderSheet', () => {
     expect(result.software).toBe(true);
     expect(result.renderer).toMatch(/SwiftShader|software|llvmpipe/i);
   }, 90_000);
+
+  // Real pack models reach 140 MB. Sending the model through Playwright's route.fulfill pushed it over Chromium's
+  // 100 MB DevTools buffer, closed the pipe and hung tagging for hours (core #1353); it must stream from disk instead.
+  it('renders a model larger than the 100 MB DevTools buffer', async () => {
+    const directory = await workspace();
+    const path = await modelFixture(directory, 110 * 1024 * 1024);
+    const result = await renderSheet(path, join(directory, 'previews', 'large.webp'), {
+      assetsRoot: directory,
+      executablePath: '/usr/bin/chromium',
+      software: true,
+      views: ['three-quarter'],
+    });
+    expect(result.software).toBe(true);
+  }, 180_000);
 
   it('caps live browser contexts at two and releases every permit', async () => {
     const directory = await workspace();
