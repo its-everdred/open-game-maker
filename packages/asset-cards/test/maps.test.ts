@@ -56,6 +56,7 @@ describe('layoutRow', () => {
       title: 'Example dungeon 01',
       source_file: 'example-dungeon-01.png',
       thumbnail: 'private/previews/00/0000000000000000-thumb.webp',
+      content_hash: `sha256:${'0'.repeat(64)}`,
     });
     expect(layoutRow(resolved(document, ['derive-layout']))).not.toHaveProperty('thumbnail');
   });

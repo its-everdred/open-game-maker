@@ -2,6 +2,7 @@ import { loadMapIndex } from '@ogm/asset-cards';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson, requireAssetsRoot } from '../../context.js';
+import { clipScores } from '../../maps/clip.js';
 import {
   FLOWS,
   GRIDS,
@@ -63,6 +64,16 @@ export const command: GmCommand = {
     for (const row of index.rows) {
       const { hard, score } = matchRow(row, q);
       if (hard) matched.push({ row, score });
+    }
+    if (flags.maps === true && args.length > 0) {
+      const scores = await clipScores(
+        root,
+        args.join(' '),
+        matched.map(({ row }) => row),
+        ctx.env,
+      );
+      if (scores === null || scores.size === 0) ctx.err('CLIP search unavailable; ranking by indexed text only');
+      else for (const match of matched) match.score += (scores.get(match.row.id) ?? 0) * 3;
     }
     matched.sort((a, b) => b.score - a.score || (a.row.id < b.row.id ? -1 : 1));
     const shown = matched.slice(0, ctx.limit);
