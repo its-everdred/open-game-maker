@@ -53,7 +53,7 @@ def scores(root, rows, vector):
             value = score(vector, clip.get('embeddings', []))
             if value is not None:
                 result[row['id']] = value
-        except (AttributeError, KeyError, OSError, ValueError, TypeError):
+        except (AttributeError, KeyError, OSError, ValueError, TypeError, OverflowError, RecursionError):
             continue
     return result
 

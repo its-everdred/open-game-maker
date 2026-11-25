@@ -23,8 +23,8 @@ Translate those answers into search facts yourself.
    results use text ranking only. Rebuild the map index after updating cards or analysis.
 2. Compare the returned layout facts against play needs. A result with a thumbnail may be viewed locally for inspiration;
    keep source images private. Choose the source yourself; never expose ids, packs, previews, or paths to the creator.
-3. Retrieve the validated graph with `gm maps info <map-id> --json`. Vision-only results can lack a graph: choose a
-   result with an authorized graph before deriving a layout. Do not copy or ship the source image.
+3. Use `--json` to identify rows with `from: "spec"` and a non-null `layout_id`, then retrieve the validated graph with
+   `gm maps info <map-id> --json`. Vision-only results can lack a graph. Do not copy or ship the source image.
 4. Derive a game-owned layout: resize, mirror, reorder, combine, or omit rooms and routes as the game needs. Inspiration
    supplies topology, not content or art. Check that the result is meaningfully adapted rather than traced.
 

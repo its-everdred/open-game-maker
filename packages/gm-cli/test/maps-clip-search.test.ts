@@ -4,11 +4,11 @@ import { gm } from './helpers.js';
 import { mapsLibrary } from './library-rights.js';
 
 vi.mock('../src/maps/clip.js', () => ({
-  clipScores: async () => new Map([['t1:profantasy-cartographers-annual/example-dungeon-01@illustrative', 0.8]]),
+  clipScores: async () => new Map([['t1:profantasy-cartographers-annual/example-dungeon-01@illustrative', -0.8]]),
 }));
 
 describe('semantic map search', () => {
-  it('uses the CLIP score to rank a matching map ahead of unscored maps', async () => {
+  it('ranks a negative CLIP score ahead of unscored maps with equal text rank', async () => {
     const root = mapsLibrary();
     const env = { OGM_ASSETS_ROOT: root };
     expect((await gm(['maps', 'index'], { env })).code).toBe(0);
