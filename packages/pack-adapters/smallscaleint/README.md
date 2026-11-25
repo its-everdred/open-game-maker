@@ -38,7 +38,9 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
   included) and `emptyScene(game, scene, bounds)` give the layer defaults. `autotile` rewrites nothing yet: pieces keep
   the facings they were placed with until the autotile join rules land.
 - `isoMapToScene(json, { game, scene })` / `sceneToIsoMap(doc)`: the Tiled subset ⇄ a scene document. Pieces become
-  cell-keyed tiles with an explicit facing, `props.solid` only where it differs from the layer default (`wall` blocks);
+  cell-keyed tiles with an explicit facing, `props.solid` only where it differs from the layer default (`wall` blocks),
+  and the Tiled `tags` string in `props.tags` when present; true `gate`, `exit`, `ruin` and `formal` properties are
+  included in that string;
   `wall#1` layers become `wall-1`; spawns become `spawn-<id>` objects on the `spawns` layer posed in 64 px units. Both
   directions are lossless for map data: the map loads the same pieces and spawns after a round trip (gids are
   renumbered), and a converted document comes back unchanged. `sceneToIsoMap` refuses what a map can't draw (flips,
