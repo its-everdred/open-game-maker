@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import type { MapLayoutSpec } from '@ogm/contracts';
+import { validateCard, type MapLayoutSpec } from '@ogm/contracts';
 import type { LayoutRow } from '@ogm/asset-cards';
 
 import { parseQuery } from '../src/maps/specs.js';
@@ -218,6 +218,38 @@ describe('gm maps search', () => {
       matchRow({ ...row, title: 'Other', themes: ['retreat'] }, parseRowQuery(['retreat'])).score,
     );
     expect(layoutLine(row)).toContain('private/previews/camp.webp  -  maps/Forest/Camp.png');
+    const cave = { ...row, title: 'Keep', source_file: 'maps/Castles/Keep.png', flow: 'hub-and-spoke' };
+    expect(matchRow(cave, parseRowQuery(['castle'], { maps: true })).score).toBeGreaterThan(0);
+    expect(matchRow(cave, parseRowQuery(['hub-and-spoke'], { maps: true })).score).toBeGreaterThan(0);
+    expect(matchRow(cave, parseRowQuery(['cave water'], { maps: true })).hard).toBe(true);
+    expect(matchRow(cave, parseRowQuery(['cave'], { maps: true, feature: 'water' })).hard).toBe(false);
+  });
+
+  it('escapes terminal controls in a schema-valid map source path', () => {
+    const library = mapsLibrary();
+    const file = join(library, 'inspiration/profantasy-cartographers-annual/cards/example-dungeon-01.card.json');
+    const card = JSON.parse(readFileSync(file, 'utf8'));
+    card.source.files[0].path = 'maps/evil\u001b]0;title\u0007.png';
+    expect(validateCard(card).ok).toBe(true);
+    const row = {
+      id: 'test',
+      resource: 'map',
+      type: null,
+      biome: null,
+      scale: null,
+      grid: null,
+      cell_px: null,
+      rooms: null,
+      loops: null,
+      secrets: null,
+      size: null,
+      flow: null,
+      features: [],
+      thumbnail: 'thumb',
+      source_file: card.source.files[0].path,
+    } as LayoutRow;
+    expect(layoutLine(row)).toContain('evil\\u001b]0;title\\u0007.png');
+    expect(layoutLine(row)).not.toContain('\u001b');
   });
 
   it('answers the C3 §10 example: small crypt 3-5 rooms one loop secret door', async () => {

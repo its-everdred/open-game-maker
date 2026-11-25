@@ -3,24 +3,26 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import type { LayoutRow } from '@ogm/asset-cards';
+import { resolvePython, workerEnvironment } from '../packs/workers.js';
 
 const worker = fileURLToPath(new URL('../../../../scripts/py/maps/search_clip.py', import.meta.url));
-const python = fileURLToPath(new URL('../../../../scripts/py/audio/.venv/bin/python', import.meta.url));
+const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 
 /** Score only rows whose indexed rights allowed vision metadata. Never download a model. */
 export async function clipScores(
   root: string,
   query: string,
   rows: LayoutRow[],
-  env?: Record<string, string | undefined>,
+  home?: string,
 ): Promise<Map<string, number> | null> {
-  const eligible = rows.filter((row) => row.thumbnail && row.source_folder && row.source_file && row.content_hash);
+  const eligible = rows.filter((row) => row.source_folder && row.source_file && row.content_hash);
   if (!eligible.length) return new Map();
+  const python = await resolvePython(repo);
   if (!existsSync(python) || !existsSync(worker)) return null;
   return new Promise((resolve) => {
     const child = spawn(python, ['-I', worker], {
       stdio: ['pipe', 'pipe', 'ignore'],
-      env: { ...env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' },
+      env: workerEnvironment({ assetsRoot: root, workers: 1, home }),
     });
     let output = '';
     let failed = false;

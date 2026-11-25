@@ -62,11 +62,11 @@ def main():
     request = json.load(sys.stdin)
     import torch
     from transformers import CLIPModel, CLIPProcessor
-    torch.set_num_threads(3)
+    torch.set_num_threads(1)
     model = CLIPModel.from_pretrained(MODEL, local_files_only=True).eval()
     processor = CLIPProcessor.from_pretrained(MODEL, local_files_only=True)
     with torch.no_grad():
-        vector = model.get_text_features(**processor(text=[request['query']], return_tensors='pt', padding=True))
+        vector = model.get_text_features(**processor(text=[request['query']], return_tensors='pt', padding=True, truncation=True))
     print(json.dumps(scores(request['root'], request['rows'], vector[0].tolist())))
 
 
