@@ -19,6 +19,8 @@ Translate those answers into search facts yourself.
 
 1. Search **all inspiration collections** with `gm maps search --maps`, narrowing by biome, feature, scale, grid, room
    count, loops, secrets, and flow. Never filter map inspiration by the game's style family, set, pack, or vendor.
+   Text queries use the locally cached CLIP model when its map-tagging Python environment is installed; a warning means
+   results use text ranking only. Rebuild the map index after updating cards or analysis.
 2. Compare the returned layout facts against play needs. A result with a thumbnail may be viewed locally for inspiration;
    keep source images private. Choose the source yourself; never expose ids, packs, previews, or paths to the creator.
 3. Retrieve the validated graph with `gm maps info <map-id> --json`. Vision-only results can lack a graph: choose a

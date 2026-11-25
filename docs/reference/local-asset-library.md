@@ -28,7 +28,7 @@ assets-local/
   derived/kaykit/lineups/              # set-wide thumbnail lineups per category, paginated (preprocess_kaykit.py)
   audio-styles/<style>-<mood>.mp3      # 60 s style montages the Sound step plays (style_montages.py), host-local
   index/cards.index.json               # gm's card index (gm packs index rebuilds it)
-  index/maps.index.json                # gm maps index: layout columns for maps and tilesets, no paths
+  index/maps.index.json                # gm maps index: rights-gated map and tileset metadata
   inbox/                               # Drive watch-folder intake (scripts/drive-sync/)
     queue.jsonl                        # one line per downloaded drop, appended by the listener
     quarantine/<time>-<slug>-<id8>/
@@ -43,9 +43,9 @@ assets-local/
 
 ## Map-inspiration index
 
-`gm maps index` writes `index/maps.index.json`: one row per inspiration map and one per tileset, holding only columns — no file path, no preview key, no description. A map row carries its C3 §12 layout (`rooms`, `connections`, `entrances`, `dead_ends`, `loops`, `secrets`, `levels`, `size_class`, `flow`) joined from a validated layout spec under `inspiration/<id>/layouts/`, plus the card's own `map.layout` block: `biome`, `features`, `grid` and any counts a producer recorded. A tileset row carries its set, biome, drawn features and grid from `sprite.tile_px`/`sprite.sheet`.
+`gm maps index` writes `index/maps.index.json`: one row per inspiration map and one per tileset. A map row carries its C3 §12 layout joined from a validated layout spec, plus the card's own `map.layout` block. Vision-authorized map rows also include the title, collection, source and thumbnail paths and source hash. A tileset row carries its set, biome, drawn features and grid.
 
-Rows are gated on rights at build time: a map needs `derive-layout` in its resolved uses and a tileset needs `in-game`; everything else is counted in a `hidden` line and kept out of the file. A card with no layout spec and no `map.layout` block still gets a row (biome from its judged environments, grid from `map.grid_detected`), so a resource is findable before it is specced, and `gm maps search` shows `-` where a count is unknown. Specs whose `tags.computed` disagree with their graph are reported and left out, exactly as the search did before.
+Rows are gated on rights at build time: a map needs `vision-input` or `derive-layout`, and a tileset needs `in-game`. Joining or retrieving a graph still requires `derive-layout`. A map without a graph shows `-` for unknown counts. Specs whose `tags.computed` disagree with their graph are reported and left out.
 
 The file is derived data: delete it and `gm maps index` rebuilds it from the cards. `gm packs index` refreshes it too. **Rights are checked when the index is built**, so re-run one of those commands after confirming a licence or changing a card's rights; until then the old rows stay served.
 

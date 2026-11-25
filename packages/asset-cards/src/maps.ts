@@ -62,6 +62,7 @@ export type LayoutRow = {
   collection?: string;
   source_file?: string;
   source_folder?: string;
+  content_hash?: string;
   thumbnail?: string;
   /** `map` for an inspiration map, `tileset` for a tile card a map can be drawn with. */
   resource: 'map' | 'tileset';
@@ -209,6 +210,7 @@ export function layoutRow(card: ResolvedCard, spec?: LayoutSpecRow): LayoutRow |
           collection: card.collection,
           source_file: card.source?.files.find((file) => file.role === 'primary')?.path,
           source_folder: card.library_root,
+          content_hash: card.source?.content_hash,
           thumbnail: card.previews?.thumb,
         }
       : {}),
