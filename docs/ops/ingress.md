@@ -7,9 +7,10 @@ are never touched. Every OGM service binds `127.0.0.1`; Tailscale is the only pu
 ## Origin map
 
 ```
-https://makeopen.games/                       Netlify static app (OGM-070)
-https://makeopen.games/api/*   -> _redirects:  /api/*   https://<tailnet-host>:8443/api/:splat   200
-https://makeopen.games/auth/*  -> _redirects:  /auth/*  https://<tailnet-host>:8443/auth/:splat  200
+https://makeopen.games/ (www -> apex)         Netlify marketing site (apps/site): splash, /setup; app paths 302 to weaver
+https://weaver.makeopen.games/                Netlify static app (OGM-070)
+https://weaver.makeopen.games/api/*   -> _redirects:  /api/*   https://<tailnet-host>:8443/api/:splat   200
+https://weaver.makeopen.games/auth/*  -> _redirects:  /auth/*  https://<tailnet-host>:8443/auth/:splat  200
 wss://<tailnet-host>:8443/ws/rooms/*   rooms (OGM-051), token auth, no cookies      -> 127.0.0.1:$OGM_ROOMS_PORT
 wss://<tailnet-host>:8443/ws/voice/*   voice host (OGM-085), token auth              -> 127.0.0.1:$OGM_VOICE_PORT
 https://<tailnet-host>:8443/*          everything else: API, /blobs/*, /ws/chat SSE  -> 127.0.0.1:$OGM_API_PORT
@@ -17,18 +18,18 @@ https://<tailnet-host>:10000/g/<gameId>/<buildId>/   games origin (OGM-007)     
 https://<tailnet-host>/ (443) and :80  untouched (pre-existing tailnet-only serves)
 ```
 
-Cookies stay first-party on `makeopen.games`: `/api/*` and `/auth/*` go through Netlify 200 rewrites. Netlify
+Cookies stay first-party on `weaver.makeopen.games`: `/api/*` and `/auth/*` go through Netlify 200 rewrites. Netlify
 proxies carry no WebSocket upgrades, so sockets connect to 8443 directly with short-lived tokens (OGM-011, OGM-052).
 
 ## Netlify lines (OGM-070 copies these)
 
 `_redirects`, the retired-host and alias redirects and proxies before the SPA fallback. The repo holds no copy:
-`apps/web/tools/deploy.sh` writes it into the deploy payload from `OGM_PUBLIC_APP_ORIGIN=https://makeopen.games`,
+`apps/web/tools/deploy.sh` writes it into the deploy payload from `OGM_PUBLIC_APP_ORIGIN=https://weaver.makeopen.games`,
 `OGM_APP_ALIAS_ORIGINS` (one `301!` line each) and `VITE_API_ORIGIN=https://<tailnet-host>:8443` in `~/.config/ogm/env/web.env`
 (`apps/web/tools/redirects.mjs`):
 
 ```
-https://ogm2000.netlify.app/*  https://makeopen.games/:splat  301!
+https://ogm2000.netlify.app/*  https://weaver.makeopen.games/:splat  301!
 /api/*  https://<tailnet-host>:8443/api/:splat  200
 /auth/*  https://<tailnet-host>:8443/auth/:splat  200
 /*  /index.html  200

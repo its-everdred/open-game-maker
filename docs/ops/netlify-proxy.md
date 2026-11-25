@@ -1,6 +1,6 @@
 # Netlify proxy and auth origin
 
-Safari blocks third-party cookies, so the browser must only ever see `https://makeopen.games`. The API's auth
+Safari blocks third-party cookies, so the browser must only ever see `https://weaver.makeopen.games`. The API's auth
 routes reach it through Netlify 200 rewrites; cookies never cross to `ts.net` (D-ORIGIN). [ingress.md](ingress.md) has
 the full origin map.
 
@@ -8,16 +8,16 @@ the full origin map.
 
 | Where | Value |
 | --- | --- |
-| `_redirects`, written by `apps/web/tools/deploy.sh` from `OGM_PUBLIC_APP_ORIGIN` in `web.env` | `https://ogm2000.netlify.app/*  https://makeopen.games/:splat  301!` |
-| | one `<alias>/*  https://makeopen.games/:splat  301!` per origin in `OGM_APP_ALIAS_ORIGINS` |
+| `_redirects`, written by `apps/web/tools/deploy.sh` from `OGM_PUBLIC_APP_ORIGIN` in `web.env` | `https://ogm2000.netlify.app/*  https://weaver.makeopen.games/:splat  301!` |
+| | one `<alias>/*  https://weaver.makeopen.games/:splat  301!` per origin in `OGM_APP_ALIAS_ORIGINS` |
 | `_redirects`, written by `apps/web/tools/deploy.sh` from `VITE_API_ORIGIN` in `web.env`, before the SPA fallback | `/api/*  https://<tailnet-host>:8443/api/:splat  200` |
 | | `/auth/*  https://<tailnet-host>:8443/auth/:splat  200` |
-| `OGM_APP_ORIGIN` in `~/.config/ogm/env/api.env` | `https://makeopen.games` (Better Auth `baseURL`, `trustedOrigins`, passkey `origin`) |
+| `OGM_APP_ORIGIN` in `~/.config/ogm/env/api.env` | `https://weaver.makeopen.games` (Better Auth `baseURL`, `trustedOrigins`, passkey `origin`) |
 | Better Auth `basePath` | `/auth` |
-| Passkey `rpID` | `makeopen.games` (host of `OGM_APP_ORIGIN`) |
-| Google authorized JavaScript origin | `https://makeopen.games` |
-| Google authorized redirect URI | `https://makeopen.games/auth/callback/google` |
-| Magic link | `https://makeopen.games/auth/magic-link/verify?token=…` (15 min, one use) |
+| Passkey `rpID` | `weaver.makeopen.games` (host of `OGM_APP_ORIGIN`) |
+| Google authorized JavaScript origin | `https://weaver.makeopen.games` |
+| Google authorized redirect URI | `https://weaver.makeopen.games/auth/callback/google` |
+| Magic link | `https://weaver.makeopen.games/auth/magic-link/verify?token=…` (15 min, one use) |
 
 `ts.net` is never a trusted origin or the RP ID. Google stays off until `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
 are both set (GATE-GOOGLE-OAUTH). With Google on, the Sign-in page offers **Continue with Google** and a passkey;
@@ -36,13 +36,13 @@ printed in a log.
    allow-list at `/admin/users` still decides on top of that.
 4. **Data access**: keep the default `openid`, `email` and `profile` scopes; add nothing else.
 5. **Clients → Create client → Web application**, with the two Google rows from the table above: authorised
-   JavaScript origin `https://makeopen.games` and authorised redirect URI `https://makeopen.games/auth/callback/google`.
+   JavaScript origin `https://weaver.makeopen.games` and authorised redirect URI `https://weaver.makeopen.games/auth/callback/google`.
    For another instance, use its `OGM_APP_ORIGIN` in both.
 6. On the API host, edit `~/.config/ogm/env/api.env` (mode `0600`) and set `GOOGLE_CLIENT_ID` and
    `GOOGLE_CLIENT_SECRET` from the client's download. Nothing goes in `web.env` or Netlify: the web app asks the API
    (`GET /auth/providers`) whether Google is on.
 7. `systemctl --user restart ogm-api`, then check `journalctl --user -u ogm-api -n 50` shows `auth-ready` with
-   `"google":true` and `curl -s https://makeopen.games/auth/providers` lists `google`.
+   `"google":true` and `curl -s https://weaver.makeopen.games/auth/providers` lists `google`.
 
 The Google flow keeps the same-origin rule: the browser starts at `/auth/sign-in/social`, Google returns to
 `/auth/callback/google` on the app origin, and Netlify proxies both to the API. An address that is not on the
@@ -52,7 +52,7 @@ allow-list is sent back to Sign-in with an error and gets no account or session.
 
 - `__Secure-better-auth.session_token`: the session, 7 days, renewed daily, same attributes.
 
-It does not set `Domain`, so it stays host-only on `makeopen.games`. `_headers` must not add caching to `/api/*` or
+It does not set `Domain`, so it stays host-only on `weaver.makeopen.games`. `_headers` must not add caching to `/api/*` or
 `/auth/*`.
 
 ## Sockets
@@ -76,7 +76,7 @@ data. After the API is live, deploy the web app and confirm Start opens email si
 
 ## iPhone check (after OGM-006 and OGM-070 are live)
 
-1. Open `https://makeopen.games` in Safari, press Start, and sign in with **Continue with Google** using an
+1. Open `https://weaver.makeopen.games` in Safari, press Start, and sign in with **Continue with Google** using an
    allowed address (or, while Google is off, by magic link from the admin inbox). Confirm no birth-date screen
    appears.
 2. Register a passkey, sign out, sign in with the passkey.
