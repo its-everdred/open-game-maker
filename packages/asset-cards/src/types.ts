@@ -5,6 +5,8 @@ import type { SoundSetCard } from './sound-set.js';
 export type Rights = { uses: Use[]; audience: Audience; redistribution: Redistribution };
 
 export type ResolvedCard = AssetCard & {
+  /** Collection directory relative to the library root, when loaded from disk. */
+  library_root?: string;
   resolved: {
     license: string;
     rights: Rights;

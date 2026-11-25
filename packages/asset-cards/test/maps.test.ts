@@ -50,6 +50,16 @@ function resolved(cardDoc: ResolvedCard, uses: string[], environments?: string[]
 }
 
 describe('layoutRow', () => {
+  it('exposes map source and thumbnail only with vision-input rights', () => {
+    const document = card('example-dungeon-01');
+    expect(layoutRow(resolved(document, ['derive-layout', 'vision-input']))).toMatchObject({
+      title: 'Example dungeon 01',
+      source_file: 'example-dungeon-01.png',
+      thumbnail: 'private/previews/00/0000000000000000-thumb.webp',
+    });
+    expect(layoutRow(resolved(document, ['derive-layout']))).not.toHaveProperty('thumbnail');
+  });
+
   it('joins the layout spec graph counts and keeps the card own columns first', () => {
     const document = card('example-dungeon-01');
     document.map = { ...document.map!, layout_spec: { id: SPEC.id, status: 'extracted' }, layout: { levels: 2 } };
@@ -126,11 +136,15 @@ function indexOf(cards: ResolvedCard[]): CardIndex {
 }
 
 describe('buildMapIndex', () => {
-  it('keeps only rows whose source grants derive-layout for a map and in-game for a tileset', () => {
+  it('finds vision-only maps without publishing their layout graph', () => {
     const allowed = resolved(card('example-dungeon-01'), ['derive-layout']);
-    const hidden = resolved(card('example-dungeon-01'), ['vision-input']);
-    const built = buildMapIndex(indexOf([allowed, hidden]), []);
-    expect(built.maps.rows.map((row) => row.id)).toEqual([EXAMPLE_CARD]);
+    const vision = resolved(card('example-dungeon-01'), ['vision-input']);
+    vision.id = 'vision-map';
+    const spec = { ...SPEC, source: { ...SPEC.source, card_id: vision.id } };
+    const hidden = resolved(card('example-dungeon-01'), []);
+    const built = buildMapIndex(indexOf([allowed, vision, hidden]), [spec]);
+    expect(built.maps.rows.map((row) => row.id)).toEqual([EXAMPLE_CARD, 'vision-map']);
+    expect(built.maps.rows[1]).toMatchObject({ from: 'card', layout_id: null, rooms: null });
     expect(built.hidden).toBe(1);
   });
 
