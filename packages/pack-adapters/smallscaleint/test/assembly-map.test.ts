@@ -42,3 +42,26 @@ it('retains multiple wall pieces in a corner using distinct Tiled layers', () =>
   expect(map.pieces('wall').map(({ facing }) => facing)).toEqual(['W', 'S']);
   expect(new Set(map.pieces('wall').map(({ key }) => key)).size).toBe(2);
 });
+
+it('keeps a gate annotation on only the marked floor cell', () => {
+  const floor = { layer: 'floor', asset: 'grass', facing: 'E', solid: false } as const;
+  const tiled = assemblyMap(2, 1, [
+    { ...floor, cell: { x: 0, y: 0 } },
+    { ...floor, cell: { x: 1, y: 0 }, tags: ['gate'] },
+  ]);
+  const layer = tiled.layers[0]!;
+  expect(layer.type).toBe('tilelayer');
+  if (layer.type !== 'tilelayer') throw new Error('expected floor layer');
+  expect(layer.data[0]).not.toBe(layer.data[1]);
+  const tiles = tiled.tilesets[0]!.tiles!;
+  expect(tiles.find((tile) => tile.id === layer.data[0]! - 1)?.properties).not.toContainEqual({
+    name: 'tags',
+    value: 'gate',
+  });
+  expect(tiles.find((tile) => tile.id === layer.data[1]! - 1)?.properties).toContainEqual({
+    name: 'tags',
+    value: 'gate',
+  });
+  expect(new IsoMap(tiled).collisionGrid()).toEqual([[false, false]]);
+  expect(() => assemblyMap(1, 1, [{ ...floor, cell: { x: 0, y: 0 }, tags: ['gate,exit'] }])).toThrow('tags');
+});
