@@ -218,6 +218,9 @@ describe('gm maps search', () => {
       matchRow({ ...row, title: 'Other', themes: ['retreat'] }, parseRowQuery(['retreat'])).score,
     );
     expect(layoutLine(row)).toContain('private/previews/camp.webp  -  maps/Forest/Camp.png');
+    expect(layoutLine({ ...row, thumbnail: undefined, source_folder: 'inspiration/sample' })).toContain(
+      ' -  inspiration/sample  maps/Forest/Camp.png',
+    );
     const cave = { ...row, title: 'Keep', source_file: 'maps/Castles/Keep.png', flow: 'hub-and-spoke' };
     expect(matchRow(cave, parseRowQuery(['castle'], { maps: true })).score).toBeGreaterThan(0);
     expect(matchRow(cave, parseRowQuery(['hub-and-spoke'], { maps: true })).score).toBeGreaterThan(0);

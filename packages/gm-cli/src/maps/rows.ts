@@ -48,9 +48,8 @@ function list(value: string | string[] | undefined): string[] {
 }
 
 /**
- * Reads columns from the words and the flags. The shared word parser turns "small crypt 3-5 rooms one loop secret door"
- * into size/type/count filters, so the C3 §10 example keeps working; a word naming a drawn feature (`water`, `stairs`)
- * becomes a feature filter, because a column-only index has no free text to score it against.
+ * Reads columns from the words and flags. In map-only searches, bare place and feature words rank results; explicit
+ * type, biome and feature flags remain filters. Other searches retain the structured word parser's filters.
  */
 export function parseRowQuery(tokens: string[], flags: RowFlags = {}): RowQuery {
   const base = parseQuery(tokens, flags.maps ? { ...flags, type: undefined } : flags);
@@ -139,8 +138,8 @@ export function layoutLine(row: LayoutRow): string {
     dash(row.size),
     dash(row.flow),
     row.features.length > 0 ? row.features.join(',') : '-',
-    ...(row.resource === 'map' && row.thumbnail
-      ? [row.thumbnail, row.source_folder ?? '-', row.source_file ?? '-']
+    ...(row.resource === 'map' && (row.thumbnail || row.source_folder || row.source_file)
+      ? [row.thumbnail ?? '-', row.source_folder ?? '-', row.source_file ?? '-']
       : []),
   ]
     .map((value) =>

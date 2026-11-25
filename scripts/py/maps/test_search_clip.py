@@ -32,6 +32,10 @@ class SearchClipTest(unittest.TestCase):
             self.assertEqual(module.scores(root, [{**row, 'source_folder': 'inspiration/../sample'}], [1, 0]), {})
             (root / 'inspiration' / 'alias').symlink_to(root / 'inspiration' / 'sample', target_is_directory=True)
             self.assertEqual(module.scores(root, [{**row, 'source_folder': 'inspiration/alias'}], [1, 0]), {})
+            bad = {**data, 'map': 'Caves/bad.png', 'clip': {'model': module.MODEL, 'embeddings': [[10 ** 400, 1]]}}
+            (analysis / 'bad.analysis.json').write_text(json.dumps(bad))
+            invalid = {**row, 'id': 'bad', 'source_file': 'maps/Caves/bad.png'}
+            self.assertEqual(module.scores(root, [invalid, row], [1, 0]), {'one': 0.5})
 
 
 if __name__ == '__main__':
