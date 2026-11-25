@@ -70,7 +70,7 @@ export const command: GmCommand = {
         root,
         args.join(' '),
         matched.map(({ row }) => row),
-        ctx.env,
+        ctx.home,
       );
       if (scores === null || scores.size === 0) ctx.err('CLIP search unavailable; ranking by indexed text only');
       else for (const match of matched) match.score += (scores.get(match.row.id) ?? 0) * 3;

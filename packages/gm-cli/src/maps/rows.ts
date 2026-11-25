@@ -57,7 +57,7 @@ export function parseRowQuery(tokens: string[], flags: RowFlags = {}): RowQuery 
   const features = list(flags.feature);
   const words: string[] = [];
   for (const word of base.words) {
-    if (FEATURES.has(word)) features.push(word);
+    if (!flags.maps && FEATURES.has(word)) features.push(word);
     else words.push(word);
   }
   if (flags.maps) words.push(...base.types);
@@ -112,13 +112,13 @@ export function matchRow(row: LayoutRow, q: RowQuery): { hard: boolean; score: n
   let score = [q.rooms, q.loops, q.secrets, q.levels, q.size].filter((term) => term !== undefined).length;
   score += q.places.length + q.scales.length + q.grids.length + q.flows.length + q.features.length;
   if (q.sizeWord !== undefined && row.size === q.sizeWord) score += 1;
-  const terms = text.flatMap((value) => value.toLowerCase().split(/[^a-z0-9]+/));
-  const sourceTerms = [row.title, row.source_file].flatMap((value) =>
-    typeof value === 'string' ? value.toLowerCase().split(/[^a-z0-9]+/) : [],
-  );
+  const normalize = (value: string) => value.toLowerCase().replace(/s$/, '');
+  const tokens = (value: string) => [value.toLowerCase(), ...value.toLowerCase().split(/[^a-z0-9]+/)].map(normalize);
+  const terms = text.flatMap(tokens);
+  const sourceTerms = [row.title, row.source_file].flatMap((value) => (typeof value === 'string' ? tokens(value) : []));
   for (const word of q.words) {
-    if (terms.includes(word) || terms.includes(word.replace(/s$/, ''))) score += 1;
-    if (sourceTerms.includes(word) || sourceTerms.includes(word.replace(/s$/, ''))) score += 2;
+    if (terms.includes(normalize(word))) score += 1;
+    if (sourceTerms.includes(normalize(word))) score += 2;
   }
   return { hard: true, score };
 }
@@ -142,7 +142,14 @@ export function layoutLine(row: LayoutRow): string {
     ...(row.resource === 'map' && row.thumbnail
       ? [row.thumbnail, row.source_folder ?? '-', row.source_file ?? '-']
       : []),
-  ].join('  ');
+  ]
+    .map((value) =>
+      Array.from(value, (character) => {
+        const code = character.codePointAt(0)!;
+        return code < 32 || (code >= 127 && code <= 159) ? `\\u${code.toString(16).padStart(4, '0')}` : character;
+      }).join(''),
+    )
+    .join('  ');
 }
 
 /** `20 of 41 (map 39, tileset 2) — biome: dungeon 12, crypt 5`, so an agent narrows instead of paging. */

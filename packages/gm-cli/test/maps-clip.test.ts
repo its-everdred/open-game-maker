@@ -7,6 +7,10 @@ import type { LayoutRow } from '@ogm/asset-cards';
 const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }));
 vi.mock('node:child_process', () => ({ spawn: spawnMock }));
 vi.mock('node:fs', () => ({ existsSync: () => true }));
+vi.mock('../src/packs/workers.js', () => ({
+  resolvePython: async () => '/legacy/python',
+  workerEnvironment: () => ({ HF_HUB_OFFLINE: '1' }),
+}));
 
 import { clipScores } from '../src/maps/clip.js';
 
@@ -35,8 +39,13 @@ describe('map CLIP scoring', () => {
       source_file: 'maps/a.png',
       content_hash: 'sha256:a',
     } as LayoutRow;
-    const scores = await clipScores('/library', 'cave', [row, { ...row, id: 'hidden', thumbnail: undefined }]);
-    expect(JSON.parse(input).rows.map((entry: { id: string }) => entry.id)).toEqual(['allowed']);
+    const scores = await clipScores('/library', 'cave', [
+      { ...row, thumbnail: undefined },
+      { ...row, id: 'invalid' },
+      { ...row, id: 'hidden', source_folder: undefined },
+    ]);
+    expect(spawnMock.mock.calls.at(-1)?.[0]).toBe('/legacy/python');
+    expect(JSON.parse(input).rows.map((entry: { id: string }) => entry.id)).toEqual(['allowed', 'invalid']);
     expect([...scores!]).toEqual([['allowed', 0.6]]);
   });
 });

@@ -202,6 +202,8 @@ export function layoutRow(card: ResolvedCard, spec?: LayoutSpecRow): LayoutRow |
   }
   if (card.kind !== 'inspiration' || card.subkind !== 'map') return null;
   if (card.map?.is_map === false || card.map?.usable === 'no') return null;
+  const canDerive = card.resolved.rights.uses.includes('derive-layout');
+  const allowedSpec = canDerive ? spec : undefined;
   const row: LayoutRow = {
     id: card.id,
     ...(card.resolved.rights.uses.includes('vision-input')
@@ -216,7 +218,7 @@ export function layoutRow(card: ResolvedCard, spec?: LayoutSpecRow): LayoutRow |
       : {}),
     resource: 'map',
     type: card.map?.map_type ?? null,
-    themes: themesOf(card, spec),
+    themes: themesOf(card, allowedSpec),
     biome: biomeOf(card),
     scale: card.map?.scale ?? null,
     grid: null,
@@ -233,10 +235,10 @@ export function layoutRow(card: ResolvedCard, spec?: LayoutSpecRow): LayoutRow |
     size: null,
     flow: null,
     features: featuresOf(card),
-    from: spec ? 'spec' : 'card',
-    layout_id: spec?.id ?? null,
+    from: allowedSpec ? 'spec' : 'card',
+    layout_id: allowedSpec?.id ?? null,
   };
-  return { ...row, ...gridOf(card, spec), ...countsOf(card, spec) };
+  return { ...row, ...gridOf(card, allowedSpec), ...(canDerive ? countsOf(card, allowedSpec) : {}) };
 }
 
 /**
