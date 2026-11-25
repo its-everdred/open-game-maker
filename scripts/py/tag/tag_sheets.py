@@ -245,6 +245,7 @@ def _image_features(images: list[Path], model, processor, batch_size=16):
             inputs = processor(images=opened, return_tensors="pt")
             with torch.no_grad():
                 rows.append(torch.nn.functional.normalize(model.get_image_features(**inputs), dim=-1).cpu())
+            emit({"progress": {"done": min(start + batch_size, len(images)), "total": len(images)}})
         finally:
             for image in opened:
                 image.close()
