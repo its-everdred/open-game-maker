@@ -131,3 +131,13 @@ export const wallC1Edges: Fact<Readonly<Record<TileFacing, 'xMin' | 'xMax' | 'yM
     'E/W overlap 1535/1522 along y versus 878/818 along x. ' +
     'Facing positions and a local 3x2 timber wall-loop diagnostic distinguish each side.',
 };
+
+/** Grid edge occupied by the fantasy Wall F6 arch for each facing. */
+export const wallF6Edges: Fact<Readonly<Record<TileFacing, 'xMin' | 'xMax' | 'yMin' | 'yMax'>>> = {
+  value: { E: 'xMax', N: 'yMin', S: 'yMax', W: 'xMin' },
+  verified:
+    'Source PNG alpha-mask overlap at a 128x64 tile displacement on 2026-11-21: ' +
+    'N/S overlap 809/795 pixels along x and zero along y; ' +
+    'E/W overlap 780/772 along y and zero along x. ' +
+    'Facing positions and the local stone-shell door diagnostic distinguish each side.',
+};

@@ -31,6 +31,15 @@ it('supplies measured card metadata without inventing anchors or sockets', () =>
     ['yMax'],
     ['xMin'],
   ]);
+  const arch = structuralCardFacts(
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-f6@2026-11-01',
+  )!;
+  expect([arch.E?.edges?.value, arch.N?.edges?.value, arch.S?.edges?.value, arch.W?.edges?.value]).toEqual([
+    ['xMax'],
+    ['yMin'],
+    ['yMax'],
+    ['xMin'],
+  ]);
   expect(structuralCardFacts('unknown')).toBeUndefined();
   expect(structuralCardFacts('toString')).toBeUndefined();
 });
