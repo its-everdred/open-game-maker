@@ -9,6 +9,8 @@ export interface AssemblyPlacement {
   facing: TileFacing;
   solid: boolean;
   elevation?: number;
+  /** Scene-check annotations attached to this placement, such as `gate`. */
+  tags?: readonly string[];
 }
 
 const LAYERS = ['floor', 'wall', 'decor', 'roof'] as const satisfies readonly Layer[];
@@ -38,6 +40,12 @@ export function assemblyMap(width: number, height: number, placements: readonly 
     if (typeof placement.asset !== 'string' || !placement.asset) throw new Error('placement asset must not be empty');
     if (typeof placement.solid !== 'boolean') throw new Error('placement solid must be a boolean');
     if (
+      placement.tags !== undefined &&
+      (!Array.isArray(placement.tags) ||
+        placement.tags.some((tag) => typeof tag !== 'string' || !tag.trim() || tag.includes(',')))
+    )
+      throw new Error('placement tags must be nonempty strings without commas');
+    if (
       placement.elevation !== undefined &&
       (!Number.isFinite(placement.elevation) ||
         placement.elevation < 0 ||
@@ -63,7 +71,14 @@ export function assemblyMap(width: number, height: number, placements: readonly 
       };
       layers.push(layer);
     }
-    const signature = JSON.stringify([placement.asset, placement.facing, placement.solid, placement.elevation ?? 0]);
+    const tags = placement.tags?.map((tag) => tag.trim()).join(',');
+    const signature = JSON.stringify([
+      placement.asset,
+      placement.facing,
+      placement.solid,
+      placement.elevation ?? 0,
+      tags,
+    ]);
     let gid = byKey.get(signature);
     if (gid === undefined) {
       gid = tiles.length + 1;
@@ -75,6 +90,7 @@ export function assemblyMap(width: number, height: number, placements: readonly 
           { name: 'rotation', value: ROTATION[placement.facing] },
           { name: 'solid', value: placement.solid },
           ...(placement.elevation === undefined ? [] : [{ name: 'elevation', value: placement.elevation }]),
+          ...(tags ? [{ name: 'tags', value: tags }] : []),
         ],
       });
     }

@@ -36,7 +36,8 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
     returns clustered dressing, denser near `boundaries`; pass the path, door entry and building cells in `avoid`.
     Solid items go on the `wall` layer so they block movement at their origin cell.
   - Concatenate the placements with the scene's floor and pass them to `assemblyMap(width, height, placements)`, the
-    Tiled subset `IsoMap` reads. The structural asset ids are pinned card ids; record them in the game's asset list.
+    Tiled subset `IsoMap` reads. Mark an opening's floor placement with `tags: ['gate']` for scene verification.
+    The structural asset ids are pinned card ids; record them in the game's asset list.
   - Not bound yet: gate posts, steps and non-stone buildings.
 - `scripts/stage-structural-cards.mjs <library> <empty-dir>` (after `pnpm build`) writes validated card copies carrying
   the structural facts and a source-hash plan, for a host operator to apply to the shared library.
