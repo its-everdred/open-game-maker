@@ -54,6 +54,7 @@ export function previewContextStats(reset = false): { active: number; peak: numb
 export type BrowserRenderOptions = {
   software?: boolean;
   executablePath?: string;
+  runtimeRoot?: string;
 };
 
 export type BrowserRenderResult = {
@@ -131,7 +132,7 @@ export async function renderModelViews(
       readFile(fileURLToPath(import.meta.resolve('three/examples/jsm/utils/SkeletonUtils.js'))),
       readFile(fileURLToPath(import.meta.resolve('three/examples/jsm/libs/meshopt_decoder.module.js'))),
     ]);
-    const runtime = await mkdtemp(join(tmpdir(), 'ogm-asset-preview-'));
+    const runtime = await mkdtemp(join(options.runtimeRoot ?? tmpdir(), 'ogm-asset-preview-'));
     let browser: Browser | undefined;
     let context: BrowserContext | undefined;
     let served: { server: Server; origin: string } | undefined;

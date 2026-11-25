@@ -237,6 +237,26 @@ def test_validation_ignores_unselected_invalid_pack(tmp_path):
     assert result[0] == 0, result[-1]
 
 
+def test_image_encoding_reports_each_completed_batch(tmp_path, capsys):
+    import json
+    import torch
+    from PIL import Image
+
+    paths = []
+    for index in range(3):
+        path = tmp_path / f"{index}.png"
+        Image.new("RGB", (1, 1)).save(path)
+        paths.append(path)
+
+    class Model:
+        def get_image_features(self, **_inputs):
+            return torch.ones((1, 2))
+
+    t._image_features(paths, Model(), lambda **_kwargs: {}, batch_size=1)
+    records = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert records == [{"progress": {"done": i, "total": 3}} for i in (1, 2, 3)]
+
+
 def test_sheet_images_are_encoded_once_across_vocabulary_groups(monkeypatch):
     calls = []
     monkeypatch.setattr(t, "label_groups", lambda: {"roles": ["wall"], "materials": ["stone"]})
