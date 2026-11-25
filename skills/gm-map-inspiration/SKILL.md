@@ -19,9 +19,10 @@ Translate those answers into search facts yourself.
 
 1. Search **all inspiration collections** with `gm maps search --maps`, narrowing by biome, feature, scale, grid, room
    count, loops, secrets, and flow. Never filter map inspiration by the game's style family, set, pack, or vendor.
-2. Compare the returned layout facts against play needs. Choose the source yourself; never turn candidates into a
-   creator option or expose their ids, packs, previews, or paths.
-3. Retrieve only the validated graph with `gm maps info <map-id> --json`. Do not open, copy, or ship the source image.
+2. Compare the returned layout facts against play needs. A result with a thumbnail may be viewed locally for inspiration;
+   keep source images private. Choose the source yourself; never expose ids, packs, previews, or paths to the creator.
+3. Retrieve the validated graph with `gm maps info <map-id> --json`. Vision-only results can lack a graph: choose a
+   result with an authorized graph before deriving a layout. Do not copy or ship the source image.
 4. Derive a game-owned layout: resize, mirror, reorder, combine, or omit rooms and routes as the game needs. Inspiration
    supplies topology, not content or art. Check that the result is meaningfully adapted rather than traced.
 

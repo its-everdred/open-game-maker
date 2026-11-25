@@ -53,6 +53,7 @@ export async function cardFiles(root: string): Promise<string[]> {
 async function buildFromFiles(root: string, files: readonly string[]): Promise<CardIndex> {
   const errors: IndexError[] = [];
   const valid: AssetCard[] = [];
+  const roots = new WeakMap<AssetCard, string>();
   for (const file of files) {
     const path = relative(root, file);
     let doc: unknown;
@@ -63,8 +64,10 @@ async function buildFromFiles(root: string, files: readonly string[]): Promise<C
       continue;
     }
     const result = validateCard(doc);
-    if (result.ok) valid.push(result.card);
-    else errors.push({ path, errors: result.errors });
+    if (result.ok) {
+      valid.push(result.card);
+      roots.set(result.card, path.split(/[\\/]/).slice(0, 2).join('/'));
+    } else errors.push({ path, errors: result.errors });
   }
 
   const raw: Record<string, AssetCard> = {};
@@ -75,7 +78,7 @@ async function buildFromFiles(root: string, files: readonly string[]): Promise<C
   for (const card of valid) {
     let resolved: ResolvedCard;
     try {
-      resolved = resolve(card, raw);
+      resolved = { ...resolve(card, raw), library_root: roots.get(card) };
     } catch (error) {
       errors.push({ path: card.id, errors: [error instanceof Error ? error.message : String(error)] });
       continue;
