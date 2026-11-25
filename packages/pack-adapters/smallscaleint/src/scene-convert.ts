@@ -17,6 +17,7 @@ const TILE_HEIGHT = 64;
 /** Every layer is a dense `width * height` array; far past any scene a phone can draw, and well inside array limits. */
 const MAX_CELLS = 512 * 512;
 const ROTATION: Record<TileFacing, number> = { E: 0, N: 90, W: 180, S: 270 };
+const SCENE_TAGS = ['gate', 'exit', 'ruin', 'formal'] as const;
 
 type SpawnJson = { id: number; name?: string; x: number; y: number; properties?: { name: string; value: unknown }[] };
 
@@ -32,6 +33,18 @@ const defaultSolid = (layer: string): boolean => layer === 'wall';
  */
 export function isoMapToScene(json: TiledIsoMap, ids: { game: string; scene: string }): SceneDoc {
   const map = new IsoMap(json);
+  const tagsByGid = new Map<number, string>();
+  for (const set of json.tilesets)
+    for (const tile of set.tiles) {
+      const tags = tile.properties?.find((property) => property.name === 'tags');
+      const flags = SCENE_TAGS.filter((name) =>
+        tile.properties?.some((property) => property.name === name && property.value === true),
+      );
+      if (tags && typeof tags.value !== 'string')
+        throw new Error(`tile gid ${set.firstgid + tile.id} tags must be a string`);
+      if (tags || flags.length)
+        tagsByGid.set(set.firstgid + tile.id, [tags?.value, ...flags].filter(Boolean).join(','));
+    }
   const layers: Record<string, SceneLayer> = {};
   json.layers.forEach((layer, order) => {
     layers[sceneLayerId(layer.name)] =
@@ -39,11 +52,16 @@ export function isoMapToScene(json: TiledIsoMap, ids: { game: string; scene: str
   });
   for (const piece of map.pieces()) {
     const layerName = piece.key.slice(0, piece.key.indexOf(':'));
+    const tags = tagsByGid.get(piece.gid);
+    const props = {
+      ...(piece.solid === defaultSolid(piece.layer) ? {} : { solid: piece.solid }),
+      ...(tags === undefined ? {} : { tags }),
+    };
     const tile: SceneTile = {
       asset: piece.asset,
       facing: piece.facing,
       ...(piece.elevation === undefined ? {} : { elevation: piece.elevation }),
-      ...(piece.solid === defaultSolid(piece.layer) ? {} : { props: { solid: piece.solid } }),
+      ...(Object.keys(props).length ? { props } : {}),
     };
     layers[sceneLayerId(layerName)]!.tiles![`${piece.x},${piece.y}`] = tile;
   }
@@ -128,10 +146,11 @@ export function sceneToIsoMap(input: SceneDoc): TiledIsoMap {
       if (tile.flip) refuse(`tile ${id}:${cell} is flipped; the pack draws facings instead`);
       const facing = (tile.facing ?? 'E') as TileFacing;
       if (!Object.hasOwn(ROTATION, facing)) refuse(`tile ${id}:${cell} facing ${tile.facing} is not E, N, W or S`);
-      const { solid = defaultSolid(id.replace(/-\d+$/, '')), ...rest } = tile.props ?? {};
+      const { solid = defaultSolid(id.replace(/-\d+$/, '')), tags, ...rest } = tile.props ?? {};
       if (typeof solid !== 'boolean') refuse(`tile ${id}:${cell} solid must be a boolean`);
+      if (tags !== undefined && typeof tags !== 'string') refuse(`tile ${id}:${cell} tags must be a string`);
       if (Object.keys(rest).length > 0) refuse(`tile ${id}:${cell} has props ${Object.keys(rest).join(', ')}`);
-      const signature = JSON.stringify([tile.asset, facing, solid, tile.elevation ?? null]);
+      const signature = JSON.stringify([tile.asset, facing, solid, tile.elevation ?? null, tags]);
       let gid = gids.get(signature);
       if (gid === undefined) {
         gid = tiles.length + 1;
@@ -142,6 +161,7 @@ export function sceneToIsoMap(input: SceneDoc): TiledIsoMap {
             { name: 'asset', value: tile.asset },
             { name: 'rotation', value: ROTATION[facing] },
             { name: 'solid', value: solid },
+            ...(tags === undefined ? [] : [{ name: 'tags', value: tags }]),
             ...(tile.elevation === undefined ? [] : [{ name: 'elevation', value: tile.elevation }]),
           ],
         });
