@@ -8,7 +8,7 @@ import { CommandError, EXIT, UsageError, type GmContext } from './command.js';
 import { findAssetsRoot } from './context.js';
 import { makeEmitter } from './events.js';
 import { parseFlags } from './flags.js';
-import { commandHelp, listHelp } from './help.js';
+import { commandHelp, groupHelp, listHelp } from './help.js';
 import { loadCommands, match } from './registry.js';
 
 export type { FlagSpec, GmCommand, GmContext } from './command.js';
@@ -75,8 +75,24 @@ export async function run(argv: string[], options: RunOptions = {}): Promise<num
     }
 
     const found = match(registry, argv);
-    if (!found)
+    if (!found) {
+      const words = argv.slice(
+        0,
+        argv.findIndex((arg) => arg.startsWith('-')) < 0 ? argv.length : argv.findIndex((arg) => arg.startsWith('-')),
+      );
+      const group = words
+        .map((_, index) => words.slice(0, index + 1).join(' '))
+        .reverse()
+        .find((prefix) =>
+          [...registry.values()].some((command) => !command.hidden && command.name.startsWith(`${prefix} `)),
+        );
+      if (group) {
+        const help = argv.length === group.split(' ').length + 1 && argv.at(-1) === '--help';
+        groupHelp(registry, group).forEach(help ? out : err);
+        return help ? EXIT.ok : EXIT.usage;
+      }
       throw new UsageError(`unknown command "${argv.filter((a) => !a.startsWith('-')).join(' ')}"`, 'gm help');
+    }
     const { command, rest } = found;
     const { args, flags } = parseFlags(command.name, command.flags, rest);
     if (flags.help === true) {
