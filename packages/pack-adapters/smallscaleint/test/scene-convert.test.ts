@@ -131,6 +131,17 @@ describe('isoMapToScene / sceneToIsoMap', () => {
     expect(isoMapToScene(sceneToIsoMap(doc), ids)).toEqual(doc);
   });
 
+  it('matches checker handling of malformed tags and duplicate flags', () => {
+    const map = richMap();
+    map.tilesets[0]!.tiles![0]!.properties!.push(
+      { name: 'tags', value: 42 },
+      { name: 'gate', value: true },
+      { name: 'exit', value: false },
+      { name: 'exit', value: true },
+    );
+    expect(isoMapToScene(map, ids).layers.floor!.tiles!['1,1']!.props).toEqual({ tags: 'gate' });
+  });
+
   it.each([
     ['the 4x4 fixture', fixtureMap4x4() as TiledIsoMap],
     ['a map with numbered layers, elevation, margins and odd solids', richMap()],

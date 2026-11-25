@@ -36,14 +36,13 @@ export function isoMapToScene(json: TiledIsoMap, ids: { game: string; scene: str
   const tagsByGid = new Map<number, string>();
   for (const set of json.tilesets)
     for (const tile of set.tiles) {
-      const tags = tile.properties?.find((property) => property.name === 'tags');
-      const flags = SCENE_TAGS.filter((name) =>
-        tile.properties?.some((property) => property.name === name && property.value === true),
+      const value = tile.properties?.find((property) => property.name === 'tags')?.value;
+      const tags = typeof value === 'string' ? value : undefined;
+      const flags = SCENE_TAGS.filter(
+        (name) => tile.properties?.find((property) => property.name === name)?.value === true,
       );
-      if (tags && typeof tags.value !== 'string')
-        throw new Error(`tile gid ${set.firstgid + tile.id} tags must be a string`);
-      if (tags || flags.length)
-        tagsByGid.set(set.firstgid + tile.id, [tags?.value, ...flags].filter(Boolean).join(','));
+      if (tags !== undefined || flags.length)
+        tagsByGid.set(set.firstgid + tile.id, [tags, ...flags].filter(Boolean).join(','));
     }
   const layers: Record<string, SceneLayer> = {};
   json.layers.forEach((layer, order) => {
