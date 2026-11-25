@@ -66,8 +66,7 @@ Wrap long work in the Agent Workpad with these exact markers:
 <!-- gm-activity: <activity> end -->
 ```
 
-Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animation_and_vfx`, `audio`,
-`ui_and_hud`, `playtesting_and_verification`, `deploy_and_release`, `writing`.
+Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animation_and_vfx`, `audio`, `ui_and_hud`, `playtesting_and_verification`, `deploy_and_release`, `writing`.
 
 ## `gm` cheat sheet
 
