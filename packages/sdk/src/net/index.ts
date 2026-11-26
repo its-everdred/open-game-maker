@@ -40,6 +40,8 @@ export interface GmNet {
   readonly mode: AuthorityMode;
   /** This client's seat, or `null` for a spectator — the one honest value that cannot be confused with seat 0. */
   readonly localSeat: number | null;
+  /** The room's elected primary seat, or `null` when no seat is eligible. */
+  readonly primarySeat: number | null;
   /** The seat table: who is seated, on which team, connected, ready, forfeited or spectating. */
   readonly seats: readonly NetSeat[];
   /** `''` outside a per-seat match. */
@@ -121,6 +123,7 @@ export interface NetController {
 /** The v2 inbound names a per-seat controller handles. Host mode ignores them (routing is N3's). */
 const V2_INBOUND = new Set([
   'net.start',
+  'net.primary',
   'net.start.cancel',
   'net.epoch.end',
   'net.seats',
@@ -250,6 +253,9 @@ export function createNetController(options: NetControllerOptions): NetControlle
     get localSeat() {
       if (!perSeat) return roles.localPlayerIndex;
       return perSeat.spectator ? null : perSeat.localSeat;
+    },
+    get primarySeat() {
+      return perSeat ? perSeat.currentPrimarySeat : null;
     },
     get seats() {
       return perSeat?.seatList ?? [];
