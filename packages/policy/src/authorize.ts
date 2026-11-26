@@ -14,7 +14,20 @@ const allowed = (): Authorization => ({ ok: true });
 const denied = (reason: string): Authorization => ({ ok: false, reason });
 
 export function authorize(actor: Actor, action: Action, resource: Resource = {}): Authorization {
-  if (resource.familyId !== undefined && resource.familyId !== actor.familyId) return denied('cross_family');
+  if (
+    resource.releaseState !== undefined &&
+    resource.releaseState !== 'released' &&
+    resource.releaseState !== 'coming_soon'
+  )
+    return denied('release_state_invalid');
+  if (resource.familyId !== undefined && resource.familyId !== actor.familyId) {
+    const earlyAccess = action === 'game.play' && resource.granted === true;
+    const adminAccess =
+      action === 'game.play' &&
+      resource.releaseState === 'coming_soon' &&
+      (actor.platformRole === 'admin' || actor.platformRole === 'maintainer');
+    if (!earlyAccess && !adminAccess) return denied('cross_family');
+  }
   if (ownerActions.has(action) && resource.ownerId === undefined) return denied('owner_required');
 
   if (actor.platformRole === 'maintainer') {

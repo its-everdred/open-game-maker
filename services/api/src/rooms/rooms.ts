@@ -11,6 +11,7 @@ import type { AppDeps } from '../app/types.js';
 import { createInvitation } from '../invites/invites.js';
 import { hashOf } from '../invites/tokens.js';
 import { createRelayRoom, revokeRelayRoom } from './client.js';
+import { hasGameGrant } from '../games/games.js';
 
 const ROOM_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -216,7 +217,7 @@ export async function joinRoom(
       ownerId: game.ownerId,
       visibility: game.visibility,
       releaseState: game.releaseState,
-      granted: true,
+      granted: game.releaseState === 'coming_soon' ? hasGameGrant(deps.db, game.id, principal.userId) : true,
     }),
   );
 

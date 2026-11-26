@@ -1,7 +1,7 @@
 # Games host
 
 `@ogm/games-host` serves completed game builds from a loopback-only process. Tailscale ingress owns the public
-games origin; this service owns immutable file responses and the browser security headers around untrusted game code.
+games origin; this service serves authorized build files and sets the browser security headers around untrusted game code.
 
 ## Environment
 

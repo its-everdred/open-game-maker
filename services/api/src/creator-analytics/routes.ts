@@ -10,7 +10,7 @@ import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
 import { createRateLimiter } from '../auth/rate-limit.js';
-import { findGameForFamily, hasGameGrant, type GameRow } from '../games/games.js';
+import { findGameForFamily, findGameForPlay, hasGameGrant, type GameRow } from '../games/games.js';
 import { ingestPlayEvents } from './ingest.js';
 import { queryAttempts, queryFunnel, queryOverview, queryReleases, type AnalyticsRange } from './query.js';
 
@@ -39,7 +39,7 @@ function routeParam(c: Parameters<typeof requirePrincipal>[0], name: string): st
 
 function playableGame(c: Parameters<typeof requirePrincipal>[0]): { principal: UserPrincipal; game: GameRow } {
   const principal = requirePrincipal(c, ['user']);
-  const game = findGameForFamily(c.get('deps').db, routeParam(c, 'gameId'), principal.familyId);
+  const game = findGameForPlay(c.get('deps').db, routeParam(c, 'gameId'), actorFromPrincipal(principal));
   requireAuthorization(
     authorize(actorFromPrincipal(principal), 'game.play', {
       familyId: game.familyId,

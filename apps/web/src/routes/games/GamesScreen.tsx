@@ -119,7 +119,7 @@ export function GamesScreen() {
 
   const open = (index: number, mode: 'play' | 'edit' = 'play') => {
     const game = sortedGames[index];
-    if (!game || game.id !== selected?.id || !canOpen) return;
+    if (!game || game.id !== selected?.id || !canOpen || game.canPlay === false) return;
     if (game.id.startsWith('showcase:') && game.showcase && game.showcase.id !== 'goblin-cellar') {
       navigate(`/g/showcase/${encodeURIComponent(game.showcase.id)}?mode=${mode}`);
       return;

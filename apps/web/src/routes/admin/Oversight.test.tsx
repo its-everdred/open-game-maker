@@ -32,9 +32,12 @@ it('grants early access to a selected member', async () => {
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByRole('button', { name: 'Grant access' }));
-  fireEvent.change(screen.getByLabelText('Member'), { target: { value: 'tester' } });
+  fireEvent.change(screen.getByLabelText('Tester email'), { target: { value: 'tester@example.test' } });
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
   await waitFor(() =>
-    expect(adminRequest).toHaveBeenCalledWith('/admin/games/g/early-access/tester', { method: 'PUT' }),
+    expect(adminRequest).toHaveBeenCalledWith('/admin/games/g/early-access', {
+      method: 'POST',
+      json: { email: 'tester@example.test' },
+    }),
   );
 });

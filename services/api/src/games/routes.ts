@@ -17,6 +17,7 @@ import {
   createGameRow,
   findGame,
   findGameForFamily,
+  findGameForPlay,
   gameResponse,
   hasGameGrant,
   isGameProvisioning,
@@ -30,6 +31,7 @@ import { CommitServiceRepoProvisioner } from './repo-provisioner.js';
 import { readQaState } from '../qa/state.js';
 import { signBuildAccess, verifyBuildAccess } from './build-access-token.js';
 import { authContextFor } from '../auth/routes.js';
+import { publicCardMedia, readPublicCardImage } from './public-card.js';
 
 export const prefix = '/api/v1';
 
@@ -136,6 +138,14 @@ const patchBody = z
   );
 
 const routes = new Hono<ApiBindings>()
+  .get('/games/:id/card-image/:token', async (c) => {
+    const image = await readPublicCardImage(c.get('deps'), c.req.param('id'), c.req.param('token'));
+    c.header('Content-Type', image.type);
+    c.header('Content-Security-Policy', "default-src 'none'; sandbox");
+    c.header('X-Content-Type-Options', 'nosniff');
+    c.header('Cache-Control', 'no-store');
+    return c.body(new Uint8Array(image.bytes));
+  })
   .post('/internal/games/:id/build-access', async (c) => {
     const deps = c.get('deps');
     const game = findGame(deps.db, c.req.param('id'));
@@ -143,8 +153,7 @@ const routes = new Hono<ApiBindings>()
     if (game.releaseState === 'released' && game.visibility === 'listed') return c.body(null, 204);
     const body = await parseBody(c, z.object({ token: z.string().max(4096).optional() }).strict());
     const claims = body.token ? verifyBuildAccess(body.token, deps.config.jobTokenSecret) : null;
-    if (!claims || claims.gameId !== game.id || claims.familyId !== game.familyId)
-      throw new HttpError(403, 'forbidden');
+    if (!claims || claims.gameId !== game.id) throw new HttpError(403, 'forbidden');
     const session = deps.db
       .select()
       .from(schema.session)
@@ -154,9 +163,10 @@ const routes = new Hono<ApiBindings>()
     const member = deps.db
       .select()
       .from(schema.familyMembers)
-      .where(and(eq(schema.familyMembers.familyId, game.familyId), eq(schema.familyMembers.userId, claims.userId)))
+      .where(and(eq(schema.familyMembers.familyId, claims.familyId), eq(schema.familyMembers.userId, claims.userId)))
       .get();
-    if (!member) throw new HttpError(403, 'forbidden');
+    if (!member && (claims.familyId !== '' || !hasGameGrant(deps.db, game.id, claims.userId)))
+      throw new HttpError(403, 'forbidden');
     const email = await deps.registry.userDirectory?.emailForUser(claims.userId);
     const allowed = email
       ? deps.db
@@ -170,7 +180,7 @@ const routes = new Hono<ApiBindings>()
       authorize(
         {
           userId: claims.userId,
-          familyId: game.familyId,
+          familyId: claims.familyId,
           platformRole: allowed.role === 'admin' ? 'admin' : 'none',
           capability: allowed.role === 'player' ? 'player' : 'creator',
         },
@@ -191,7 +201,7 @@ const routes = new Hono<ApiBindings>()
     const deps = c.get('deps');
     const session = await authContextFor(deps)?.auth.api.getSession({ headers: c.req.raw.headers });
     if (!session || session.user.id !== principal.userId) throw new HttpError(401, 'unauthenticated');
-    const game = findGameForFamily(deps.db, c.req.param('id'), principal.familyId);
+    const game = findGameForPlay(deps.db, c.req.param('id'), actorFromPrincipal(principal));
     requireAuthorization(
       authorize(actorFromPrincipal(principal), 'game.play', {
         familyId: game.familyId,
@@ -305,7 +315,7 @@ const routes = new Hono<ApiBindings>()
             ownerId: game.ownerId,
           }).ok,
           canPlay,
-          ...media.get(game.id),
+          ...(canPlay ? media.get(game.id) : publicCardMedia(game.id, media.get(game.id))),
           stats: stats.get(game.id),
           lastPlayedAt: playedAt.get(game.id) ?? null,
           live: live.has(game.id),
@@ -315,7 +325,7 @@ const routes = new Hono<ApiBindings>()
   })
   .get('/games/:id', async (c) => {
     const principal = requirePrincipal(c, ['user']);
-    const game = findGameForFamily(c.get('deps').db, c.req.param('id'), principal.familyId);
+    const game = findGameForPlay(c.get('deps').db, c.req.param('id'), actorFromPrincipal(principal));
     requireAuthorization(
       authorize(actorFromPrincipal(principal), 'game.play', {
         familyId: game.familyId,
@@ -335,12 +345,15 @@ const routes = new Hono<ApiBindings>()
     if (!game) throw new HttpError(404, 'game_not_found');
     if (game.delistedAt !== null) throw new HttpError(404, 'game_not_found');
     const current = c.get('principal');
+    if (game.releaseState === 'coming_soon' && current.kind === 'anonymous') throw new HttpError(403, 'coming_soon');
+    const principal = requirePrincipal(c, ['user']);
     if (
       game.releaseState === 'coming_soon' &&
-      (current.kind === 'anonymous' || (current.kind === 'user' && current.familyId !== game.familyId))
+      principal.familyId !== game.familyId &&
+      principal.platformRole === 'none' &&
+      !hasGameGrant(c.get('deps').db, game.id, principal.userId)
     )
       throw new HttpError(403, 'coming_soon');
-    const principal = requirePrincipal(c, ['user']);
     requireAuthorization(
       authorize(actorFromPrincipal(principal), 'game.play', {
         familyId: game.familyId,

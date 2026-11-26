@@ -14,7 +14,7 @@ import { parseBody } from '../app/validate.js';
 import { getDesignRuntime } from '../design/routes.js';
 import { BranchArchived, BranchNotFound } from '../design/store.js';
 import { LeaseMismatch } from '../design/lease.js';
-import { findGameForFamily, hasGameGrant, type GameRow } from '../games/games.js';
+import { findGameForFamily, findGameForPlay, hasGameGrant, type GameRow } from '../games/games.js';
 import { InvalidResolution, PatchTooLargeError, UnresolvedConflict } from '@ogm/design-log';
 import {
   InvalidBranchPair,
@@ -65,7 +65,10 @@ function routeParam(c: Context<ApiBindings>, name: string): string {
 
 function authorizedGame(c: Context<ApiBindings>, action: 'game.edit' | 'game.play'): { game: GameRow; userId: string } {
   const principal = requirePrincipal(c, ['user']);
-  const game = findGameForFamily(c.get('deps').db, routeParam(c, 'gameId'), principal.familyId);
+  const game =
+    action === 'game.play'
+      ? findGameForPlay(c.get('deps').db, routeParam(c, 'gameId'), actorFromPrincipal(principal))
+      : findGameForFamily(c.get('deps').db, routeParam(c, 'gameId'), principal.familyId);
   requireAuthorization(
     authorize(
       actorFromPrincipal(principal),

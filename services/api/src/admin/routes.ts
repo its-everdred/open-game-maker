@@ -226,26 +226,49 @@ const routes = new Hono<ApiBindings>()
         .map((row) => row.userId),
     });
   })
-  .put('/games/:id/early-access/:userId', (c) => {
+  .post('/games/:id/early-access', async (c) => {
     const actor = admin(c, 'admin.members.manage');
     const deps = c.get('deps');
     const game = findGameForFamily(deps.db, c.req.param('id'), actor.familyId);
-    const member = familyMember(deps, actor.familyId, c.req.param('userId'));
-    deps.db
-      .insert(schema.gameEarlyAccess)
-      .values({ gameId: game.id, userId: member.userId })
-      .onConflictDoNothing()
-      .run();
+    const body = await parseBody(c, z.object({ email: z.email() }).strict());
+    const userId = await deps.registry.userDirectory?.userIdForEmail(body.email);
+    if (
+      !userId ||
+      !deps.db
+        .select({ email: schema.allowedUsers.email })
+        .from(schema.allowedUsers)
+        .where(eq(schema.allowedUsers.email, body.email.trim().toLowerCase()))
+        .get()
+    )
+      throw new HttpError(404, 'member_not_found');
+    deps.db.insert(schema.gameEarlyAccess).values({ gameId: game.id, userId }).onConflictDoNothing().run();
+    return c.body(null, 204);
+  })
+  .put('/games/:id/early-access/:userId', async (c) => {
+    const actor = admin(c, 'admin.members.manage');
+    const deps = c.get('deps');
+    const game = findGameForFamily(deps.db, c.req.param('id'), actor.familyId);
+    const userId = c.req.param('userId');
+    const email = await deps.registry.userDirectory?.emailForUser(userId);
+    if (
+      !email ||
+      !deps.db
+        .select({ email: schema.allowedUsers.email })
+        .from(schema.allowedUsers)
+        .where(eq(schema.allowedUsers.email, email.trim().toLowerCase()))
+        .get()
+    )
+      throw new HttpError(404, 'member_not_found');
+    deps.db.insert(schema.gameEarlyAccess).values({ gameId: game.id, userId }).onConflictDoNothing().run();
     return c.body(null, 204);
   })
   .delete('/games/:id/early-access/:userId', (c) => {
     const actor = admin(c, 'admin.members.manage');
     const deps = c.get('deps');
     const game = findGameForFamily(deps.db, c.req.param('id'), actor.familyId);
-    const member = familyMember(deps, actor.familyId, c.req.param('userId'));
     deps.db
       .delete(schema.gameEarlyAccess)
-      .where(and(eq(schema.gameEarlyAccess.gameId, game.id), eq(schema.gameEarlyAccess.userId, member.userId)))
+      .where(and(eq(schema.gameEarlyAccess.gameId, game.id), eq(schema.gameEarlyAccess.userId, c.req.param('userId'))))
       .run();
     return c.body(null, 204);
   })

@@ -11,6 +11,7 @@ export async function mayReadGame(api: string, gameId: string, token: string | u
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(token ? { token } : {}),
+        redirect: 'error',
         signal: AbortSignal.timeout(5000),
       },
     );
@@ -22,7 +23,7 @@ export async function mayReadGame(api: string, gameId: string, token: string | u
 
 type PlanRef = { gameId: string; directory: string; path: string };
 type BlobIndex = Map<string, PlanRef[]>;
-const indexes = new Map<string, { started: number; pending: Promise<BlobIndex | null> }>();
+const indexes = new Map<string, { expires: number; pending: Promise<BlobIndex | null> }>();
 
 async function readPlan(path: string) {
   const raw = await readFile(path, 'utf8').catch((error: NodeJS.ErrnoException) => {
@@ -70,8 +71,13 @@ async function buildIndex(root: string): Promise<BlobIndex | null> {
 // blob. A stale index can briefly deny a new blob; it cannot authorize one after its public reference is removed.
 export async function blobOwners(root: string, file: string): Promise<string[] | null> {
   let entry = indexes.get(root);
-  if (!entry || Date.now() - entry.started >= 1000) {
-    entry = { started: Date.now(), pending: buildIndex(root) };
+  if (!entry || Date.now() >= entry.expires) {
+    const next = { expires: Number.POSITIVE_INFINITY, pending: buildIndex(root) };
+    next.pending = next.pending.then((index) => {
+      next.expires = Date.now() + 1000;
+      return index;
+    });
+    entry = next;
     indexes.set(root, entry);
   }
   const index = await entry.pending;

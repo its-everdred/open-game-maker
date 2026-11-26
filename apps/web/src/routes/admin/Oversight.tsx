@@ -11,7 +11,7 @@ export function Oversight() {
   const data = useAdminBuilds();
   const [action, setAction] = useState<Action | null>(null);
   const [reason, setReason] = useState<'spam' | 'harmful' | 'other'>('harmful');
-  const [userId, setUserId] = useState('');
+  const [email, setEmail] = useState('');
   const delist = useMutation({
     mutationFn: (gameId: string) =>
       adminRequest(`/admin/games/${encodeURIComponent(gameId)}/delist`, { method: 'POST' }),
@@ -41,12 +41,13 @@ export function Oversight() {
   });
   const grant = useMutation({
     mutationFn: (gameId: string) =>
-      adminRequest(`/admin/games/${encodeURIComponent(gameId)}/early-access/${encodeURIComponent(userId)}`, {
-        method: 'PUT',
+      adminRequest(`/admin/games/${encodeURIComponent(gameId)}/early-access`, {
+        method: 'POST',
+        json: { email },
       }),
     onSuccess: () => {
       setAction(null);
-      setUserId('');
+      setEmail('');
     },
   });
   const activeMutation =
@@ -63,7 +64,7 @@ export function Oversight() {
     if (action.kind === 'delist') delist.mutate(action.game.id);
     else if (action.kind === 'flag') flag.mutate(action.game.id);
     else if (action.kind === 'grant') {
-      if (userId) grant.mutate(action.game.id);
+      if (email) grant.mutate(action.game.id);
     } else
       release.mutate({ gameId: action.game.id, releaseState: action.kind === 'release' ? 'released' : 'coming_soon' });
   };
@@ -164,15 +165,8 @@ export function Oversight() {
           <p>{action.game.title}</p>
           {action.kind === 'grant' && (
             <label>
-              Member
-              <select value={userId} onChange={(event) => setUserId(event.target.value)}>
-                <option value="">Choose a member</option>
-                {data.data.members.map((member) => (
-                  <option key={member.userId} value={member.userId}>
-                    {member.email ?? member.userId}
-                  </option>
-                ))}
-              </select>
+              Tester email
+              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
             </label>
           )}
           {action.kind === 'flag' ? (
