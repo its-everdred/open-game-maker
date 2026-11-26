@@ -79,7 +79,7 @@ export default new Hono<ApiBindings>()
             })),
         );
         const build = media.find((item) => item.kind === 'build');
-        const published = round.track === 'prototype-publish' && build && game.slug ? build : undefined;
+        const published = round.track === 'prototype-publish' ? build : undefined;
         return {
           id: round.id,
           ticket: round.ticket,
