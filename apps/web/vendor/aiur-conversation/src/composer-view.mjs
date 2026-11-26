@@ -6,7 +6,8 @@ export const BARS = 24;
 const ICONS = {
   attach: '<path d="M12 5v14M5 12h14"/>',
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
-  voice: '<circle cx="7" cy="10" r="3"/><path d="M2 20a5 5 0 0 1 10 0"/><circle cx="17" cy="10" r="3"/><path d="M12 20a5 5 0 0 1 10 0M10 4.5q2-2 4 0"/>',
+  voice:
+    '<circle cx="7" cy="10" r="3"/><path d="M2 20a5 5 0 0 1 10 0"/><circle cx="17" cy="10" r="3"/><path d="M12 20a5 5 0 0 1 10 0M10 4.5q2-2 4 0"/>',
   send: '<path d="M12 19V5M6 11l6-6 6 6"/>',
   cancel: '<path d="M6 6l12 12M18 6L6 18"/>',
   stop: '<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/>',

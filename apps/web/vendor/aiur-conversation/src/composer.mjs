@@ -225,7 +225,13 @@ export class AiurComposer extends HTMLElementBase {
     const { input } = this.#el;
     const start = input.selectionStart ?? input.value.length;
     const end = input.selectionEnd ?? input.value.length;
-    const dictation = { session: null, before: input.value.slice(0, start), after: input.value.slice(end), text: '', end: null };
+    const dictation = {
+      session: null,
+      before: input.value.slice(0, start),
+      after: input.value.slice(end),
+      text: '',
+      end: null,
+    };
     this.#dictation = dictation;
     this.#level(null);
     this.#render();
@@ -362,7 +368,9 @@ export class AiurComposer extends HTMLElementBase {
   }
 
   #fail(action, error) {
-    this.dispatchEvent(new CustomEvent('aiur-composer-error', { detail: { action, error }, bubbles: true, composed: true }));
+    this.dispatchEvent(
+      new CustomEvent('aiur-composer-error', { detail: { action, error }, bubbles: true, composed: true }),
+    );
   }
 
   get disabled() {
