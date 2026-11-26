@@ -13,6 +13,9 @@ import bpy
 import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from blender_unity_bake import bake_mesh, requires_mesh_bake
+
 
 # Unity's left-handed Y-up coordinates become glTF's right-handed Y-up coordinates;
 # Blender's exporter rotates its Z-up coordinates into glTF Y-up.
@@ -272,6 +275,8 @@ def main():
         obj.matrix_basis = transform(node)
     cache = {}
     materials = {}
+    baked_meshes = {}
+    baked_materials = 0
     count = 0
     exported_meshes = []
     for node in plan:
@@ -293,17 +298,27 @@ def main():
             surfaces = node["surfaces"]
             if len(surfaces) != len(mesh.materials):
                 raise ValueError(f"material slot count differs for {model['name']}")
-            for index, surface in enumerate(surfaces):
-                uv_names = [layer.name for layer in mesh.uv_layers]
-                key = json.dumps([surface, uv_names], sort_keys=True)
-                if key not in materials:
-                    materials[key] = build_material(surface, uv_names)
-                mesh.materials[index] = materials[key]
+            mixed_uv = requires_mesh_bake(surfaces)
+            bake_key = json.dumps([model, surfaces], sort_keys=True) if mixed_uv else None
+            if bake_key in baked_meshes:
+                bpy.data.meshes.remove(mesh)
+                mesh = baked_meshes[bake_key].copy()
             obj = bpy.data.objects.new(f"{reserved}mesh_{count}", mesh)
             names.append((obj, node["name"] or model["name"]))
             bpy.context.scene.collection.objects.link(obj)
             obj.parent = objects[node["transformId"]]
             obj.matrix_basis = matrix
+            if mixed_uv and bake_key not in baked_meshes:
+                bake_mesh(obj, surfaces)
+                baked_meshes[bake_key] = mesh
+                baked_materials += len(surfaces)
+            elif not mixed_uv:
+                for index, surface in enumerate(surfaces):
+                    uv_names = [layer.name for layer in mesh.uv_layers]
+                    key = json.dumps([surface, uv_names], sort_keys=True)
+                    if key not in materials:
+                        materials[key] = build_material(surface, uv_names)
+                    mesh.materials[index] = materials[key]
             exported_meshes.append(obj)
             count += 1
     if not count:
@@ -325,7 +340,7 @@ def main():
     bpy.ops.export_scene.gltf(filepath=str(output), export_format="GLB", export_yup=True, export_animations=False)
     if not output.is_file() or not output.stat().st_size:
         raise ValueError("GLB exporter wrote no output")
-    print(json.dumps({"meshes": count, "materials": len(materials), "bytes": output.stat().st_size}))
+    print(json.dumps({"meshes": count, "materials": len(materials) + baked_materials, "bytes": output.stat().st_size}))
 
 
 main()

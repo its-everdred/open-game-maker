@@ -317,7 +317,25 @@ it.skipIf(!available)(
       expect(pixels[4]).toBeLessThan(73);
       const mixed = structuredClone(plan);
       mixed[0]!.surfaces[0]!.blends![0]!.b.textures[0]!.uv = 0;
-      await expect(exportUnityAssembly(mixed, join(root, 'mixed.glb'))).rejects.toThrow('different UV transforms');
+      mixed[1]!.surfaces[0]!.blends![0]!.b.textures[0]!.uv = 0;
+      const mixedOutput = join(root, 'mixed.glb');
+      await exportUnityAssembly(mixed, mixedOutput);
+      const mixedDocument = await new NodeIO()
+        .registerExtensions([KHRTextureTransform])
+        .readBinary(await readFile(mixedOutput));
+      const bakedMaterial = mixedDocument
+        .getRoot()
+        .listMaterials()
+        .find((entry) => entry.getBaseColorTexture()?.getSize()?.[0] === 256);
+      expect(bakedMaterial?.getBaseColorTexture()).toBeTruthy();
+      expect(bakedMaterial?.getBaseColorTextureInfo()?.getTexCoord()).toBe(0);
+      const bakedPrimitives = mixedDocument
+        .getRoot()
+        .listMeshes()
+        .flatMap((mesh) => mesh.listPrimitives())
+        .filter((primitive) => primitive.getMaterial() === bakedMaterial);
+      expect(bakedPrimitives).toHaveLength(2);
+      expect(bakedPrimitives.every((primitive) => primitive.getAttribute('TEXCOORD_0'))).toBe(true);
       const missing = [structuredClone(plan[3]!)];
       missing[0]!.parentId = null;
       missing[0]!.surfaces[0]!.textures[0]!.uv = 7;
@@ -330,5 +348,5 @@ it.skipIf(!available)(
       await rm(root, { recursive: true, force: true });
     }
   },
-  420_000,
+  600_000,
 );

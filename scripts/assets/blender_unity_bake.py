@@ -1,0 +1,215 @@
+"""Bake Unity base-color expressions using each source texture's UV mapping."""
+import math
+
+import bpy
+import numpy as np
+
+
+def expression_material(surface, uv_names):
+    """Construct a Cycles emission shader for one resolved base-color expression."""
+    material = bpy.data.materials.new('Unity bake source')
+    material.use_nodes = True
+    nodes, links = material.node_tree.nodes, material.node_tree.links
+    nodes.clear()
+    images = []
+
+    def constant(value):
+        node = nodes.new('ShaderNodeValue')
+        node.outputs[0].default_value = value
+        return node.outputs[0]
+
+    def math_node(operation, *inputs):
+        node = nodes.new('ShaderNodeMath')
+        node.operation = operation
+        for index, value in enumerate(inputs):
+            links.new(value, node.inputs[index])
+        return node.outputs[0]
+
+    def weight(value):
+        if isinstance(value, (int, float)):
+            if not math.isfinite(value):
+                raise ValueError('invalid shader blend weight')
+            return constant(value)
+        if 'op' not in value:
+            channel = value.get('channel')
+            if channel not in (0, 1, 2, 3):
+                raise ValueError('invalid shader blend channel')
+            result = term(value['term'])[channel]
+            return math_node('SUBTRACT', constant(1), result) if value.get('invert') else result
+        args = [weight(arg) for arg in value['args']]
+        op = value['op']
+        if op == 'invert' and len(args) == 1:
+            return math_node('SUBTRACT', constant(1), args[0])
+        # Cycles defines division by zero differently from the existing CPU
+        # evaluator, so only accept a provably nonzero constant divisor.
+        if op == 'divide' and (
+            len(value['args']) != 2
+            or not isinstance(value['args'][1], (int, float))
+            or value['args'][1] == 0
+        ):
+            raise ValueError('unsupported shader division for mesh bake')
+        operations = {'add': 'ADD', 'subtract': 'SUBTRACT', 'multiply': 'MULTIPLY', 'divide': 'DIVIDE'}
+        if op in operations and len(args) == 2:
+            return math_node(operations[op], *args)
+        if op == 'clamp' and len(args) == 3:
+            return math_node('MINIMUM', math_node('MAXIMUM', args[0], args[1]), args[2])
+        if op == 'contrast' and len(args) == 2:
+            midpoint = constant(0.5 ** 2.2)
+            return math_node('ADD', math_node('MULTIPLY', math_node('SUBTRACT', args[0], midpoint), args[1]), midpoint)
+        raise ValueError('unsupported shader weight operation')
+
+    def term(value):
+        textures, paths, spaces = value['textures'], value['texturePaths'], value['textureSrgb']
+        if len(textures) != len(paths) or len(textures) != len(spaces):
+            raise ValueError('material texture references differ from resolved paths')
+        channels = [constant(float(component)) for component in value['color']]
+        for texture, path, srgb in zip(textures, paths, spaces):
+            channel = texture.get('uv', 0)
+            if type(channel) is not int or not 0 <= channel <= 7 or channel >= len(uv_names):
+                raise ValueError('missing or unsupported Unity UV channel')
+            image = bpy.data.images.load(path, check_existing=False)
+            image.colorspace_settings.name = 'sRGB' if srgb else 'Non-Color'
+            images.append(image)
+            uv = nodes.new('ShaderNodeUVMap')
+            uv.uv_map = uv_names[channel]
+            mapping = nodes.new('ShaderNodeMapping')
+            mapping.inputs['Scale'].default_value = (*texture['scale'], 1)
+            mapping.inputs['Location'].default_value = (*texture['offset'], 0)
+            links.new(uv.outputs['UV'], mapping.inputs['Vector'])
+            sample = nodes.new('ShaderNodeTexImage')
+            sample.image = image
+            sample.extension = 'REPEAT'
+            links.new(mapping.outputs['Vector'], sample.inputs['Vector'])
+            separate = nodes.new('ShaderNodeSeparateColor')
+            links.new(sample.outputs['Color'], separate.inputs[0])
+            rgba = [separate.outputs[i] for i in range(3)] + [sample.outputs['Alpha']]
+            channels = [math_node('MULTIPLY', left, right) for left, right in zip(channels, rgba)]
+        for blend in value.get('blends', []):
+            if isinstance(blend['weight'], (int, float)) and not 0 <= blend['weight'] <= 1:
+                raise ValueError('invalid shader blend weight')
+            a, b, amount = term(blend['a']), term(blend['b']), weight(blend['weight'])
+            one_minus = math_node('SUBTRACT', constant(1), amount)
+            channels = [
+                math_node(
+                    'MULTIPLY', channel,
+                    math_node('ADD', math_node('MULTIPLY', left, one_minus), math_node('MULTIPLY', right, amount)),
+                )
+                for channel, left, right in zip(channels, a, b)
+            ]
+        return channels
+
+    rgba = term(surface)
+    combine = nodes.new('ShaderNodeCombineColor')
+    for index in range(3):
+        links.new(rgba[index], combine.inputs[index])
+    emission = nodes.new('ShaderNodeEmission')
+    links.new(combine.outputs[0], emission.inputs['Color'])
+    output = nodes.new('ShaderNodeOutputMaterial')
+    links.new(emission.outputs[0], output.inputs['Surface'])
+    return material, images
+
+
+def requires_mesh_bake(surfaces):
+    """Return whether any one surface samples differing UV mappings."""
+    def layers(term):
+        result = list(term['textures'])
+        for blend in term.get('blends', []):
+            result.extend(layers(blend['a']))
+            result.extend(layers(blend['b']))
+            result.extend(weight_layers(blend['weight']))
+        return result
+
+    def weight_layers(value):
+        if isinstance(value, (int, float)):
+            return []
+        if 'op' in value:
+            return [texture for arg in value['args'] for texture in weight_layers(arg)]
+        return layers(value['term'])
+
+    for surface in surfaces:
+        textures = layers(surface)
+        if textures:
+            first = textures[0]
+            if any(
+                texture.get('uv', 0) != first.get('uv', 0)
+                or texture['scale'] != first['scale']
+                or texture['offset'] != first['offset']
+                for texture in textures[1:]
+            ):
+                return True
+    return False
+
+
+def bake_mesh(obj, surfaces):
+    """Bake all slots to a new non-overlapping UV layer, unique to this mesh."""
+    mesh = obj.data
+    uv_names = [layer.name for layer in mesh.uv_layers]
+    if not uv_names:
+        raise ValueError('missing or unsupported Unity UV channel')
+    if len(uv_names) >= 8:
+        raise ValueError('mesh bake requires a spare UV layer')
+    # Capture source layer names before adding a new layer or entering edit mode:
+    # Blender can invalidate RNA layer handles during either operation.
+    sources = [expression_material(surface, uv_names) for surface in surfaces]
+    for _, images in sources:
+        for image in images:
+            if image.size[0] * image.size[1] > 16777216:
+                raise ValueError('shader layer texture is too large to bake')
+    bake_layer = mesh.uv_layers.new(name='OGM baked UV')
+    if bake_layer is None:
+        raise ValueError('cannot add a Unity mesh bake UV layer')
+    bake_name = bake_layer.name
+    mesh.uv_layers.active = bake_layer
+    mesh.uv_layers[bake_name].active_render = True
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.smart_project(island_margin=0.01)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    outputs = []
+    for index, (source, images) in enumerate(sources):
+        width = max([256] + [image.size[0] for image in images])
+        height = max([256] + [image.size[1] for image in images])
+        if width * height > 16777216:
+            raise ValueError('shader layer texture is too large to bake')
+        image = bpy.data.images.new('Unity baked base color', width=width, height=height, alpha=True)
+        image.colorspace_settings.name = 'Non-Color'
+        target = source.node_tree.nodes.new('ShaderNodeTexImage')
+        target.image = image
+        source.node_tree.nodes.active = target
+        mesh.materials[index] = source
+        outputs.append(image)
+    bpy.context.scene.render.engine = 'CYCLES'
+    bpy.context.scene.cycles.samples = 1
+    bpy.ops.object.bake(type='EMIT', margin=4, uv_layer=bake_name)
+    for index, image in enumerate(outputs):
+        pixels = np.empty(image.size[0] * image.size[1] * 4, dtype=np.float32)
+        image.pixels.foreach_get(pixels)
+        pixels = pixels.reshape((-1, 4))
+        if not np.all(np.isfinite(pixels)):
+            raise ValueError('non-finite shader blend result')
+        rgb = np.clip(pixels[:, :3], 0, 1)
+        pixels[:, :3] = np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * rgb ** (1 / 2.4) - 0.055)
+        image.colorspace_settings.name = 'sRGB'
+        image.pixels.foreach_set(pixels.reshape(-1))
+        image.update()
+        image.pack()
+        material = bpy.data.materials.new('Unity baked material')
+        material.use_nodes = True
+        nodes, links = material.node_tree.nodes, material.node_tree.links
+        uv = nodes.new('ShaderNodeUVMap')
+        uv.uv_map = bake_name
+        texture = nodes.new('ShaderNodeTexImage')
+        texture.image = image
+        links.new(uv.outputs['UV'], texture.inputs['Vector'])
+        links.new(texture.outputs['Color'], nodes.get('Principled BSDF').inputs['Base Color'])
+        mesh.materials[index] = material
+    for source, images in sources:
+        bpy.data.materials.remove(source)
+        for image in images:
+            bpy.data.images.remove(image)
+    for name in uv_names:
+        mesh.uv_layers.remove(mesh.uv_layers[name])
+    mesh.uv_layers[bake_name].active_render = True
