@@ -593,6 +593,16 @@ gm packs scenes [--setting <setting>] [--json]
 
 Pack search matches all supplied filters against non-quarantined collection cards with effective `in-game` rights. Cameras are `isometric`, `top-down`, `third-person`, `first-person` and `side`; settings use the controlled pack settings in the asset-card schema. Scene search lists matching pre-assembled sources and their preview paths; `null` means no scene preview has been made. Unknown metadata does not match a filter. Intake preserves Unity scenes, prefabs and metadata sidecars and proposes settings from their names; these tags should be reviewed against the content. Supply `--style <family>` and `--cameras <comma-separated cameras>` to `gm packs import` when the pack's style or views are known and are not in the registry. Mixed-license imports discard scene and prefab sources until those sources can carry individual rights.
 
+## Assemble a Unity building
+
+```text
+gm packs assemble <pack-id> <source-relative-path> --id <slug> --title <title> [--object <name>] [--binary2text <path>] [--json]
+```
+
+The source is a prefab or scene within the pack version's extracted tree. For a scene, `--object` must name a unique building object or its scoped transform ID; the command preserves its ancestor transforms and includes only that object and its descendants. The command writes a GLB under `extracted/assembled/` and a measured `model/building` card inheriting the collection's rights. It requires a confirmed tier-1 collection with in-game rights and refuses packs with per-asset rights overrides. It never replaces an existing output. Binary Unity sources also require `--binary2text` pointing to the standalone tool bundled with Unity Editor. Unity metadata sidecars for referenced prefabs, FBX models, materials, shader graphs and textures must be present; import an older pack under a new version if those sidecars were discarded. Blender with its FBX and glTF add-ons and NumPy is required; provision the managed Python environment with `gm py setup` and expose its site-packages to Blender via `PYTHONPATH` when Blender lacks NumPy.
+
+The exported model is centered at its base. Materials currently preserve base color only; cards are marked `needs-review` for surface shading. The converter supports transform hierarchies, prefab instances, material slots, standard base-color maps, and shader graphs that multiply texture samples and color or scalar properties. It uses the highest-detail LOD. It reports stale overrides targeting missing objects in a non-nested prefab and, when modern FBX metadata has no file-ID name table, reports inferred mesh names and marks the card for review and refuses other missing references, unsupported overrides or shader nodes, transparent or alpha-clipped materials, ambiguous mesh names, unsupported texture sampling, and texture layers with different UV transforms; a refusal means no card or GLB was published. Inspect assembled models before use.
+
 ## Tag local asset packs
 
 ```text

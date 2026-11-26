@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 /** Index Unity sidecars in a source tree. Refuse ambiguity and links rather than guessing. */
@@ -10,6 +10,7 @@ export async function indexUnityGuids(root: string): Promise<Map<string, string>
       if (entry.isSymbolicLink()) throw new Error(`Unity source contains a symbolic link: ${path}`);
       if (entry.isDirectory()) await visit(path);
       else if (entry.isFile() && entry.name.toLowerCase().endsWith('.meta')) {
+        if ((await stat(path)).size > 1024 * 1024) throw new Error(`Unity GUID sidecar is too large: ${path}`);
         const data = await readFile(path, 'utf8');
         const matches = [...data.matchAll(/^guid:\s*([a-f0-9]{32})\s*$/gim)];
         if (matches.length !== 1) throw new Error(`invalid Unity GUID sidecar: ${path}`);

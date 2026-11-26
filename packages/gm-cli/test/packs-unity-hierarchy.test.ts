@@ -92,3 +92,16 @@ LODGroup:
   expect(nodes.find((node) => node.name === 'Roof')?.rendererActive).toBe(true);
   expect(nodes.find((node) => node.name === 'Roof LOD1')?.rendererActive).toBe(false);
 });
+
+it('does not render mesh filters without an enabled renderer', () => {
+  const withoutRenderer = fixture.replace('  - component: {fileID: 6}\n', '');
+  const roof = resolveUnityHierarchy(parseUnityYaml(withoutRenderer)).find((node) => node.name === 'Roof');
+  expect(roof?.mesh).toBeDefined();
+  expect(roof?.rendererActive).toBe(false);
+});
+
+it('refuses missing components instead of silently omitting geometry', () => {
+  expect(() =>
+    resolveUnityHierarchy(parseUnityYaml(fixture.replace('component: {fileID: 5}', 'component: {fileID: 99}'))),
+  ).toThrow('missing Unity component 99');
+});

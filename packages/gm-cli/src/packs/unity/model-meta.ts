@@ -1,7 +1,11 @@
 import { parseDocument } from 'yaml';
 
 /** Resolve a Unity mesh subasset ID to its model-importer name. */
-export function meshNameFromMeta(source: string, fileId: string): string {
+export function meshNameFromMeta(
+  source: string,
+  fileId: string,
+  fallback?: { name: string; onInferred: () => void },
+): string {
   const document = parseDocument(source, { intAsBigInt: true });
   if (document.errors.length) throw new Error(`invalid Unity model metadata: ${document.errors[0]!.message}`);
   const data = document.toJS({ mapAsMap: true, maxAliasCount: 0 }) as Map<unknown, unknown>;
@@ -27,6 +31,12 @@ export function meshNameFromMeta(source: string, fileId: string): string {
       )
         return second;
     }
+  }
+  const meshes = importer.get('meshes');
+  const noMappings = (!(names instanceof Map) || names.size === 0) && (!Array.isArray(table) || table.length === 0);
+  if (fallback?.name && noMappings && meshes instanceof Map && String(meshes.get('fileIdsGeneration')) === '2') {
+    fallback.onInferred();
+    return fallback.name;
   }
   throw new Error(`missing Unity mesh name for fileID ${fileId}`);
 }

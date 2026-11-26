@@ -58,8 +58,16 @@ export function resolveUnityHierarchy(
     const gameObject = records.get(reference(data.m_GameObject).fileId);
     if (!gameObject || gameObject.type !== 'GameObject') throw new Error(`missing GameObject for ${transform.id}`);
     const parent = reference(data.m_Father).fileId;
-    const components = Array.isArray(gameObject.data.m_Component) ? gameObject.data.m_Component : [];
-    const linked = components.map((entry) => records.get(reference(object(entry).component).fileId)).filter(Boolean);
+    if (!Array.isArray(gameObject.data.m_Component))
+      throw new Error(`missing Unity component list for ${gameObject.id}`);
+    const linked = gameObject.data.m_Component.flatMap((entry) => {
+      const id = reference(object(entry).component).fileId;
+      if (id === '0') return [];
+      const component = records.get(id);
+      if (!component) throw new Error(`missing Unity component ${id}`);
+      return [component];
+    });
+    if (linked.some((entry) => entry.type === 'SkinnedMeshRenderer')) throw new Error('unsupported Unity skinned mesh');
     const filter = linked.find((entry) => entry?.type === 'MeshFilter');
     const renderer = linked.find((entry) => entry?.type === 'MeshRenderer');
     const mesh = filter ? reference(filter.data.m_Mesh) : undefined;
@@ -76,7 +84,7 @@ export function resolveUnityHierarchy(
       materials,
       active: gameObject.data.m_IsActive !== '0',
       rendererActive:
-        !renderer || (renderer.data.m_Enabled !== '0' && (!lowerLods.has(renderer.id) || primaryLods.has(renderer.id))),
+        !!renderer && renderer.data.m_Enabled !== '0' && (!lowerLods.has(renderer.id) || primaryLods.has(renderer.id)),
     });
   }
   for (const node of nodes.values()) {
