@@ -49,6 +49,7 @@ describe('SideBySide', () => {
     );
 
     expect(frame.mountGameFrame).toHaveBeenCalledTimes(2);
+    expect(frame.options).toEqual(expect.arrayContaining([expect.objectContaining({ authenticated: true })]));
     act(() => frame.options[0]?.onState?.({ bridgeState: 'ready', dropped: 0 }));
     act(() => frame.options[1]?.onState?.({ bridgeState: 'error', dropped: 0 }));
 

@@ -103,6 +103,7 @@ describe('playable review cards', () => {
     expect(mounts[0]!.options).toMatchObject({
       gameId: 'g_1',
       buildId: 'b_live',
+      authenticated: true,
       mode: 'play',
       params: { scenario: 'sandbox', speed: 'slow' },
     });

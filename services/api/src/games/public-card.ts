@@ -83,7 +83,7 @@ export async function readPublicCardImage(
   let path: string | null = null;
   try {
     if (parts.length === 3 && parts[1] === 'a' && parts[2]) path = blobPath(deps.config.gamesRoot, parts[2]);
-    if (parts.length >= 6 && parts[1] === 'g' && parts[2] === gameId && parts[3]) {
+    if (parts.length >= 5 && parts[1] === 'g' && parts[2] === gameId && parts[3]) {
       path = await resolveFile(buildDir(deps.config.gamesRoot, gameId, parts[3]), parts.slice(4).join('/'));
     }
     if (!path) throw new Error('invalid path');

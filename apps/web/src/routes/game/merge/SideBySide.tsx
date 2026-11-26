@@ -51,6 +51,7 @@ export function FramePreview({
       gamesOrigin: import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000',
       gameId,
       buildId: snapshot.buildId,
+      authenticated: true,
       mode: 'play',
       build: 'test',
       design: snapshot,

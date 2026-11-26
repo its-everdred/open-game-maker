@@ -16,9 +16,13 @@ it('marks a restricted coming soon game for its viewer', () => {
     releaseState: 'coming_soon' as const,
     canPlay: false,
   };
-  render(<Tile game={game} selected={false} tabIndex={0} onClick={vi.fn()} onFocus={vi.fn()} />);
+  const { rerender } = render(<Tile game={game} selected={false} tabIndex={0} onClick={vi.fn()} onFocus={vi.fn()} />);
   expect(screen.getByText('Coming Soon')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Soon: Coming Soon' })).toBeInTheDocument();
+  rerender(
+    <Tile game={{ ...game, canPlay: true }} selected={false} tabIndex={0} onClick={vi.fn()} onFocus={vi.fn()} />,
+  );
+  expect(screen.getByText('Coming Soon')).toBeVisible();
 });
 
 describe('showcase tile', () => {

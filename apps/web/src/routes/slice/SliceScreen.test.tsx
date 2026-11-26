@@ -60,6 +60,7 @@ describe('SliceScreen', () => {
     expect(mounts[0]).toMatchObject({
       gameId: 'g_blobs',
       buildId: 'build_reviewed',
+      authenticated: true,
       mode: 'play',
       params: { scenario: 'endless/wave-3', seed: '7' },
     });

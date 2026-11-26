@@ -113,6 +113,16 @@ describe('games routes', () => {
     expect(card.status).toBe(200);
     expect(card.headers.get('content-security-policy')).toContain('sandbox');
     expect(await card.text()).toBe('card image');
+    const ownerList = (await (await app.request('/api/v1/games', { headers: asUser(creator.userId) })).json()) as {
+      games: Array<{ coverUrl: string }>;
+    };
+    expect((await app.request(ownerList.games[0]!.coverUrl)).status).toBe(200);
+    const detail = (await (
+      await app.request(`/api/v1/games/${game.id}`, { headers: asUser(creator.userId) })
+    ).json()) as {
+      coverUrl: string;
+    };
+    expect((await app.request(detail.coverUrl)).status).toBe(200);
     const secret = `https://games.example.test/g/${game.id}/build1/media/secret.png`;
     const token = Buffer.from(secret).toString('base64url');
     expect((await app.request(`/api/v1/games/${game.id}/card-image/${token}`)).status).toBe(404);

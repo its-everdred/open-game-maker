@@ -91,6 +91,7 @@ function PlayableSlice({ gameId, option, onEnded }: { gameId: string; option: Op
       gamesOrigin: import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000',
       gameId,
       buildId: snapshot.buildId,
+      authenticated: true,
       mode: 'play',
       design: snapshot,
       params: playableParams({ scenario, seconds, ...(leadIn === undefined ? {} : { lead_in: leadIn }) }),

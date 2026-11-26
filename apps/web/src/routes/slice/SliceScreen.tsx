@@ -34,6 +34,7 @@ export function SliceScreen() {
       gamesOrigin: import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000',
       gameId,
       buildId: snapshot.buildId,
+      authenticated: true,
       mode: 'play',
       design: snapshot,
       params: { ...(scenario ? { scenario } : {}), ...(seed ? { seed } : {}) },

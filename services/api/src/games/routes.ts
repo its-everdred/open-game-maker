@@ -315,7 +315,7 @@ const routes = new Hono<ApiBindings>()
             ownerId: game.ownerId,
           }).ok,
           canPlay,
-          ...(canPlay ? media.get(game.id) : publicCardMedia(game.id, media.get(game.id))),
+          ...(game.releaseState === 'coming_soon' ? publicCardMedia(game.id, media.get(game.id)) : media.get(game.id)),
           stats: stats.get(game.id),
           lastPlayedAt: playedAt.get(game.id) ?? null,
           live: live.has(game.id),
@@ -337,7 +337,11 @@ const routes = new Hono<ApiBindings>()
     );
     const media = await gameMedia(c.get('deps'), [game.id]);
     const stats = gameStats(c.get('deps').db, [game]);
-    return c.json({ ...gameResponse(game), ...media.get(game.id), stats: stats.get(game.id) });
+    return c.json({
+      ...gameResponse(game),
+      ...(game.releaseState === 'coming_soon' ? publicCardMedia(game.id, media.get(game.id)) : media.get(game.id)),
+      stats: stats.get(game.id),
+    });
   })
   // Every shareable `/play/<ref>` link lands here: the current slug, a slug the game has outgrown, or its id.
   .get('/games/resolve/:ref', (c) => {

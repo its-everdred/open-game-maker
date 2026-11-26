@@ -28,7 +28,7 @@ type TileProps = {
 
 export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCover, eager }: TileProps) {
   const unavailable = game.creationStatus === 'creating' || game.creationStatus === 'failed';
-  const comingSoon = game.releaseState === 'coming_soon' && game.canPlay === false;
+  const comingSoon = game.releaseState === 'coming_soon';
   const statusLabel = game.creationStatus === 'creating' ? 'Creating' : 'Setup failed';
   const accessibleName = comingSoon
     ? `${game.title}: Coming Soon`
