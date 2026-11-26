@@ -58,6 +58,8 @@ test.describe('games origin browser boundary', () => {
 
     const app = createApp({
       root,
+      accessCheck: async () => true,
+      blobOwners: async () => ['demo'],
       appOrigin: allowedParent.origin,
       version: 'browser-test',
       workerScript: fileURLToPath(new URL('./fixtures/game-cache.js', import.meta.url)),

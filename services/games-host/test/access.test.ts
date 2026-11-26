@@ -11,6 +11,17 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
+it('fails closed when no authorization service is configured', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ogm-access-'));
+  dirs.push(root);
+  const build = join(root, 'game', 'b1');
+  await mkdir(build, { recursive: true });
+  await writeFile(join(build, 'index.html'), 'game');
+  await markComplete(build);
+  const app = createApp({ root, appOrigin: 'https://app.test', version: 'test', workerScript: join(root, 'sw') });
+  expect((await app.request('/g/game/b1/index.html')).status).toBe(403);
+});
+
 it('refuses unsigned builds and shared build assets, then checks the cookie on each request', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ogm-access-'));
   dirs.push(root);

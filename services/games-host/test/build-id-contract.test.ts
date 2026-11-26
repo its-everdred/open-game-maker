@@ -31,6 +31,8 @@ describe('build id contract between the API and the games host', () => {
   function app() {
     return createApp({
       root,
+      accessCheck: async () => true,
+      blobOwners: async () => ['demo'],
       appOrigin: 'https://makeopen.games',
       version: '0123456789abcdef0123456789abcdef01234567',
       uptimeSec: () => 0,

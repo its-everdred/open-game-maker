@@ -9,13 +9,15 @@ import { cachePlanSchema } from '@ogm/contracts';
 
 import { gameHeaders, healthHeaders } from './headers.js';
 import { FRAME_OBSERVER, FRAME_OBSERVER_FILE, observeFrameHtml } from './frame-observer.js';
-import { BadBlobName, BadId, blobPath, buildDir, isComplete, resolveFile } from './layout.js';
+import { BadBlobName, BadId, blobPath, buildDir, isComplete, isServableId, resolveFile } from './layout.js';
 import { isCompressiblePath, mimeForPath } from './mime.js';
 import { bootstrapPreviewHtml, PREVIEW_BOOTSTRAP, PREVIEW_BOOTSTRAP_FILE } from './preview-bootstrap.js';
 import { accessCookie, blobOwners, mayReadGame } from './access.js';
 
 export interface GamesHostOptions {
   accessApi?: string;
+  accessCheck?: (gameId: string, token: string | undefined) => Promise<boolean>;
+  blobOwners?: (root: string, file: string) => Promise<string[] | null>;
   appOrigin: string;
   root: string;
   uptimeSec?: () => number;
@@ -56,16 +58,28 @@ export function createApp(options: GamesHostOptions): Hono {
   app.use('/a/*', secureResponse);
   app.use('/game-cache.js', secureResponse);
 
-  if (options.accessApi) {
-    const api = options.accessApi;
+  {
+    const check =
+      options.accessCheck ??
+      ((gameId: string, token: string | undefined) =>
+        options.accessApi ? mayReadGame(options.accessApi, gameId, token) : Promise.resolve(false));
+    const ownersFor = options.blobOwners ?? blobOwners;
     app.use('/g/*', async (context, next) => {
       const url = new URL(context.req.url);
       const gameId = url.pathname.split('/')[2] ?? '';
+      const buildId = url.pathname.split('/')[3] ?? '';
+      if (
+        !isServableId(gameId) ||
+        !isServableId(buildId) ||
+        buildId.startsWith('pv-') ||
+        buildId.startsWith('preview-')
+      )
+        return context.text('Not Found', 404);
       const supplied = url.searchParams.get('access');
       if (supplied && !/^gba1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u.test(supplied)) return context.text('Forbidden', 403);
       if (!/^[A-Za-z0-9_-]{1,80}$/u.test(gameId)) return context.text('Forbidden', 403);
       const token = supplied ?? accessCookie(context.req.header('cookie'), gameId);
-      if (!(await mayReadGame(api, gameId, token))) return context.text('Forbidden', 403);
+      if (!(await check(gameId, token))) return context.text('Forbidden', 403);
       if (supplied) {
         url.searchParams.delete('access');
         const secure = options.appOrigin.split(/\s+/u).some((origin) => origin.startsWith('https:'));
@@ -80,20 +94,18 @@ export function createApp(options: GamesHostOptions): Hono {
     });
     app.use('/a/*', async (context, next) => {
       const file = new URL(context.req.url).pathname.split('/')[2] ?? '';
-      if (!/^[0-9a-f]{64}\.[a-z0-9]{1,12}$/u.test(file)) return context.text('Forbidden', 403);
+      if (!/^[0-9a-f]{64}\.[a-z0-9]{1,12}$/u.test(file)) return context.text('Not Found', 404);
       try {
         if (!(await stat(blobPath(options.root, file))).isFile()) return context.text('Not Found', 404);
       } catch {
         return context.text('Not Found', 404);
       }
-      const owners = await blobOwners(options.root, file);
+      const owners = await ownersFor(options.root, file);
       if (owners === null || owners.length === 0) return context.text('Forbidden', 403);
       if (
-        !(
-          await Promise.all(
-            owners.map((game) => mayReadGame(api, game, accessCookie(context.req.header('cookie'), game))),
-          )
-        ).some(Boolean)
+        !(await Promise.all(owners.map((game) => check(game, accessCookie(context.req.header('cookie'), game))))).some(
+          Boolean,
+        )
       )
         return context.text('Forbidden', 403);
       await next();

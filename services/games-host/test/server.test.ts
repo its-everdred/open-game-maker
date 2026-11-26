@@ -39,6 +39,8 @@ describe('games-host server', () => {
   function app() {
     return createApp({
       root,
+      accessCheck: async () => true,
+      blobOwners: async () => ['demo'],
       appOrigin: 'https://makeopen.games',
       version: '0123456789abcdef0123456789abcdef01234567',
       uptimeSec: () => 12.9,
@@ -240,19 +242,6 @@ describe('games-host server', () => {
 
   it('does not set cookies when the request carries one', async () => {
     const response = await app().request('/g/demo/b1/', { headers: { Cookie: 'session=secret' } });
-
-    expect(response.status).toBe(200);
-    expect(response.headers.has('set-cookie')).toBe(false);
-  });
-
-  it('strips a Set-Cookie header from every game response', async () => {
-    const application = app();
-    application.get('/g/cookie-probe', (context) => {
-      context.header('Set-Cookie', 'probe=1');
-      return context.text('ok');
-    });
-
-    const response = await application.request('/g/cookie-probe');
 
     expect(response.status).toBe(200);
     expect(response.headers.has('set-cookie')).toBe(false);

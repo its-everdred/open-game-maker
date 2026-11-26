@@ -107,6 +107,7 @@ describe('games routes', () => {
     };
     const card = await app.request(body.games[0]!.coverUrl);
     expect(card.status).toBe(200);
+    expect(card.headers.get('content-security-policy')).toContain('sandbox');
     expect(await card.text()).toBe('card image');
     const secret = `https://games.example.test/g/${game.id}/build1/media/secret.png`;
     const token = Buffer.from(secret).toString('base64url');
