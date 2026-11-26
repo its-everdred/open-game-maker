@@ -155,6 +155,10 @@ seat, `peer` for any other) and is not an authority signal. The per-seat surface
 `started`, `onSeats`, `onStart`, `now()`, `frameFor(seat, tick)`, `rng('shared' | seat)` and `digest()`, plus the
 `net.*` counters in `renderInfo().net`.
 
+For a connected per-seat room, call `gm.net.setReady(true)` when the local player is ready (or `false` to withdraw
+readiness), then have the primary call `gm.net.requestStart()`. The room checks membership, readiness and primary-seat
+authority before it broadcasts `onStart`; these calls do not create or join a room.
+
 A per-seat manifest must implement `MultiplayerHooksV2`: `capture({ seat })` returns that seat's owned slice and
 `capture({})` the shared one, `restore(snapshot)` applies exactly the slice it is given, and `digest()` returns
 integers in canonical order — seats ascending, entity ids sorted by code unit, positions quantised with `toUnits`

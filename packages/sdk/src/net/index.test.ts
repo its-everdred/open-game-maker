@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { encodeBase64, packJson } from './codec.js';
 import { createNetController } from './index.js';
+import { createFixtureGame } from './test/fixture-game.js';
 
 const manifest = { inputs: { actions: {} } } as GameManifest;
 const hooks: MultiplayerHooks = {
@@ -18,6 +19,33 @@ const event = (seq: number, value: unknown) => ({
 });
 
 describe('GmNet controller', () => {
+  it('forwards per-seat readiness and start requests until disposed', () => {
+    const send = vi.fn();
+    const controller = createNetController({
+      manifest: { ...manifest, net: { authority: 'per-seat', maxSeats: 4 } } as GameManifest,
+      hooks: createFixtureGame([0]),
+      localPlayerIndex: 0,
+      send,
+      acceptInput: vi.fn(),
+      syncPlayers: vi.fn(),
+      setLocalPlayerIndex: vi.fn(),
+      recordEvent: vi.fn(),
+      now: () => 0,
+    });
+    controller.net.setReady(true);
+    controller.net.setReady(false);
+    controller.net.requestStart();
+    expect(send.mock.calls).toEqual([
+      ['net.ready', { ready: true }],
+      ['net.ready', { ready: false }],
+      ['net.start.request', {}],
+    ]);
+    controller.dispose();
+    controller.net.requestStart();
+    controller.net.setReady(true);
+    expect(send).toHaveBeenCalledTimes(3);
+  });
+
   it('delivers reliable events in sequence order without reporting a gap that closes in time', () => {
     const controller = createNetController({
       manifest,

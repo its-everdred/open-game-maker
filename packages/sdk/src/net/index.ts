@@ -48,6 +48,10 @@ export interface GmNet {
   readonly started: boolean;
   onSeats(callback: (seats: readonly NetSeat[]) => void): () => void;
   onStart(callback: (start: NetStart) => void): () => void;
+  /** Set this seat's room readiness; the room validates membership. */
+  setReady(ready: boolean): void;
+  /** Ask the room to start; the room validates the primary seat and readiness. */
+  requestStart(): void;
   now(): NetTime;
   /** The tick-stamped frame this client holds for `seat`, if any. */
   frameFor(seat: number, tick: number): ActionFrame | undefined;
@@ -261,6 +265,12 @@ export function createNetController(options: NetControllerOptions): NetControlle
     },
     onSeats: (callback) => subscribe(seatListeners, callback),
     onStart: (callback) => subscribe(startListeners, callback),
+    setReady: (ready) => {
+      if (!disposed && perSeat) options.send('net.ready', { ready });
+    },
+    requestStart: () => {
+      if (!disposed && perSeat) options.send('net.start.request', {});
+    },
     now: () => ({
       serverMs: options.now() + (perSeat?.offsetMs ?? 0),
       tick: perSeat?.tick ?? 0,
