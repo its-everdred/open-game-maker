@@ -20,6 +20,8 @@ it('finds an SDK game nested in a workspace without a source manifest', () => {
     expect(findPlayAreaGame(join(game, 'src'), root)).toBe(game);
     writeFileSync(join(game, 'package.json'), JSON.stringify({ peerDependencies: { '@gm/sdk': '*' } }));
     expect(findPlayAreaGame(join(game, 'src'), root)).toBe(game);
+    rmSync(join(game, 'index.html'));
+    expect(findPlayAreaGame(join(game, 'src'), root)).toBeUndefined();
     expect(findPlayAreaGame(root, root)).toBeUndefined();
   } finally {
     rmSync(root, { recursive: true, force: true });

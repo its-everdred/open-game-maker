@@ -10,7 +10,14 @@ import {
   readPreferences,
   validatePreferences,
 } from '../../preferences.js';
-import { bundledPreferences, bundledSkill, preferencePrompt, preferenceSkill, preferencesDirectory } from './list.js';
+import {
+  bundledPreferences,
+  bundledSkill,
+  fallbackSkill,
+  preferencePrompt,
+  preferenceSkill,
+  preferencesDirectory,
+} from './list.js';
 
 export const command: GmCommand = {
   name: 'prefs check',
@@ -35,6 +42,10 @@ export const command: GmCommand = {
       );
     if (result.errors.length === 0 && existsSync(preferencePrompt))
       result.errors.push(...checkPromptPreferenceSection(entries, preferencePrompt));
+    if (result.errors.length === 0 && existsSync(fallbackSkill))
+      result.errors.push(
+        ...checkPreferenceSection(entries, fallbackSkill).map(() => 'fallback gm-core preference section is stale'),
+      );
     if (result.errors.some((error) => error.includes('/skills/gm-core/SKILL.md: preference section is stale')))
       ctx.err('run gm prefs refresh to refresh installed preferences');
     if (result.errors.length) {

@@ -10,6 +10,7 @@ import {
 import {
   bundledPreferences,
   bundledSkill,
+  fallbackSkill,
   preferencePrompt,
   preferencePromptFixture,
   preferenceSkill,
@@ -23,6 +24,7 @@ type SyncPaths = {
   prompt: string;
   fixture: string;
   bundledSkill: string;
+  fallbackSkill?: string;
 };
 
 export function syncPreferenceCopies(paths: SyncPaths): void {
@@ -32,6 +34,11 @@ export function syncPreferenceCopies(paths: SyncPaths): void {
     path,
     contents: updatePreferenceSection(readFileSync(path, 'utf8'), entries),
   }));
+  if (paths.fallbackSkill)
+    updated.push({
+      path: paths.fallbackSkill,
+      contents: updatePreferenceSection(readFileSync(paths.fallbackSkill, 'utf8'), entries),
+    });
   updated.push({
     path: paths.prompt,
     contents: updatePromptPreferenceSection(readFileSync(paths.prompt, 'utf8'), entries),
@@ -57,6 +64,7 @@ export const command: GmCommand = {
       prompt: preferencePrompt,
       fixture: preferencePromptFixture,
       bundledSkill,
+      fallbackSkill,
     });
     ctx.out('updated gm-core, daemon prompt and packaged preferences');
     return EXIT.ok;

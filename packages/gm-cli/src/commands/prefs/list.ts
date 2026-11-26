@@ -11,6 +11,9 @@ export const preferencePromptFixture = fileURLToPath(
 export const preferencePrompt = fileURLToPath(
   new URL('../../../../game-repo-template/templates/prompt.md.liquid', import.meta.url),
 );
+export const fallbackSkill = fileURLToPath(
+  new URL('../../../../game-repo-template/templates/skills/gm-core/SKILL.md', import.meta.url),
+);
 const corePreferences = fileURLToPath(new URL('../../../../../preferences/', import.meta.url));
 const coreSkill = fileURLToPath(new URL('../../../../../skills/gm-core/SKILL.md', import.meta.url));
 export const preferencesDirectory = existsSync(corePreferences) ? corePreferences : bundledPreferences;

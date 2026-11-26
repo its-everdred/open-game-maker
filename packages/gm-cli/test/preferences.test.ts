@@ -9,7 +9,13 @@ import {
   validatePreferences,
   type Preference,
 } from '../src/preferences.js';
-import { bundledPreferences, bundledSkill, preferenceSkill, preferencesDirectory } from '../src/commands/prefs/list.js';
+import {
+  bundledPreferences,
+  bundledSkill,
+  fallbackSkill,
+  preferenceSkill,
+  preferencesDirectory,
+} from '../src/commands/prefs/list.js';
 
 const entry = (id: string, date: string, value: string): Preference => ({
   id,
@@ -119,6 +125,7 @@ it('keeps worker-injected preferences current', () => {
   const entries = readPreferences(preferencesDirectory);
   expect(checkPreferenceSection(entries, preferenceSkill)).toEqual([]);
   expect(checkPreferenceSection(entries.slice(1), preferenceSkill)).toContain('gm-core preference section is stale');
+  expect(checkPreferenceSection(entries, fallbackSkill)).toEqual([]);
 });
 
 it('refreshes only the marked worker section', () => {
@@ -235,12 +242,14 @@ it('synchronizes changed and removed entries into generated files', async () => 
   const prompt = join(root, 'prompt.md');
   const fixture = join(root, 'fixture.md');
   const bundledSkill = join(root, 'bundled.md');
-  for (const path of [skill, prompt, fixture])
+  const fallbackSkill = join(root, 'fallback.md');
+  for (const path of [skill, prompt, fixture, fallbackSkill])
     writeFileSync(path, '<!-- preferences:start -->old<!-- preferences:end -->');
-  syncPreferenceCopies({ source, bundle, skill, prompt, fixture, bundledSkill });
+  syncPreferenceCopies({ source, bundle, skill, prompt, fixture, bundledSkill, fallbackSkill });
   expect(existsSync(join(bundle, 'old.json'))).toBe(false);
   expect(JSON.parse(readFileSync(join(bundle, 'one.json'), 'utf8')).id).toBe('one');
-  for (const path of [skill, prompt, fixture, bundledSkill]) expect(readFileSync(path, 'utf8')).toContain('[one]');
+  for (const path of [skill, prompt, fixture, bundledSkill, fallbackSkill])
+    expect(readFileSync(path, 'utf8')).toContain('[one]');
 });
 
 it('checks game and role scopes together, and rejects broken conflict references', () => {
