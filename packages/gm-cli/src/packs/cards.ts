@@ -23,6 +23,7 @@ type CreateCardsOptions = {
   version: string;
   tier: 1 | 2;
   vendor: Vendor;
+  displayVendor?: string;
   origin: 'vendor-pack' | 'drive-drop' | 'mirror';
   extracted: string;
   items: Item[];
@@ -160,7 +161,7 @@ export async function createCards(options: CreateCardsOptions): Promise<CardSet>
       license: 'NOASSERTION',
       rights: defaultRights(options.date),
       collection_info: {
-        vendor: options.vendor,
+        vendor: options.displayVendor ?? options.vendor,
         version: options.version,
         origin: options.origin,
         counts,

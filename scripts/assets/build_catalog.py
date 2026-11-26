@@ -39,7 +39,7 @@ def build(root: Path) -> dict:
             "icon": f"packs/{m['id']}/icon.png" if (pj.parent / "icon.png").exists() else None,
             "files": v["extracted_files"],
             "file_types": ft,
-            "requires": m["requires"],
+            "requires": m.get("requires", []),
             **card_info(pj.parent, root),
         })
 

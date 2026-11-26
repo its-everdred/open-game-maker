@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 import AdmZip from 'adm-zip';
 import sharp from 'sharp';
@@ -67,6 +68,76 @@ describe('gm packs import', () => {
       env,
     });
     expect(search.out).toEqual([]);
+  });
+
+  it('builds the catalog for imported and legacy manifests', async () => {
+    const assets = fresh('gm-pack-catalog-');
+    const input = await unknownFixture();
+    const result = await gm(
+      [
+        'packs',
+        'import',
+        input,
+        '--id',
+        'catalog-test',
+        '--version',
+        '1',
+        '--vendor',
+        'Example',
+        '--title',
+        'Example Pack',
+        '--source-url',
+        'https://example.com/pack',
+      ],
+      { env: { OGM_ASSETS_ROOT: assets } },
+    );
+    expect(result.code, result.err.join('\n')).toBe(0);
+    const path = join(assets, 'packs', 'catalog-test', 'pack.json');
+    const manifest = JSON.parse(await readFile(path, 'utf8'));
+    expect(manifest).toMatchObject({
+      vendor: 'Example',
+      title: 'Example Pack',
+      requires: [],
+      source: { label: 'Example', url: 'https://example.com/pack' },
+    });
+    expect(
+      JSON.parse(await readFile(join(assets, 'packs', 'catalog-test', 'collection.card.json'), 'utf8')),
+    ).toMatchObject({ title: 'Example Pack', collection_info: { vendor: 'Example' } });
+    const builder = resolve(import.meta.dirname, '../../../scripts/assets/build_catalog.py');
+    execFileSync('python3', ['-I', builder, '--root', assets]);
+    expect(JSON.parse(await readFile(join(assets, 'catalog.json'), 'utf8')).packs[0].requires).toEqual([]);
+    delete manifest.requires;
+    await writeFile(path, JSON.stringify(manifest));
+    execFileSync('python3', ['-I', builder, '--root', assets]);
+    expect(JSON.parse(await readFile(join(assets, 'catalog.json'), 'utf8')).packs[0].requires).toEqual([]);
+    const again = await gm(
+      [
+        'packs',
+        'import',
+        input,
+        '--id',
+        'catalog-test',
+        '--version',
+        '1',
+        '--vendor',
+        'Updated',
+        '--title',
+        'Updated Pack',
+        '--source-url',
+        'https://example.com/new',
+      ],
+      { env: { OGM_ASSETS_ROOT: assets } },
+    );
+    expect(again.code, again.err.join('\n')).toBe(0);
+    expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({
+      vendor: 'Updated',
+      title: 'Updated Pack',
+      requires: [],
+      source: { label: 'Updated', url: 'https://example.com/new' },
+    });
+    expect(
+      JSON.parse(await readFile(join(assets, 'packs', 'catalog-test', 'collection.card.json'), 'utf8')),
+    ).toMatchObject({ title: 'Updated Pack', collection_info: { vendor: 'Updated' } });
   });
 
   it('imports a folder of archives whose members share names', async () => {
@@ -212,7 +283,19 @@ describe('gm packs import', () => {
     );
     const env = { OGM_ASSETS_ROOT: assets };
     const imported = await gm(
-      ['packs', 'import', '--from-queue', 'drop-confirm', '--id', 'confirm-test', '--version', '1', '--json'],
+      [
+        'packs',
+        'import',
+        '--from-queue',
+        'drop-confirm',
+        '--id',
+        'confirm-test',
+        '--version',
+        '1',
+        '--source-url',
+        'https://example.com/pack',
+        '--json',
+      ],
       { env },
     );
     expect(imported.code, imported.err.join('\n')).toBe(0);
