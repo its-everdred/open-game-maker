@@ -24,7 +24,10 @@ def read_observations(path: Path, cutoff: datetime) -> list[tuple[str, float]]:
         for line in stream:
             try:
                 row = json.loads(line)
-                timestamp = datetime.fromisoformat(row["timestamp"].replace("Z", "+00:00"))
+                raw_timestamp = row["timestamp"]
+                if not isinstance(raw_timestamp, str):
+                    continue
+                timestamp = datetime.fromisoformat(raw_timestamp.replace("Z", "+00:00"))
                 if timestamp < cutoff:
                     continue
                 source = str(row["source"])
@@ -46,7 +49,10 @@ def read_observations(path: Path, cutoff: datetime) -> list[tuple[str, float]]:
                     key = (source, game, str(item["id"]))
                     refreshes.setdefault(key, []).append(timestamp)
                     try:
-                        posted = datetime.fromisoformat(item["postedAt"].replace("Z", "+00:00"))
+                        raw_posted = item["postedAt"]
+                        if not isinstance(raw_posted, str):
+                            continue
+                        posted = datetime.fromisoformat(raw_posted.replace("Z", "+00:00"))
                         if posted.tzinfo is not None and cutoff <= posted <= timestamp:
                             feed_posts.setdefault(key, (str(item["ticket"]), posted))
                     except (KeyError, TypeError, ValueError):

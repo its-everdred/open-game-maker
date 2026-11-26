@@ -37,7 +37,7 @@ class ReviewLoopMetricTest(unittest.TestCase):
         refresh = posted + timedelta(seconds=20)
         item = {"ticket": "42", "id": "decision-1", "postedAt": posted.isoformat()}
         rows = [
-            {"timestamp": refresh.isoformat(), "event": "feed_refresh", "source": "game_commands", "gameId": "g1", "items": [item, {"ticket": "qa-review", "id": "qa-1", "postedAt": posted.isoformat()}]},
+            {"timestamp": refresh.isoformat(), "event": "feed_refresh", "source": "game_commands", "gameId": "g1", "items": [item, {"ticket": "qa-review", "id": "qa-1", "postedAt": posted.isoformat()}, {"ticket": "43", "id": "malformed", "postedAt": None}]},
         ]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "review-publishes.log"
