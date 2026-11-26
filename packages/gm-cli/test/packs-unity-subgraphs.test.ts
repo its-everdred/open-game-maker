@@ -10,7 +10,8 @@ const edge = (from: string, to: string, input: number, output = 0) => ({
 const text = (docs: object[]) => docs.map((doc) => JSON.stringify(doc)).join('\n');
 const subgraph = text([
   { m_Type: 'UnityEditor.ShaderGraph.GraphData', m_Edges: [edge('input', 'output', 0)] },
-  { m_ObjectId: 'output', m_Type: 'UnityEditor.ShaderGraph.SubGraphOutputNode' },
+  { m_ObjectId: 'output', m_Type: 'UnityEditor.ShaderGraph.SubGraphOutputNode', m_Slots: [{ m_Id: 'output-slot' }] },
+  { m_ObjectId: 'output-slot', m_Type: 'UnityEditor.ShaderGraph.Vector4MaterialSlot', m_Id: 0, m_SlotType: 0 },
   { m_ObjectId: 'input', m_Type: 'UnityEditor.ShaderGraph.PropertyNode', m_Property: { m_Id: 'property' } },
   {
     m_ObjectId: 'property',
@@ -53,7 +54,8 @@ it('resolves a connected subgraph input into its caller and refuses an unconnect
 it('rejects cyclic subgraph references', () => {
   const cyclic = text([
     { m_Type: 'UnityEditor.ShaderGraph.GraphData', m_Edges: [edge('sub', 'output', 0)] },
-    { m_ObjectId: 'output', m_Type: 'UnityEditor.ShaderGraph.SubGraphOutputNode' },
+    { m_ObjectId: 'output', m_Type: 'UnityEditor.ShaderGraph.SubGraphOutputNode', m_Slots: [{ m_Id: 'output-slot' }] },
+    { m_ObjectId: 'output-slot', m_Type: 'UnityEditor.ShaderGraph.Vector4MaterialSlot', m_Id: 0, m_SlotType: 0 },
     {
       m_ObjectId: 'sub',
       m_Type: 'UnityEditor.ShaderGraph.SubGraphNode',
@@ -86,10 +88,33 @@ it('preserves an explicit unconnected scalar default from the parent subgraph sl
   const docs = shaderGraphDocuments(outer(false));
   docs.find((doc) => doc.m_ObjectId === 'sub')!.m_Slots = [{ m_Id: 'default-slot' }];
   docs.push({ m_ObjectId: 'default-slot', m_Id: 11, m_SlotType: 0, m_Value: 0.5 });
-  const scalar = subgraph.replace('Vector3ShaderProperty', 'Vector1ShaderProperty');
+  const scalar = subgraph
+    .replace('Vector3ShaderProperty', 'Vector1ShaderProperty')
+    .replace('Vector4MaterialSlot', 'Vector1MaterialSlot');
   const expanded = inlineUnitySubgraphs(text(docs), () => scalar);
   const material = '--- !u!21 &1\nMaterial:\n  m_SavedProperties: {}\n';
   expect(parseUnitySurface(material, shaderGraphBase(expanded)).color).toEqual([0.5, 0.5, 0.5, 0.5]);
+});
+
+it('does not silently treat a vector input as a scalar', () => {
+  const scalar = subgraph.replace('Vector3ShaderProperty', 'Vector1ShaderProperty');
+  const expanded = inlineUnitySubgraphs(outer(), () => scalar);
+  expect(() => shaderGraphBase(expanded)).toThrow('UnsupportedScalarConversion');
+});
+
+it('does not silently treat a vector subgraph result as a scalar', () => {
+  const scalarOutput = subgraph.replace('Vector4MaterialSlot', 'Vector1MaterialSlot');
+  const expanded = inlineUnitySubgraphs(outer(), () => scalarOutput);
+  expect(() => shaderGraphBase(expanded)).toThrow('UnsupportedScalarConversion');
+});
+
+it('refuses vector widths that the material evaluator cannot represent', () => {
+  expect(() =>
+    inlineUnitySubgraphs(outer(), () => subgraph.replace('Vector4MaterialSlot', 'Vector2MaterialSlot')),
+  ).toThrow('unsupported Unity subgraph output type');
+  expect(() =>
+    inlineUnitySubgraphs(outer(), () => subgraph.replace('Vector3ShaderProperty', 'Vector2ShaderProperty')),
+  ).toThrow('unsupported Unity subgraph vector input');
 });
 
 it('does not load subgraphs outside the requested base-color path', () => {
@@ -115,7 +140,8 @@ it('connects multiple inputs through an internal multiply node', () => {
       m_Type: 'UnityEditor.ShaderGraph.GraphData',
       m_Edges: [edge('input', 'multiply', 0), edge('factor', 'multiply', 1), edge('multiply', 'output', 0, 2)],
     },
-    { m_ObjectId: 'output', m_Type: 'UnityEditor.ShaderGraph.SubGraphOutputNode' },
+    { m_ObjectId: 'output', m_Type: 'UnityEditor.ShaderGraph.SubGraphOutputNode', m_Slots: [{ m_Id: 'output-slot' }] },
+    { m_ObjectId: 'output-slot', m_Type: 'UnityEditor.ShaderGraph.Vector4MaterialSlot', m_Id: 0, m_SlotType: 0 },
     { m_ObjectId: 'input', m_Type: 'UnityEditor.ShaderGraph.PropertyNode', m_Property: { m_Id: 'input-property' } },
     { m_ObjectId: 'factor', m_Type: 'UnityEditor.ShaderGraph.PropertyNode', m_Property: { m_Id: 'factor-property' } },
     {

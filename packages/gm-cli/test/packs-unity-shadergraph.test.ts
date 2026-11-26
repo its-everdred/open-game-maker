@@ -303,7 +303,9 @@ it('uses a vector scalar node input slot value rather than its legacy fallback',
     { m_ObjectId: 'slot', m_Type: 'UnityEditor.ShaderGraph.Vector1MaterialSlot', m_Id: 1, m_SlotType: 0, m_Value: 0.5 },
   ];
   const material = '--- !u!21 &1\nMaterial:\n  m_SavedProperties: {}\n';
-  expect(parseUnitySurface(material, shaderGraphBase(docs.map((doc) => JSON.stringify(doc)).join('\n'))).color).toEqual(
-    [0.5, 0.5, 0.5, 0.5],
+  const source = docs.map((doc) => JSON.stringify(doc)).join('\n');
+  expect(parseUnitySurface(material, shaderGraphBase(source)).color).toEqual([0.5, 0.5, 0.5, 0.5]);
+  expect(() => shaderGraphBase(source.replace('"m_Id":1,"m_SlotType":0', '"m_Id":2,"m_SlotType":0'))).toThrow(
+    'invalid Unity shader graph constant slot',
   );
 });

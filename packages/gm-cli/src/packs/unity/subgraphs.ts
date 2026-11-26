@@ -115,11 +115,35 @@ export function inlineUnitySubgraphs(source: string, load: (guid: string) => str
       const childEdges = edges(childGraph);
       const prefix = `${node.m_ObjectId}/`;
       const propertyInputs = new Map<string, Endpoint>();
+      const coercionEdges: Edge[] = [];
+      const scalarSource = (endpoint: Endpoint): boolean => {
+        const source = docs.find((doc) => doc.m_ObjectId === endpoint.m_Node.m_Id);
+        if (source?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode')
+          return [4, 5, 6, 7].includes(endpoint.m_SlotId);
+        if (
+          source?.m_Type === 'UnityEditor.ShaderGraph.Vector1Node' ||
+          source?.m_Type === 'UnityEditor.ShaderGraph.UnsupportedScalarConversion'
+        )
+          return endpoint.m_SlotId === 0;
+        if (source?.m_Type === 'UnityEditor.ShaderGraph.PropertyNode' && endpoint.m_SlotId === 0) {
+          const propertyId = ref(source.m_Property);
+          return docs.some(
+            (doc) =>
+              doc.m_ObjectId === propertyId && doc.m_Type === 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty',
+          );
+        }
+        return false;
+      };
       for (const item of child) {
         if (item.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode' || typeof item.m_ObjectId !== 'string') continue;
         const property = childById.get(ref(item.m_Property));
         const propertyGuid = property ? object(property.m_Guid).m_GuidSerialized : undefined;
         if (typeof propertyGuid !== 'string') throw new Error('invalid Unity subgraph property GUID');
+        if (
+          property?.m_Type === 'UnityEditor.ShaderGraph.Internal.Vector2ShaderProperty' &&
+          childEdges.some((edge) => edge.m_OutputSlot.m_Node.m_Id === item.m_ObjectId)
+        )
+          throw new Error('unsupported Unity subgraph vector input');
         let sourceEndpoint = inputByGuid.get(propertyGuid);
         if (!sourceEndpoint && childEdges.some((edge) => edge.m_OutputSlot.m_Node.m_Id === item.m_ObjectId)) {
           const slotId = slotByGuid.get(propertyGuid);
@@ -138,6 +162,18 @@ export function inlineUnitySubgraphs(source: string, load: (guid: string) => str
           if (docs.some((doc) => doc.m_ObjectId === constantId)) throw new Error('duplicate Unity subgraph default');
           docs.push({ m_ObjectId: constantId, m_Type: 'UnityEditor.ShaderGraph.Vector1Node', m_Value: slot.m_Value });
           sourceEndpoint = { m_Node: { m_Id: constantId }, m_SlotId: 0 };
+          inputByGuid.set(propertyGuid, sourceEndpoint);
+        }
+        if (
+          sourceEndpoint &&
+          property?.m_Type === 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty' &&
+          !scalarSource(sourceEndpoint)
+        ) {
+          const castId = `${prefix}scalar-${slotByGuid.get(propertyGuid)}`;
+          if (docs.some((doc) => doc.m_ObjectId === castId)) throw new Error('duplicate Unity subgraph conversion');
+          docs.push({ m_ObjectId: castId, m_Type: 'UnityEditor.ShaderGraph.UnsupportedScalarConversion' });
+          coercionEdges.push({ m_InputSlot: { m_Node: { m_Id: castId }, m_SlotId: 0 }, m_OutputSlot: sourceEndpoint });
+          sourceEndpoint = { m_Node: { m_Id: castId }, m_SlotId: 0 };
           inputByGuid.set(propertyGuid, sourceEndpoint);
         }
         if (sourceEndpoint) propertyInputs.set(item.m_ObjectId, sourceEndpoint);
@@ -162,9 +198,38 @@ export function inlineUnitySubgraphs(source: string, load: (guid: string) => str
           m_OutputSlot: sourceFor(edge.m_OutputSlot),
         }));
       const outputs = new Map<number, Endpoint>();
+      const outputSlotRefs = Array.isArray(childOutput.m_Slots) ? childOutput.m_Slots.map(ref) : [];
       for (const edge of childEdges.filter((entry) => entry.m_InputSlot.m_Node.m_Id === childOutput.m_ObjectId)) {
         if (outputs.has(edge.m_InputSlot.m_SlotId)) throw new Error('ambiguous Unity subgraph output');
-        outputs.set(edge.m_InputSlot.m_SlotId, sourceFor(edge.m_OutputSlot));
+        const slots = outputSlotRefs
+          .map((id) => childById.get(id))
+          .filter((slot) => slot?.m_Id === edge.m_InputSlot.m_SlotId && slot.m_SlotType === 0);
+        if (slots.length !== 1) throw new Error('missing Unity subgraph output slot');
+        if (
+          ![
+            'UnityEditor.ShaderGraph.Vector1MaterialSlot',
+            'UnityEditor.ShaderGraph.Vector3MaterialSlot',
+            'UnityEditor.ShaderGraph.Vector4MaterialSlot',
+          ].includes(String(slots[0]!.m_Type))
+        )
+          throw new Error('unsupported Unity subgraph output type');
+        let output = sourceFor(edge.m_OutputSlot);
+        if (slots[0]!.m_Type === 'UnityEditor.ShaderGraph.Vector1MaterialSlot') {
+          const childSource = childById.get(edge.m_OutputSlot.m_Node.m_Id);
+          const knownScalar =
+            scalarSource(output) ||
+            (childSource?.m_Type === 'UnityEditor.ShaderGraph.Vector1Node' && edge.m_OutputSlot.m_SlotId === 0) ||
+            (childSource?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode' &&
+              [4, 5, 6, 7].includes(edge.m_OutputSlot.m_SlotId));
+          if (!knownScalar) {
+            const castId = `${prefix}output-scalar-${edge.m_InputSlot.m_SlotId}`;
+            if (docs.some((doc) => doc.m_ObjectId === castId)) throw new Error('duplicate Unity subgraph conversion');
+            docs.push({ m_ObjectId: castId, m_Type: 'UnityEditor.ShaderGraph.UnsupportedScalarConversion' });
+            coercionEdges.push({ m_InputSlot: { m_Node: { m_Id: castId }, m_SlotId: 0 }, m_OutputSlot: output });
+            output = { m_Node: { m_Id: castId }, m_SlotId: 0 };
+          }
+        }
+        outputs.set(edge.m_InputSlot.m_SlotId, output);
       }
       const combined = parentEdges.flatMap((edge) => {
         if (edge.m_InputSlot.m_Node.m_Id === node.m_ObjectId) return [];
@@ -173,7 +238,7 @@ export function inlineUnitySubgraphs(source: string, load: (guid: string) => str
         if (!replacement) throw new Error('missing Unity subgraph output connection');
         return [{ ...edge, m_OutputSlot: replacement }];
       });
-      graph.m_Edges = [...combined, ...internal];
+      graph.m_Edges = [...combined, ...internal, ...coercionEdges];
       docs.splice(docs.indexOf(node), 1);
       const ids = new Set(
         child.filter((doc) => typeof doc.m_ObjectId === 'string').map((doc) => doc.m_ObjectId as string),

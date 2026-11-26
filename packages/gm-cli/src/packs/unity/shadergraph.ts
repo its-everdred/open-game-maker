@@ -104,7 +104,10 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
     const inputs = incoming.get(id) ?? [];
     if (type === 'UnityEditor.ShaderGraph.Vector1Node' && inputs.length === 0) {
       const slots = Array.isArray(node.m_Slots) ? node.m_Slots.map((slot) => byId.get(nodeId(slot))) : [];
-      const input = slots.find((slot) => slot?.m_Id === 1 && slot.m_SlotType === 0);
+      const matches = slots.filter((slot) => slot?.m_Id === 1 && slot.m_SlotType === 0);
+      if (node.m_Slots !== undefined && matches.length !== 1)
+        throw new Error('invalid Unity shader graph constant slot');
+      const input = matches[0];
       const value = input ? input.m_Value : node.m_Value;
       if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('invalid Unity shader graph constant');
       return { textures: [], factors: [{ key: '', kind: 'constant', defaultValue: value }] };

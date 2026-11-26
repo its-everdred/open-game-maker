@@ -119,7 +119,12 @@ it('resolves texture paths inside blended graph terms', async () => {
     const subGuid = 'f'.repeat(32);
     const subgraph = [
       { m_Type: 'UnityEditor.ShaderGraph.GraphData', m_Edges: [edge('input', 'output', 0)] },
-      { m_ObjectId: 'output', m_Type: 'UnityEditor.ShaderGraph.SubGraphOutputNode' },
+      {
+        m_ObjectId: 'output',
+        m_Type: 'UnityEditor.ShaderGraph.SubGraphOutputNode',
+        m_Slots: [{ m_Id: 'output-slot' }],
+      },
+      { m_ObjectId: 'output-slot', m_Type: 'UnityEditor.ShaderGraph.Vector4MaterialSlot', m_Id: 0, m_SlotType: 0 },
       { m_ObjectId: 'input', m_Type: 'UnityEditor.ShaderGraph.PropertyNode', m_Property: { m_Id: 'property' } },
       {
         m_ObjectId: 'property',
