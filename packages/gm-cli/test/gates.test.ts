@@ -156,6 +156,7 @@ describe('gm check', () => {
     const root = tempDir();
     execFileSync('git', ['-C', root, 'init', '-q']);
     writeFileSync(join(root, 'package.json'), JSON.stringify({ dependencies: { '@gm/sdk': '*' } }));
+    writeFileSync(join(root, 'index.html'), '');
     const spy = vi
       .spyOn(playAreaCheck, 'checkPlayArea')
       .mockResolvedValue({ ok: false, output: ['capture unavailable'] });

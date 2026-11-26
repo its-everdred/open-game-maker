@@ -26,6 +26,7 @@ import {
 } from '../../preferences.js';
 import {
   bundledPreferences,
+  fallbackSkill,
   bundledSkill,
   preferencePrompt,
   preferenceSkill,
@@ -259,6 +260,12 @@ export const command: GmCommand = {
       );
     if (preferenceProblems.length === 0 && existsSync(preferencePrompt))
       preferenceProblems.push(...checkPromptPreferenceSection(preferenceEntries, preferencePrompt));
+    if (preferenceProblems.length === 0 && existsSync(fallbackSkill))
+      preferenceProblems.push(
+        ...checkPreferenceSection(preferenceEntries, fallbackSkill).map(
+          () => 'fallback gm-core preference section is stale',
+        ),
+      );
     let preferenceWarnings: string[] = [];
     if (!ctx.json) preferenceProblems.forEach(ctx.err);
     const prProblems =

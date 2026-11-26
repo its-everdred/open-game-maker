@@ -202,6 +202,13 @@ it('refreshes installed preferences without replacing project context', async ()
   refreshInstalledPreferenceSections(readPreferences(preferencesDirectory), root);
   expect(readFileSync(skill, 'utf8')).toContain('local project context');
   expect(checkInstalledPreferenceSections(readPreferences(preferencesDirectory), root)).toEqual([]);
+  const { renderPreferenceSection } = await import('../src/preferences.js');
+  const newer = renderPreferenceSection([entry('newer', '2027-01-01', 'icons')]);
+  writeFileSync(skill, newer);
+  expect(() => refreshInstalledPreferenceSections(readPreferences(preferencesDirectory), root)).toThrow(
+    'installed preferences may be newer',
+  );
+  expect(readFileSync(skill, 'utf8')).toBe(newer);
 });
 
 it('refuses to refresh an absent or external installed skill', async () => {
@@ -305,6 +312,7 @@ it('requires classification for unmarked overlapping topics', () => {
   const general = entry('general', '2026-01-01', 'crisp');
   const specific = { ...entry('specific', '2026-02-01', 'separation'), topic: 'controls.buttons' };
   expect(validatePreferences([general, specific]).errors.join(' ')).toContain('unclassified overlap');
+  expect(validatePreferences([general, specific]).errors.join(' ')).toContain('recommend specific');
 });
 
 it('finds a workspace skill when the game directory is reached through a symlink', async () => {

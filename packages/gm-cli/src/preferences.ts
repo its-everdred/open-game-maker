@@ -76,18 +76,18 @@ export function validatePreferences(entries: Preference[]): { active: Preference
       const overlappingTopics = a.topic.startsWith(`${b.topic}.`) || b.topic.startsWith(`${a.topic}.`);
       const explicitConflict = a.conflicts_with?.includes(b.id) || b.conflicts_with?.includes(a.id);
       const compatible = a.compatible_with?.includes(b.id) || b.compatible_with?.includes(a.id);
+      const recommendation = a.date === b.date ? 'same date' : `recommend ${a.date > b.date ? a.id : b.id}`;
       const differentGames = a.scope.startsWith('game:') && b.scope.startsWith('game:') && a.scope !== b.scope;
       if (differentGames) continue;
       if (compatible && (sameDecision || explicitConflict))
         errors.push(`${a.id} and ${b.id}: incompatible relationship declarations`);
       else if (sameDecision || explicitConflict) {
-        const recommendation = a.date === b.date ? 'same date' : `recommend ${a.date > b.date ? a.id : b.id}`;
         errors.push(
           `conflict: ${a.id} (${a.date}) “${a.quote}” / ${b.id} (${b.date}) “${b.quote}”; ask the creator; ${recommendation}`,
         );
       } else if (overlappingTopics && !compatible) {
         errors.push(
-          `unclassified overlap: ${a.id} (${a.date}) “${a.quote}” / ${b.id} (${b.date}) “${b.quote}”; classify or ask the creator`,
+          `unclassified overlap: ${a.id} (${a.date}) “${a.quote}” / ${b.id} (${b.date}) “${b.quote}”; classify or ask the creator; ${recommendation}`,
         );
       }
     }
@@ -244,6 +244,20 @@ export function refreshInstalledPreferenceSections(entries: Preference[], cwd: s
     const hasStart = skill.includes('<!-- preferences:start -->');
     const hasEnd = skill.includes('<!-- preferences:end -->');
     if (hasStart !== hasEnd) throw new CommandError(`${target}: incomplete preference section markers`);
+    const current = preferenceSection(skill);
+    const expected = renderPreferenceSection(entries);
+    if (current && current !== expected) {
+      const known = new Map(entries.map((entry) => [entry.id, entry.date]));
+      const expectedLines = new Set(expected.split('\n'));
+      for (const line of current.split('\n')) {
+        const match = /^- \[([^\]]+)\]\([^)]*\) \((\d{4}-\d{2}-\d{2}),/.exec(line);
+        if (
+          line.startsWith('- [') &&
+          (!match || !known.has(match[1]!) || (known.get(match[1]!)! >= match[2]! && !expectedLines.has(line)))
+        )
+          throw new CommandError(`${target}: installed preferences may be newer; update the CLI before refreshing`);
+      }
+    }
     const updated = hasStart
       ? updatePreferenceSection(skill, entries)
       : `${skill.trimEnd()}\n\n${renderPreferenceSection(entries)}\n`;
