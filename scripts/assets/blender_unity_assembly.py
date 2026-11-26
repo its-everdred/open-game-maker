@@ -4,6 +4,7 @@ Usage: blender --background --factory-startup --python-exit-code 1 --python
 scripts/assets/blender_unity_assembly.py -- <plan.json> <output.glb>
 """
 import json
+import math
 from pathlib import Path
 import sys
 from uuid import uuid4
@@ -93,6 +94,40 @@ def build_blended_material(material, surface):
     """Bake a material expression in linear light using a shared UV transform."""
     layers = []
 
+    def collect_weight(weight):
+        if isinstance(weight, (float, int)):
+            if not math.isfinite(weight):
+                raise ValueError("invalid shader blend weight")
+        elif isinstance(weight, dict) and "op" in weight:
+            for argument in weight["args"]:
+                collect_weight(argument)
+        elif isinstance(weight, dict):
+            if weight.get("channel") not in (0, 1, 2, 3):
+                raise ValueError("invalid shader blend channel")
+            collect(weight["term"])
+        else:
+            raise ValueError("invalid shader blend weight")
+
+    def arithmetic(op, args):
+        if op == "invert" and len(args) == 1:
+            return 1 - args[0]
+        if op == "add" and len(args) == 2:
+            return args[0] + args[1]
+        if op == "subtract" and len(args) == 2:
+            return args[0] - args[1]
+        if op == "multiply" and len(args) == 2:
+            return args[0] * args[1]
+        if op == "divide" and len(args) == 2:
+            if np.any(np.asarray(args[1]) == 0):
+                raise ValueError("division by zero in shader weight")
+            return args[0] / args[1]
+        if op == "clamp" and len(args) == 3:
+            return np.minimum(np.maximum(args[0], args[1]), args[2])
+        if op == "contrast" and len(args) == 2:
+            midpoint = 0.5 ** 2.2
+            return (args[0] - midpoint) * args[1] + midpoint
+        raise ValueError("unsupported shader weight operation")
+
     def collect(term):
         textures, paths, spaces = term["textures"], term["texturePaths"], term["textureSrgb"]
         if len(textures) != len(paths) or len(textures) != len(spaces):
@@ -102,22 +137,24 @@ def build_blended_material(material, surface):
             weight = blend["weight"]
             collect(blend["a"])
             collect(blend["b"])
-            if isinstance(weight, dict):
-                if weight.get("channel") not in (0, 1, 2, 3):
-                    raise ValueError("invalid shader blend channel")
-                collect(weight["term"])
-            elif not 0 <= weight <= 1:
+            if isinstance(weight, (float, int)) and not 0 <= weight <= 1:
                 raise ValueError("invalid shader blend weight")
+            collect_weight(weight)
 
     collect(surface)
     if not layers:
+        def constant_weight(weight):
+            if isinstance(weight, (float, int)):
+                return weight
+            if "op" in weight:
+                return arithmetic(weight["op"], [constant_weight(arg) for arg in weight["args"]])
+            value = constant(weight["term"])[weight["channel"]]
+            return 1 - value if weight.get("invert") else value
+
         def constant(term):
             value = np.asarray(term["color"], dtype=np.float32)
             for blend in term.get("blends", []):
-                weight = blend["weight"]
-                if isinstance(weight, dict):
-                    value_at_channel = constant(weight["term"])[weight["channel"]]
-                    weight = 1 - value_at_channel if weight.get("invert") else value_at_channel
+                weight = constant_weight(blend["weight"])
                 value = value * (constant(blend["a"]) * (1 - weight) + constant(blend["b"]) * weight)
             return value
         material.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value = constant(surface)
@@ -130,6 +167,15 @@ def build_blended_material(material, surface):
     if width * height > 16777216:
         raise ValueError("shader layer texture is too large to bake")
     pixels_by_layer = iter(zip(images, (srgb for _, _, srgb in layers)))
+
+    def evaluate_weight(weight):
+        if isinstance(weight, (float, int)):
+            return weight
+        if "op" in weight:
+            return arithmetic(weight["op"], [evaluate_weight(arg) for arg in weight["args"]])
+        channel = weight["channel"]
+        value = evaluate(weight["term"])[:, channel:channel + 1]
+        return 1 - value if weight.get("invert") else value
 
     def evaluate(term):
         value = np.ones((width * height, 4), dtype=np.float32) * np.asarray(term["color"], dtype=np.float32)
@@ -147,15 +193,13 @@ def build_blended_material(material, surface):
             value *= pixels
             bpy.data.images.remove(copy)
         for blend in term.get("blends", []):
-            a, b, weight = evaluate(blend["a"]), evaluate(blend["b"]), blend["weight"]
-            if isinstance(weight, dict):
-                channel = weight["channel"]
-                value_at_channel = evaluate(weight["term"])[:, channel:channel + 1]
-                weight = 1 - value_at_channel if weight.get("invert") else value_at_channel
+            a, b, weight = evaluate(blend["a"]), evaluate(blend["b"]), evaluate_weight(blend["weight"])
             value *= a * (1 - weight) + b * weight
         return value
 
     pixels = evaluate(surface)
+    if not np.all(np.isfinite(pixels)):
+        raise ValueError("non-finite shader blend result")
     rgb = np.clip(pixels[:, :3], 0, 1)
     pixels[:, :3] = np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * rgb ** (1 / 2.4) - 0.055)
     baked = bpy.data.images.new("Unity blended base color", width=width, height=height, alpha=True)

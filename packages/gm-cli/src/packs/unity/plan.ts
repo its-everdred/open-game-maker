@@ -5,6 +5,7 @@ import { expandUnityInstances } from './instances.js';
 import { meshNameFromMeta } from './model-meta.js';
 import { materialFloatProperties, materialShaderGuid, parseUnitySurface, type UnitySurface } from './material.js';
 import { shaderGraphBase } from './shadergraph.js';
+import { mapWeightExpression, type WeightExpression } from './weight-expression.js';
 import { inlineUnitySubgraphs } from './subgraphs.js';
 import { selectUnityBuilding, selectUnityPieces } from './select.js';
 import { textureIsSrgb } from './texture-meta.js';
@@ -18,7 +19,7 @@ export type PlannedUnitySurface = Omit<UnitySurface, 'blends'> & {
   blends?: Array<{
     a: PlannedUnitySurface;
     b: PlannedUnitySurface;
-    weight: number | { term: PlannedUnitySurface; channel: number; invert?: boolean };
+    weight: WeightExpression<PlannedUnitySurface>;
   }>;
 };
 export type PlannedUnityMesh = UnityMeshNode & {
@@ -143,7 +144,7 @@ export async function planUnityAssembly(
                 blends: blends.map(({ a, b, weight }) => ({
                   a: resolveSurface(a),
                   b: resolveSurface(b),
-                  weight: typeof weight === 'number' ? weight : { ...weight, term: resolveSurface(weight.term) },
+                  weight: mapWeightExpression(weight, resolveSurface),
                 })),
               }
             : {}),

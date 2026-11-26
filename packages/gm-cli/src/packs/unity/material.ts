@@ -1,5 +1,6 @@
 import { parseUnityYaml } from './yaml.js';
 import type { ShaderGraphBase } from './shadergraph.js';
+import { mapWeightExpression, type WeightExpression } from './weight-expression.js';
 
 export type UnityTexture = { guid: string; scale: [number, number]; offset: [number, number] };
 export type UnitySurface = {
@@ -8,7 +9,7 @@ export type UnitySurface = {
   blends?: Array<{
     a: UnitySurface;
     b: UnitySurface;
-    weight: number | { term: UnitySurface; channel: number; invert?: boolean };
+    weight: WeightExpression<UnitySurface>;
   }>;
 };
 function object(value: unknown): Record<string, unknown> {
@@ -99,7 +100,7 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
             blends: term.blends.map(({ a, b, weight }) => ({
               a: resolve(a),
               b: resolve(b),
-              weight: typeof weight === 'number' ? weight : { ...weight, term: resolve(weight.term) },
+              weight: mapWeightExpression(weight, resolve),
             })),
           }
         : {}),

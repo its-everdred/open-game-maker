@@ -1,3 +1,5 @@
+import { compileWeightExpression, type WeightExpression } from './weight-expression.js';
+
 type GraphObject = Record<string, unknown>;
 function object(value: unknown): GraphObject {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid Unity shader graph');
@@ -48,7 +50,7 @@ export type ShaderGraphBase = {
   blends?: Array<{
     a: ShaderGraphBase;
     b: ShaderGraphBase;
-    weight: number | { term: ShaderGraphBase; channel: number; invert?: boolean };
+    weight: WeightExpression<ShaderGraphBase>;
   }>;
 };
 
@@ -183,6 +185,12 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
       const mask = maskFor(amount, new Set(ancestors).add(id));
       if (mask)
         return { textures: [], factors: [], blends: [{ a: resolveInput(0), b: resolveInput(1), weight: mask }] };
+      if (amountNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode') {
+        const weight = compileWeightExpression(amount, byId, incoming, floats, visit, new Set(ancestors).add(id));
+        if (typeof weight === 'number' && (weight < 0 || weight > 1))
+          throw new Error('unsupported Unity shader graph interpolation amount');
+        return { textures: [], factors: [], blends: [{ a: resolveInput(0), b: resolveInput(1), weight }] };
+      }
       if (
         amount.outputSlot !== 0 ||
         amountNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode' ||
@@ -256,7 +264,7 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
           uvNode?.m_Type !== 'UnityEditor.ShaderGraph.UVNode' ||
           (uvNode.m_OutputChannel !== undefined && uvNode.m_OutputChannel !== 0)
         )
-          throw new Error('unsupported Unity texture UV graph');
+          throw new Error(`unsupported Unity texture UV graph at ${id}`);
       }
       const texture = inputs.find((input) => input.inputSlot === 1);
       if (!texture) return { textures: [`_SampleTexture2D_${id}_Texture_1`], factors: [] };

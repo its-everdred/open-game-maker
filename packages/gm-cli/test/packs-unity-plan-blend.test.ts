@@ -156,6 +156,51 @@ it('resolves texture paths inside blended graph terms', async () => {
     expect(nested[0]?.surfaces[0]?.blends).toMatchObject([
       { b: { texturePaths: [join(root, 'b.png')] }, weight: { term: { color: [0.5, 0.5, 0.5, 0.5] }, invert: true } },
     ]);
+    docs[0]!.m_Edges = [
+      edge('lerp', 'base', 0, 3),
+      edge('a', 'lerp', 0),
+      edge('b', 'lerp', 1),
+      edge('clamp', 'lerp', 2, 3),
+      edge('add', 'clamp', 0, 2),
+      edge('zero', 'clamp', 1),
+      edge('one', 'clamp', 2),
+      edge('scale', 'add', 0, 2),
+      edge('offset', 'add', 1),
+      edge('b', 'scale', 0, 4),
+      edge('amount', 'scale', 1),
+    ];
+    docs.push(
+      { m_ObjectId: 'clamp', m_Type: 'UnityEditor.ShaderGraph.ClampNode' } as (typeof docs)[number],
+      { m_ObjectId: 'add', m_Type: 'UnityEditor.ShaderGraph.AddNode' } as (typeof docs)[number],
+      ...[
+        ['zero', 0],
+        ['one', 1],
+        ['offset', 0.1],
+      ].map(
+        ([id, value]) =>
+          ({ m_ObjectId: id, m_Type: 'UnityEditor.ShaderGraph.Vector1Node', m_Value: value }) as (typeof docs)[number],
+      ),
+    );
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const calculated = await planUnityAssembly(root, prefab);
+    expect(calculated[0]?.surfaces[0]?.blends).toMatchObject([
+      {
+        weight: {
+          op: 'clamp',
+          args: [
+            {
+              op: 'add',
+              args: [
+                { op: 'multiply', args: [{ term: { texturePaths: [join(root, 'b.png')] }, channel: 0 }, 0.5] },
+                0.1,
+              ],
+            },
+            0,
+            1,
+          ],
+        },
+      },
+    ]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

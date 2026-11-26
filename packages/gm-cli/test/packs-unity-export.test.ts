@@ -91,15 +91,33 @@ it.skipIf(!available)(
                     color: [1, 1, 1, 1],
                   },
                   weight: {
-                    term: {
-                      path: 'fixture.mat',
-                      textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
-                      texturePaths: [mask],
-                      textureSrgb: [false],
-                      color: [0.5, 0.5, 0.5, 0.5],
-                    },
-                    channel: 0,
-                    invert: true,
+                    op: 'clamp',
+                    args: [
+                      {
+                        op: 'add',
+                        args: [
+                          {
+                            op: 'multiply',
+                            args: [
+                              {
+                                term: {
+                                  path: 'fixture.mat',
+                                  textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
+                                  texturePaths: [mask],
+                                  textureSrgb: [false],
+                                  color: [1, 1, 1, 1],
+                                },
+                                channel: 0,
+                              },
+                              0.5,
+                            ],
+                          },
+                          0.1,
+                        ],
+                      },
+                      0,
+                      1,
+                    ],
                   },
                 },
               ],
@@ -135,15 +153,33 @@ it.skipIf(!available)(
                     color: [1, 1, 1, 1],
                   },
                   weight: {
-                    term: {
-                      path: 'fixture.mat',
-                      textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
-                      texturePaths: [mask],
-                      textureSrgb: [false],
-                      color: [0.5, 0.5, 0.5, 0.5],
-                    },
-                    channel: 0,
-                    invert: true,
+                    op: 'clamp',
+                    args: [
+                      {
+                        op: 'add',
+                        args: [
+                          {
+                            op: 'multiply',
+                            args: [
+                              {
+                                term: {
+                                  path: 'fixture.mat',
+                                  textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
+                                  texturePaths: [mask],
+                                  textureSrgb: [false],
+                                  color: [1, 1, 1, 1],
+                                },
+                                channel: 0,
+                              },
+                              0.5,
+                            ],
+                          },
+                          0.1,
+                        ],
+                      },
+                      0,
+                      1,
+                    ],
                   },
                 },
               ],
@@ -172,7 +208,32 @@ it.skipIf(!available)(
                 {
                   a: { path: 'plain.mat', textures: [], texturePaths: [], textureSrgb: [], color: [0.5, 0, 0, 1] },
                   b: { path: 'plain.mat', textures: [], texturePaths: [], textureSrgb: [], color: [1, 1, 1, 1] },
-                  weight: 0.5,
+                  weight: {
+                    op: 'add',
+                    args: [
+                      {
+                        op: 'contrast',
+                        args: [
+                          {
+                            op: 'clamp',
+                            args: [
+                              {
+                                op: 'add',
+                                args: [
+                                  { op: 'subtract', args: [1, 0.75] },
+                                  { op: 'multiply', args: [0.125, 2] },
+                                ],
+                              },
+                              0,
+                              1,
+                            ],
+                          },
+                          1,
+                        ],
+                      },
+                      { op: 'subtract', args: [{ op: 'invert', args: [{ op: 'divide', args: [1, 2] }] }, 0.5] },
+                    ],
+                  },
                 },
               ],
             },
@@ -217,14 +278,14 @@ it.skipIf(!available)(
       expect(textureTransform?.getScale()).toEqual([2, 3]);
       expect(textureTransform?.getOffset()[0]).toBeCloseTo(0.25, 5);
       const pixels = await sharp(material.getBaseColorTexture()!.getImage()!).ensureAlpha().raw().toBuffer();
-      expect(pixels[0]).toBeGreaterThan(42);
-      expect(pixels[0]).toBeLessThan(49);
-      expect(pixels[1]).toBeGreaterThan(94);
-      expect(pixels[1]).toBeLessThan(102);
-      expect(pixels[2]).toBeGreaterThan(59);
-      expect(pixels[2]).toBeLessThan(67);
-      expect(pixels[4]).toBeGreaterThan(67);
-      expect(pixels[4]).toBeLessThan(74);
+      expect(pixels[0]).toBeGreaterThan(54);
+      expect(pixels[0]).toBeLessThan(61);
+      expect(pixels[1]).toBeGreaterThan(143);
+      expect(pixels[1]).toBeLessThan(151);
+      expect(pixels[2]).toBeGreaterThan(93);
+      expect(pixels[2]).toBeLessThan(102);
+      expect(pixels[4]).toBeGreaterThan(64);
+      expect(pixels[4]).toBeLessThan(73);
       await expect(exportUnityAssembly(plan, output)).rejects.toMatchObject({ code: 'EEXIST' });
       expect(await readFile(output)).toEqual(bytes);
     } finally {
