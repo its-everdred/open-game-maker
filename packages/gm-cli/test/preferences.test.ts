@@ -198,7 +198,7 @@ it('refreshes installed preferences without replacing project context', async ()
   execFileSync('git', ['-C', root, 'init', '-q']);
   const skill = join(root, '.claude', 'skills', 'gm-core', 'SKILL.md');
   mkdirSync(join(skill, '..'), { recursive: true });
-  writeFileSync(skill, 'local project context\n<!-- preferences:start -->stale<!-- preferences:end -->\n');
+  writeFileSync(skill, 'local project context\n');
   refreshInstalledPreferenceSections(readPreferences(preferencesDirectory), root);
   expect(readFileSync(skill, 'utf8')).toContain('local project context');
   expect(checkInstalledPreferenceSections(readPreferences(preferencesDirectory), root)).toEqual([]);
@@ -206,9 +206,16 @@ it('refreshes installed preferences without replacing project context', async ()
   const newer = renderPreferenceSection([entry('newer', '2027-01-01', 'icons')]);
   writeFileSync(skill, newer);
   expect(() => refreshInstalledPreferenceSections(readPreferences(preferencesDirectory), root)).toThrow(
-    'installed preferences may be newer',
+    'installed preferences may differ in version',
   );
   expect(readFileSync(skill, 'utf8')).toBe(newer);
+  const olderCatalog = [entry('old', '2026-01-01', 'icons'), entry('kept', '2026-02-01', 'icons')];
+  const removed = renderPreferenceSection([olderCatalog[1]!]);
+  writeFileSync(skill, removed);
+  expect(() => refreshInstalledPreferenceSections(olderCatalog, root)).toThrow(
+    'installed preferences may differ in version',
+  );
+  expect(readFileSync(skill, 'utf8')).toBe(removed);
 });
 
 it('refuses to refresh an absent or external installed skill', async () => {

@@ -47,7 +47,7 @@ export const command: GmCommand = {
         ...checkPreferenceSection(entries, fallbackSkill).map(() => 'fallback gm-core preference section is stale'),
       );
     if (result.errors.some((error) => error.includes('/skills/gm-core/SKILL.md: preference section is stale')))
-      ctx.err('run gm prefs refresh to refresh installed preferences');
+      ctx.err('update the CLI and skill pack before refreshing installed preferences');
     if (result.errors.length) {
       result.errors.forEach(ctx.err);
       return EXIT.failed;

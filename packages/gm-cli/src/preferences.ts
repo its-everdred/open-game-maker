@@ -246,18 +246,8 @@ export function refreshInstalledPreferenceSections(entries: Preference[], cwd: s
     if (hasStart !== hasEnd) throw new CommandError(`${target}: incomplete preference section markers`);
     const current = preferenceSection(skill);
     const expected = renderPreferenceSection(entries);
-    if (current && current !== expected) {
-      const known = new Map(entries.map((entry) => [entry.id, entry.date]));
-      const expectedLines = new Set(expected.split('\n'));
-      for (const line of current.split('\n')) {
-        const match = /^- \[([^\]]+)\]\([^)]*\) \((\d{4}-\d{2}-\d{2}),/.exec(line);
-        if (
-          line.startsWith('- [') &&
-          (!match || !known.has(match[1]!) || (known.get(match[1]!)! >= match[2]! && !expectedLines.has(line)))
-        )
-          throw new CommandError(`${target}: installed preferences may be newer; update the CLI before refreshing`);
-      }
-    }
+    if (current && current !== expected)
+      throw new CommandError(`${target}: installed preferences may differ in version; update the CLI and skill pack`);
     const updated = hasStart
       ? updatePreferenceSection(skill, entries)
       : `${skill.trimEnd()}\n\n${renderPreferenceSection(entries)}\n`;
