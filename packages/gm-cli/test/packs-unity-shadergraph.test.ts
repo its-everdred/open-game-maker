@@ -178,3 +178,38 @@ it('resolves interpolation endpoints and rejects non-endpoint blending', () => {
     'unsupported Unity shader graph interpolation amount',
   );
 });
+
+it('preserves a literal graph color independently of material properties', async () => {
+  const { parseUnitySurface } = await import('../src/packs/unity/material.js');
+  const docs = [
+    {
+      m_Type: 'UnityEditor.ShaderGraph.GraphData',
+      m_Edges: [
+        {
+          m_OutputSlot: { m_Node: { m_Id: 'color' }, m_SlotId: 0 },
+          m_InputSlot: { m_Node: { m_Id: 'base' }, m_SlotId: 0 },
+        },
+      ],
+    },
+    {
+      m_ObjectId: 'base',
+      m_Type: 'UnityEditor.ShaderGraph.BlockNode',
+      m_SerializedDescriptor: 'SurfaceDescription.BaseColor',
+    },
+    {
+      m_ObjectId: 'color',
+      m_Type: 'UnityEditor.ShaderGraph.ColorNode',
+      m_Color: { mode: 0, color: { r: 0.25, g: 0.5, b: 0.75, a: 1 } },
+    },
+  ];
+  const source = docs.map((doc) => JSON.stringify(doc)).join('\n');
+  const material = '--- !u!21 &1\nMaterial:\n  m_SavedProperties: {}\n';
+  const color = parseUnitySurface(material, shaderGraphBase(source)).color;
+  expect(color[0]).toBeCloseTo(0.050876, 5);
+  expect(color[1]).toBeCloseTo(0.214041, 5);
+  expect(color[2]).toBeCloseTo(0.522522, 5);
+  expect(color[3]).toBe(1);
+  expect(() => shaderGraphBase(source.replace('"mode":0', '"mode":1'))).toThrow(
+    'unsupported Unity shader graph color mode',
+  );
+});

@@ -39,7 +39,7 @@ function documents(source: string): GraphObject[] {
 
 export type ShaderGraphFactor = {
   key: string;
-  kind: 'scalar' | 'color';
+  kind: 'scalar' | 'color' | 'constant';
   defaultValue: number | [number, number, number, number];
 };
 export type ShaderGraphBase = { textures: string[]; factors: ShaderGraphFactor[] };
@@ -53,6 +53,7 @@ function graphOutputSlot(node: GraphObject | undefined): number {
       return 3;
     case 'UnityEditor.ShaderGraph.SampleTexture2DNode':
     case 'UnityEditor.ShaderGraph.PropertyNode':
+    case 'UnityEditor.ShaderGraph.ColorNode':
       return 0;
     default:
       throw new Error(`unsupported Unity shader graph node ${String(node?.m_Type)}`);
@@ -92,6 +93,21 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
     if (!node) throw new Error(`missing Unity shader node ${id}`);
     const type = node.m_Type;
     const inputs = incoming.get(id) ?? [];
+    if (type === 'UnityEditor.ShaderGraph.ColorNode' && inputs.length === 0) {
+      const colorState = object(node.m_Color);
+      if (colorState.mode !== 0) throw new Error('unsupported Unity shader graph color mode');
+      const value = object(colorState.color);
+      const color = ['r', 'g', 'b', 'a'].map((key) => Number(value[key]));
+      if (color.some((number) => !Number.isFinite(number))) throw new Error('invalid Unity shader graph color');
+      for (let index = 0; index < 3; index++) {
+        const channel = color[index]!;
+        color[index] = channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      }
+      return {
+        textures: [],
+        factors: [{ key: '', kind: 'constant', defaultValue: color as [number, number, number, number] }],
+      };
+    }
     if (type === 'UnityEditor.ShaderGraph.LerpNode') {
       if (
         inputs.length !== 3 ||

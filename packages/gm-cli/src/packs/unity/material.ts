@@ -72,9 +72,11 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
   ) as [number, number, number, number];
   for (const factor of graph?.factors ?? []) {
     const value =
-      factor.kind === 'scalar'
-        ? Number(floats.get(factor.key) ?? factor.defaultValue)
-        : vector(colors.get(factor.key), ['r', 'g', 'b', 'a'], factor.defaultValue as number[]);
+      factor.kind === 'constant'
+        ? (factor.defaultValue as number[])
+        : factor.kind === 'scalar'
+          ? Number(floats.get(factor.key) ?? factor.defaultValue)
+          : vector(colors.get(factor.key), ['r', 'g', 'b', 'a'], factor.defaultValue as number[]);
     for (let index = 0; index < 4; index++)
       color[index] = color[index]! * (typeof value === 'number' ? value : value[index]!);
   }
