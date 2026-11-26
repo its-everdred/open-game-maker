@@ -10,7 +10,7 @@ function nodeId(value: unknown): string {
 }
 
 /** Shader Graph stores consecutive JSON objects instead of a single JSON document. */
-function documents(source: string): GraphObject[] {
+export function shaderGraphDocuments(source: string): GraphObject[] {
   const result: GraphObject[] = [];
   let depth = 0,
     start = -1,
@@ -62,6 +62,7 @@ function graphOutputSlot(node: GraphObject | undefined): number {
     case 'UnityEditor.ShaderGraph.SampleTexture2DNode':
     case 'UnityEditor.ShaderGraph.PropertyNode':
     case 'UnityEditor.ShaderGraph.ColorNode':
+    case 'UnityEditor.ShaderGraph.Vector1Node':
       return 0;
     default:
       throw new Error(`unsupported Unity shader graph node ${String(node?.m_Type)}`);
@@ -70,7 +71,7 @@ function graphOutputSlot(node: GraphObject | undefined): number {
 
 /** Resolve a base-color graph composed of texture samples, properties and multiplication. */
 export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unknown> = new Map()): ShaderGraphBase {
-  const docs = documents(source);
+  const docs = shaderGraphDocuments(source);
   const graph = docs.find((doc) => doc.m_Type === 'UnityEditor.ShaderGraph.GraphData');
   const base = docs.find((doc) => doc.m_SerializedDescriptor === 'SurfaceDescription.BaseColor');
   if (!graph || !base || typeof base.m_ObjectId !== 'string' || !Array.isArray(graph.m_Edges)) {
@@ -101,6 +102,13 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
     if (!node) throw new Error(`missing Unity shader node ${id}`);
     const type = node.m_Type;
     const inputs = incoming.get(id) ?? [];
+    if (type === 'UnityEditor.ShaderGraph.Vector1Node' && inputs.length === 0) {
+      const slots = Array.isArray(node.m_Slots) ? node.m_Slots.map((slot) => byId.get(nodeId(slot))) : [];
+      const input = slots.find((slot) => slot?.m_Id === 1 && slot.m_SlotType === 0);
+      const value = input ? input.m_Value : node.m_Value;
+      if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('invalid Unity shader graph constant');
+      return { textures: [], factors: [{ key: '', kind: 'constant', defaultValue: value }] };
+    }
     if (type === 'UnityEditor.ShaderGraph.ColorNode' && inputs.length === 0) {
       const colorState = object(node.m_Color);
       if (colorState.mode !== 0) throw new Error('unsupported Unity shader graph color mode');

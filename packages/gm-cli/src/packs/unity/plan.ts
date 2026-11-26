@@ -5,6 +5,7 @@ import { expandUnityInstances } from './instances.js';
 import { meshNameFromMeta } from './model-meta.js';
 import { materialFloatProperties, materialShaderGuid, parseUnitySurface, type UnitySurface } from './material.js';
 import { shaderGraphBase } from './shadergraph.js';
+import { inlineUnitySubgraphs } from './subgraphs.js';
 import { selectUnityBuilding, selectUnityPieces } from './select.js';
 import { textureIsSrgb } from './texture-meta.js';
 import { readUnityRecords } from './read.js';
@@ -107,7 +108,12 @@ export async function planUnityAssembly(
         try {
           surface = parseUnitySurface(
             contents,
-            shaderGraphBase(readFileSync(shader, 'utf8'), materialFloatProperties(contents)),
+            shaderGraphBase(
+              inlineUnitySubgraphs(readFileSync(shader, 'utf8'), (guid) =>
+                readFileSync(file({ fileId: '0', guid }, '.shadersubgraph'), 'utf8'),
+              ),
+              materialFloatProperties(contents),
+            ),
           );
         } catch (error) {
           throw new Error(`material ${path}: ${error instanceof Error ? error.message : String(error)}`, {

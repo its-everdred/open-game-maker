@@ -116,6 +116,41 @@ it('resolves texture paths inside blended graph terms', async () => {
         },
       },
     ]);
+    const subGuid = 'f'.repeat(32);
+    const subgraph = [
+      { m_Type: 'UnityEditor.ShaderGraph.GraphData', m_Edges: [edge('input', 'output', 0)] },
+      { m_ObjectId: 'output', m_Type: 'UnityEditor.ShaderGraph.SubGraphOutputNode' },
+      { m_ObjectId: 'input', m_Type: 'UnityEditor.ShaderGraph.PropertyNode', m_Property: { m_Id: 'property' } },
+      {
+        m_ObjectId: 'property',
+        m_Type: 'UnityEditor.ShaderGraph.Internal.Vector3ShaderProperty',
+        m_Guid: { m_GuidSerialized: 'input-guid' },
+      },
+    ];
+    await writeFile(join(root, 'nested.shadersubgraph'), subgraph.map((doc) => JSON.stringify(doc)).join('\n'));
+    await writeFile(join(root, 'nested.shadersubgraph.meta'), `guid: ${subGuid}\n`);
+    docs[0]!.m_Edges = [
+      edge('lerp', 'base', 0, 3),
+      edge('a', 'lerp', 0),
+      edge('sub', 'lerp', 1),
+      edge('b', 'sub', 11),
+      edge('inverse', 'lerp', 2, 1),
+      edge('scale', 'inverse', 0, 2),
+      edge('b', 'scale', 0, 4),
+      edge('amount', 'scale', 1),
+    ];
+    docs.push({
+      m_ObjectId: 'sub',
+      m_Type: 'UnityEditor.ShaderGraph.SubGraphNode',
+      m_SerializedSubGraph: JSON.stringify({ subGraph: { guid: subGuid } }),
+      m_PropertyGuids: ['input-guid'],
+      m_PropertyIds: [11],
+    } as (typeof docs)[number]);
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const nested = await planUnityAssembly(root, prefab);
+    expect(nested[0]?.surfaces[0]?.blends).toMatchObject([
+      { b: { texturePaths: [join(root, 'b.png')] }, weight: { term: { color: [0.5, 0.5, 0.5, 0.5] }, invert: true } },
+    ]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

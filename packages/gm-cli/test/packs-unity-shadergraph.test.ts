@@ -281,3 +281,29 @@ it('preserves a literal graph color independently of material properties', async
     'unsupported Unity shader graph color mode',
   );
 });
+
+it('uses a vector scalar node input slot value rather than its legacy fallback', async () => {
+  const { parseUnitySurface } = await import('../src/packs/unity/material.js');
+  const docs = [
+    {
+      m_Type: 'UnityEditor.ShaderGraph.GraphData',
+      m_Edges: [
+        {
+          m_OutputSlot: { m_Node: { m_Id: 'constant' }, m_SlotId: 0 },
+          m_InputSlot: { m_Node: { m_Id: 'base' }, m_SlotId: 0 },
+        },
+      ],
+    },
+    {
+      m_ObjectId: 'base',
+      m_Type: 'UnityEditor.ShaderGraph.BlockNode',
+      m_SerializedDescriptor: 'SurfaceDescription.BaseColor',
+    },
+    { m_ObjectId: 'constant', m_Type: 'UnityEditor.ShaderGraph.Vector1Node', m_Value: 0, m_Slots: [{ m_Id: 'slot' }] },
+    { m_ObjectId: 'slot', m_Type: 'UnityEditor.ShaderGraph.Vector1MaterialSlot', m_Id: 1, m_SlotType: 0, m_Value: 0.5 },
+  ];
+  const material = '--- !u!21 &1\nMaterial:\n  m_SavedProperties: {}\n';
+  expect(parseUnitySurface(material, shaderGraphBase(docs.map((doc) => JSON.stringify(doc)).join('\n'))).color).toEqual(
+    [0.5, 0.5, 0.5, 0.5],
+  );
+});
