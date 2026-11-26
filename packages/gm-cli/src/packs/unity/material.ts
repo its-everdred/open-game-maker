@@ -2,7 +2,13 @@ import { parseUnityYaml } from './yaml.js';
 import type { ShaderGraphBase } from './shadergraph.js';
 import { mapWeightExpression, type WeightExpression } from './weight-expression.js';
 
-export type UnityTexture = { guid: string; scale: [number, number]; offset: [number, number]; uv?: number };
+export type UnityTexture = {
+  guid: string;
+  scale: [number, number];
+  offset: [number, number];
+  uv?: number;
+  uvTransform?: [number, number, number, number, number, number];
+};
 export type UnitySurface = {
   textures: UnityTexture[];
   color: [number, number, number, number];
@@ -44,6 +50,11 @@ export function materialFloatProperties(source: string): Map<string, unknown> {
   return properties(object(material(source).m_SavedProperties).m_Floats);
 }
 
+/** Return saved vector and color properties used by material-specific UV graphs. */
+export function materialColorProperties(source: string): Map<string, unknown> {
+  return properties(object(material(source).m_SavedProperties).m_Colors);
+}
+
 /** Interpret standard base-color properties or explicit graph-resolved texture slots. */
 export function parseUnitySurface(source: string, graph?: ShaderGraphBase): UnitySurface {
   const materialData = material(source);
@@ -73,15 +84,33 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
         term.textureChannels.some((channel) => !Number.isInteger(channel) || channel < 0 || channel > 7))
     )
       throw new Error('invalid Unity texture UV channels');
+    if (
+      term?.textureUvTransforms &&
+      (term.textureUvTransforms.length !== keys.length ||
+        term.textureUvTransforms.some(
+          (transform, index) =>
+            transform &&
+            (transform.channel !== (term.textureChannels?.[index] ?? 0) ||
+              transform.matrix.length !== 6 ||
+              transform.matrix.some((value) => !Number.isFinite(value))),
+        ))
+    )
+      throw new Error('invalid Unity texture UV transforms');
     const textures = keys.map((key, index) => {
       const env = object(environments.get(key));
       const reference = object(env.m_Texture);
       if (typeof reference.guid !== 'string') throw new Error(`missing Unity texture for ${key}`);
+      const scale = vector(env.m_Scale, ['x', 'y'], [1, 1]) as [number, number];
+      const offset = vector(env.m_Offset, ['x', 'y'], [0, 0]) as [number, number];
+      const transform = term?.textureUvTransforms?.[index];
+      if (transform && (scale[0] !== 1 || scale[1] !== 1 || offset[0] !== 0 || offset[1] !== 0))
+        throw new Error('unsupported texture property transform with explicit Unity UV graph');
       return {
         guid: reference.guid,
-        scale: vector(env.m_Scale, ['x', 'y'], [1, 1]) as [number, number],
-        offset: vector(env.m_Offset, ['x', 'y'], [0, 0]) as [number, number],
+        scale,
+        offset,
         ...(term?.textureChannels?.[index] ? { uv: term.textureChannels[index] } : {}),
+        ...(transform ? { uvTransform: transform.matrix } : {}),
       };
     });
     const color = (

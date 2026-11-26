@@ -50,6 +50,7 @@ for layer in range(2):
   for x in range(16): pixels.extend([(x+.5)/16 if layer==0 else 1,(y+.5)/16 if layer==1 else 1,1,1])
  image.pixels.foreach_set(pixels); image.filepath_raw=str(Path(${JSON.stringify(root)})/f'gradient-{layer}.png'); image.file_format='PNG'; image.save(); paths.append(image.filepath_raw)
 surface={'path':'test.mat','textures':[{'uv':0,'scale':[1,1],'offset':[0,0]},{'uv':1,'scale':[1,1],'offset':[0,0]}],'texturePaths':paths,'textureSrgb':[False,False],'color':[1,1,1,1]}
+surface['textures'][1]['uvTransform']=[0,1,0,-1,0,1]
 constant=lambda value: {'path':'test.mat','textures':[],'texturePaths':[],'textureSrgb':[],'color':[value,value,value,1]}
 mask={'path':'test.mat','textures':[surface['textures'][1]],'texturePaths':[paths[1]],'textureSrgb':[False],'color':[1,1,1,1]}
 surface['blends']=[{'a':constant(1),'b':constant(.5),'weight':{'term':mask,'channel':1}}]
@@ -61,7 +62,7 @@ for loop in mesh.loops:
  u,v=mesh.uv_layers[0].data[loop.index].uv; u=.8*u+.1; v=.8*v+.1
  x=min(size-1,int(u*size)); y=min(size-1,int(v*size)); ix=(y*size+x)*4
  vx,vy,_=mesh.vertices[loop.vertex_index].co
- green=1-(.8*vy+.1); blend=1-.5*green
+ green=.8*vx+.1; blend=1-.5*green
  for i,expected in [(0,(.8*vx+.1)*blend),(1,green*blend)]:
   expected=expected*12.92 if expected<=.0031308 else 1.055*expected**(1/2.4)-.055
   assert abs(pixels[ix+i]-expected)<.12, (loop.vertex_index,i,pixels[ix+i],expected)

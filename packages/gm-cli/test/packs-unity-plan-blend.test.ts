@@ -30,7 +30,7 @@ it('resolves texture paths inside blended graph terms', async () => {
     await writeFile(join(root, 'surface.mat.meta'), `guid: ${material}\n`);
     await writeFile(
       join(root, 'surface.mat'),
-      `--- !u!21 &1\nMaterial:\n  m_Shader: {fileID: 4800000, guid: ${shader}}\n  m_SavedProperties:\n    m_Floats:\n    - _Weight: 0.5\n    m_TexEnvs:\n    - _SampleTexture2D_a_Texture_1: {m_Texture: {guid: ${first}}, m_Scale: {x: 1, y: 1}, m_Offset: {x: 0, y: 0}}\n    - _SampleTexture2D_b_Texture_1: {m_Texture: {guid: ${second}}, m_Scale: {x: 1, y: 1}, m_Offset: {x: 0, y: 0}}\n`,
+      `--- !u!21 &1\nMaterial:\n  m_Shader: {fileID: 4800000, guid: ${shader}}\n  m_SavedProperties:\n    m_Floats:\n    - _Weight: 0.5\n    m_Colors:\n    - _Offset: {r: 0.25, g: 0.125, b: 0, a: 0}\n    m_TexEnvs:\n    - _SampleTexture2D_a_Texture_1: {m_Texture: {guid: ${first}}, m_Scale: {x: 1, y: 1}, m_Offset: {x: 0, y: 0}}\n    - _SampleTexture2D_b_Texture_1: {m_Texture: {guid: ${second}}, m_Scale: {x: 1, y: 1}, m_Offset: {x: 0, y: 0}}\n`,
     );
     const edge = (from: string, to: string, input: number, output = 0) => ({
       m_OutputSlot: { m_Node: { m_Id: from }, m_SlotId: output },
@@ -224,6 +224,36 @@ it('resolves texture paths inside blended graph terms', async () => {
           ],
         },
       },
+    ]);
+    docs[0]!.m_Edges = docs[0]!.m_Edges!.filter(
+      (entry) => !(entry.m_InputSlot.m_Node.m_Id === 'b' && entry.m_InputSlot.m_SlotId === 2),
+    );
+    docs[0]!.m_Edges!.push(
+      edge('uvadd', 'b', 2, 2),
+      edge('uvscale', 'uvadd', 0, 2),
+      edge('uvparam', 'uvadd', 1),
+      edge('uv', 'uvscale', 0),
+      edge('amount', 'uvscale', 1),
+    );
+    docs.push(
+      { m_ObjectId: 'uvadd', m_Type: 'UnityEditor.ShaderGraph.AddNode' } as (typeof docs)[number],
+      { m_ObjectId: 'uvscale', m_Type: 'UnityEditor.ShaderGraph.MultiplyNode' } as (typeof docs)[number],
+      {
+        m_ObjectId: 'uvparam',
+        m_Type: 'UnityEditor.ShaderGraph.PropertyNode',
+        m_Property: { m_Id: 'uvproperty' },
+      } as (typeof docs)[number],
+      {
+        m_ObjectId: 'uvproperty',
+        m_Type: 'UnityEditor.ShaderGraph.Internal.Vector2ShaderProperty',
+        m_DefaultReferenceName: '_Offset',
+        m_Value: { x: 0, y: 0 },
+      } as (typeof docs)[number],
+    );
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const affinePlan = await planUnityAssembly(root, prefab);
+    expect(affinePlan[0]?.surfaces[0]?.blends).toMatchObject([
+      { b: { textures: [{ uv: 2, uvTransform: [0.5, 0, 0.25, 0, 0.5, 0.125] }] } },
     ]);
   } finally {
     await rm(root, { recursive: true, force: true });

@@ -1,4 +1,5 @@
 import { compileWeightExpression, type WeightExpression } from './weight-expression.js';
+import { compileUvAffine, type UvAffine } from './uv-affine.js';
 
 type GraphObject = Record<string, unknown>;
 function object(value: unknown): GraphObject {
@@ -47,6 +48,7 @@ export type ShaderGraphFactor = {
 export type ShaderGraphBase = {
   textures: string[];
   textureChannels?: number[];
+  textureUvTransforms?: Array<UvAffine | null>;
   factors: ShaderGraphFactor[];
   blends?: Array<{
     a: ShaderGraphBase;
@@ -73,7 +75,11 @@ function graphOutputSlot(node: GraphObject | undefined): number {
 }
 
 /** Resolve a base-color graph composed of texture samples, properties and multiplication. */
-export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unknown> = new Map()): ShaderGraphBase {
+export function shaderGraphBase(
+  source: string,
+  floats: ReadonlyMap<string, unknown> = new Map(),
+  colors: ReadonlyMap<string, unknown> = new Map(),
+): ShaderGraphBase {
   const docs = shaderGraphDocuments(source);
   const graph = docs.find((doc) => doc.m_Type === 'UnityEditor.ShaderGraph.GraphData');
   const base = docs.find((doc) => doc.m_SerializedDescriptor === 'SurfaceDescription.BaseColor');
@@ -254,23 +260,29 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
     }
     if (type === 'UnityEditor.ShaderGraph.SampleTexture2DNode') {
       if (
-        inputs.some((input) => ![1, 2].includes(input.inputSlot) || input.outputSlot !== 0) ||
+        inputs.some(
+          (input) => ![1, 2].includes(input.inputSlot) || (input.inputSlot === 1 && input.outputSlot !== 0),
+        ) ||
         new Set(inputs.map((input) => input.inputSlot)).size !== inputs.length
       )
         throw new Error(`unsupported Unity texture sample input at ${id}`);
       const uv = inputs.find((input) => input.inputSlot === 2);
       let uvChannel = 0;
+      let uvTransform: UvAffine | undefined;
       if (uv) {
         const uvNode = byId.get(uv.node);
-        if (
-          uvNode?.m_Type !== 'UnityEditor.ShaderGraph.UVNode' ||
+        if (uvNode?.m_Type !== 'UnityEditor.ShaderGraph.UVNode') {
+          uvTransform = compileUvAffine(uv, byId, incoming, floats, colors, new Set(ancestors).add(id));
+          uvChannel = uvTransform.channel;
+        } else if (
+          uv.outputSlot !== 0 ||
           (uvNode.m_OutputChannel !== undefined &&
             (!Number.isInteger(uvNode.m_OutputChannel) ||
               (uvNode.m_OutputChannel as number) < 0 ||
               (uvNode.m_OutputChannel as number) > 7))
         )
           throw new Error(`unsupported Unity texture UV graph at ${id}`);
-        uvChannel = (uvNode.m_OutputChannel as number | undefined) ?? 0;
+        else uvChannel = (uvNode.m_OutputChannel as number | undefined) ?? 0;
       }
       const texture = inputs.find((input) => input.inputSlot === 1);
       if (!texture)
@@ -278,6 +290,7 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
           textures: [`_SampleTexture2D_${id}_Texture_1`],
           factors: [],
           ...(uvChannel ? { textureChannels: [uvChannel] } : {}),
+          ...(uvTransform ? { textureUvTransforms: [uvTransform] } : {}),
         };
       const textureNode = byId.get(texture.node);
       if (textureNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode')
@@ -290,7 +303,12 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
         !key
       )
         throw new Error('unsupported Unity texture property');
-      return { textures: [key], factors: [], ...(uvChannel ? { textureChannels: [uvChannel] } : {}) };
+      return {
+        textures: [key],
+        factors: [],
+        ...(uvChannel ? { textureChannels: [uvChannel] } : {}),
+        ...(uvTransform ? { textureUvTransforms: [uvTransform] } : {}),
+      };
     }
     if (type === 'UnityEditor.ShaderGraph.PropertyNode' && inputs.length === 0) {
       const property = byId.get(nodeId(node.m_Property));
@@ -335,8 +353,13 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
         ...(result.textureChannels ?? result.textures.map(() => 0)),
         ...(term.textureChannels ?? term.textures.map(() => 0)),
       ];
+      const transforms = [
+        ...(result.textureUvTransforms ?? result.textures.map(() => null)),
+        ...(term.textureUvTransforms ?? term.textures.map(() => null)),
+      ];
       result.textures.push(...term.textures);
       if (channels.some((channel) => channel !== 0)) result.textureChannels = channels;
+      if (transforms.some(Boolean)) result.textureUvTransforms = transforms;
       result.factors.push(...term.factors);
       if (term.blends) (result.blends ??= []).push(...term.blends);
     }

@@ -3,7 +3,13 @@ import { extname, isAbsolute, relative, sep } from 'node:path';
 import { indexUnityGuids } from './guid-index.js';
 import { expandUnityInstances } from './instances.js';
 import { meshNameFromMeta } from './model-meta.js';
-import { materialFloatProperties, materialShaderGuid, parseUnitySurface, type UnitySurface } from './material.js';
+import {
+  materialColorProperties,
+  materialFloatProperties,
+  materialShaderGuid,
+  parseUnitySurface,
+  type UnitySurface,
+} from './material.js';
 import { shaderGraphBase } from './shadergraph.js';
 import { mapWeightExpression, type WeightExpression } from './weight-expression.js';
 import { inlineUnitySubgraphs } from './subgraphs.js';
@@ -114,6 +120,7 @@ export async function planUnityAssembly(
                 readFileSync(file({ fileId: '0', guid }, '.shadersubgraph'), 'utf8'),
               ),
               materialFloatProperties(contents),
+              materialColorProperties(contents),
             ),
           );
         } catch (error) {

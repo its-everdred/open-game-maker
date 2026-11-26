@@ -72,10 +72,29 @@ def expression_material(surface, uv_names):
             images.append(image)
             uv = nodes.new('ShaderNodeUVMap')
             uv.uv_map = uv_names[channel]
+            coordinates = uv.outputs['UV']
+            transform = texture.get('uvTransform')
+            if transform is not None:
+                if (
+                    not isinstance(transform, list) or len(transform) != 6
+                    or any(type(value) not in (int, float) or not math.isfinite(value) for value in transform)
+                    or texture['scale'] != [1, 1] or texture['offset'] != [0, 0]
+                ):
+                    raise ValueError('invalid Unity texture UV transform')
+                separate_uv = nodes.new('ShaderNodeSeparateXYZ')
+                links.new(coordinates, separate_uv.inputs[0])
+                combined_uv = nodes.new('ShaderNodeCombineXYZ')
+                for row in range(2):
+                    a, b, offset = transform[row * 3:row * 3 + 3]
+                    first = math_node('MULTIPLY', separate_uv.outputs['X'], constant(a))
+                    second = math_node('MULTIPLY', separate_uv.outputs['Y'], constant(b))
+                    coordinate = math_node('ADD', math_node('ADD', first, second), constant(offset))
+                    links.new(coordinate, combined_uv.inputs[row])
+                coordinates = combined_uv.outputs[0]
             mapping = nodes.new('ShaderNodeMapping')
             mapping.inputs['Scale'].default_value = (*texture['scale'], 1)
             mapping.inputs['Location'].default_value = (*texture['offset'], 0)
-            links.new(uv.outputs['UV'], mapping.inputs['Vector'])
+            links.new(coordinates, mapping.inputs['Vector'])
             sample = nodes.new('ShaderNodeTexImage')
             sample.image = image
             sample.extension = 'REPEAT'
@@ -129,6 +148,8 @@ def requires_mesh_bake(surfaces):
     for surface in surfaces:
         textures = layers(surface)
         if textures:
+            if any(texture.get('uvTransform') is not None for texture in textures):
+                return True
             first = textures[0]
             if any(
                 texture.get('uv', 0) != first.get('uv', 0)

@@ -69,7 +69,7 @@ export function compileWeightExpression(
     if (node.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode') {
       const channel =
         edge.outputSlot >= 4 && edge.outputSlot <= 7 ? edge.outputSlot - 4 : narrow && edge.outputSlot === 0 ? 0 : -1;
-      if (channel < 0) throw new Error('unsupported Unity scalar texture output');
+      if (channel < 0) throw new Error(`unsupported Unity scalar texture output ${edge.outputSlot} at ${edge.node}`);
       return { term: visitTexture(edge.node, seen), channel };
     }
     if (node.m_Type === 'UnityEditor.ShaderGraph.PropertyNode' && edge.outputSlot === 0 && linked.length === 0) {
