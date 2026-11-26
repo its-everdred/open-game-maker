@@ -5,6 +5,22 @@ import { Tile } from './Tile';
 
 afterEach(cleanup);
 
+it('marks a restricted coming soon game for its viewer', () => {
+  const game = {
+    id: 'g',
+    familyId: 'f',
+    ownerId: 'o',
+    repo: null,
+    title: 'Soon',
+    createdAt: '',
+    releaseState: 'coming_soon' as const,
+    canPlay: false,
+  };
+  render(<Tile game={game} selected={false} tabIndex={0} onClick={vi.fn()} onFocus={vi.fn()} />);
+  expect(screen.getByText('Coming Soon')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Soon: Coming Soon' })).toBeInTheDocument();
+});
+
 describe('showcase tile', () => {
   it('replaces the title with a declared logo while retaining the accessible name', () => {
     const game = { ...mergeShowcase([])[0]!, logoUrl: '/logo.png' };

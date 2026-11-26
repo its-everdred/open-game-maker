@@ -27,6 +27,7 @@ export function gameResponse(game: GameRow) {
     title: game.title,
     slug: game.slug,
     visibility: game.visibility,
+    releaseState: game.releaseState,
     repoVisibility: game.repoVisibility,
     repo:
       game.githubOwner && game.githubRepo && game.repoUrl
@@ -58,7 +59,15 @@ export function findGameForFamily(db: Db, id: string, familyId: string): GameRow
     .from(schema.games)
     .where(and(eq(schema.games.id, id), eq(schema.games.familyId, familyId)))
     .get();
-  if (!game) throw new HttpError(404, 'game_not_found');
+  if (!game) {
+    const visible = db
+      .select({ releaseState: schema.games.releaseState, delistedAt: schema.games.delistedAt })
+      .from(schema.games)
+      .where(eq(schema.games.id, id))
+      .get();
+    if (visible?.releaseState === 'coming_soon' && visible.delistedAt === null) throw new HttpError(403, 'coming_soon');
+    throw new HttpError(404, 'game_not_found');
+  }
   return game;
 }
 
@@ -68,21 +77,35 @@ export function listGames(db: Db, familyId: string, userId: string): GameRow[] {
     .from(schema.games)
     .where(
       and(
-        eq(schema.games.familyId, familyId),
         isNull(schema.games.delistedAt),
-        or(eq(schema.games.visibility, 'listed'), eq(schema.games.ownerId, userId)),
+        or(
+          eq(schema.games.releaseState, 'coming_soon'),
+          and(
+            eq(schema.games.familyId, familyId),
+            or(eq(schema.games.visibility, 'listed'), eq(schema.games.ownerId, userId)),
+          ),
+        ),
       ),
     )
     .all();
 }
 
 export function hasGameGrant(db: Db, gameId: string, userId: string): boolean {
-  return Boolean(
-    db
-      .select({ gameId: schema.gameGrants.gameId })
-      .from(schema.gameGrants)
-      .where(and(eq(schema.gameGrants.gameId, gameId), eq(schema.gameGrants.userId, userId)))
-      .get(),
+  return (
+    Boolean(
+      db
+        .select({ gameId: schema.gameGrants.gameId })
+        .from(schema.gameGrants)
+        .where(and(eq(schema.gameGrants.gameId, gameId), eq(schema.gameGrants.userId, userId)))
+        .get(),
+    ) ||
+    Boolean(
+      db
+        .select({ gameId: schema.gameEarlyAccess.gameId })
+        .from(schema.gameEarlyAccess)
+        .where(and(eq(schema.gameEarlyAccess.gameId, gameId), eq(schema.gameEarlyAccess.userId, userId)))
+        .get(),
+    )
   );
 }
 

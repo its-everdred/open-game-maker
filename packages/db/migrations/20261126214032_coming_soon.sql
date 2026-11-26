@@ -1,0 +1,1 @@
+ALTER TABLE `games` ADD `release_state` text DEFAULT 'released' NOT NULL;

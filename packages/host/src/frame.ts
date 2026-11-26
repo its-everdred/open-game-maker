@@ -29,6 +29,8 @@ export interface GameFrameOptions {
   buildId: string;
   /** A scoped preview capability, served outside the published-build service worker scope. */
   preview?: boolean;
+  /** Resolve an authenticated build capability through the app before navigating to the game origin. */
+  authenticated?: boolean;
   build: 'draft' | 'test' | 'published';
   /** Extra query parameters the game reads at boot, such as a review deck's scenario (`speed=slow`). */
   params?: Readonly<Record<string, string>>;
@@ -103,8 +105,11 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   iframe.setAttribute('allow', 'autoplay; fullscreen; gamepad');
   iframe.setAttribute('referrerpolicy', 'origin');
   Object.assign(iframe.style, { border: '0', width: '100%', height: '100%', display: 'block' });
-  const path = `/${options.preview ? 'p' : 'g'}/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/index.html`;
-  const source = new URL(path, gamesOrigin.origin);
+  const path =
+    options.authenticated && !options.preview
+      ? `/api/v1/games/${encodeURIComponent(options.gameId)}/launch/${encodeURIComponent(options.buildId)}`
+      : `/${options.preview ? 'p' : 'g'}/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/index.html`;
+  const source = new URL(path, options.authenticated && !options.preview ? appOrigin.origin : gamesOrigin.origin);
   /* The host's own parameters are set after, so a scenario can never change the build or the protocol. */
   for (const [key, value] of Object.entries(options.params ?? {})) source.searchParams.set(key, value);
   source.searchParams.set('build', options.build);

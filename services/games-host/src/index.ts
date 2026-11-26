@@ -9,6 +9,7 @@ import { createApp } from './server.js';
 export function main(environment: NodeJS.ProcessEnv = env): ServerType {
   const config = loadGamesHostEnv(environment);
   const app = createApp({
+    accessApi: config.accessApi,
     appOrigin: config.appOrigin,
     root: config.root,
     version: readGitVersion(),

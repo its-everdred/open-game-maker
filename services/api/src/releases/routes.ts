@@ -80,6 +80,7 @@ function requirePlayer(c: Parameters<typeof requirePrincipal>[0], gameId: string
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      releaseState: game.releaseState,
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
     }),
   );

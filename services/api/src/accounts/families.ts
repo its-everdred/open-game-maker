@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Principal } from '@ogm/contracts';
 import type { Db } from '@ogm/db';
 import { schema } from '@ogm/db';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import type { Actor, Authorization } from '@ogm/policy';
 
@@ -83,9 +83,18 @@ export function removeMember(db: Db, familyId: string, userId: string): void {
   const family = db.select().from(schema.families).where(eq(schema.families.id, familyId)).get();
   if (!family) throw new HttpError(404, 'family_not_found');
   if (family.ownerUserId === userId) throw new HttpError(409, 'owner_immutable');
-  db.delete(schema.familyMembers)
-    .where(and(eq(schema.familyMembers.familyId, familyId), eq(schema.familyMembers.userId, userId)))
-    .run();
+  db.transaction((tx) => {
+    const familyGames = tx
+      .select({ id: schema.games.id })
+      .from(schema.games)
+      .where(eq(schema.games.familyId, familyId));
+    tx.delete(schema.gameEarlyAccess)
+      .where(and(eq(schema.gameEarlyAccess.userId, userId), inArray(schema.gameEarlyAccess.gameId, familyGames)))
+      .run();
+    tx.delete(schema.familyMembers)
+      .where(and(eq(schema.familyMembers.familyId, familyId), eq(schema.familyMembers.userId, userId)))
+      .run();
+  });
 }
 
 export function setRole(db: Db, familyId: string, userId: string, role: 'admin' | 'member'): void {

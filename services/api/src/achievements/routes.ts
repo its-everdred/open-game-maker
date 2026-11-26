@@ -35,6 +35,7 @@ function playableGame(c: Parameters<typeof requirePrincipal>[0]): { principal: U
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      releaseState: game.releaseState,
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
     }),
   );

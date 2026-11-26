@@ -344,6 +344,20 @@
       "when": 1795489393818,
       "tag": "20261124030313_client_telemetry",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1795729232161,
+      "tag": "20261126214032_coming_soon",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1795729976487,
+      "tag": "20261126215256_game_early_access",
+      "breakpoints": true
     }
   ]
 }

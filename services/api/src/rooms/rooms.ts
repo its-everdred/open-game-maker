@@ -94,6 +94,7 @@ export async function createRoom(
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      releaseState: game.releaseState,
     }),
   );
 
@@ -214,6 +215,7 @@ export async function joinRoom(
     authorize(actorFromPrincipal(principal), 'game.play', {
       ownerId: game.ownerId,
       visibility: game.visibility,
+      releaseState: game.releaseState,
       granted: true,
     }),
   );

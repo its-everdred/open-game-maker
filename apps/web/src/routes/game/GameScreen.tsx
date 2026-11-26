@@ -490,6 +490,7 @@ export function GameScreen() {
               gamesOrigin,
               gameId,
               buildId: framePreview?.accessId ?? snapshot.buildId,
+              authenticated: !framePreview,
               ...(framePreview ? { preview: true } : {}),
               mode: mode === 'edit' ? 'play' : mode,
               ...(scenario === null ? {} : { params: { scenario } }),

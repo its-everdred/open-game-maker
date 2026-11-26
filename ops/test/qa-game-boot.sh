@@ -26,9 +26,9 @@ db=$scratch/ogm.sqlite3
 python3 - "$db" << 'PY'
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
-c.execute('create table games (id text, slug text, delisted_at text)')
+c.execute("create table games (id text, slug text, delisted_at text, visibility text default 'listed', release_state text default 'released')")
 c.execute('create table builds (id text, game_id text, status text, created_at text)')
-c.executemany('insert into games values (?, ?, null)', [('g_ok', 'ok'), ('g_bad', 'bad'), ('g_qa', 'qa-review')])
+c.executemany('insert into games (id, slug, delisted_at) values (?, ?, null)', [('g_ok', 'ok'), ('g_bad', 'bad'), ('g_qa', 'qa-review')])
 c.executemany('insert into builds values (?, ?, ?, ?)', [
   ('build_old', 'g_ok', 'tested', '2026-11-20'), ('build_new', 'g_ok', 'tested', '2026-11-21'),
   ('build_bad', 'g_bad', 'tested', '2026-11-21'), ('build_qa', 'g_qa', 'tested', '2026-11-21')])

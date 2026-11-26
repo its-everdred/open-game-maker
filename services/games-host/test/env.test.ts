@@ -6,6 +6,7 @@ import { loadGamesHostEnv } from '../src/env.js';
 
 const validEnvironment = {
   OGM_GAMES_PORT: '3400',
+  OGM_GAMES_ACCESS_API: 'http://127.0.0.1:3401',
   OGM_GAMES_ROOT: './games',
   OGM_APP_ORIGIN: 'https://makeopen.games',
 };
@@ -15,6 +16,7 @@ describe('games-host environment', () => {
   it('loads the loopback-only service configuration', () => {
     expect(loadGamesHostEnv(validEnvironment)).toEqual({
       appOrigin: 'https://makeopen.games',
+      accessApi: 'http://127.0.0.1:3401',
       host: '127.0.0.1',
       port: 3400,
       root: resolve('./games'),

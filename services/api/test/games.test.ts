@@ -9,6 +9,9 @@ import { createGameRow } from '../src/games/games.js';
 import { CommitServiceRepoProvisioner, NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
 import { writeQaState } from '../src/qa/state.js';
+import * as authRoutes from '../src/auth/routes.js';
+import { createApp as createGamesHost } from '../../games-host/src/server.js';
+import { markComplete } from '../../games-host/src/layout.js';
 
 const now = '2026-11-01T00:00:00.000Z';
 const familyId = 'f-family';
@@ -69,6 +72,142 @@ async function createGame(
 }
 
 describe('games routes', () => {
+  it('lists coming soon games while denying ungranted players access', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.db
+      .insert(schema.allowedUsers)
+      .values({ email: player.email, role: 'player', addedBy: admin.userId, addedAt: now })
+      .run();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: 'g-soon',
+        familyId,
+        ownerId: creator.userId,
+        title: 'Soon',
+        slug: 'soon',
+        visibility: 'private',
+        releaseState: 'coming_soon',
+        repoVisibility: 'private',
+        createdAt: now,
+      })
+      .run();
+    const outsider: TestUser = { ...player, userId: 'u-outside', email: 'outside@example.com', familyId: 'f-outside' };
+    installUsers(deps, [creator, admin, player, outsider]);
+    deps.db
+      .insert(schema.families)
+      .values({ id: 'f-outside', name: 'Other', ownerUserId: outsider.userId, createdAt: now })
+      .run();
+    deps.db
+      .insert(schema.familyMembers)
+      .values({ familyId: 'f-outside', userId: outsider.userId, role: 'owner', capability: 'player', joinedAt: now })
+      .run();
+    const { app } = await makeApp(deps);
+    expect(await (await app.request('/api/v1/games', { headers: asUser(outsider.userId) })).json()).toMatchObject({
+      games: [{ id: 'g-soon', canPlay: false, repo: null }],
+    });
+    expect((await app.request('/api/v1/games/g-soon/builds', { headers: asUser(outsider.userId) })).status).toBe(403);
+    expect(
+      await (await app.request('/api/v1/games/resolve/soon', { headers: asUser(outsider.userId) })).json(),
+    ).toMatchObject({ error: 'coming_soon' });
+    const list = await app.request('/api/v1/games', { headers: asUser(player.userId) });
+    expect(await list.json()).toMatchObject({ games: [{ id: 'g-soon', releaseState: 'coming_soon', canPlay: false }] });
+    const denied = await app.request('/api/v1/games/resolve/soon', { headers: asUser(player.userId) });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ error: 'coming_soon' });
+    const anonymous = await app.request('/api/v1/games/resolve/soon');
+    expect(anonymous.status).toBe(403);
+    expect(await anonymous.json()).toMatchObject({ error: 'coming_soon' });
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(creator.userId) })).status).toBe(200);
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(admin.userId) })).status).toBe(200);
+    const grantUrl = `/api/v1/admin/games/g-soon/early-access/${player.userId}`;
+    expect((await app.request(grantUrl, { method: 'PUT', headers: asUser(player.userId) })).status).toBe(403);
+    expect((await app.request(grantUrl, { method: 'PUT', headers: asUser(admin.userId) })).status).toBe(204);
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(player.userId) })).status).toBe(200);
+    deps.db
+      .insert(schema.user)
+      .values({
+        id: player.userId,
+        name: 'Player',
+        email: player.email,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run();
+    deps.db
+      .insert(schema.session)
+      .values({
+        id: 'session-test',
+        userId: player.userId,
+        token: 'session-token',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      })
+      .run();
+    const sessionSpy = vi.spyOn(authRoutes, 'authContextFor').mockReturnValue({
+      auth: { api: { getSession: async () => ({ user: { id: player.userId }, session: { id: 'session-test' } }) } },
+    } as unknown as ReturnType<typeof authRoutes.authContextFor>);
+    const launch = await app.request('/api/v1/games/g-soon/launch/build1', { headers: asUser(player.userId) });
+    expect(launch.status).toBe(302);
+    const token = new URL(launch.headers.get('location')!).searchParams.get('access');
+    expect(token).toBeTruthy();
+    const buildDir = join(deps.config.gamesRoot, 'g-soon', 'build1');
+    mkdirSync(buildDir, { recursive: true });
+    writeFileSync(join(buildDir, 'index.html'), '<h1>game</h1>');
+    await markComplete(buildDir);
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => app.request(url, init));
+    const host = createGamesHost({
+      root: deps.config.gamesRoot,
+      appOrigin: 'https://app.test',
+      version: 'test',
+      workerScript: '',
+      accessApi: 'http://127.0.0.1:4300',
+    });
+    expect((await host.request('/g/g-soon/build1/index.html')).status).toBe(403);
+    const hostLaunch = await host.request(`/g/g-soon/build1/index.html?access=${token}`);
+    expect(hostLaunch.status).toBe(302);
+    const hostCookie = hostLaunch.headers.get('set-cookie')!.split(';')[0]!;
+    expect(
+      (await host.request('/g/g-soon/build1/index.html?frameObserver=2', { headers: { cookie: hostCookie } })).status,
+    ).toBe(200);
+    const check = () =>
+      app.request('/api/v1/internal/games/g-soon/build-access', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+    expect((await check()).status).toBe(204);
+    sessionSpy.mockRestore();
+    expect((await app.request(grantUrl, { method: 'DELETE', headers: asUser(admin.userId) })).status).toBe(204);
+    expect((await check()).status).toBe(403);
+    expect((await host.request('/g/g-soon/build1/index.html', { headers: { cookie: hostCookie } })).status).toBe(403);
+    vi.unstubAllGlobals();
+    expect((await app.request(grantUrl, { method: 'PUT', headers: asUser(admin.userId) })).status).toBe(204);
+    deps.db.delete(schema.session).where(eq(schema.session.id, 'session-test')).run();
+    expect((await check()).status).toBe(403);
+    expect((await app.request(grantUrl, { method: 'DELETE', headers: asUser(admin.userId) })).status).toBe(204);
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(player.userId) })).status).toBe(403);
+    expect(
+      (
+        await app.request('/api/v1/games/g-soon', {
+          method: 'PATCH',
+          headers: { ...asUser(player.userId), 'content-type': 'application/json' },
+          body: JSON.stringify({ releaseState: 'released' }),
+        })
+      ).status,
+    ).toBe(403);
+    const release = await app.request('/api/v1/games/g-soon', {
+      method: 'PATCH',
+      headers: { ...asUser(admin.userId), 'content-type': 'application/json' },
+      body: JSON.stringify({ releaseState: 'released' }),
+    });
+    expect(release.status).toBe(200);
+    expect(await release.json()).toMatchObject({ releaseState: 'released', visibility: 'listed' });
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(player.userId) })).status).toBe(200);
+  });
   it('isolates the QA creator before provisioning and refuses an unsafe repository', async () => {
     const deps = makeDeps();
     seedFamily(deps);

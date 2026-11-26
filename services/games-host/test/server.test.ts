@@ -54,7 +54,7 @@ describe('games-host server', () => {
     expect(response.headers.get('content-security-policy')).toContain('frame-ancestors https://makeopen.games');
     expect(response.headers.get('cross-origin-opener-policy')).toBe('same-origin');
     expect(response.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
-    expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('content-length')).toBe(String(Buffer.byteLength('<h1>demo</h1>')));
     expect(await response.text()).toBe('<h1>demo</h1>');
   });
@@ -98,7 +98,7 @@ describe('games-host server', () => {
     expect(entry.status).toBe(308);
     expect(entry.headers.get('location')).toBe(`/a/${hash}.html`);
     const shared = await app().request(`/a/${hash}.html`);
-    expect(shared.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(shared.headers.get('cache-control')).toBe('no-store');
     expect(await shared.text()).toBe('<!doctype html><h1>shared</h1>');
   });
 
@@ -137,11 +137,11 @@ describe('games-host server', () => {
     expect(unknown.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
-  it('serves AVIF display images with immutable caching', async () => {
+  it('serves AVIF display images without caching', async () => {
     await writeFile(join(build, 'assets', 'image.avif'), 'avif');
     const response = await app().request('/g/demo/b1/assets/image.avif');
     expect(response.headers.get('content-type')).toBe('image/avif');
-    expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(response.headers.get('cache-control')).toBe('no-store');
   });
 
   it('serves gameplay trailers as MP4 video', async () => {
@@ -168,12 +168,12 @@ describe('games-host server', () => {
     expect(await response.text()).toBe('');
   });
 
-  it('serves a shared blob with immutable headers and its sha ETag', async () => {
+  it('serves a shared blob without caching and with its sha ETag', async () => {
     const response = await app().request(`/a/${blobSha}.webp`);
     const headResponse = await app().request(`/a/${blobSha}.webp`, { method: 'HEAD' });
 
     expect(response.status).toBe(200);
-    expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('content-type')).toBe('image/webp');
     expect(response.headers.get('etag')).toBe(`"${blobSha}"`);
     expect(response.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
@@ -270,7 +270,7 @@ describe('games-host server', () => {
     await markComplete(build);
     const completed = await app().request('/g/demo/b1/');
     expect(completed.status).toBe(200);
-    expect(completed.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(completed.headers.get('cache-control')).toBe('no-store');
   });
 
   it.each([
@@ -305,6 +305,7 @@ describe('games-host server', () => {
       main({
         OGM_GAMES_BIND: '0.0.0.0',
         OGM_GAMES_PORT: '3400',
+        OGM_GAMES_ACCESS_API: 'http://127.0.0.1:3401',
         OGM_GAMES_ROOT: root,
         OGM_APP_ORIGIN: 'https://makeopen.games',
       }),
@@ -325,6 +326,7 @@ describe('games-host server', () => {
     try {
       const server = main({
         OGM_GAMES_PORT: String(address.port),
+        OGM_GAMES_ACCESS_API: 'http://127.0.0.1:3401',
         OGM_GAMES_ROOT: root,
         OGM_APP_ORIGIN: 'https://makeopen.games',
       });

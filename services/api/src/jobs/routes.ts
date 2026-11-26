@@ -44,6 +44,7 @@ function requireRead(deps: AppDeps, gameId: string, actor: ReturnType<typeof act
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      releaseState: game.releaseState,
       granted: hasGameGrant(deps.db, game.id, actor.userId),
     }),
   );
@@ -80,7 +81,18 @@ const routes = new Hono<ApiBindings>()
     }
 
     requireAuthorization(authorize(actor, 'game.play', { familyId: principal.familyId, visibility: 'listed' }));
-    const visibleGameIds = listVisibleGames(deps.db, principal.familyId, principal.userId).map((game) => game.id);
+    const visibleGameIds = listVisibleGames(deps.db, principal.familyId, principal.userId)
+      .filter(
+        (game) =>
+          authorize(actor, 'game.play', {
+            familyId: game.familyId,
+            ownerId: game.ownerId,
+            visibility: game.visibility,
+            releaseState: game.releaseState,
+            granted: hasGameGrant(deps.db, game.id, principal.userId),
+          }).ok,
+      )
+      .map((game) => game.id);
     const jobs = listJobs(deps.db, visibleGameIds).filter((job) => !isTerminal(job.state));
     return c.json({ jobs });
   })

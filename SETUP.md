@@ -176,6 +176,7 @@ cp services/commit/ops/ogm-commit.env.example ~/.config/ogm/env/ogm-commit.env
 # Fill OGM_API_PORT=4300, OGM_COMMIT_PORT=4301,
 # OGM_ROOMS_PORT=4302, OGM_GAMES_PORT=<unused-loopback-port>,
 # OGM_VOICE_PORT=40400, and OGM_VOICE_INTERNAL_PORT=40401.
+# Set OGM_GAMES_ACCESS_API=http://127.0.0.1:4300 in games.env to match OGM_API_PORT.
 # Optional: OGM_ROOMS_SEAT_RECONNECT_SEC=60 in rooms.env (default 30).
 # Fill OGM_DATA_DIR=~/.local/share/ogm/data,
 # OGM_BLOB_ROOT=~/.local/share/ogm/blobs,

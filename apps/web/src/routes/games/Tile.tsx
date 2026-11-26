@@ -28,19 +28,22 @@ type TileProps = {
 
 export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCover, eager }: TileProps) {
   const unavailable = game.creationStatus === 'creating' || game.creationStatus === 'failed';
+  const comingSoon = game.releaseState === 'coming_soon' && game.canPlay === false;
   const statusLabel = game.creationStatus === 'creating' ? 'Creating' : 'Setup failed';
-  const accessibleName = unavailable
-    ? `${game.title}: ${statusLabel}`
-    : game.tagline
-      ? `${game.title}: ${game.tagline}`
-      : game.title;
+  const accessibleName = comingSoon
+    ? `${game.title}: Coming Soon`
+    : unavailable
+      ? `${game.title}: ${statusLabel}`
+      : game.tagline
+        ? `${game.title}: ${game.tagline}`
+        : game.title;
   if (game.showcase) {
     const tags = game.showcase.displayTags.filter((tag) => tag.kind === 'genre' || tag.kind === 'vibe').slice(0, 4);
     return (
       <button
         type="button"
         className="game-tile showcase-tile"
-        aria-label={unavailable ? accessibleName : `${game.title}: ${game.showcase.tagline}`}
+        aria-label={unavailable || comingSoon ? accessibleName : `${game.title}: ${game.showcase.tagline}`}
         aria-pressed={selected}
         disabled={unavailable}
         tabIndex={tabIndex}
@@ -55,7 +58,11 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
               {game.creationStatus === 'creating' ? 'Creating…' : 'Setup failed'}
             </span>
           )}
-          {game.showcase.badge && <span className="game-new-badge">{game.showcase.badge}</span>}
+          {comingSoon ? (
+            <span className="game-new-badge">Coming Soon</span>
+          ) : (
+            game.showcase.badge && <span className="game-new-badge">{game.showcase.badge}</span>
+          )}
           {game.logoUrl && (
             <DisplayImage
               className="game-logo"
@@ -117,7 +124,11 @@ export function Tile({ game, job, selected, tabIndex, onClick, onFocus, sharedCo
             {game.creationStatus === 'creating' ? 'Creating…' : 'Setup failed'}
           </span>
         )}
-        {!game.publishedReleaseId && <span className="game-new-badge">New</span>}
+        {comingSoon ? (
+          <span className="game-new-badge">Coming Soon</span>
+        ) : (
+          !game.publishedReleaseId && <span className="game-new-badge">New</span>
+        )}
         {game.logoUrl && (
           <DisplayImage
             className="game-logo"

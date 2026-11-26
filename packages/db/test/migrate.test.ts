@@ -73,6 +73,8 @@ describe('migrate', () => {
         '20261123020745_energy_admin.sql',
         '20261123185739_scene_store.sql',
         '20261124030313_client_telemetry.sql',
+        '20261126214032_coming_soon.sql',
+        '20261126215256_game_early_access.sql',
       ],
     });
     expect(migrate({ sqlite })).toEqual({ applied: [] });
@@ -132,6 +134,8 @@ describe('migrate', () => {
       'migration:20261123020745_energy_admin.sql',
       'migration:20261123185739_scene_store.sql',
       'migration:20261124030313_client_telemetry.sql',
+      'migration:20261126214032_coming_soon.sql',
+      'migration:20261126215256_game_early_access.sql',
     ]);
     sqlite.close();
   });

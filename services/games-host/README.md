@@ -6,6 +6,7 @@ games origin; this service owns immutable file responses and the browser securit
 ## Environment
 
 - `OGM_GAMES_PORT`: loopback port for the HTTP server.
+- `OGM_GAMES_ACCESS_API`: loopback API origin (for example `http://127.0.0.1:4300`); build requests fail closed if the API is unavailable.
 - `OGM_GAMES_ROOT`: directory containing `<gameId>/<buildId>/` build trees.
 - `OGM_APP_ORIGIN`: one or more space-separated HTTP(S) origins allowed by CSP `frame-ancestors`.
 - `OGM_GAMES_BIND`: optional assertion; if set, it must be `127.0.0.1`.
@@ -17,6 +18,7 @@ A build is invisible until its directory contains `.complete`. Publishers should
 The API's build publisher (`services/api/src/builds`) is the production writer.
 
 The service exposes `GET /healthz`, `GET|HEAD /g/<gameId>/<buildId>/<path>`, shared content-addressed blobs at
-`GET|HEAD /a/<sha256>.<ext>`, and the cache worker at `GET|HEAD /game-cache.js`. It never sets cookies, never lists a
-directory, and applies the game security headers to every game, blob, and worker response. Text responses negotiate
+`GET|HEAD /a/<sha256>.<ext>`, and the cache worker at `GET|HEAD /game-cache.js`. The host stores short-lived build
+capabilities in HTTP-only cookies and rechecks them with the API; it never lists a directory and applies the game
+security headers to every game, blob, and worker response. Text responses negotiate
 Brotli or gzip; media files are never compressed.

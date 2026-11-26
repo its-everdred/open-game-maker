@@ -76,6 +76,7 @@ function authorizedGame(c: Context<ApiBindings>, action: 'game.edit' | 'game.pla
             familyId: game.familyId,
             ownerId: game.ownerId,
             visibility: game.visibility,
+            releaseState: game.releaseState,
             granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
           },
     ),

@@ -6,6 +6,23 @@ import { createGameFrame, HostError } from './frame.js';
 afterEach(() => document.body.replaceChildren());
 
 describe('createGameFrame', () => {
+  it('starts authenticated builds at the app launch endpoint', () => {
+    const frame = createGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'https://games.test',
+      appOrigin: 'https://app.test',
+      gameId: 'g1',
+      buildId: 'b1',
+      authenticated: true,
+      build: 'draft',
+      mode: 'play',
+      playerIndex: 0,
+      capabilities: [],
+      role: () => 'owner',
+    });
+    expect(frame.iframe.src).toBe('https://app.test/api/v1/games/g1/launch/b1?build=draft&protocol=1&frameObserver=2');
+    frame.dispose();
+  });
   it('keeps preview frames outside the published-build service worker scope', () => {
     const container = document.createElement('div');
     const onError = vi.fn();

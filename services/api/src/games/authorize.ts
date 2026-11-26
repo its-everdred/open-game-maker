@@ -20,6 +20,7 @@ export function authorizedGame(c: Context<ApiBindings>, action: Action): GameRow
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      releaseState: game.releaseState,
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
     }),
   );

@@ -12,8 +12,10 @@ import { FRAME_OBSERVER, FRAME_OBSERVER_FILE, observeFrameHtml } from './frame-o
 import { BadBlobName, BadId, blobPath, buildDir, isComplete, resolveFile } from './layout.js';
 import { isCompressiblePath, mimeForPath } from './mime.js';
 import { bootstrapPreviewHtml, PREVIEW_BOOTSTRAP, PREVIEW_BOOTSTRAP_FILE } from './preview-bootstrap.js';
+import { accessCookie, blobOwners, mayReadGame } from './access.js';
 
 export interface GamesHostOptions {
+  accessApi?: string;
   appOrigin: string;
   root: string;
   uptimeSec?: () => number;
@@ -25,6 +27,7 @@ export function createApp(options: GamesHostOptions): Hono {
   const app = new Hono();
   const gameHeaderEntries = Object.entries(gameHeaders(options.appOrigin));
   const uptimeSec = options.uptimeSec ?? (() => process.uptime());
+  const issuedCookies = new WeakMap<Request, string>();
 
   const secureResponse: MiddlewareHandler = async (context, next) => {
     await next();
@@ -34,17 +37,68 @@ export function createApp(options: GamesHostOptions): Hono {
     if (new URL(context.req.url).pathname.startsWith('/p/')) {
       context.res.headers.set('Access-Control-Allow-Origin', '*');
     }
-    if (context.res.status !== 200 || new URL(context.req.url).pathname.startsWith('/p/')) {
+    if (
+      new URL(context.req.url).pathname.startsWith('/g/') ||
+      new URL(context.req.url).pathname.startsWith('/a/') ||
+      context.res.status !== 200 ||
+      new URL(context.req.url).pathname.startsWith('/p/')
+    ) {
       context.res.headers.set('Cache-Control', 'no-store');
     } else if (new URL(context.req.url).pathname === '/game-cache.js') {
       context.res.headers.set('Cache-Control', 'no-cache');
     }
     context.res.headers.delete('set-cookie');
+    const issuedCookie = issuedCookies.get(context.req.raw);
+    if (issuedCookie) context.res.headers.set('set-cookie', issuedCookie);
   };
   app.use('/g/*', secureResponse);
   app.use('/p/*', secureResponse);
   app.use('/a/*', secureResponse);
   app.use('/game-cache.js', secureResponse);
+
+  if (options.accessApi) {
+    const api = options.accessApi;
+    app.use('/g/*', async (context, next) => {
+      const url = new URL(context.req.url);
+      const gameId = url.pathname.split('/')[2] ?? '';
+      const supplied = url.searchParams.get('access');
+      if (supplied && !/^gba1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u.test(supplied)) return context.text('Forbidden', 403);
+      if (!/^[A-Za-z0-9_-]{1,80}$/u.test(gameId)) return context.text('Forbidden', 403);
+      const token = supplied ?? accessCookie(context.req.header('cookie'), gameId);
+      if (!(await mayReadGame(api, gameId, token))) return context.text('Forbidden', 403);
+      if (supplied) {
+        url.searchParams.delete('access');
+        const secure = options.appOrigin.split(/\s+/u).some((origin) => origin.startsWith('https:'));
+        issuedCookies.set(
+          context.req.raw,
+          `ogm_build_${gameId}=${supplied}; Path=/; HttpOnly; Max-Age=86400; ${secure ? 'SameSite=None; Secure' : 'SameSite=Lax'}`,
+        );
+        context.header('Referrer-Policy', 'no-referrer');
+        return context.redirect(`${url.pathname}${url.search}`, 302);
+      }
+      await next();
+    });
+    app.use('/a/*', async (context, next) => {
+      const file = new URL(context.req.url).pathname.split('/')[2] ?? '';
+      if (!/^[0-9a-f]{64}\.[a-z0-9]{1,12}$/u.test(file)) return context.text('Forbidden', 403);
+      try {
+        if (!(await stat(blobPath(options.root, file))).isFile()) return context.text('Not Found', 404);
+      } catch {
+        return context.text('Not Found', 404);
+      }
+      const owners = await blobOwners(options.root, file);
+      if (owners === null || owners.length === 0) return context.text('Forbidden', 403);
+      if (
+        !(
+          await Promise.all(
+            owners.map((game) => mayReadGame(api, game, accessCookie(context.req.header('cookie'), game))),
+          )
+        ).some(Boolean)
+      )
+        return context.text('Forbidden', 403);
+      await next();
+    });
+  }
 
   app.get('/healthz', (context) =>
     context.json(

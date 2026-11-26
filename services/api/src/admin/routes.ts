@@ -213,6 +213,42 @@ const routes = new Hono<ApiBindings>()
       .all();
     return c.json({ games: games.map(gameResponse) });
   })
+  .get('/games/:id/early-access', (c) => {
+    const actor = admin(c, 'admin.members.manage');
+    const db = c.get('deps').db;
+    const game = findGameForFamily(db, c.req.param('id'), actor.familyId);
+    return c.json({
+      userIds: db
+        .select({ userId: schema.gameEarlyAccess.userId })
+        .from(schema.gameEarlyAccess)
+        .where(eq(schema.gameEarlyAccess.gameId, game.id))
+        .all()
+        .map((row) => row.userId),
+    });
+  })
+  .put('/games/:id/early-access/:userId', (c) => {
+    const actor = admin(c, 'admin.members.manage');
+    const deps = c.get('deps');
+    const game = findGameForFamily(deps.db, c.req.param('id'), actor.familyId);
+    const member = familyMember(deps, actor.familyId, c.req.param('userId'));
+    deps.db
+      .insert(schema.gameEarlyAccess)
+      .values({ gameId: game.id, userId: member.userId })
+      .onConflictDoNothing()
+      .run();
+    return c.body(null, 204);
+  })
+  .delete('/games/:id/early-access/:userId', (c) => {
+    const actor = admin(c, 'admin.members.manage');
+    const deps = c.get('deps');
+    const game = findGameForFamily(deps.db, c.req.param('id'), actor.familyId);
+    const member = familyMember(deps, actor.familyId, c.req.param('userId'));
+    deps.db
+      .delete(schema.gameEarlyAccess)
+      .where(and(eq(schema.gameEarlyAccess.gameId, game.id), eq(schema.gameEarlyAccess.userId, member.userId)))
+      .run();
+    return c.body(null, 204);
+  })
   // Register a game whose repository already exists — a game living in an Open-Games monorepo — so the next game in
   // that repository takes this path instead of a hand-edited row. The row names the repository and the game's
   // `games/<slug>` folder in it; no provisioner runs and no repository or folder is created. The daemon block links

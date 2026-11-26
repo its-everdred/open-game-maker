@@ -136,6 +136,7 @@ export async function forkGame(
     familyId: sourceGame.familyId,
     ownerId: sourceGame.ownerId,
     visibility: sourceGame.visibility,
+    releaseState: sourceGame.releaseState,
   });
   if (!authorization.ok) throw new ForkError(authorization.reason, 403);
   if (!sourceGame.forkable) throw new ForkError('not_forkable', 403);

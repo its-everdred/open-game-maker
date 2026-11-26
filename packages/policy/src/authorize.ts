@@ -52,6 +52,12 @@ export function authorize(actor: Actor, action: Action, resource: Resource = {})
   }
 
   if (action === 'game.play') {
+    if (resource.visibility === undefined) return denied('visibility_required');
+    if (resource.releaseState === 'coming_soon') {
+      return actor.platformRole === 'admin' || resource.ownerId === actor.userId || resource.granted === true
+        ? allowed()
+        : denied('coming_soon');
+    }
     if (resource.visibility === 'listed') return allowed();
     if (resource.visibility !== 'private') return denied('visibility_required');
     return resource.ownerId === actor.userId || resource.granted === true ? allowed() : denied('private_game');
@@ -59,6 +65,7 @@ export function authorize(actor: Actor, action: Action, resource: Resource = {})
 
   if (action === 'game.fork') {
     if (resource.ownerId === actor.userId) return allowed();
+    if (resource.releaseState === 'coming_soon') return denied('coming_soon');
     return actor.capability === 'creator' && resource.visibility === 'listed' ? allowed() : denied('not_allowed');
   }
 

@@ -49,6 +49,9 @@ export const games = sqliteTable(
     // The shareable URL segment. Unique per instance, nullable only for rows written before slugs existed.
     slug: text('slug'),
     visibility: text('visibility', { enum: ['listed', 'private'] }).notNull(),
+    releaseState: text('release_state', { enum: ['released', 'coming_soon'] })
+      .notNull()
+      .default('released'),
     githubOwner: text('github_owner'),
     githubRepo: text('github_repo'),
     // The game's folder inside the instance repository (`games/<slug>`), fixed for the life of the game so renaming
@@ -148,4 +151,15 @@ export const gameGrants = sqliteTable(
       .references(() => invitations.id),
   },
   (table) => [primaryKey({ columns: [table.gameId, table.userId] }), index('game_grants_user_index').on(table.userId)],
+);
+
+export const gameEarlyAccess = sqliteTable(
+  'game_early_access',
+  {
+    gameId: text('game_id')
+      .notNull()
+      .references(() => games.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.gameId, table.userId] })],
 );

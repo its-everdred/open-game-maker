@@ -143,11 +143,20 @@ def main(argv):
         rows = conn.execute(
             """select g.id, g.slug, (select b.id from builds b where b.game_id = g.id and b.status = 'tested'
                                       order by b.created_at desc limit 1)
-               from games g where g.delisted_at is null and g.slug not like 'qa-%' order by g.slug"""
+               from games g where g.delisted_at is null and g.visibility = 'listed' and g.release_state = 'released' and g.slug not like 'qa-%' order by g.slug"""
         ).fetchall()
     if args.get('--game'):
         rows = [row for row in rows if row[1] == args['--game']]
         if not rows:
+            with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as conn:
+                protected = conn.execute(
+                    "select 1 from games where slug = ? and delisted_at is null and release_state = 'coming_soon'",
+                    (args['--game'],),
+                ).fetchone()
+            if protected:
+                print(f"{clean(args['--game'])}: not checked (coming soon)")
+                print('exit=0 qa-game-play')
+                return 0
             print(f"ogm-qa-game-play: no published game {args['--game']}", file=sys.stderr)
             return 64
         if args.get('--build'):
