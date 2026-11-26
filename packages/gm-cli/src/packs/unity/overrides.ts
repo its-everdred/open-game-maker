@@ -51,6 +51,16 @@ export function applyPrefabOverrides(
     )
       continue;
     if (
+      record.type === 'Terrain' &&
+      [
+        'm_TreeCrossFadeLength',
+        'm_DetailObjectDistance',
+        'm_TreeBillboardDistance',
+        'm_TreeMaximumFullLODCount',
+      ].includes(path)
+    )
+      continue;
+    if (
       (path === 'm_IsActive' && record.type === 'GameObject') ||
       (path === 'm_Enabled' && record.type === 'MeshRenderer')
     ) {

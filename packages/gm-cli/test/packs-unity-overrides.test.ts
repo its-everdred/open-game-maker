@@ -61,6 +61,21 @@ it('ignores light-only overrides while still rejecting unknown mesh overrides', 
   ).toThrow('unsupported prefab override');
 });
 
+it('ignores terrain vegetation display settings but refuses unrelated terrain changes', () => {
+  const source = parseUnityYaml('--- !u!218 &5\nTerrain: {}\n');
+  for (const propertyPath of [
+    'm_TreeCrossFadeLength',
+    'm_DetailObjectDistance',
+    'm_TreeBillboardDistance',
+    'm_TreeMaximumFullLODCount',
+  ]) {
+    expect(() => applyPrefabOverrides(source, [{ target: { fileID: '5' }, propertyPath, value: '10' }])).not.toThrow();
+  }
+  expect(() =>
+    applyPrefabOverrides(source, [{ target: { fileID: '5' }, propertyPath: 'm_TerrainData', value: '10' }]),
+  ).toThrow('unsupported prefab override');
+});
+
 it('resizes material slots before applying an instance replacement', () => {
   const source = parseUnityYaml('--- !u!23 &5\nMeshRenderer:\n  m_Materials:\n  - {fileID: 1, guid: old}\n');
   const updated = applyPrefabOverrides(source, [
