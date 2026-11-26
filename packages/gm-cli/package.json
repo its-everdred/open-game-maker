@@ -32,8 +32,8 @@
     "@gltf-transform/functions": "4.5.1",
     "@gm/pack-smallscaleint": "workspace:*",
     "@gm/sdk": "workspace:*",
-    "@ogm/asset-cards": "workspace:*",
     "@ogm/aiur-client": "workspace:*",
+    "@ogm/asset-cards": "workspace:*",
     "@ogm/asset-measure": "workspace:*",
     "@ogm/asset-previews": "workspace:*",
     "@ogm/blob-store": "workspace:*",
@@ -50,9 +50,11 @@
     "three": "0.186.1",
     "ulid": "3.0.2",
     "yaml": "2.9.1",
+    "yauzl": "3.2.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@types/three": "0.186.0"
+    "@types/three": "0.186.0",
+    "@types/yauzl": "2.10.3"
   }
 }

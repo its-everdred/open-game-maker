@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { constants } from 'node:fs';
+import { constants, createWriteStream } from 'node:fs';
 import {
   access,
   chmod,
@@ -13,12 +13,14 @@ import {
   rename,
   rm,
   stat,
-  writeFile,
 } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
+import { Transform } from 'node:stream';
 import { promisify } from 'node:util';
+import { crc32 } from 'node:zlib';
+import { pipeline } from 'node:stream/promises';
 
-import AdmZip from 'adm-zip';
+import * as yauzl from 'yauzl';
 import * as tar from 'tar';
 
 export type UnpackCaps = { maxMembers: number; maxUnpackedMb: number; maxRatio: number };
@@ -64,44 +66,79 @@ function limitBytes(caps: UnpackCaps): number {
 }
 
 async function extractZip(file: string, destination: string, caps: UnpackCaps): Promise<void> {
-  const archive = new AdmZip(file);
-  const entries = archive.getEntries();
-  if (entries.length > caps.maxMembers)
-    throw new Error(`archive has ${entries.length} members; limit is ${caps.maxMembers}`);
-  let total = 0;
-  const paths = new Set<string>();
-  for (const entry of entries) {
-    checkedPath(destination, entry.entryName);
-    const key = normalize(entry.entryName).replaceAll('\\', '/');
-    if (paths.has(key)) throw new Error(`duplicate archive member ${JSON.stringify(entry.entryName)}`);
-    paths.add(key);
-    const mode = entry.attr >>> 16;
-    if ((mode & 0o170000) === 0o120000) throw new Error(`archive link is not allowed: ${entry.entryName}`);
-    if (entry.header.encrypted) throw new Error(`encrypted archive member is not allowed: ${entry.entryName}`);
-    if (entry.isDirectory) continue;
-    total += entry.header.size;
-    if (entry.header.size > limitBytes(caps) || total > limitBytes(caps))
-      throw new Error('archive exceeds unpacked-size limit');
-    if (
-      entry.header.size > 1024 * 1024 &&
-      entry.header.compressedSize > 0 &&
-      entry.header.size / entry.header.compressedSize > caps.maxRatio
-    ) {
-      throw new Error(`archive member exceeds compression-ratio limit: ${entry.entryName}`);
+  const archive = await new Promise<yauzl.ZipFile>((resolveZip, reject) => {
+    yauzl.open(file, { lazyEntries: true, autoClose: false, strictFileNames: true }, (error, zip) => {
+      if (error || !zip) reject(error ?? new Error('unable to open ZIP'));
+      else resolveZip(zip);
+    });
+  });
+  try {
+    const entries: yauzl.Entry[] = [];
+    const paths = new Set<string>();
+    let total = 0;
+    await new Promise<void>((resolveEntries, reject) => {
+      archive.on('error', reject);
+      archive.on('end', resolveEntries);
+      archive.on('entry', (entry: yauzl.Entry) => {
+        try {
+          if (entries.length >= caps.maxMembers) throw new Error(`archive exceeds member limit ${caps.maxMembers}`);
+          checkedPath(destination, entry.fileName);
+          const key = normalize(entry.fileName).replaceAll('\\', '/');
+          if (paths.has(key)) throw new Error(`duplicate archive member ${JSON.stringify(entry.fileName)}`);
+          paths.add(key);
+          const mode = entry.externalFileAttributes >>> 16;
+          if ((mode & 0o170000) === 0o120000) throw new Error(`archive link is not allowed: ${entry.fileName}`);
+          if (entry.isEncrypted()) throw new Error(`encrypted archive member is not allowed: ${entry.fileName}`);
+          if (!entry.fileName.endsWith('/')) {
+            total += entry.uncompressedSize;
+            if (total > limitBytes(caps)) throw new Error('archive exceeds unpacked-size limit');
+            if (
+              entry.uncompressedSize > 1024 * 1024 &&
+              entry.compressedSize > 0 &&
+              entry.uncompressedSize / entry.compressedSize > caps.maxRatio
+            ) {
+              throw new Error(`archive member exceeds compression-ratio limit: ${entry.fileName}`);
+            }
+          }
+          entries.push(entry);
+          archive.readEntry();
+        } catch (error) {
+          reject(error);
+        }
+      });
+      archive.readEntry();
+    });
+    const archiveBytes = (await stat(file)).size;
+    if (total > 1024 * 1024 && archiveBytes > 0 && total / archiveBytes > caps.maxRatio) {
+      throw new Error('archive exceeds compression-ratio limit');
     }
-  }
-  const archiveBytes = (await stat(file)).size;
-  if (total > 1024 * 1024 && archiveBytes > 0 && total / archiveBytes > caps.maxRatio) {
-    throw new Error('archive exceeds compression-ratio limit');
-  }
-  for (const entry of entries) {
-    const target = checkedPath(destination, entry.entryName);
-    if (entry.isDirectory) {
-      await mkdir(target, { recursive: true, mode: 0o755 });
-      continue;
+    for (const entry of entries) {
+      const target = checkedPath(destination, entry.fileName);
+      if (entry.fileName.endsWith('/')) {
+        await mkdir(target, { recursive: true, mode: 0o755 });
+        continue;
+      }
+      await mkdir(dirname(target), { recursive: true, mode: 0o755 });
+      const stream = await new Promise<NodeJS.ReadableStream>((resolveStream, reject) => {
+        archive.openReadStream(entry, (error, input) => {
+          if (error || !input) reject(error ?? new Error('unable to read ZIP entry'));
+          else resolveStream(input);
+        });
+      });
+      let checksum = 0;
+      const verify = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          checksum = crc32(chunk, checksum);
+          callback(null, chunk);
+        },
+        flush(callback) {
+          callback(checksum === entry.crc32 ? undefined : new Error(`archive member CRC mismatch: ${entry.fileName}`));
+        },
+      });
+      await pipeline(stream, verify, createWriteStream(target, { mode: 0o644, flags: 'wx' }));
     }
-    await mkdir(dirname(target), { recursive: true, mode: 0o755 });
-    await writeFile(target, entry.getData(), { mode: 0o644, flag: 'wx' });
+  } finally {
+    archive.close();
   }
 }
 
