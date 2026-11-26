@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { CARD_INDEX_VERSION } from '@ogm/asset-cards';
 import { schema } from '@ogm/db';
 
 import { createApp } from '../src/app/app.js';
@@ -79,7 +80,8 @@ function fixture() {
   writeFileSync(
     join(assets, 'index', 'cards.index.json'),
     JSON.stringify({
-      version: 3,
+      version: CARD_INDEX_VERSION,
+      soundSets: [],
       built: '2026-11-23T00:00:00Z',
       vocab: '2026-10-27',
       collections: {},
