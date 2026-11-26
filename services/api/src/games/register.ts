@@ -64,7 +64,7 @@ export function registerExistingGame(db: Db, input: RegisterGameInput): GameRow 
   // The slug is the game's identity everywhere else (play link, daemon row, aiur grants), so a taken slug is a
   // conflict rather than a rename: registering `games/blobs` twice would give two games one link.
   // The slug is also the game's top-level link (`/<slug>`), so a folder named like an app route cannot register (#591).
-  if (isReservedGameSlug(slug) || isReservedGameSlug(slug.replaceAll('-', ''))) {
+  if (isReservedGameSlug(slug)) {
     throw new HttpError(422, 'game_slug_reserved');
   }
   if (!isSlugAvailable(db, slug)) throw new HttpError(409, 'game_slug_taken');

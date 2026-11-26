@@ -26,6 +26,9 @@ describe('marketing-site redirects', () => {
     for (const entry of directories) expect(isReservedGameSlug(entry.name), entry.name).toBe(true);
     for (const page of ['docs', 'setup']) expect(isReservedGameSlug(page), page).toBe(true);
   });
+  it.each(['docs-prototype', 'docsprototype'])('reserves the site path and its alias: %s', (page) => {
+    expect(isReservedGameSlug(page)).toBe(true);
+  });
   it('sends every app-shaped path to the configured try-it instance and preserves nested paths', () => {
     expect(renderRedirects('https://app.example').split('\n').filter(Boolean)).toEqual([
       '/games  https://app.example/games  302!',

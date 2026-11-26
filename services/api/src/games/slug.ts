@@ -27,7 +27,7 @@ export function slugify(title: string): string {
 // the game being (re)named, so reusing a slug that is already its own never blocks the rename.
 export function isSlugAvailable(db: Db, slug: string, gameId?: string): boolean {
   const compact = slug.replaceAll('-', '');
-  if (isReservedGameSlug(slug) || isReservedGameSlug(compact)) return false;
+  if (isReservedGameSlug(slug)) return false;
   const live = db
     .select({ id: schema.games.id })
     .from(schema.games)
