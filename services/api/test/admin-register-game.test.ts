@@ -126,6 +126,46 @@ describe('registering a game whose repository already exists', () => {
     expect(gameRow(deps, 'settings')).toBeUndefined();
   });
 
+  it('refuses a hyphenated spelling of a reserved route', async () => {
+    const { call } = await seededApp();
+    const response = await call(X.admin, 'POST', '/games/import', {
+      ...blobs,
+      repo: { ...blobs.repo, path: 'games/do-cs' },
+    });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: 'game_slug_reserved' });
+  });
+
+  it('refuses an alias even when existing legacy slugs are already ambiguous', async () => {
+    const { app, call, deps } = await seededApp();
+    for (const [id, slug] of [
+      ['g-a', 'castle-game'],
+      ['g-b', 'castlegame'],
+    ]) {
+      deps.db
+        .insert(schema.games)
+        .values({
+          id: id!,
+          familyId: X.family,
+          ownerId: X.owner.userId,
+          title: slug!,
+          slug: slug!,
+          visibility: 'private',
+          repoVisibility: 'private',
+          createdAt: new Date().toISOString(),
+        })
+        .run();
+    }
+    const ambiguous = await app.request('/api/v1/games/resolve/cast-le-game', { headers: asUser(X.owner.userId) });
+    expect(ambiguous.status).toBe(404);
+    const response = await call(X.admin, 'POST', '/games/import', {
+      ...blobs,
+      repo: { ...blobs.repo, path: 'games/cast-le-game' },
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'game_slug_taken' });
+  });
+
   it('refuses a repository and folder already registered', async () => {
     const { call } = await seededApp();
     expect((await call(X.admin, 'POST', '/games/import', blobs)).status).toBe(201);
