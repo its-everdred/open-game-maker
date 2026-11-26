@@ -49,6 +49,7 @@ function graphOutputSlot(node: GraphObject | undefined): number {
     case 'UnityEditor.ShaderGraph.MultiplyNode':
       return 2;
     case 'UnityEditor.ShaderGraph.BranchNode':
+    case 'UnityEditor.ShaderGraph.LerpNode':
       return 3;
     case 'UnityEditor.ShaderGraph.SampleTexture2DNode':
     case 'UnityEditor.ShaderGraph.PropertyNode':
@@ -91,6 +92,39 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
     if (!node) throw new Error(`missing Unity shader node ${id}`);
     const type = node.m_Type;
     const inputs = incoming.get(id) ?? [];
+    if (type === 'UnityEditor.ShaderGraph.LerpNode') {
+      if (
+        inputs.length !== 3 ||
+        new Set(inputs.map((input) => input.inputSlot)).size !== 3 ||
+        inputs.some((input) => ![0, 1, 2].includes(input.inputSlot))
+      )
+        throw new Error('unsupported Unity shader graph interpolation');
+      const amount = inputs.find((input) => input.inputSlot === 2)!;
+      const amountNode = byId.get(amount.node);
+      if (
+        amount.outputSlot !== 0 ||
+        amountNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode' ||
+        (incoming.get(amount.node) ?? []).length !== 0
+      )
+        throw new Error('unsupported Unity shader graph interpolation amount');
+      const property = byId.get(nodeId(amountNode.m_Property));
+      const key = property?.m_OverrideReferenceName || property?.m_DefaultReferenceName;
+      if (
+        property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty' ||
+        typeof key !== 'string' ||
+        !key ||
+        typeof property.m_Value !== 'number' ||
+        !Number.isFinite(property.m_Value)
+      )
+        throw new Error('unsupported Unity shader graph interpolation property');
+      const raw = floats.has(key) ? floats.get(key) : property.m_Value;
+      if (raw !== 0 && raw !== 1 && raw !== '0' && raw !== '1')
+        throw new Error('unsupported Unity shader graph interpolation amount');
+      const selected = inputs.find((input) => input.inputSlot === Number(raw))!;
+      if (selected.outputSlot !== graphOutputSlot(byId.get(selected.node)))
+        throw new Error('unsupported Unity shader graph output channel');
+      return visit(selected.node, new Set(ancestors).add(id));
+    }
     if (type === 'UnityEditor.ShaderGraph.BranchNode') {
       if (
         inputs.length !== 3 ||

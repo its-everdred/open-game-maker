@@ -144,3 +144,37 @@ it('selects the material boolean branch without interpreting its inactive branch
     'invalid Unity shader graph branch value',
   );
 });
+
+it('resolves interpolation endpoints and rejects non-endpoint blending', () => {
+  const edge = (from: string, to: string, input: number, output = 0) => ({
+    m_OutputSlot: { m_Node: { m_Id: from }, m_SlotId: output },
+    m_InputSlot: { m_Node: { m_Id: to }, m_SlotId: input },
+  });
+  const docs = [
+    {
+      m_Type: 'UnityEditor.ShaderGraph.GraphData',
+      m_Edges: [edge('lerp', 'base', 0, 3), edge('a', 'lerp', 0), edge('b', 'lerp', 1), edge('amount', 'lerp', 2)],
+    },
+    {
+      m_ObjectId: 'base',
+      m_Type: 'UnityEditor.ShaderGraph.BlockNode',
+      m_SerializedDescriptor: 'SurfaceDescription.BaseColor',
+    },
+    { m_ObjectId: 'lerp', m_Type: 'UnityEditor.ShaderGraph.LerpNode' },
+    { m_ObjectId: 'a', m_Type: 'UnityEditor.ShaderGraph.SampleTexture2DNode' },
+    { m_ObjectId: 'b', m_Type: 'UnityEditor.ShaderGraph.SampleTexture2DNode' },
+    { m_ObjectId: 'amount', m_Type: 'UnityEditor.ShaderGraph.PropertyNode', m_Property: { m_Id: 'scalar' } },
+    {
+      m_ObjectId: 'scalar',
+      m_Type: 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty',
+      m_DefaultReferenceName: '_Weight',
+      m_Value: 0,
+    },
+  ];
+  const source = docs.map((doc) => JSON.stringify(doc)).join('\n');
+  expect(shaderGraphBase(source).textures).toEqual(['_SampleTexture2D_a_Texture_1']);
+  expect(shaderGraphBase(source, new Map([['_Weight', '1']])).textures).toEqual(['_SampleTexture2D_b_Texture_1']);
+  expect(() => shaderGraphBase(source, new Map([['_Weight', '0.5']]))).toThrow(
+    'unsupported Unity shader graph interpolation amount',
+  );
+});
