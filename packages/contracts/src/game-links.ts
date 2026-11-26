@@ -10,11 +10,15 @@ export const RESERVED_GAME_SLUGS: ReadonlySet<string> = new Set([
   'art',
   'assets',
   'auth',
+  'captures',
   'connect',
+  'docs',
+  'docs-prototype',
   'g',
   'game',
   'games',
   'help',
+  'hero',
   'icons',
   'internal',
   'join',
@@ -25,14 +29,17 @@ export const RESERVED_GAME_SLUGS: ReadonlySet<string> = new Set([
   'proto',
   'review',
   'settings',
+  'setup',
   'signin',
   'signout',
   'signup',
   'town',
 ]);
 
+const RESERVED_COMPACT_SLUGS = new Set([...RESERVED_GAME_SLUGS].map((slug) => slug.replaceAll('-', '')));
+
 export function isReservedGameSlug(slug: string): boolean {
-  return RESERVED_GAME_SLUGS.has(slug);
+  return RESERVED_COMPACT_SLUGS.has(slug.replaceAll('-', ''));
 }
 
 export function gamePath(slug: string): string {
