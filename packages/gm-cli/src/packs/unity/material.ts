@@ -30,6 +30,11 @@ export function materialShaderGuid(source: string): string | undefined {
   return typeof shader.guid === 'string' ? shader.guid : undefined;
 }
 
+/** Return saved float properties for resolving material-specific graph switches. */
+export function materialFloatProperties(source: string): Map<string, unknown> {
+  return properties(object(material(source).m_SavedProperties).m_Floats);
+}
+
 /** Interpret standard base-color properties or explicit graph-resolved texture slots. */
 export function parseUnitySurface(source: string, graph?: ShaderGraphBase): UnitySurface {
   const materialData = material(source);

@@ -99,3 +99,48 @@ it('resolves an explicit texture property with the default UV channel', () => {
     'unsupported Unity texture UV graph',
   );
 });
+
+it('selects the material boolean branch without interpreting its inactive branch', async () => {
+  const { materialFloatProperties } = await import('../src/packs/unity/material.js');
+  const edge = (from: string, to: string, input: number, output = 0) => ({
+    m_OutputSlot: { m_Node: { m_Id: from }, m_SlotId: output },
+    m_InputSlot: { m_Node: { m_Id: to }, m_SlotId: input },
+  });
+  const docs = [
+    {
+      m_Type: 'UnityEditor.ShaderGraph.GraphData',
+      m_Edges: [
+        edge('branch', 'base', 0, 3),
+        edge('switch', 'branch', 0),
+        edge('texture', 'branch', 1),
+        edge('unsupported', 'branch', 2),
+      ],
+    },
+    {
+      m_ObjectId: 'base',
+      m_Type: 'UnityEditor.ShaderGraph.BlockNode',
+      m_SerializedDescriptor: 'SurfaceDescription.BaseColor',
+    },
+    { m_ObjectId: 'branch', m_Type: 'UnityEditor.ShaderGraph.BranchNode' },
+    { m_ObjectId: 'switch', m_Type: 'UnityEditor.ShaderGraph.PropertyNode', m_Property: { m_Id: 'boolean' } },
+    {
+      m_ObjectId: 'boolean',
+      m_Type: 'UnityEditor.ShaderGraph.Internal.BooleanShaderProperty',
+      m_DefaultReferenceName: '_Switch',
+      m_Value: false,
+    },
+    { m_ObjectId: 'texture', m_Type: 'UnityEditor.ShaderGraph.SampleTexture2DNode' },
+    { m_ObjectId: 'unsupported', m_Type: 'UnityEditor.ShaderGraph.NoiseNode' },
+  ];
+  const source = docs.map((doc) => JSON.stringify(doc)).join('\n');
+  const material = '--- !u!21 &1\nMaterial:\n  m_SavedProperties:\n    m_Floats:\n    - _Switch: 1\n';
+  expect(shaderGraphBase(source, materialFloatProperties(material)).textures).toEqual([
+    '_SampleTexture2D_texture_Texture_1',
+  ]);
+  expect(() => shaderGraphBase(source)).toThrow('unsupported Unity shader graph');
+  const supported = source.replace('UnityEditor.ShaderGraph.NoiseNode', 'UnityEditor.ShaderGraph.SampleTexture2DNode');
+  expect(shaderGraphBase(supported).textures).toEqual(['_SampleTexture2D_unsupported_Texture_1']);
+  expect(() => shaderGraphBase(source, new Map([['_Switch', '0.5']]))).toThrow(
+    'invalid Unity shader graph branch value',
+  );
+});

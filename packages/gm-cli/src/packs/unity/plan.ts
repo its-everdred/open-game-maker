@@ -3,7 +3,7 @@ import { extname, isAbsolute, relative, sep } from 'node:path';
 import { indexUnityGuids } from './guid-index.js';
 import { expandUnityInstances } from './instances.js';
 import { meshNameFromMeta } from './model-meta.js';
-import { materialShaderGuid, parseUnitySurface, type UnitySurface } from './material.js';
+import { materialFloatProperties, materialShaderGuid, parseUnitySurface, type UnitySurface } from './material.js';
 import { shaderGraphBase } from './shadergraph.js';
 import { selectUnityBuilding, selectUnityPieces } from './select.js';
 import { textureIsSrgb } from './texture-meta.js';
@@ -95,7 +95,10 @@ export async function planUnityAssembly(
       if (shaderPath && extname(shaderPath).toLowerCase() === '.shadergraph') {
         const shader = file({ fileId: '0', guid: shaderGuid! }, '.shadergraph');
         try {
-          surface = parseUnitySurface(contents, shaderGraphBase(readFileSync(shader, 'utf8')));
+          surface = parseUnitySurface(
+            contents,
+            shaderGraphBase(readFileSync(shader, 'utf8'), materialFloatProperties(contents)),
+          );
         } catch (error) {
           throw new Error(`material ${path}: ${error instanceof Error ? error.message : String(error)}`, {
             cause: error,

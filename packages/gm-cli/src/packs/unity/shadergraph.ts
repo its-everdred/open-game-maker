@@ -44,8 +44,22 @@ export type ShaderGraphFactor = {
 };
 export type ShaderGraphBase = { textures: string[]; factors: ShaderGraphFactor[] };
 
+function graphOutputSlot(node: GraphObject | undefined): number {
+  switch (node?.m_Type) {
+    case 'UnityEditor.ShaderGraph.MultiplyNode':
+      return 2;
+    case 'UnityEditor.ShaderGraph.BranchNode':
+      return 3;
+    case 'UnityEditor.ShaderGraph.SampleTexture2DNode':
+    case 'UnityEditor.ShaderGraph.PropertyNode':
+      return 0;
+    default:
+      throw new Error(`unsupported Unity shader graph node ${String(node?.m_Type)}`);
+  }
+}
+
 /** Resolve a base-color graph composed of texture samples, properties and multiplication. */
-export function shaderGraphBase(source: string): ShaderGraphBase {
+export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unknown> = new Map()): ShaderGraphBase {
   const docs = documents(source);
   const graph = docs.find((doc) => doc.m_Type === 'UnityEditor.ShaderGraph.GraphData');
   const base = docs.find((doc) => doc.m_SerializedDescriptor === 'SurfaceDescription.BaseColor');
@@ -77,6 +91,41 @@ export function shaderGraphBase(source: string): ShaderGraphBase {
     if (!node) throw new Error(`missing Unity shader node ${id}`);
     const type = node.m_Type;
     const inputs = incoming.get(id) ?? [];
+    if (type === 'UnityEditor.ShaderGraph.BranchNode') {
+      if (
+        inputs.length !== 3 ||
+        new Set(inputs.map((input) => input.inputSlot)).size !== 3 ||
+        inputs.some((input) => ![0, 1, 2].includes(input.inputSlot))
+      )
+        throw new Error('unsupported Unity shader graph branch');
+      const selector = inputs.find((input) => input.inputSlot === 0)!;
+      const selectorNode = byId.get(selector.node);
+      if (
+        selector.outputSlot !== 0 ||
+        selectorNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode' ||
+        (incoming.get(selector.node) ?? []).length !== 0
+      )
+        throw new Error('unsupported Unity shader graph branch selector');
+      const property = byId.get(nodeId(selectorNode.m_Property));
+      const key = property?.m_OverrideReferenceName || property?.m_DefaultReferenceName;
+      if (
+        property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.BooleanShaderProperty' ||
+        typeof key !== 'string' ||
+        !key ||
+        typeof property.m_Value !== 'boolean'
+      )
+        throw new Error('unsupported Unity shader graph branch property');
+      const raw = floats.has(key) ? floats.get(key) : Number(property.m_Value);
+      if (raw !== 0 && raw !== 1 && raw !== '0' && raw !== '1')
+        throw new Error('invalid Unity shader graph branch value');
+      const value = Number(raw);
+      if (value !== 0 && value !== 1) throw new Error('invalid Unity shader graph branch value');
+      const selected = inputs.find((input) => input.inputSlot === (value ? 1 : 2))!;
+      const selectedNode = byId.get(selected.node);
+      const outputSlot = graphOutputSlot(selectedNode);
+      if (selected.outputSlot !== outputSlot) throw new Error('unsupported Unity shader graph output channel');
+      return visit(selected.node, new Set(ancestors).add(id));
+    }
     if (type === 'UnityEditor.ShaderGraph.SampleTexture2DNode') {
       if (
         inputs.some((input) => ![1, 2].includes(input.inputSlot) || input.outputSlot !== 0) ||
@@ -143,7 +192,7 @@ export function shaderGraphBase(source: string): ShaderGraphBase {
     const result: ShaderGraphBase = { textures: [], factors: [] };
     for (const input of inputs) {
       const source = byId.get(input.node);
-      const outputSlot = source?.m_Type === 'UnityEditor.ShaderGraph.MultiplyNode' ? 2 : 0;
+      const outputSlot = graphOutputSlot(source);
       if (input.outputSlot !== outputSlot) throw new Error('unsupported Unity shader graph output channel');
       const term = visit(input.node, next);
       result.textures.push(...term.textures);
