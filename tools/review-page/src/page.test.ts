@@ -4,6 +4,47 @@ import { expect, it, vi } from 'vitest';
 import { renderPage } from './build.js';
 import type { Card } from './cards.js';
 
+it('saves phase withdrawal alongside an existing choice', async () => {
+  const card: Card = {
+    key: 'one',
+    repo: 'core',
+    ticket: 1,
+    decision: '',
+    title: 'Review',
+    at: '',
+    mode: 'review',
+    shared: [],
+    options: [{ id: 'yes', label: 'Yes', media: [] }],
+    phase: { at: 'mock', next: 'prototype' },
+  };
+  const page = renderPage(readFileSync(new URL('./page.html', import.meta.url), 'utf8'), [card]);
+  const writes: Record<string, unknown>[] = [];
+  const dom = new JSDOM(page, {
+    runScripts: 'dangerously',
+    beforeParse(window) {
+      Object.assign(window, {
+        claude: {
+          use: async () => ({
+            doc: () => ({
+              get: async () => ({ exists: false }),
+              set: async (value: Record<string, unknown>) => {
+                writes.push(value);
+              },
+            }),
+          }),
+        },
+      });
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  dom.window.document.querySelector<HTMLButtonElement>('button[data-id="yes"]')!.click();
+  dom.window.document.querySelector<HTMLButtonElement>('button.adv')!.click();
+  dom.window.document.querySelector<HTMLButtonElement>('button.adv')!.click();
+  await vi.waitFor(() => expect(writes).toHaveLength(3));
+  expect(writes[2]).toMatchObject({ choice: 'yes', withdrawn: 'prototype' });
+  dom.window.close();
+}, 30000);
+
 it('keeps partial group answers open until every group is answered', async () => {
   const card: Card = {
     key: 'multi',

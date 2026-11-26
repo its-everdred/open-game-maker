@@ -483,7 +483,11 @@
             label: p.label,
             ...(p.notes ? { notes: p.notes } : {}),
             ...(s.adv ? { advance: s.adv } : {}),
-            ...(p.withdrawn ? { withdrawn: p.withdrawn } : {}),
+            ...(!s.adv && saved[c.key]?.advance
+              ? { withdrawn: saved[c.key].advance }
+              : p.withdrawn
+                ? { withdrawn: p.withdrawn }
+                : {}),
             ...(c.source ? { source: c.source } : {}),
             note: s.ta.value,
             ticket: c.ticket,
