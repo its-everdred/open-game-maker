@@ -121,6 +121,7 @@ def main() -> int:
     if args.hours <= 0:
         parser.error("--hours must be greater than zero")
     cutoff = datetime.now(timezone.utc) - timedelta(hours=args.hours)
+    answer_status = 0
     try:
         database = args.db or default_database(
             Path(os.environ.get("OGM_ENV_DIR", "~/.config/ogm/env")).expanduser(), os.environ.get("OGM_DATA_DIR")
@@ -129,18 +130,19 @@ def main() -> int:
         commands = count_answered_commands(database, cutoff)
     except (OSError, sqlite3.Error) as error:
         print(f"Review answers unavailable: {error}", file=sys.stderr)
-        return 1
-    print(f"Creator review rounds answered: {answered}; recorded Command reviews: {commands}")
+        answer_status = 1
+    else:
+        print(f"Creator review rounds answered: {answered}; recorded Command reviews: {commands}")
     rows = read_observations(args.log, cutoff)
     if not rows:
         print("No review feed observations in the selected window.")
-        return 0
+        return answer_status
     seconds = [elapsed for _, elapsed in rows]
     print(f"S6 first feed refresh: {len(rows)} cards; median {statistics.median(seconds):.1f}s; worst {max(seconds):.1f}s")
     if args.rows:
         for ticket, elapsed in rows:
             print(f"ticket {ticket}: {elapsed:.1f}s")
-    return 0
+    return answer_status
 
 
 if __name__ == "__main__":

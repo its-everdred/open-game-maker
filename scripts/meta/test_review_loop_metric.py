@@ -80,6 +80,27 @@ class ReviewLoopMetricTest(unittest.TestCase):
             self.assertEqual(METRIC.default_database(env_dir, None), Path("/configured/data/ogm.sqlite3"))
             self.assertEqual(METRIC.default_database(env_dir, "/override"), Path("/override/ogm.sqlite3"))
 
+    def test_reports_feed_latency_even_if_answer_database_is_unavailable(self):
+        now = datetime.now(timezone.utc)
+        posted = now - timedelta(seconds=30)
+        refreshed = now - timedelta(seconds=10)
+        item = {"ticket": "42", "id": "r", "postedAt": posted.isoformat()}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "feed.log"
+            rows = [
+                {"timestamp": posted.isoformat(), "event": "publish", "source": "rounds", "gameId": "g", "items": [item]},
+                {"timestamp": refreshed.isoformat(), "event": "feed_refresh", "source": "rounds", "gameId": "g", "items": [item]},
+            ]
+            log.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--db", str(root / "missing"), "--log", str(log)],
+                capture_output=True, text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Review answers unavailable", result.stderr)
+        self.assertIn("S6 first feed refresh: 1 cards", result.stdout)
+
     def test_missing_database_is_not_reported_as_zero_answers(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(FileNotFoundError):
