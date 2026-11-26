@@ -1,4 +1,4 @@
-import type { AiurClient } from '@ogm/aiur-client';
+import { AiurHttpError, type AiurClient } from '@ogm/aiur-client';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createExecutorNotifier } from '../src/executor-thread/notify.js';
@@ -85,5 +85,39 @@ describe('executor notices', () => {
     deps.config.instanceOwnerId = undefined as unknown as string;
     await notify();
     expect(events).not.toHaveBeenCalled();
+  });
+
+  it('backs off unavailable feeds, logs each cause once, and resumes after recovery', async () => {
+    const deps = makeDeps();
+    deps.config.instanceOwnerId = OWNER;
+    let now = NOW.getTime();
+    const log = vi.fn();
+    deps.log = log;
+    const events = vi
+      .fn()
+      .mockRejectedValueOnce(new AiurHttpError(404, 'feature_disabled', '', 'core'))
+      .mockRejectedValueOnce(new AiurHttpError(404, 'feature_disabled', '', 'core'))
+      .mockRejectedValueOnce(new AiurHttpError(422, 'topic_not_exported', '', 'core'))
+      .mockResolvedValue(page([]));
+    deps.registry.coreAiurClient = { events } as unknown as AiurClient;
+    const notify = createExecutorNotifier(deps, { deliver: async () => undefined, now: () => new Date(now) });
+    await notify();
+    await notify();
+    expect(events).toHaveBeenCalledTimes(1);
+    now += 600_000;
+    await notify();
+    expect(log).toHaveBeenCalledTimes(1);
+    now += 600_000;
+    await notify();
+    expect(log).toHaveBeenLastCalledWith({
+      event: 'executor_notify_error',
+      error: 'AiurHttpError',
+      status: 422,
+      code: 'topic_not_exported',
+    });
+    now += 600_000;
+    await notify();
+    await notify();
+    expect(events).toHaveBeenCalledTimes(6);
   });
 });

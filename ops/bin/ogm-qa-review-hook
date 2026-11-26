@@ -184,6 +184,7 @@ grep -qE "$games_cache" <<< "$changed" && runs+=(games-cache game-boot)
 game_play='^(apps/web/(src/(routes/game|features/(editor|room))/|index\.html|vite\.config|package\.json)'
 game_play+='|packages/(contracts|host|iframe-bridge|sdk)/|services/games-host/|services/api/src/(games|builds)/)'
 grep -qE "$game_play" <<< "$changed" && runs+=(game-play)
+grep -qE '^(services/api/src/executor-thread/notify\.ts|services/api/src/main\.ts|ops/bin/ogm-qa-executor-notify(\.ts)?)$' <<< "$changed" && runs+=(executor-notify)
 # Free and fast, and the gate can regress from any path: it runs on every deploy (#1221).
 runs+=(paid-apis)
 
@@ -200,6 +201,7 @@ for kind in "${runs[@]}"; do
   [[ $kind == game-boot ]] && name=qa-game-boot
   [[ $kind == game-play ]] && name=qa-game-play
   [[ $kind == paid-apis ]] && name=qa-paid-apis
+  [[ $kind == executor-notify ]] && name=qa-executor-notify
   stills=qa-e2e
   [[ $kind == voice ]] && stills=voice-e2e
   [[ $kind == new-game ]] && stills=new-game-e2e
@@ -218,7 +220,9 @@ for kind in "${runs[@]}"; do
   fi
   rc=$session_rc
   if ((rc == 0)); then
-    if [[ $kind == paid-apis ]]; then
+    if [[ $kind == executor-notify ]]; then
+      timeout --kill-after=30 "$limit" ${OGM_QA_EXECUTOR_NOTIFY:-$repo/ops/bin/ogm-qa-executor-notify} >> "$log" 2>&1
+    elif [[ $kind == paid-apis ]]; then
       timeout --kill-after=30 "$limit" ${OGM_QA_PAID_APIS:-$repo/ops/bin/ogm-qa-paid-apis} >> "$log" 2>&1
     elif [[ $kind == game-play ]]; then
       play=(${OGM_QA_GAME_PLAY:-$repo/ops/bin/ogm-qa-game-play} --repo "$repo")

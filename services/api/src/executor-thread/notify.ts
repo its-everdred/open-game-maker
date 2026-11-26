@@ -1,4 +1,5 @@
 import type { Notification } from '@ogm/contracts';
+import { AiurHttpError } from '@ogm/aiur-client';
 
 import type { AppDeps } from '../app/types.js';
 import { insertNotification } from '../notify/store.js';
@@ -14,6 +15,7 @@ const PAGE = 100;
 const MAX_AGE_MS = 60 * 60 * 1000;
 // How far back a fresh process looks, so a notice published while it restarted still arrives.
 const LOOKBACK = 200;
+const RETRY_UNAVAILABLE_MS = 10 * 60 * 1000;
 
 function text(value: unknown, max: number): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : undefined;
@@ -35,10 +37,12 @@ export function createExecutorNotifier(
 ) {
   let after: number | undefined;
   let running = false;
+  let retryAt = 0;
+  let unavailableCode: string | undefined;
   return async () => {
     const client = deps.registry.coreAiurClient;
     const owner = deps.config.instanceOwnerId;
-    if (!client || !owner || running) return;
+    if (!client || !owner || running || (options.now?.() ?? new Date()).getTime() < retryAt) return;
     running = true;
     try {
       if (after === undefined) {
@@ -95,6 +99,18 @@ export function createExecutorNotifier(
         }
         if (page.records.length < PAGE || after <= from) break;
       }
+      unavailableCode = undefined;
+      retryAt = 0;
+    } catch (error) {
+      if (error instanceof AiurHttpError && ['topic_not_exported', 'feature_disabled'].includes(error.code)) {
+        if (unavailableCode !== error.code) {
+          deps.log({ event: 'executor_notify_error', error: error.name, status: error.status, code: error.code });
+        }
+        unavailableCode = error.code;
+        retryAt = (options.now?.() ?? new Date()).getTime() + RETRY_UNAVAILABLE_MS;
+        return;
+      }
+      throw error;
     } finally {
       running = false;
     }
