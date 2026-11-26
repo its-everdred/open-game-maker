@@ -34,14 +34,14 @@ def read_observations(path: Path, cutoff: datetime) -> list[tuple[str, float]]:
                     continue
                 if row.get("event") == "publish":
                     for item in items:
-                        if isinstance(item, dict):
+                        if isinstance(item, dict) and item.get("ticket") != "qa-review":
                             key = (source, game, str(item["id"]))
                             published[key] = (str(item["ticket"]), timestamp)
                     continue
                 if row.get("event") != "feed_refresh":
                     continue
                 for item in items:
-                    if not isinstance(item, dict):
+                    if not isinstance(item, dict) or item.get("ticket") == "qa-review":
                         continue
                     key = (source, game, str(item["id"]))
                     refreshes.setdefault(key, []).append(timestamp)
@@ -69,7 +69,8 @@ def count_answered_rounds(path: Path, cutoff: datetime) -> int:
         raise FileNotFoundError(path)
     with closing(sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)) as db:
         row = db.execute(
-            "SELECT count(*) FROM review_rounds WHERE verdict IS NOT NULL AND julianday(verdict_at) >= julianday(?)",
+            "SELECT count(*) FROM review_rounds WHERE verdict IS NOT NULL AND ticket <> 'qa-review' "
+            "AND julianday(verdict_at) >= julianday(?)",
             (cutoff.isoformat(),),
         ).fetchone()
     return int(row[0])
@@ -82,7 +83,8 @@ def count_answered_commands(path: Path, cutoff: datetime) -> int:
     with closing(sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)) as db:
         row = db.execute(
             "SELECT count(*) FROM (SELECT game_id, decision_id FROM command_reviews "
-            "WHERE julianday(at) >= julianday(?) GROUP BY game_id, decision_id)",
+            "WHERE coalesce(ticket, '') <> 'qa-review' AND julianday(at) >= julianday(?) "
+            "GROUP BY game_id, decision_id)",
             (cutoff.isoformat(),),
         ).fetchone()
     return int(row[0])

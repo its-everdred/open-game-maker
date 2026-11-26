@@ -37,7 +37,7 @@ class ReviewLoopMetricTest(unittest.TestCase):
         refresh = posted + timedelta(seconds=20)
         item = {"ticket": "42", "id": "decision-1", "postedAt": posted.isoformat()}
         rows = [
-            {"timestamp": refresh.isoformat(), "event": "feed_refresh", "source": "game_commands", "gameId": "g1", "items": [item]},
+            {"timestamp": refresh.isoformat(), "event": "feed_refresh", "source": "game_commands", "gameId": "g1", "items": [item, {"ticket": "qa-review", "id": "qa-1", "postedAt": posted.isoformat()}]},
         ]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "review-publishes.log"
@@ -50,17 +50,19 @@ class ReviewLoopMetricTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "ogm.sqlite3"
             with closing(sqlite3.connect(path)) as db:
-                db.execute("CREATE TABLE review_rounds (id TEXT, verdict TEXT, verdict_at TEXT)")
-                db.execute("CREATE TABLE command_reviews (game_id TEXT, decision_id TEXT, at TEXT)")
-                db.executemany("INSERT INTO review_rounds VALUES (?, ?, ?)", [
-                    ("answer", "approved", "2026-11-26T01:00:00Z"),
-                    ("old", "needs_work", "2026-11-25T23:59:59Z"),
-                    ("open", None, None),
+                db.execute("CREATE TABLE review_rounds (id TEXT, verdict TEXT, verdict_at TEXT, ticket TEXT)")
+                db.execute("CREATE TABLE command_reviews (game_id TEXT, decision_id TEXT, at TEXT, ticket TEXT)")
+                db.executemany("INSERT INTO review_rounds VALUES (?, ?, ?, ?)", [
+                    ("answer", "approved", "2026-11-26T01:00:00Z", "42"),
+                    ("old", "needs_work", "2026-11-25T23:59:59Z", "42"),
+                    ("open", None, None, "42"),
+                    ("qa", "approved", "2026-11-26T01:00:00Z", "qa-review"),
                 ])
-                db.executemany("INSERT INTO command_reviews VALUES (?, ?, ?)", [
-                    ("g", "d", "2026-11-26T01:00:00Z"),
-                    ("g", "d", "2026-11-26T01:01:00Z"),
-                    ("g", "old", "2026-11-25T23:59:59Z"),
+                db.executemany("INSERT INTO command_reviews VALUES (?, ?, ?, ?)", [
+                    ("g", "d", "2026-11-26T01:00:00Z", "42"),
+                    ("g", "d", "2026-11-26T01:01:00Z", "42"),
+                    ("g", "old", "2026-11-25T23:59:59Z", None),
+                    ("qa", "qa-decision", "2026-11-26T01:00:00Z", "qa-review"),
                 ])
                 db.commit()
             self.assertEqual(METRIC.count_answered_rounds(path, cutoff), 1)
