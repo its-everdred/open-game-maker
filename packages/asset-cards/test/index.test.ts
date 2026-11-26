@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -60,6 +61,77 @@ describe('buildIndex', () => {
     ]);
   });
 
+  it('persists sound-set cards and retains each variation’s rights', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'sound-set-index-'));
+    const cards = join(root, 'sets/fantasy/cards');
+    mkdirSync(cards, { recursive: true });
+    const soundSet = {
+      schema: 'ogm.sound-set-card/1.0',
+      id: 'fantasy/hit',
+      set_id: 'fantasy',
+      category_id: 'hit',
+      title: 'Hit',
+      intent: 'A hit',
+      variation_count: 1,
+      preview: {
+        path: 'previews/hit.mp3',
+        order: ['hit-01'],
+        excerpt_seconds: 1,
+        gap_seconds: 0,
+        audition: { status: 'pending-operator' },
+      },
+      variations: [
+        {
+          id: 'hit-01',
+          pack_id: 'test',
+          pack_title: 'Test',
+          pack_version: '1',
+          source_path: 'hit.wav',
+          collection_card: null,
+          license: 'CC0-1.0',
+          rights_uses: ['in-game'],
+          sha256: `sha256:${'a'.repeat(64)}`,
+          bytes: 1,
+          audio: { channels: 1, codec: 'pcm', duration_seconds: 1, sample_rate: 48000 },
+          audition: { status: 'pending-operator' },
+        },
+      ],
+      provenance: {},
+    };
+    writeFileSync(join(cards, 'hit.card.json'), JSON.stringify(soundSet));
+    const index = await buildIndex(root);
+    expect(index.errors).toEqual([]);
+    expect(index.soundSets).toEqual([soundSet]);
+    await writeIndex(root, index);
+    expect(JSON.parse(readFileSync(join(root, INDEX_PATH), 'utf8')).soundSets).toEqual([soundSet]);
+    soundSet.variation_count = 2;
+    writeFileSync(join(cards, 'hit.card.json'), JSON.stringify(soundSet));
+    expect((await buildIndex(root)).errors).toHaveLength(1);
+  });
+
+  it('fails the build when a card cannot be read', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'asset-index-unreadable-'));
+    const cards = join(root, 'packs/broken/cards');
+    mkdirSync(cards, { recursive: true });
+    symlinkSync(join(root, 'missing'), join(cards, 'unreadable.card.json'));
+    await expect(buildIndex(root)).rejects.toThrow();
+  });
+
+  it('denies asset rights when their collection is invalid', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'asset-index-parent-'));
+    const pack = join(root, 'packs/kenney-mini-dungeon');
+    cpSync(join(FIXTURE, 'packs/kenney-mini-dungeon'), pack, { recursive: true });
+    const collectionPath = join(pack, 'collection.card.json');
+    const collection = JSON.parse(readFileSync(collectionPath, 'utf8'));
+    const assetPath = join(pack, 'cards/character-orc.card.json');
+    const asset = JSON.parse(readFileSync(assetPath, 'utf8'));
+    asset.rights = collection.rights;
+    writeFileSync(assetPath, JSON.stringify(asset));
+    writeFileSync(collectionPath, '{}');
+    const index = await buildIndex(root);
+    expect(index.cards.find((card) => card.id === ORC)?.resolved.rights.uses).toEqual([]);
+  });
+
   it('indexes only the named pack without walking the rest of the library', async () => {
     const index = await buildPackIndex(FIXTURE, ['kenney-mini-dungeon']);
 
@@ -72,9 +144,22 @@ describe('buildIndex', () => {
     ]);
   });
 
-  it('keeps the previous on-disk index when the command encounters an invalid card', () => {
+  it('finds the workspace asset root by default when run from the package', () => {
+    const root = mkdtempSync(join(tmpdir(), 'asset-index-default-'));
+    const pkg = join(root, 'packages/asset-cards');
+    mkdirSync(join(pkg, 'scripts'), { recursive: true });
+    mkdirSync(join(root, 'assets-local/packs'), { recursive: true });
+    cpSync(fileURLToPath(new URL('../scripts/build-index.mjs', import.meta.url)), join(pkg, 'scripts/build-index.mjs'));
+    symlinkSync(fileURLToPath(new URL('../dist', import.meta.url)), join(pkg, 'dist'), 'dir');
+    const result = spawnSync(process.execPath, [join(pkg, 'scripts/build-index.mjs')], { cwd: pkg, encoding: 'utf8' });
+    expect(result.status).toBe(0);
+    expect(existsSync(join(root, 'assets-local', INDEX_PATH))).toBe(true);
+  }, 30_000);
+
+  it('writes valid cards and warns when the command encounters an invalid card', () => {
     const root = mkdtempSync(join(tmpdir(), 'asset-index-command-'));
     mkdirSync(join(root, 'packs', 'broken', 'cards'), { recursive: true });
+    cpSync(join(FIXTURE, 'packs/kenney-mini-dungeon'), join(root, 'packs/kenney-mini-dungeon'), { recursive: true });
     mkdirSync(join(root, 'index'));
     writeFileSync(join(root, 'packs', 'broken', 'cards', 'bad.card.json'), '{not json');
     const indexPath = join(root, INDEX_PATH);
@@ -83,9 +168,14 @@ describe('buildIndex', () => {
     const script = fileURLToPath(new URL('../scripts/build-index.mjs', import.meta.url));
     const result = spawnSync(process.execPath, [script, root], { encoding: 'utf8' });
 
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('refusing to replace the asset index: 1 invalid card(s)');
-    expect(readFileSync(indexPath, 'utf8')).toBe('{"previous":true}\n');
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain('WARNING: skipped invalid card packs/broken/cards/bad.card.json');
+    expect(result.stderr).toContain('invalid card(s) skipped');
+    const index = JSON.parse(readFileSync(indexPath, 'utf8'));
+    expect(index.cards.some((card: { id: string }) => card.id === ORC)).toBe(true);
+    expect(index.errors.some((error: { path: string }) => error.path === 'packs/broken/cards/bad.card.json')).toBe(
+      true,
+    );
   }, 30_000);
 
   it("gives an asset without rights its collection's rights, licence and family, marked by: collection", async () => {
