@@ -5,7 +5,7 @@ export type UnityTexture = { guid: string; scale: [number, number]; offset: [num
 export type UnitySurface = {
   textures: UnityTexture[];
   color: [number, number, number, number];
-  blends?: Array<{ a: UnitySurface; b: UnitySurface; weight: number }>;
+  blends?: Array<{ a: UnitySurface; b: UnitySurface; weight: number | { term: UnitySurface; channel: number } }>;
 };
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid Unity material property');
@@ -91,7 +91,13 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
       textures,
       color,
       ...(term?.blends
-        ? { blends: term.blends.map(({ a, b, weight }) => ({ a: resolve(a), b: resolve(b), weight })) }
+        ? {
+            blends: term.blends.map(({ a, b, weight }) => ({
+              a: resolve(a),
+              b: resolve(b),
+              weight: typeof weight === 'number' ? weight : { term: resolve(weight.term), channel: weight.channel },
+            })),
+          }
         : {}),
     };
   };

@@ -45,7 +45,11 @@ export type ShaderGraphFactor = {
 export type ShaderGraphBase = {
   textures: string[];
   factors: ShaderGraphFactor[];
-  blends?: Array<{ a: ShaderGraphBase; b: ShaderGraphBase; weight: number }>;
+  blends?: Array<{
+    a: ShaderGraphBase;
+    b: ShaderGraphBase;
+    weight: number | { term: ShaderGraphBase; channel: number };
+  }>;
 };
 
 function graphOutputSlot(node: GraphObject | undefined): number {
@@ -121,6 +125,23 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
         throw new Error('unsupported Unity shader graph interpolation');
       const amount = inputs.find((input) => input.inputSlot === 2)!;
       const amountNode = byId.get(amount.node);
+      const resolveInput = (slot: number) => {
+        const input = inputs.find((entry) => entry.inputSlot === slot)!;
+        if (input.outputSlot !== graphOutputSlot(byId.get(input.node)))
+          throw new Error('unsupported Unity shader graph output channel');
+        return visit(input.node, new Set(ancestors).add(id));
+      };
+      if (
+        amountNode?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode' &&
+        [4, 5, 6, 7].includes(amount.outputSlot)
+      ) {
+        const term = visit(amount.node, new Set(ancestors).add(id));
+        return {
+          textures: [],
+          factors: [],
+          blends: [{ a: resolveInput(0), b: resolveInput(1), weight: { term, channel: amount.outputSlot - 4 } }],
+        };
+      }
       if (
         amount.outputSlot !== 0 ||
         amountNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode' ||
@@ -143,12 +164,6 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
       const weight = Number(raw);
       if (!Number.isFinite(weight) || weight < 0 || weight > 1)
         throw new Error('unsupported Unity shader graph interpolation amount');
-      const resolveInput = (slot: number) => {
-        const input = inputs.find((entry) => entry.inputSlot === slot)!;
-        if (input.outputSlot !== graphOutputSlot(byId.get(input.node)))
-          throw new Error('unsupported Unity shader graph output channel');
-        return visit(input.node, new Set(ancestors).add(id));
-      };
       if (weight === 0 || weight === 1) return resolveInput(weight);
       return { textures: [], factors: [], blends: [{ a: resolveInput(0), b: resolveInput(1), weight }] };
     }

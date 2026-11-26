@@ -14,7 +14,11 @@ export type PlannedUnitySurface = Omit<UnitySurface, 'blends'> & {
   path: string;
   texturePaths: string[];
   textureSrgb: boolean[];
-  blends?: Array<{ a: PlannedUnitySurface; b: PlannedUnitySurface; weight: number }>;
+  blends?: Array<{
+    a: PlannedUnitySurface;
+    b: PlannedUnitySurface;
+    weight: number | { term: PlannedUnitySurface; channel: number };
+  }>;
 };
 export type PlannedUnityMesh = UnityMeshNode & {
   model?: { path: string; name: string };
@@ -129,7 +133,16 @@ export async function planUnityAssembly(
           texturePaths,
           textureSrgb,
           ...(blends
-            ? { blends: blends.map(({ a, b, weight }) => ({ a: resolveSurface(a), b: resolveSurface(b), weight })) }
+            ? {
+                blends: blends.map(({ a, b, weight }) => ({
+                  a: resolveSurface(a),
+                  b: resolveSurface(b),
+                  weight:
+                    typeof weight === 'number'
+                      ? weight
+                      : { term: resolveSurface(weight.term), channel: weight.channel },
+                })),
+              }
             : {}),
         };
       };

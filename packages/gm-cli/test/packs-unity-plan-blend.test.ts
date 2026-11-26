@@ -71,6 +71,17 @@ it('resolves texture paths inside blended graph terms', async () => {
         weight: 0.5,
       },
     ]);
+    docs[0]!.m_Edges = [
+      edge('lerp', 'base', 0, 3),
+      edge('a', 'lerp', 0),
+      edge('b', 'lerp', 1),
+      edge('b', 'lerp', 2, 4),
+    ];
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const masked = await planUnityAssembly(root, prefab);
+    expect(masked[0]?.surfaces[0]?.blends).toMatchObject([
+      { weight: { term: { texturePaths: [join(root, 'b.png')], textureSrgb: [true] }, channel: 0 } },
+    ]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

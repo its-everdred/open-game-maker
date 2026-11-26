@@ -99,10 +99,15 @@ def build_blended_material(material, surface):
             raise ValueError("material texture references differ from resolved paths")
         layers.extend(zip(textures, paths, spaces))
         for blend in term.get("blends", []):
-            if not 0 <= blend["weight"] <= 1:
-                raise ValueError("invalid shader blend weight")
+            weight = blend["weight"]
             collect(blend["a"])
             collect(blend["b"])
+            if isinstance(weight, dict):
+                if weight.get("channel") not in (0, 1, 2, 3):
+                    raise ValueError("invalid shader blend channel")
+                collect(weight["term"])
+            elif not 0 <= weight <= 1:
+                raise ValueError("invalid shader blend weight")
 
     collect(surface)
     if not layers:
@@ -110,6 +115,8 @@ def build_blended_material(material, surface):
             value = np.asarray(term["color"], dtype=np.float32)
             for blend in term.get("blends", []):
                 weight = blend["weight"]
+                if isinstance(weight, dict):
+                    weight = constant(weight["term"])[weight["channel"]]
                 value = value * (constant(blend["a"]) * (1 - weight) + constant(blend["b"]) * weight)
             return value
         material.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value = constant(surface)
@@ -140,6 +147,9 @@ def build_blended_material(material, surface):
             bpy.data.images.remove(copy)
         for blend in term.get("blends", []):
             a, b, weight = evaluate(blend["a"]), evaluate(blend["b"]), blend["weight"]
+            if isinstance(weight, dict):
+                channel = weight["channel"]
+                weight = evaluate(weight["term"])[:, channel:channel + 1]
             value *= a * (1 - weight) + b * weight
         return value
 

@@ -195,6 +195,20 @@ Material:
   expect(() => shaderGraphBase(source, new Map([['_Weight', '1.5']]))).toThrow(
     'unsupported Unity shader graph interpolation amount',
   );
+  const maskedDocs = structuredClone(docs);
+  maskedDocs[0]!.m_Edges = [
+    edge('lerp', 'base', 0, 3),
+    edge('a', 'lerp', 0),
+    edge('b', 'lerp', 1),
+    edge('mask', 'lerp', 2, 4),
+  ];
+  maskedDocs.push({
+    m_ObjectId: 'mask',
+    m_Type: 'UnityEditor.ShaderGraph.SampleTexture2DNode',
+  } as (typeof maskedDocs)[number]);
+  expect(shaderGraphBase(maskedDocs.map((doc) => JSON.stringify(doc)).join('\n')).blends).toMatchObject([
+    { weight: { term: { textures: ['_SampleTexture2D_mask_Texture_1'] }, channel: 0 } },
+  ]);
 });
 
 it('preserves a literal graph color independently of material properties', async () => {

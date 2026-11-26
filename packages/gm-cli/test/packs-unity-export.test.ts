@@ -41,7 +41,9 @@ it.skipIf(!available)(
       await sharp({ create: { width: 2, height: 2, channels: 4, background: { r: 120, g: 160, b: 200, alpha: 1 } } })
         .png()
         .toFile(texture);
-      await sharp({ create: { width: 2, height: 2, channels: 4, background: { r: 128, g: 128, b: 128, alpha: 1 } } })
+      await sharp(Buffer.from([64, 64, 64, 255, 192, 192, 192, 255, 64, 64, 64, 255, 192, 192, 192, 255]), {
+        raw: { width: 2, height: 2, channels: 4 },
+      })
         .png()
         .toFile(mask);
       const create = `import bpy\nbpy.ops.wm.read_factory_settings(use_empty=True)\nbpy.ops.mesh.primitive_cube_add()\nbpy.context.object.name='Roof'\nbpy.context.object.data.name='RoofGeometry'\nbpy.context.object.data.materials.append(bpy.data.materials.new('Base'))\nbpy.ops.export_scene.fbx(filepath=${JSON.stringify(fbx)})`;
@@ -88,7 +90,16 @@ it.skipIf(!available)(
                     textureSrgb: [false],
                     color: [1, 1, 1, 1],
                   },
-                  weight: 0.5,
+                  weight: {
+                    term: {
+                      path: 'fixture.mat',
+                      textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
+                      texturePaths: [mask],
+                      textureSrgb: [false],
+                      color: [1, 1, 1, 1],
+                    },
+                    channel: 0,
+                  },
                 },
               ],
             },
@@ -122,7 +133,16 @@ it.skipIf(!available)(
                     textureSrgb: [false],
                     color: [1, 1, 1, 1],
                   },
-                  weight: 0.5,
+                  weight: {
+                    term: {
+                      path: 'fixture.mat',
+                      textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
+                      texturePaths: [mask],
+                      textureSrgb: [false],
+                      color: [1, 1, 1, 1],
+                    },
+                    channel: 0,
+                  },
                 },
               ],
             },
@@ -196,11 +216,13 @@ it.skipIf(!available)(
       expect(textureTransform?.getOffset()[0]).toBeCloseTo(0.25, 5);
       const pixels = await sharp(material.getBaseColorTexture()!.getImage()!).ensureAlpha().raw().toBuffer();
       expect(pixels[0]).toBeGreaterThan(55);
-      expect(pixels[0]).toBeLessThan(70);
-      expect(pixels[1]).toBeGreaterThan(130);
-      expect(pixels[1]).toBeLessThan(151);
-      expect(pixels[2]).toBeGreaterThan(87);
-      expect(pixels[2]).toBeLessThan(102);
+      expect(pixels[0]).toBeLessThan(60);
+      expect(pixels[1]).toBeGreaterThan(143);
+      expect(pixels[1]).toBeLessThan(149);
+      expect(pixels[2]).toBeGreaterThan(92);
+      expect(pixels[2]).toBeLessThan(100);
+      expect(pixels[4]).toBeGreaterThan(68);
+      expect(pixels[4]).toBeLessThan(78);
       await expect(exportUnityAssembly(plan, output)).rejects.toMatchObject({ code: 'EEXIST' });
       expect(await readFile(output)).toEqual(bytes);
     } finally {
