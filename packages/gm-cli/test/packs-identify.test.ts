@@ -13,6 +13,23 @@ afterEach(async () => {
 });
 
 describe('identify', () => {
+  it('rejects control characters in extracted paths', async () => {
+    const root = tempDir('gm-identify-control-');
+    temporary.push(root);
+    await writeFile(join(root, 'unsafe\u001b]52.unity'), 'scene');
+    await expect(identify(root)).rejects.toThrow('control or formatting characters');
+  });
+
+  it('records named GLB scenes without treating ordinary models as scenes', async () => {
+    const root = tempDir('gm-identify-scenes-');
+    temporary.push(root);
+    await mkdir(join(root, 'scenes'));
+    await writeFile(join(root, 'scenes', 'castle.glb'), 'scene');
+    await writeFile(join(root, 'chair.glb'), 'model');
+    await writeFile(join(root, 'village.umap'), 'unreal scene');
+    const result = await identify(root);
+    expect(result.sceneSources).toEqual(['scenes/castle.glb', 'village.umap']);
+  });
   it('recognizes Kenney CC0 and groups sibling textures with a model', async () => {
     const root = tempDir('gm-identify-');
     temporary.push(root);

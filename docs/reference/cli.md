@@ -584,6 +584,15 @@ the output and no preview command for an inspiration map, so an agent cannot end
 library. Once an agent chooses a searchable map, `gm maps info` returns its validated abstract layout graph without a
 file or preview path. Contact sheets stay a human tool: `gm assets sheet`.
 
+## Find packs and scenes
+
+```text
+gm packs search [--camera <camera>] [--setting <setting>] [--style <family-or-set>] [--json]
+gm packs scenes [--setting <setting>] [--json]
+```
+
+Pack search matches all supplied filters against non-quarantined collection cards with effective `in-game` rights. Cameras are `isometric`, `top-down`, `third-person`, `first-person` and `side`; settings use the controlled pack settings in the asset-card schema. Scene search lists matching pre-assembled sources and their preview paths; `null` means no scene preview has been made. Unknown metadata does not match a filter. Intake preserves Unity scenes, prefabs and metadata sidecars and proposes settings from their names; these tags should be reviewed against the content. Supply `--style <family>` and `--cameras <comma-separated cameras>` to `gm packs import` when the pack's style or views are known and are not in the registry. Mixed-license imports discard scene and prefab sources until those sources can carry individual rights.
+
 ## Tag local asset packs
 
 ```text

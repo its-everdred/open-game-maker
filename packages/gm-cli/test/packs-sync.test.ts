@@ -333,12 +333,16 @@ describe('gm packs sync', () => {
     await writeFile(join(input, 'kept.obj'), 'o kept\n');
     await writeFile(join(input, 'dropped.obj'), 'o dropped\n');
     await writeFile(join(input, 'unmapped.obj'), 'o unmapped\n');
+    await writeFile(join(input, 'scene.unity'), 'scene');
+    await writeFile(join(input, 'prop.prefab'), 'prefab');
     const map = join(fresh('gm-sync-map-'), 'licenses.json');
     await writeFile(
       map,
       JSON.stringify({
         'kept.obj': { license: 'CC0-1.0', attribution: 'Fixture Author' },
         'dropped.obj': { license: 'GPL-3.0-only', attribution: 'Other', dropped: 'GPL excluded' },
+        'scene.unity': { license: 'CC0-1.0', attribution: 'Fixture Author' },
+        'prop.prefab': { license: 'CC0-1.0', attribution: 'Fixture Author' },
       }),
     );
 
@@ -379,6 +383,8 @@ describe('gm packs sync', () => {
       license: 'CC-BY-3.0',
       collection_info: { origin: 'mirror' },
       rights: { redistribution: 'free' },
+      scenes: [],
+      prefabs: [],
     });
     const card = JSON.parse(await readFile(join(pack, 'cards', 'kept.card.json'), 'utf8'));
     expect(card).toMatchObject({
@@ -389,6 +395,8 @@ describe('gm packs sync', () => {
     });
     await expect(stat(join(pack, 'pin1', 'extracted', 'dropped.obj'))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(stat(join(pack, 'pin1', 'extracted', 'unmapped.obj'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(join(pack, 'pin1', 'extracted', 'scene.unity'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(join(pack, 'pin1', 'extracted', 'prop.prefab'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('requires a named human for real tier-2 import', async () => {

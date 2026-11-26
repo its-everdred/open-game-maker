@@ -1,7 +1,9 @@
 # What a new game can use (snapshot 2026-11-03)
 
 Confirm against the live repo and catalog before promising anything: `gm assets search|facets|info`, `gm maps search`,
-the style families API (`/api/catalog/style-families`) and the templates. Lines marked **Planned** do not exist yet.
+`gm packs search --camera <camera> --setting <setting> --style <family>`, `gm packs scenes --setting <setting>`,
+the style families API (`/api/catalog/style-families`) and the templates. Pack and scene metadata may be incomplete;
+an empty result is not proof that no suitable source exists. Lines marked **Planned** do not exist yet.
 
 ## Engine and hosting (built)
 

@@ -33,6 +33,39 @@ async function unknownFixture(): Promise<string> {
 }
 
 describe('gm packs import', () => {
+  it('accepts an identical legacy source but rejects changed scene content', async () => {
+    const assets = fresh('gm-pack-legacy-assets-');
+    const input = await unknownFixture();
+    await writeFile(join(input, 'scene.unity'), 'original scene');
+    await writeFile(join(input, 'prop.prefab'), 'original prefab');
+    const env = { OGM_ASSETS_ROOT: assets };
+    const args = ['packs', 'import', input, '--id', 'legacy-test', '--version', '1', '--json'];
+    const first = await gm(args, { env });
+    expect(first.code, first.err.join('\n')).toBe(0);
+    const hashPath = join(assets, 'packs', 'legacy-test', '1', 'hash-manifest.txt');
+    const manifest = await readFile(hashPath, 'utf8');
+    const legacy = manifest.split('\n').filter((line) => line && !/\.(unity|prefab|umap|meta)$/i.test(line));
+    await writeFile(hashPath, `${legacy.join('\n')}\n`);
+    const again = await gm(args, { env });
+    expect(again.code, again.err.join('\n')).toBe(0);
+    const installed = join(assets, 'packs', 'legacy-test', '1', 'extracted');
+    await rm(join(installed, 'scene.unity'));
+    await rm(join(installed, 'prop.prefab'));
+    const newer = await gm(['packs', 'import', input, '--id', 'legacy-test', '--version', '2', '--json'], { env });
+    expect(newer.code, newer.err.join('\n')).toBe(0);
+    const restored = await gm(args, { env });
+    expect(restored.code, restored.err.join('\n')).toBe(0);
+    const card = JSON.parse(await readFile(join(assets, 'packs', 'legacy-test', 'collection.card.json'), 'utf8'));
+    expect(card.id).toBe('t1:legacy-test@1');
+    expect(card.scenes).toEqual([]);
+    expect(card.prefabs).toEqual([]);
+    expect(await readFile(hashPath, 'utf8')).toBe(`${legacy.join('\n')}\n`);
+    await writeFile(join(input, 'scene.unity'), 'changed scene');
+    const changed = await gm(args, { env });
+    expect(changed.code).toBe(2);
+    expect(changed.err.join('\n')).toContain('already exists with different content');
+  }, 120_000);
+
   it('writes a valid, stable collection that remains hidden while quarantined', async () => {
     const assets = fresh('gm-pack-assets-');
     const input = await unknownFixture();

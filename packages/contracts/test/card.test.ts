@@ -30,6 +30,30 @@ describe('card schemas', () => {
     (card.generated as { method: string }).method = 'unknown';
     expect(validateCard(card)).toMatchObject({ ok: false });
   });
+  it('validates pack discovery metadata', () => {
+    const card = structuredClone(
+      cardFixtureDocs().find(({ file }) => file === 'collection-kenney-mini-dungeon.json')?.doc,
+    ) as Record<string, unknown>;
+    Object.assign(card, {
+      style_family: 'isometric-2d',
+      cameras: ['isometric'],
+      settings: ['tavern'],
+      scenes: [{ path: 'packs/example/demo.unity', engine: 'unity', settings: ['tavern'], preview: null }],
+    });
+    expect(validateCard(card)).toMatchObject({ ok: true });
+    card.style_family = 'invented';
+    expect(validateCard(card)).toMatchObject({ ok: false });
+    card.style_family = 'isometric-2d';
+    card.cameras = ['first-person', 'invented'];
+    expect(validateCard(card)).toMatchObject({ ok: false });
+    card.cameras = ['isometric'];
+    (card.scenes as Array<{ settings: string[] }>)[0]!.settings = ['invented'];
+    expect(validateCard(card)).toMatchObject({ ok: false });
+    (card.scenes as Array<{ settings: string[]; engine: string }>)[0]!.settings = ['tavern'];
+    (card.scenes as Array<{ settings: string[]; engine: string }>)[0]!.engine = 'invented';
+    expect(validateCard(card)).toMatchObject({ ok: false });
+  });
+
   it('accepts all 16 moved C3 fixtures', () => {
     for (const { file, doc } of cardFixtureDocs()) {
       const schema = (doc as { schema?: string }).schema;
