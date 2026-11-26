@@ -15,6 +15,8 @@ export function renderRedirects(appOrigin) {
     `/signin  ${appOrigin}/signin  302!`,
     `/auth/*  ${appOrigin}/auth/:splat  302!`,
     `/api/*  ${appOrigin}/api/:splat  302!`,
+    `/docs  /docs/index.html  200`,
+    `/:slug  ${appOrigin}/play/:slug  302`,
     '',
   ].join('\n');
 }
