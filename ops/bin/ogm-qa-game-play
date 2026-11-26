@@ -4,7 +4,7 @@
 ogm-qa-game-boot only proves a game's files return 200; on 2026-11-22 every game still showed "Try again" for a day
 (#1252, #1266, #1267). For each game with a tested build (QA games excluded), this runs `gm qa play-check`: the
 production shell at 390x844 with the QA session, the bridge handshake and first frame, the game's first tap path, and
-one input that must change the frame. One game at a time; each play is capped at 170 s (`--timeout`). A game that
+one input that must change the frame. One game at a time; each play has a load-adjusted wall-time budget capped at 340 s. A game that
 fails is played once more and fails only if both plays fail: a loaded host can miss one boot, a broken game misses both.
 
 First, every app domain (OGM_PUBLIC_APP_ORIGIN, then each OGM_APP_ALIAS_ORIGINS entry, in web.env) frames the first
@@ -76,15 +76,18 @@ def play(gm, repo, game_id, build_id, out):
     try:
         run = subprocess.run(command, cwd=repo, capture_output=True, text=True, timeout=540)
         code, stderr = run.returncode, run.stderr
-    except subprocess.TimeoutExpired:
-        code, stderr = 124, 'timed out after 540 s'
+    except subprocess.TimeoutExpired as error:
+        partial = error.stderr or b''
+        if isinstance(partial, bytes):
+            partial = partial.decode(errors='replace')
+        code, stderr = 124, f'timed out after 540 s; {partial[-250:]}'
     try:
         with open(report_path) as handle:
             report = json.load(handle)
     except (FileNotFoundError, json.JSONDecodeError):
-        report = {'failures': [f'gm qa play-check exited {code} without a report: {stderr.strip()[-300:]}']}
+        report = {'failures': [f'check/host problem: gm qa play-check exited {code} without a report: {stderr.strip()[-300:]}']}
     if code != 0 and not report.get('failures'):
-        report['failures'] = [f'gm qa play-check exited {code}: {stderr.strip()[-300:]}']
+        report['failures'] = [f'check/host problem: gm qa play-check exited {code}: {stderr.strip()[-300:]}']
     return report
 
 

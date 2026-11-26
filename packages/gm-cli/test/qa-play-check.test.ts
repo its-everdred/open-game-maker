@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
 import {
+  bootDeadlineFailure,
   changedShare,
   expectsHostStick,
   firstTapPath,
@@ -9,6 +10,7 @@ import {
   gameApiAnswer,
   judgePlay,
   moveKey,
+  updatePlayState,
   type PlayObservation,
   type PlayTraceEntry,
 } from '../src/qa-play-check.js';
@@ -39,6 +41,17 @@ function played(overrides: Partial<PlayObservation> = {}): PlayObservation {
 }
 
 describe('qa play-check verdict', () => {
+  it('preserves observed bridge errors if the browser stops answering', () => {
+    const observation = played({ bridgeState: 'error', trace: booted });
+    expect(updatePlayState(observation, null)).toBe(false);
+    expect(observation.bridgeState).toBe('error');
+    expect(observation.trace).toEqual(booted);
+  });
+  it('accepts a late first frame and reports an incomplete boot as inconclusive', () => {
+    expect(bootDeadlineFailure('ready', true)).toBeUndefined();
+    expect(bootDeadlineFailure('ready', false)).toContain('inconclusive');
+    expect(bootDeadlineFailure('error', true)).toContain('inconclusive');
+  });
   it('passes a game that reached its first frame, took its tap path and answered one input', () => {
     expect(judgePlay(played())).toEqual({ failures: [], unchecked: [] });
   });
@@ -120,6 +133,21 @@ describe('qa play-check verdict', () => {
       'no input was tried',
     ]);
     expect(judgePlay(played({ stopped: 'over 170 s' })).failures).toEqual(['the check stopped: over 170 s']);
+  });
+
+  it('does not blame the game when the check stops before observation', () => {
+    expect(
+      judgePlay(
+        played({ stopped: 'check/host problem: fetch failed', bridgeState: undefined, trace: [], bootMs: null }),
+      ).failures,
+    ).toEqual(['the check stopped: check/host problem: fetch failed']);
+  });
+
+  it('retains observed shell failures when the check also stops', () => {
+    expect(
+      judgePlay(played({ stopped: 'deadline', bridgeState: 'error', tryAgain: true, trace: [], bootMs: null }))
+        .failures,
+    ).toEqual(['the check stopped: deadline', 'bridge error', 'the shell shows Try again']);
   });
 
   it('reports a game with no tap path as checked from its first screen', () => {
