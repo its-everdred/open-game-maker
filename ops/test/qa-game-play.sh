@@ -128,7 +128,7 @@ OGM_TEST_SILENT=g_ok "$check" --db "$db" --repo "$stack" --game ok > "$scratch/o
 rc=$?
 set -e
 assert_eq 1 "$rc" 'a play with no report fails'
-assert_grep 'ok build_new: gm qa play-check exited 3 without a report' "$scratch/out"
+assert_grep 'ok build_new: check/host problem: gm qa play-check exited 3 without a report' "$scratch/out"
 
 # Bad usage.
 set +e

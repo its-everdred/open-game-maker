@@ -111,14 +111,35 @@ export function sawFirstFrame(trace: readonly PlayTraceEntry[]): boolean {
   return trace.some((entry) => entry.dir === 'in' && entry.t === 'load.frame');
 }
 
+/** Keep the last observed bridge state when the browser can no longer answer. */
+export function updatePlayState(
+  observation: PlayObservation,
+  state: { bridge: string | undefined; trace: PlayTraceEntry[] } | null,
+): boolean {
+  if (state === null) return false;
+  observation.bridgeState = state.bridge;
+  observation.trace = state.trace;
+  return true;
+}
+
+/** A late first frame is usable; without one the cause of a boot timeout is unknown. */
+export function bootDeadlineFailure(bridge: string | undefined, firstFrameSeen: boolean): string | undefined {
+  return bridge === 'ready' && firstFrameSeen
+    ? undefined
+    : 'inconclusive: boot exceeded its wall-time budget; inspect bridge trace to distinguish game and host';
+}
+
 export function judgePlay(observation: PlayObservation): PlayVerdict {
   const failures: string[] = [];
   const unchecked: string[] = [];
   if (observation.stopped !== undefined) failures.push(`the check stopped: ${observation.stopped}`);
-  if (observation.bridgeState !== 'ready') failures.push(`bridge ${observation.bridgeState ?? 'never connected'}`);
+  if (observation.bridgeState === 'error' || (observation.stopped === undefined && observation.bridgeState !== 'ready'))
+    failures.push(`bridge ${observation.bridgeState ?? 'never connected'}`);
   if (observation.tryAgain) failures.push('the shell shows Try again');
-  if (!sawFirstFrame(observation.trace)) failures.push('the game never reported load.frame');
-  else if (observation.bootMs === null) failures.push('the game did not reach ready and its first frame in time');
+  if (observation.stopped === undefined) {
+    if (!sawFirstFrame(observation.trace)) failures.push('the game never reported load.frame');
+    else if (observation.bootMs === null) failures.push('the game did not reach ready and its first frame in time');
+  }
   if (observation.tapFailed !== undefined) failures.push(`could not tap "${observation.tapFailed}"`);
   if (!observation.tapPath.length) unchecked.push('the manifest names no tap path: checked from the first screen');
   if (observation.frameStddev !== null && observation.frameStddev < BLANK_STDDEV)
