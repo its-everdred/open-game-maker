@@ -138,7 +138,7 @@ def main() -> int:
         print("No review feed observations in the selected window.")
         return answer_status
     seconds = [elapsed for _, elapsed in rows]
-    print(f"S6 first feed refresh: {len(rows)} cards; median {statistics.median(seconds):.1f}s; worst {max(seconds):.1f}s")
+    print(f"S6 first feed refresh: {len(rows)} feed observations; median {statistics.median(seconds):.1f}s; worst {max(seconds):.1f}s")
     if args.rows:
         for ticket, elapsed in rows:
             print(f"ticket {ticket}: {elapsed:.1f}s")

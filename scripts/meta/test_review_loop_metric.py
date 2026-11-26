@@ -99,7 +99,7 @@ class ReviewLoopMetricTest(unittest.TestCase):
             )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Review answers unavailable", result.stderr)
-        self.assertIn("S6 first feed refresh: 1 cards", result.stdout)
+        self.assertIn("S6 first feed refresh: 1 feed observations", result.stdout)
 
     def test_missing_database_is_not_reported_as_zero_answers(self):
         with tempfile.TemporaryDirectory() as directory:
