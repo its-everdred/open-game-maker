@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 
 import AdmZip from 'adm-zip';
 import sharp from 'sharp';
+import * as tar from 'tar';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { validateCard } from '@ogm/contracts';
@@ -33,6 +34,33 @@ async function unknownFixture(): Promise<string> {
 }
 
 describe('gm packs import', () => {
+  it('imports a model from a Unity package wrapped in another Unity package and zip', async () => {
+    const root = fresh('gm-pack-unity-wrapper-');
+    const assets = fresh('gm-pack-unity-assets-');
+    const inner = join(root, 'inner');
+    const outer = join(root, 'outer');
+    await mkdir(join(inner, 'guid'), { recursive: true });
+    await writeFile(join(inner, 'guid', 'pathname'), 'Assets/Models/wall.fbx');
+    await writeFile(join(inner, 'guid', 'asset'), 'fixture mesh');
+    const innerArchive = join(root, 'inner.unitypackage');
+    await tar.c({ gzip: true, file: innerArchive, cwd: inner }, ['guid']);
+    await mkdir(join(outer, 'guid'), { recursive: true });
+    await writeFile(join(outer, 'guid', 'pathname'), 'Leartes/Pack/inner.unitypackage');
+    await writeFile(join(outer, 'guid', 'asset'), await readFile(innerArchive));
+    const outerArchive = join(root, 'outer.unitypackage');
+    await tar.c({ gzip: true, file: outerArchive, cwd: outer }, ['guid']);
+    const zip = new AdmZip();
+    zip.addFile('outer.unitypackage', await readFile(outerArchive));
+    const input = join(root, 'pack.zip');
+    zip.writeZip(input);
+
+    const result = await gm(['packs', 'import', input, '--id', 'wrapped', '--version', '1', '--json'], {
+      env: { OGM_ASSETS_ROOT: assets },
+    });
+    expect(result.code, result.err.join('\n')).toBe(0);
+    expect(JSON.parse(result.out[0])).toMatchObject({ cards: 1, counts: { model: 1 } });
+  });
+
   it('accepts an identical legacy source but rejects changed scene content', async () => {
     const assets = fresh('gm-pack-legacy-assets-');
     const input = await unknownFixture();
