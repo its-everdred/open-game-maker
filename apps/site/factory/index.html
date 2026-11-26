@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open Game Maker</title>
+    <meta name="description" content="Game Factory that Supports Humans: bring human art, agents write code." />
+    <link rel="stylesheet" href="/factory/factory.css" />
+    <link rel="stylesheet" href="/factory/sections.css" />
+    <link rel="stylesheet" href="/factory/responsive.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <nav aria-label="Main">
+      <a class="brand" href="#top"><img src="/hero/logo.webp" alt="Open Game Maker 2000" /></a>
+      <div class="links">
+        <a href="#create">Create</a><a href="#factory">Factory</a><a href="#editor">Editor</a
+        ><a href="#review">Review</a><a href="#devices">Devices</a><a class="go" href="/signin">Try it</a>
+      </div>
+    </nav>
+
+    <header class="hero" id="top">
+      <div class="plan" aria-hidden="true"></div>
+      <div class="hero-top">
+        <div>
+          <h1>Game Factory that Supports Humans</h1>
+          <p class="sub">bring human art, agents write code.</p>
+          <div class="acts">
+            <a class="btn dark" href="/signin">Start a game<span class="icon" data-icon="play"></span></a>
+          </div>
+        </div>
+        <div class="crate">
+          <img src="/hero/logo.webp" alt="Open Game Maker 2000" />
+        </div>
+      </div>
+      <div class="line" aria-label="The development line: idea, mocks, prototype, review, build, publish">
+        <div class="stations" id="stations"></div>
+        <div class="cargo" id="cargo" aria-hidden="true"></div>
+        <div class="belt" aria-hidden="true">
+          <div class="treads"></div>
+          <div class="rollers" id="rollers"></div>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section id="create">
+        <div class="wrap">
+          <div class="sh reveal">
+            <span class="step">1</span>
+            <div><h2>Create a game</h2></div>
+            <div><p>Pick a style family, then pour in the assets you own.</p></div>
+          </div>
+          <div class="molds reveal" id="molds"></div>
+          <div class="press reveal">
+            <div>
+              <ul class="bul" style="margin-bottom: 32px">
+                <li>
+                  <span class="icon" data-icon="chest"></span
+                  ><span><b>Human-made assets.</b> From Humble, Unity, Unreal and itch, plus map libraries.</span>
+                </li>
+                <li>
+                  <span class="icon" data-icon="search"></span
+                  ><span><b>Metadata on every asset.</b> So agents find the right piece first time.</span>
+                </li>
+                <li>
+                  <span class="icon" data-icon="build"></span
+                  ><span><b>Curated tools.</b> Agents use tools such as Sprite Forge to make and check game art.</span>
+                </li>
+                <li>
+                  <span class="icon" data-icon="admin"></span
+                  ><span
+                    ><b>Licences kept.</b> Rights tracked per asset from intake. No-AI assets never reach image
+                    generation, private assets never ship, credits stay attached.</span
+                  >
+                </li>
+              </ul>
+              <ol class="feed">
+                <li>Licence<span class="icon" data-icon="admin"></span></li>
+                <li>Unpack<span class="icon" data-icon="layers"></span></li>
+                <li>Catalog<span class="icon" data-icon="games"></span></li>
+                <li>Previews<span class="icon" data-icon="eye"></span></li>
+                <li>Tags<span class="icon" data-icon="pencil"></span></li>
+                <li>Style family<span class="icon" data-icon="brush"></span></li>
+                <li>Pixel finish<span class="icon" data-icon="pixel"></span></li>
+                <li>Search card<span class="icon" data-icon="search"></span></li>
+              </ol>
+            </div>
+            <div class="card">
+              <span class="ok">Licence read</span>
+              <div class="pic">
+                <img src="/factory/assets/kk-sword_a.webp" alt="Sword from KayKit Fantasy Weapons" />
+              </div>
+              <dl class="mono">
+                <dt>source</dt>
+                <dd>KayKit Fantasy Weapons</dd>
+                <dt>licence</dt>
+                <dd>CC0 1.0</dd>
+                <dt>kind</dt>
+                <dd>weapon / sword</dd>
+                <dt>family</dt>
+                <dd>low poly</dd>
+                <dt>views</dt>
+                <dd>4 angles, 1 sheet</dd>
+              </dl>
+              <div class="chips">
+                <span>public site ok</span><span>image gen ok</span><span>one handed</span
+                ><span>pixel finish ready</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="factory" class="floor">
+        <div class="wrap">
+          <div class="sh reveal">
+            <span class="step">2</span>
+            <div><h2>Software factory</h2></div>
+            <div>
+              <ul class="bul">
+                <li>
+                  <span class="icon" data-icon="agent"></span
+                  ><span><b>Parallel agents.</b> Tickets run in waves; a merge queue lands them.</span>
+                </li>
+                <li>
+                  <span class="icon" data-icon="person"></span
+                  ><span><b>Role based.</b> Each station loads its own skills.</span>
+                </li>
+              </ul>
+              <a class="aiur" href="https://aiur.team">Powered by Aiur<span class="icon" data-icon="link"></span></a>
+            </div>
+          </div>
+          <div class="grid reveal" id="floorgrid" aria-label="Seven role stations and the merge queue"></div>
+          <div class="perks reveal">
+            <div class="perk">
+              <span class="icon" data-icon="hammer"></span>
+              <div>
+                <b>Agent <code>gm</code> CLI</b
+                ><span>Each agent gets exactly the skills, tools, libraries and assets its job needs.</span>
+              </div>
+            </div>
+            <div class="perk">
+              <span class="icon" data-icon="chat"></span>
+              <div>
+                <b>Shared bus</b
+                ><span>Agents emit and subscribe to events, declare blockers and unblock each other's work.</span>
+              </div>
+            </div>
+            <div class="perk">
+              <span class="icon" data-icon="bots"></span>
+              <div>
+                <b>Claude and Codex</b><span>Story points route each ticket to the right model size and skills.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="editor" class="edit">
+        <div class="plan" aria-hidden="true"></div>
+        <div class="wrap">
+          <div class="sh reveal">
+            <span class="step">3</span>
+            <div><h2>Get your hands dirty</h2></div>
+            <div>
+              <ul class="bul">
+                <li>
+                  <span class="icon" data-icon="edit"></span
+                  ><span><b>An editor with every game.</b> The agents build it alongside the game.</span>
+                </li>
+                <li>
+                  <span class="icon" data-icon="map"></span><span><b>Make maps</b> with the agent.</span>
+                </li>
+                <li>
+                  <span class="icon" data-icon="settings"></span
+                  ><span><b>Adjust difficulty</b> and tweak the settings that matter for that game.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="bench reveal">
+            <span class="tape" aria-hidden="true"></span>
+            <div class="laptop">
+              <div class="scr">
+                <img src="/factory/assets/editor-reference.png" alt="Goblin Cellar editor, still reference" />
+              </div>
+              <div class="base"></div>
+            </div>
+            <div
+              class="phone"
+              style="
+                display: grid;
+                place-items: center;
+                color: white;
+                font-weight: 700;
+                text-align: center;
+                padding: 12px;
+              "
+            >
+              Mobile editor loop pending
+            </div>
+          </div>
+          <p class="quote reveal" style="margin-top: 72px">Don't let agents have all the fun.</p>
+        </div>
+      </section>
+
+      <section id="review">
+        <div class="wrap">
+          <div class="sh reveal">
+            <span class="step">4</span>
+            <div><h2>Continuous review</h2></div>
+            <div>
+              <ul class="bul">
+                <li>
+                  <span class="icon" data-icon="decisions"></span
+                  ><span><b>Pictures on every option.</b> Decide by looking.</span>
+                </li>
+                <li>
+                  <span class="icon" data-icon="send"></span
+                  ><span><b>Picks go straight to the agents.</b> The next round follows.</span>
+                </li>
+                <li>
+                  <span class="icon" data-icon="check"></span><span><b>Rounds until approved.</b> Then it ships.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="reveal">
+            <div class="toggle" role="group" aria-label="Orientation">
+              <button type="button" aria-pressed="true" data-set="h">
+                <span class="ori h" aria-hidden="true"></span>Horizontal
+              </button>
+              <button type="button" aria-pressed="false" data-set="v">
+                <span class="ori v" aria-hidden="true"></span>Vertical
+              </button>
+            </div>
+            <div class="set h" id="set-h"></div>
+            <div class="set v" id="set-v" hidden></div>
+          </div>
+          <div class="cycle reveal" aria-label="The development line">
+            <span class="k">Idea</span><span>Concept mocks</span><span>Prototype</span><span>Playable review</span
+            ><span>Build</span><span class="k">Publish</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="devices" class="devices">
+        <div class="plan" aria-hidden="true"></div>
+        <div class="wrap">
+          <div class="sh reveal">
+            <span class="step">5</span>
+            <div><h2>Support every device</h2></div>
+            <div>
+              <ul class="bul">
+                <li>
+                  <span class="icon" data-icon="games"></span
+                  ><span><b>Phone, tablet and desktop.</b> Games receive the live viewport and safe areas.</span>
+                </li>
+                <li>
+                  <span class="icon" data-icon="layers"></span
+                  ><span><b>Art as aspect sets.</b> Phone portrait first, then landscape, tablet and desktop.</span>
+                </li>
+                <li>
+                  <span class="icon" data-icon="pointer"></span
+                  ><span><b>Touch controls built in.</b> Sticks and buttons with action icons.</span>
+                </li>
+                <li>
+                  <span class="icon" data-icon="cloud"></span
+                  ><span><b>Cloud saves.</b> Saves sync to the server every 30 seconds and on pause.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div
+            class="desk reveal"
+            id="desk"
+            aria-label="The same scene on a monitor, a laptop, a tablet, and a phone in landscape and portrait"
+          ></div>
+        </div>
+      </section>
+
+      <section class="end">
+        <img class="mark" src="/hero/logo.webp" alt="Open Game Maker 2000" />
+        <h2>Start the line.</h2>
+        <div class="acts">
+          <a class="btn hz" href="/signin">Try it<span class="icon" data-icon="play"></span></a>
+          <a class="btn ol" href="/setup">Self-host<span class="icon" data-icon="build"></span></a>
+        </div>
+        <div class="crew" id="crew" aria-hidden="true"></div>
+        <div class="foot">
+          <a href="https://aiur.team">Powered by Aiur</a><a href="/setup">Setup guide</a
+          ><a href="/signin">Open the app</a>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/page/factory.js"></script>
+  </body>
+</html>
