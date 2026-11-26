@@ -190,7 +190,7 @@ document.querySelectorAll<HTMLButtonElement>('.toggle button').forEach((b) =>
 if (params.has('vert')) document.querySelector<HTMLButtonElement>('.toggle [data-set=v]')?.click();
 
 // devices: one scene, laid out per device shape
-const scene = (touch: boolean) =>
+const scene = () =>
   `<div class="scene"><span class="sun"></span><img class="mill" src="/factory/assets/k2-house.webp" alt=""><img class="bld" src="/factory/assets/k2-house.webp" alt=""><img class="twr" src="/factory/assets/k2-tower.webp" alt=""><span class="dh">${spr('k2-hero', 1, { fit: '22cqh' })}</span><span class="dm">${spr('k2-slime', 1, { fit: '22cqh', delay: -0.3 })}</span><span class="pad"></span><span class="btns"><i></i><i></i></span></div>`;
 const devices: [string, boolean][] = [
   ['monitor', false],
@@ -200,7 +200,7 @@ const devices: [string, boolean][] = [
   ['php', true],
 ];
 document.getElementById('desk')!.innerHTML = devices
-  .map(([c, t]) => `<div class="dev ${c}${t ? ' touch' : ''}">${scene(t)}</div>`)
+  .map(([c, t]) => `<div class="dev ${c}${t ? ' touch' : ''}">${scene()}</div>`)
   .join('');
 
 // crew in the cta
