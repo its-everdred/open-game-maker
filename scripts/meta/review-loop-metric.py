@@ -88,6 +88,18 @@ def count_answered_commands(path: Path, cutoff: datetime) -> int:
     return int(row[0])
 
 
+def default_database(env_dir: Path, data_dir: str | None) -> Path:
+    if not data_dir:
+        try:
+            for line in (env_dir / "api.env").read_text(encoding="utf-8").splitlines():
+                key, separator, value = line.partition("=")
+                if separator and key.strip() == "OGM_DATA_DIR":
+                    data_dir = value.strip().strip('"').strip("'")
+        except FileNotFoundError:
+            pass
+    return Path(data_dir or "~/.local/share/ogm/data").expanduser() / "ogm.sqlite3"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hours", type=float, default=24)
@@ -101,16 +113,18 @@ def main() -> int:
     parser.add_argument(
         "--db",
         type=Path,
-        default=Path(os.environ.get("OGM_DATA_DIR", Path.home() / ".local/share/ogm/data")) / "ogm.sqlite3",
-        help="API SQLite database (defaults to $OGM_DATA_DIR/ogm.sqlite3)",
+        help="API SQLite database (defaults to OGM_DATA_DIR from the environment or API env file)",
     )
     args = parser.parse_args()
     if args.hours <= 0:
         parser.error("--hours must be greater than zero")
     cutoff = datetime.now(timezone.utc) - timedelta(hours=args.hours)
     try:
-        answered = count_answered_rounds(args.db, cutoff)
-        commands = count_answered_commands(args.db, cutoff)
+        database = args.db or default_database(
+            Path(os.environ.get("OGM_ENV_DIR", "~/.config/ogm/env")).expanduser(), os.environ.get("OGM_DATA_DIR")
+        )
+        answered = count_answered_rounds(database, cutoff)
+        commands = count_answered_commands(database, cutoff)
     except (OSError, sqlite3.Error) as error:
         print(f"Review answers unavailable: {error}", file=sys.stderr)
         return 1

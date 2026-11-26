@@ -71,6 +71,13 @@ class ReviewLoopMetricTest(unittest.TestCase):
             )
             self.assertIn("Creator review rounds answered: 2; recorded Command reviews: 2", result.stdout)
 
+    def test_database_path_uses_api_configuration_and_explicit_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env_dir = Path(directory)
+            (env_dir / "api.env").write_text('OTHER=ignored\nOGM_DATA_DIR="/configured/data"\n', encoding="utf-8")
+            self.assertEqual(METRIC.default_database(env_dir, None), Path("/configured/data/ogm.sqlite3"))
+            self.assertEqual(METRIC.default_database(env_dir, "/override"), Path("/override/ogm.sqlite3"))
+
     def test_missing_database_is_not_reported_as_zero_answers(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(FileNotFoundError):
