@@ -1229,6 +1229,12 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.6)(jsdom@27.4.0(@noble/hashes@2.4.0))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  tools/review-page:
+    devDependencies:
+      jsdom:
+        specifier: 27.4.0
+        version: 27.4.0(@noble/hashes@2.4.0)
+
   tools/skills:
     dependencies:
       '@ogm/config':

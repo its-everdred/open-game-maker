@@ -1,0 +1,15 @@
+{
+  "name": "@ogm/review-page",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "lint": "eslint src"
+  },
+  "devDependencies": {
+    "jsdom": "27.4.0"
+  }
+}
