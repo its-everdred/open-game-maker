@@ -1,6 +1,6 @@
 # QA launch plan: Mon 2026-11-30 09:00 PT
 
-Status: **proposal.** Nothing has been filed, labelled, paused or queued; Kevin approves first.
+Status: **approved by Kevin 2026-11-26 ~14:15Z, with the recommended answers to D1-D6; tickets filed (see section 2). Queues and aiur features wait for the aiur swap.**
 Written 2026-11-26 13:30Z (Thu 05:30 PT). Deadline Mon 17:00Z, about 100 hours away.
 
 Refs: `core #N` = its-everdred/open-game-maker issue N, `og #N` = its-everdred/open-games, `aiur #N` = aiur-team/aiur.
@@ -220,6 +220,29 @@ label used to sort the queue). Core tickets are web, API or ops work, so they ge
 | Q5 | `ogm-qa launch`: one go/no-go command running every launch check (S1–S9) and posting a pass table | core | role:qa, model:low | green Mon 08:00 PT | NG1, V2, C1, B1, B2, CS1, Q1, E1 |
 | Q6 | Creator lane: tester jobs run on reserved worker slots, one job in flight per tester, queue position shown | core | role:engine, model:medium | two QA accounts' jobs don't wait behind fleet work | aiur #8115, #8142 |
 | M1 | Site copy and motion to Kevin's 11-26 words: hero "Game Factory that Supports Humans" / "bring human art, agents write code."; "Get your hands dirty" and "Support Every Device" sections; one animated element per section; "assets", never "packs" | core | build-lane:web, phase:build, model:medium | live stills (phone and desktop) on makeopen.games | core #1355 |
+
+### Filed 2026-11-26 (Kevin approved the plan and D1-D6 recommendations)
+
+Core = its-everdred/open-game-maker, og = its-everdred/open-games. All work tickets carry `priority:1` and `launch:2026-11-30`; epics carry `epic`, `priority:1` and `launch:2026-11-30` and no `agent:*` labels. Children are native sub-issues; every prerequisite in the table is a native `blocked_by` link (plus og #1025 blocked by B3, core #1110 by aiur #8082, core #1362 by og #1025). D1 is filed held (no `agent:todo`): it is an Executor task.
+
+| Item | Ticket | Item | Ticket |
+|---|---|---|---|
+| NG1 | core #1402 | D1 | core #1411 (held) |
+| NG2 | core #1412 | D2 | core #1419 |
+| NG3 | core #1418 | D3 | core #1420 |
+| V1 | core #1403 | D4 | core #1421 |
+| V2 | core #1413 | E1 | core #1404 |
+| R1 | core #1415 | E2 | core #1414 |
+| R2 | core #1416 | B1 | og #1062 |
+| C1 | core #1417 | B2 | og #1063 |
+| B3 | core #1406 | CS1 | core #1405 |
+| Q1 | core #1407 | Q3 | core #1408 |
+| Q4 | core #1409 | Q5 | core #1423 |
+| Q6 | core #1422 | M1 | core #1410 |
+
+Epics: S1 core #1424, S2 #1425, S3 #1426, S4 #1427, S5 #1428, S6 #1429, S7 og #1064, S8 core #1430, S9 #1431, S10 #1432.
+
+Priority changes: `priority:1` added to core #1087 and #1349 (replacing `priority:2`), #1333, #1334; og #711, #710, #663, #698, #657, #1025, #819, #881. Core #1333 and #1334 stay `agent:parked` until the queues are applied. The aiur feature, epic and queue writes wait for the swap: `apply-after-swap.sh` in this folder.
 
 Core #1362 gets a fallback in its body: if no real recording exists by Sun 12:00 PT, show the Endless and
 versus-CPU clips and leave the two-phone animation for after launch.
