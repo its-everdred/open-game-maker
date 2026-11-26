@@ -9,6 +9,8 @@ export type ImportOptions = {
   title?: string;
   styleFamily?: AssetCard['style_family'];
   cameras?: AssetCard['cameras'];
+  vendor?: string;
+  sourceUrl?: string;
   version?: string;
   license?: string;
   licenseMap?: LicenseMap;

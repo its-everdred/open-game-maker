@@ -14,6 +14,14 @@ The visual verdict does not imply the quantitative gates passed. Round 74 measur
 - **Palette and outline:** No palette quantisation or outline pass is indicated: 467 tileset south views contain 51,860 distinct colours, and rim/interior luminance ratios are approximately 0.8–1.05. The 64 px knight's small palette follows its size and materials. Measured with `study.py` / `spritemetrics.py`.
 - **Light and shadow:** Props use 3–4 stepped shading plateaus. Stone A12 has approximate luminance levels 130, 109 and 62; its contact shadow is black at alpha approximately 165 (range 128–200). Measured with `study.py` / `spritemetrics.py`. Near-black partial-alpha pixels are classified as shadows by `spritemetrics.py` and excluded from its object mask.
 
+## Crispness (#1338)
+
+`spritemetrics.crispness` on the Idle frame 0 of 6Barbarian, 3Wizard and 5BarbArcher (S, SE, E; the hero references):
+alpha is binary; 46-69% of neighbouring object pixel pairs share a colour; of the pairs that differ, 13-52% step by
+CIE76 dE >= 20 (hard steps; Barbarian 13-18%, Wizard 30-39%, Archer 46-52%); the rim averages 0.2-4.5 L* darker than the
+pixel inside it, a darkened local colour rather than a black outline (the "no outline pass" above means no black line). Finish B on the Warrior base body: 49% shared,
+1% hard steps, the fuzz Kevin saw. Finish C is tuned to these.
+
 ## Additional measured examples
 
 The following per-frame values are summaries from `study.py`, using `spritemetrics.py` for masks, colour, luminance, alpha and IoU. Bounding boxes and feet are in cell pixels. Colour coverage is the number of colours covering 90% of object pixels; motion is consecutive-frame silhouette IoU.
