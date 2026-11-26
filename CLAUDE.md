@@ -1,6 +1,6 @@
 # Open Game Maker 2000
 
-Kevin's voice-first game maker. This repo holds research, the scope, prototypes and the skills Game Maker's agents will
+Kevin's voice-first game maker. **Executor: load the `/gm` skill (`.claude/skills/gm/SKILL.md`, which loads aiur-run) at session start and after every compaction or resume, before acting; order work with aiur build queues, not slot juggling.** This repo holds research, the scope, prototypes and the skills Game Maker's agents will
 use. Work here the way those agents will work: dogfood the skills.
 
 - **Creator requests** (a scene, a screen, a look): follow `gm-design-loop`, with `gm-assets` (packs first, lineups),
