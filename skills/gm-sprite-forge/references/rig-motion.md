@@ -114,7 +114,7 @@ loop, none for an attack, in pixels at the pack cell.
   `{"finish": "C", "variant": "C1"}` gives the colour pass finish C instead (#1338; `scripts/pixel_finish_c.py`,
   `presets/finish-c.json`): the cell renders crisp (`filter=0.01` and `supersample=1` are added unless `render` sets them: `gpu_bake_finish.py` would box-average a supersample first) with the
   cloth and weapon masks, which become its materials; hard bands per material, 1 px lines where they meet, a darkened
-  outline, the clip's pack sheet as the `ssi_tone` colour reference. B stays the default until Kevin picks a C variant.
+  outline, the clip's pack sheet as the `ssi_tone` colour reference. C4 is the default when `pixel` is omitted; it preserves model albedo hue, keeps detail and omits internal lines. It renders an aligned albedo pass. Old renders need a fresh render before C4 can be scored.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,
   `samples`, `supersample`, `threads`, `filter` (Cycles pixel filter width, 1.5; 0.01 renders without anti-aliasing),
   `sun_elev`, `sun_az`, `sun_energy`, `sky`, `mask_s`, `mask_v` (`mask=1` is added for you when `pixel.cloth` is set or
@@ -389,7 +389,7 @@ base bodies, not on those meshes:
   from 0.37 to 0.21, because the pack Wizard walks with its casting arm raised ahead. Give such a clip its own layer
   in the cell's `motion` (`"stance": "ssi-wizard-walk"`).
 - Base bodies set `"finish": "base"` with `pack.idle`, and `"pixel": {"colours": 8, "cloth": 6, "smooth": true}`:
-  Kevin's finish "B" (hero-finish1-warrior) carries to every hero cell and every later rung. The attack is scored against the class's own clip: Warrior
+  This records the earlier finish B recipe for comparison; omit `pixel` for the current C4 default. The attack is scored against the class's own clip: Warrior
   Attack1 (`chop`), Wizard CastSpell (`cast`), Ranger QuickShot (`bow`).
 - The class weapon goes in `weapon` on the hand bone, never fused into the body. With nothing fused, the fit's
   weapon cut-off does nothing. Size it to the pack clip, not the default: the Warrior's KayKit `axe_1handed` needs
@@ -405,7 +405,7 @@ gait on every body.
 Kevin rejected every cell of the round: hand-keyed, KayKit, Bandai and CMU, walks and attacks, on all six bodies
 ("none move like humans at all"). No rig or motion source in this step is approved, and its correlation and foot-slide
 scores did not predict his verdict. Do not post another round from these tools; the next step is the dedicated
-rigging and animation bake-off in #1282, which waits on his approval. The static base bodies and finish B stay approved.
+rigging and animation bake-off in #1282, which waits on his approval. The static base bodies remain approved; finish B is retained for historical comparison.
 
 ## Creator verdict on round 3 (2026-11-24): the first approved motion
 

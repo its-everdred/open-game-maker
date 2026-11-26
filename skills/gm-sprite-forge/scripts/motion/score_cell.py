@@ -11,6 +11,7 @@ before it is kept as out/sheet_colour.png. With --cloth N
 the cell's mask_<row>_<col>.png frames (render_motion.py mask=1) give the cloth its own N colours.
 --finish-c gives the colour pass finish C instead (pixel_finish_c.py with presets/finish-c.json and --variant, #1338): the
 cell's mask frames, when it has them, are its materials (body, cloth, weapon); the pack sheet is its ssi_tone reference.
+C4 uses aligned albedo frames, preserves model hue and skips both pack-colour passes.
 A walk is a loop with an arbitrary first frame, so with --loop every cyclic shift of the frames is scored and the best
 motion correlation is kept (its shift is reported); an attack is scored as rendered.
 Foot slide: a foot is in contact on frames where its sole is within 1 px of its lowest height; each contact step
@@ -122,6 +123,19 @@ def mask_sheets(cell_dir, shape, cell=128):
     return cloth, weapon
 
 
+def albedo_sheet(cell_dir, shape, cell=128):
+    """Place each albedo pass in the same sheet cell as its raw frame."""
+    frames = sorted(cell_dir.glob('alb_*_*.png'))
+    if {p.stem[4:] for p in frames} != {p.stem[4:] for p in cell_dir.glob('raw_*_*.png')}:
+        raise SystemExit(f'{cell_dir}: finish C4 needs one albedo frame per raw frame; render again')
+    sheet = np.zeros(shape + (3,), np.uint8)
+    for p in frames:
+        row, col = map(int, p.stem.split('_')[1:])
+        im = Image.open(p).convert('RGB').resize((cell, cell), Image.Resampling.NEAREST)
+        sheet[row * cell:(row + 1) * cell, col * cell:(col + 1) * cell] = np.asarray(im)
+    return sheet
+
+
 def empty_render(cell_dir):
     """True when no raw frame shows anything: the body stood outside the camera the whole clip (a window cut from deep
     in a mocap take without in_place), which every later pass would misreport (no weapon in the masks, IoU 0)."""
@@ -143,7 +157,7 @@ def main():
     ap.add_argument('--weapon', type=int, help='with --cloth: colours for the weapon, from the same mask frames')
     ap.add_argument('--body-smooth', type=int, help='with --pixel: an N x N median over the skin alone (stray specks)')
     ap.add_argument('--finish-c', action='store_true', help='with --finish: finish C (crisp bands, lines, outline)')
-    ap.add_argument('--variant', help='with --finish-c: the preset variant (C1, C2, C3)')
+    ap.add_argument('--variant', help='with --finish-c: the preset variant (C1, C2, C3, C4; default C4)')
     a = ap.parse_args()
     if a.finish_c and (not a.finish or a.pixel):
         ap.error('--finish-c is part of the finish pass and replaces --pixel: add --finish, drop --pixel')
@@ -159,7 +173,9 @@ def main():
     rows = [int(r) for r in a.rows.split(',')]
     out = a.cell_dir / 'out'
     if a.finish:
-        ref = [] if a.skin_ref else ['--colour-ref', a.pack_sheet]
+        # C4 uses model colours; either pack colour pass can wash out a face.
+        own_colour = a.finish_c and a.variant in (None, 'C4')
+        ref = [] if a.skin_ref or own_colour else ['--colour-ref', a.pack_sheet]
         subprocess.run([sys.executable, str(HERE.parent / 'gpu_bake_finish.py'), str(a.cell_dir), str(out),
                         '--cell', '128', *ref], check=True, stdout=subprocess.DEVNULL)
         shape = np.asarray(Image.open(out / 'sheet.png')).shape[:2]
@@ -168,7 +184,7 @@ def main():
         if weapon is not None and not weapon.any():
             sys.exit(f'{a.cell_dir.name}: --weapon but no weapon in the masks (rendered before the weapon was red?): '
                      'render the cell again with run_cells.py (no --rescore)')
-        if a.skin_ref:
+        if a.skin_ref and not own_colour:
             import finish_base
             (out / 'sheet.png').replace(out / 'sheet_finish.png')
             sheet, _ = finish_base.base_pass(finish_base.sm.load(out / 'sheet_finish.png'),
@@ -189,7 +205,8 @@ def main():
             if any(a.cell_dir.glob('mask_*_*.png')):
                 cloth, weapon = mask_sheets(a.cell_dir, colour.shape[:2])
                 ids = np.where(weapon, 2, np.where(cloth, 1, 0))
-            sheet, _ = finish_c(colour, None, None, load_preset(PRESET, a.variant), [a.pack_sheet], ss=1, ids=ids)
+            albedo = albedo_sheet(a.cell_dir, colour.shape[:2]) if own_colour else None
+            sheet, _ = finish_c(colour, albedo, None, load_preset(PRESET, a.variant), [a.pack_sheet], ss=1, ids=ids)
             Image.fromarray(sheet).save(out / 'sheet.png')
     tmp = a.cell_dir / '_score'
     tmp.mkdir(exist_ok=True)

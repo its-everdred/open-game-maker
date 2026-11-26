@@ -17,7 +17,8 @@ Inputs come from pixel_preview_rig.py with ss=4 passes=1: the colour render, the
    painted texture gradients band too) cut into `bands` hard levels (1-D k-means), then
    isolated band pixels folded into their neighbours (`orphans`).
 4. Colour per (material, band): `palette` = "own" (the render's median colour per band, band lightness spread by
-   `contrast`, shadows hue-shifted cool and lights warm by `hue_shift`), "ssi" (ramps measured from the --ssi
+   `contrast`, shadows hue-shifted cool and lights warm by `hue_shift`; `chroma_source` "albedo" retains painted hue
+   in shadow), "ssi" (ramps measured from the --ssi
    sprites: each material takes the SSI colour group nearest its albedo, band i -> ramp step i by rank), "ssi_tone"
    (our bands rescaled onto the nearest SSI group's 10-90th lightness range x `ssi_tone_contrast`, in its hue;
    own hue when no group's a*b* is within `ssi_max_de`; the range is clamped to `ssi_span` [min, max] L*), or "snap"
@@ -93,6 +94,10 @@ def downsample(raw, alb_lab, depth, ids, ss, alpha_cov):
     blk = lambda x: x[:H * ss, :W * ss].reshape(H, ss, W, ss, *x.shape[2:]).swapaxes(1, 2).reshape(H, W, ss * ss, *x.shape[2:])
     lit = rgb2lab(raw[..., :3] / 255)
     shade = lit[..., 0] / np.maximum(alb_lab[..., 0], 1)
+    if ss == 1 and 0 < alpha_cov <= 1:
+        on = ids >= 0
+        return (ids.copy(), np.where(on, shade, 0), np.where(on[..., None], lit, 0),
+                np.where(on[..., None], alb_lab, 0), np.where(on, depth, 1))
     bi, bl, ba, bd, bs = blk(ids), blk(lit), blk(alb_lab), blk(depth), blk(shade)
     on = (bi >= 0).mean(-1) >= alpha_cov
     mid = np.full((H, W), -1)
@@ -239,9 +244,22 @@ def finish_c(raw, alb, depth, P, ssi=(), ss=4, ids=None):
     if not m4.any():  # nothing rendered (a transparent material): an empty sprite, not a crash for the whole batch
         return np.zeros((raw.shape[0] // ss, raw.shape[1] // ss, 4), np.uint8), {'materials': 0, 'line_px': 0, 'rim_px': 0}
     alb = raw[..., :3] if alb is None else alb
+    if P.get('chroma_source') == 'albedo':
+        # Blender's diffuse-colour pass is black for unlit/emission materials.
+        missing = (alb[..., :3].max(-1) <= 3) & (raw[..., :3].max(-1) > 3) & m4
+        alb = np.where(missing[..., None], raw[..., :3], alb[..., :3])
     alb_lab = rgb2lab(alb[..., :3] / 255)
     if ids is not None:
         ids = np.where(m4, np.where(ids < 0, 0, ids), -1)
+        if P.get('cluster_ids'):
+            # A body/cloth/weapon mask is too coarse to preserve faces and trim.
+            partition = ids.copy()
+            next_id = 0
+            for part in np.unique(partition[m4]):
+                mask = m4 & (partition == part)
+                sub = materials(alb_lab, mask, P['materials'], P['merge_de'])
+                ids[mask] = sub[mask] + next_id
+                next_id = int(ids[mask].max()) + 1
     else:
         cloth = cloth_rule(alb) if P.get('cloth_split') else None
         ids = materials(alb_lab, m4, P['materials'], P['merge_de'], cloth=cloth)
@@ -255,6 +273,9 @@ def finish_c(raw, alb, depth, P, ssi=(), ss=4, ids=None):
     out_lab = np.zeros(mid.shape + (3,))
     for (k, b), c in pal.items():
         out_lab[(mid == k) & (band == b)] = c
+    if P.get('chroma_source') == 'albedo':
+        # A small face can share a cluster with grey armour; retain its own hue.
+        out_lab[..., 1:][on] = albd[..., 1:][on]
     dark = {k: min((c for (kk, b), c in pal.items() if kk == k), key=lambda c: c[0]) for k in np.unique(mid[on])}
     line = np.zeros(mid.shape, bool)
     if P['line_dark'] > 0:
@@ -311,6 +332,7 @@ def needs_ssi(P):
 def load_preset(path, variant):
     pre = json.loads(Path(path).read_text())
     P = dict(pre['defaults'])
+    variant = variant or pre.get('default_variant')
     if variant:
         P.update(pre['variants'][variant])
     return P
@@ -328,6 +350,8 @@ def main():
     ap.add_argument('--ss', type=int, default=4)
     a = ap.parse_args()
     P = load_preset(a.preset, a.variant)
+    if needs_ssi(P) and not a.ssi:
+        ap.error(f"finish C {a.variant or 'default'} uses the {P['palette']} palette: add --ssi <pack sprites>")
     out, info = finish_c(sm.load(a.raw), np.asarray(Image.open(a.alb).convert('RGB')), np.asarray(Image.open(a.depth)),
                          P, a.ssi, a.ss)
     Image.fromarray(out).save(a.out)

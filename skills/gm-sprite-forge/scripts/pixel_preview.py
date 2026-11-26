@@ -1,18 +1,18 @@
 """Preview 3D models through the pack camera and a pixel finish (B, or C): raw | pixel, side by side.
 
 Usage: pixel_preview.py <model|dir> [...] --out <dir> [--dirs S,SE] [--colours 14] [--anim rig.glb] [--ref-height H]
-                        [--group category|none] [--title "Pack"] [--finish B|C [--variant C1|C2|C3] [--ssi ref.png ...]
+                        [--group category|none] [--title "Pack"] [--finish B|C [--variant C1|C2|C3|C4] [--ssi ref.png ...]
                         [--cloth-split]]
 Renders every .glb/.gltf/.fbx/.obj (directories recursively; one file per model name, glb > gltf > fbx > obj) with
 pixel_preview_rig.py in one Blender run at pack scale (a character stands 43 px, as the hero bodies; props, weapons
-and tiles at the same world scale), then gives each model finish B: hard alpha (finish.py) and pixel_finish.py with
+and tiles at the same world scale). Finish B uses hard alpha (finish.py) and pixel_finish.py with
 14 colours, smoothed, one palette across its directions (B is 8 + 6 cloth colours; with no cloth mask the 14 share one
 palette). Writes raw/ and pixel/ PNGs at 1x, one contact sheet per group (<out>/<group>.png, zoomed, nearest
 neighbour), sheets.json and recipe.json. Never writes into the inputs.
---finish C (#1338) renders at 4x with no anti-aliasing plus albedo and depth passes (raw/, alb/ and depth/ keep them at
+Finish C (the default, #1338) renders at 4x with no anti-aliasing plus albedo and depth passes (raw/, alb/ and depth/ keep them at
 4x) and gives each model pixel_finish_c.py with presets/finish-c.json (--variant; --ssi pack sprites of the same kind
 for the ssi_tone palette; --cloth-split keeps white undergarments off the skin): majority-vote downsample, hard bands per
-material, separation lines, a darkened-colour outline.
+material and a darkened-colour outline. Default C4 keeps albedo hue and has no internal separation lines.
 """
 import argparse
 import json
@@ -165,9 +165,9 @@ def main():
     ap.add_argument('--samples', type=int, default=32)
     ap.add_argument('--threads', type=int, default=2)
     ap.add_argument('--blender', default='blender')
-    ap.add_argument('--finish', choices=['B', 'C'], default='B')
+    ap.add_argument('--finish', choices=['B', 'C'], default='C')
     ap.add_argument('--preset', type=Path, default=PRESET, help='finish C parameters')
-    ap.add_argument('--variant', help='finish C preset variant (C1, C2, C3; default: the defaults)')
+    ap.add_argument('--variant', help='finish C preset variant (C1, C2, C3, C4; default: C4)')
     ap.add_argument('--ssi', nargs='*', type=Path, default=[], help='finish C: pack sprites of the same kind (ssi_tone)')
     ap.add_argument('--cloth-split', action='store_true', help='finish C: white undergarments are their own material')
     a = ap.parse_args()

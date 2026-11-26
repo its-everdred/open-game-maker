@@ -3,6 +3,7 @@ transitions. clear lines separating clothing from skin". The pack's differing ne
 (dE >= 20), finish B's 1%; its rim is a darkened local colour, never black."""
 from pathlib import Path
 import sys
+import subprocess
 import unittest
 
 import numpy as np
@@ -38,10 +39,23 @@ def body(seed=0):
 
 
 def preset(**kw):
-    return load_preset(PRESET, None) | {'palette': 'own'} | kw
+    return load_preset(PRESET, 'C1') | {'palette': 'own'} | kw
 
 
 class FinishC(unittest.TestCase):
+    def test_pack_palette_cli_requires_references_before_reading_inputs(self):
+        command = [sys.executable, '-I', str(ROOT / 'scripts/pixel_finish_c.py'),
+                   'raw.png', 'alb.png', 'depth.png', 'out.png', '--variant', 'C1']
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('add --ssi', result.stderr)
+
+    def test_default_uses_own_colours_without_internal_lines(self):
+        default = load_preset(PRESET, None)
+        self.assertEqual(default, load_preset(PRESET, 'C4'))
+        self.assertEqual(default['palette'], 'own')
+        self.assertEqual(default['line_dark'], 0)
+
     def test_hard_steps_like_the_pack_where_b_is_soft(self):
         raw, alb, dep, _ = body()
         one = np.asarray(Image.fromarray(raw).resize((64, 64), Image.LANCZOS))  # what finish B starts from
@@ -151,6 +165,49 @@ class FinishC(unittest.TestCase):
         out, info = finish_c(np.zeros((64, 64, 4), np.uint8), None, None, preset(cloth_split=False))
         self.assertEqual(out.shape, (16, 16, 4))
         self.assertFalse(out[..., 3].any())
+
+    def test_albedo_chroma_preserves_a_shadowed_face(self):
+        # A neutral shadow in the lit pass must not turn a warm painted face grey.
+        raw = np.full((32, 32, 4), [100, 100, 100, 255], np.uint8)
+        alb = np.full((32, 32, 3), [210, 140, 110], np.uint8)
+        P = load_preset(PRESET, 'C4')
+        out, info = finish_c(raw, alb, None, P)
+        lab = rgb2lab(out[..., :3] / 255)
+        self.assertGreater(lab[..., 1].mean(), 8)
+        self.assertGreater(lab[..., 2].mean(), 8)
+        self.assertEqual(info['line_px'], 0)
+
+    def test_body_mask_keeps_distinct_painted_details(self):
+        raw = np.full((32, 32, 4), [100, 100, 100, 255], np.uint8)
+        alb = np.full((32, 32, 3), [210, 140, 110], np.uint8)
+        alb[:, 16:] = [100, 140, 210]
+        ids = np.zeros((32, 32), int)  # both regions are part of the body mask
+        out, _ = finish_c(raw, alb, None, load_preset(PRESET, 'C4'), ids=ids)
+        lab = rgb2lab(out[..., :3] / 255)
+        self.assertGreater(lab[:, :4, 2].mean() - lab[:, -4:, 2].mean(), 20)
+
+    def test_small_warm_face_survives_many_grey_materials(self):
+        raw = np.full((128, 128, 4), [128, 128, 128, 255], np.uint8)
+        alb = np.empty((128, 128, 3), np.uint8)
+        for i in range(32):
+            alb[:, i * 4:(i + 1) * 4] = 30 + i * 6
+        alb[60:64, 60:64] = [168, 135, 125]
+        out, _ = finish_c(raw, alb, None, load_preset(PRESET, 'C4'), ss=1)
+        face = rgb2lab(out[60:64, 60:64, :3] / 255)
+        self.assertGreater(face[..., 1].mean(), 5)
+        self.assertGreater(face[..., 2].mean(), 5)
+
+    def test_unlit_material_uses_visible_colour_when_diffuse_pass_is_black(self):
+        raw = np.full((32, 32, 4), [180, 80, 40, 255], np.uint8)
+        alb = np.ones((32, 32, 3), np.uint8)  # Blender can dither an all-black pass to 1.
+        raw[:, 16:, :3] = [100, 100, 100]
+        alb[:, 16:] = [210, 140, 110]  # a neighbouring diffuse material still uses its albedo
+        out, _ = finish_c(raw, alb, None, load_preset(PRESET, 'C4'))
+        lab = rgb2lab(out[..., :3] / 255)
+        self.assertGreater(lab[:, :4, 1].mean(), 15)
+        self.assertGreater(lab[:, :4, 2].mean(), 15)
+        self.assertGreater(lab[:, -4:, 1].mean(), 8)
+        self.assertGreater(lab[:, -4:, 2].mean(), 8)
 
 
 class PickResize(unittest.TestCase):

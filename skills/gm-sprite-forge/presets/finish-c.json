@@ -1,5 +1,6 @@
 {
   "about": "Finish C (#1338): parameters for pixel_finish_c.py. Render with pixel_preview_rig.py ss=4 passes=1; pass --ssi <pack sprites of the same kind> for the ssi_tone palette. Tuned on KayKit Cleric_Font vs SmallScaleInt fantasy tileset Misc B42 (stone well), 2026-11-24.",
+  "default_variant": "C4",
   "defaults": {
     "alpha_cov": 0.5,
     "materials": 6,
@@ -21,10 +22,7 @@
     "band_source": "lit",
     "line_space": "ss",
     "ssi_max_de": 15,
-    "ssi_span": [
-      12,
-      24
-    ],
+    "ssi_span": [12, 24],
     "cloth_split": false
   },
   "variants": {
@@ -52,6 +50,20 @@
       "hue_shift": 5,
       "line_dark": 0.45,
       "outline_dark": 0.3
+    },
+    "C4": {
+      "_": "experimental own colours: preserve albedo hue and detail, with a light local rim",
+      "palette": "own",
+      "materials": 16,
+      "merge_de": 4,
+      "bands": 4,
+      "orphans": 0,
+      "contrast": 1.15,
+      "hue_shift": 0,
+      "chroma_source": "albedo",
+      "cluster_ids": true,
+      "line_dark": 0,
+      "outline_dark": 0.12
     }
   }
 }

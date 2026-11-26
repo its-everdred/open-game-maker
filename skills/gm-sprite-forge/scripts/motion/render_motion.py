@@ -3,6 +3,7 @@
 Usage: blender -b --factory-startup --python render_motion.py -- <out_dir> <spec.json> [key=value ...]
 mask=1 also renders mask_<row>_<col>.png (white where the base-colour texture is cloth: pale and unsaturated, the
 undergarments) through the same camera and frames, for the pixel finish's cloth ramp; mask_only=1 renders only those.
+albedo=1 also renders alb_<row>_<col>.png at the same poses for finish C4.
 blade_only=1 renders nothing and writes blade.json for blade.py (which way the weapon's edge faces per frame).
 spec: {"mesh": glb, "rotz": deg, "motion": {"kind": "kaykit"|"bvh"|"handkey"|"none", "path", "action",
        "frames": [f0, f1] | "auto", "loop": true, "foot_ik": true, "clip": "walk"|"attack"},
@@ -29,12 +30,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fit_rig  # noqa: E402
 import retarget  # noqa: E402
 import rigged  # noqa: E402
+import albedo_frames  # noqa: E402
 
 argv = sys.argv[sys.argv.index('--') + 1:]
 OUT, SPEC = argv[0], json.load(open(argv[1]))
 P = {'rows': '1,2', 'frames': 15, 'cell': 128, 'height_px': 43.0, 'origin_row': 88.0, 'engine': 'cycles',
      'samples': 32, 'supersample': 1, 'threads': 6, 'filter': 1.5, 'sun_elev': 55.0, 'sun_az': -60.0, 'sun_energy': 4.0, 'sky': 0.35,
-     'mask': 0.0, 'mask_only': 0.0, 'blade_only': 0.0, 'mask_s': 0.16, 'mask_v': 0.5}
+     'mask': 0.0, 'mask_only': 0.0, 'albedo': 0.0, 'blade_only': 0.0, 'mask_s': 0.16, 'mask_v': 0.5}
 for kv in argv[2:]:
     k, v = kv.split('=', 1)
     P[k] = v if k in ('rows', 'engine') else float(v)
@@ -45,6 +47,8 @@ UNIT_PX = CELL / (2 * math.sqrt(2))
 def scene():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     sc = bpy.context.scene
+    # Auxiliary mask and albedo passes use Cycles even when the colour pass uses workbench.
+    sc.cycles.filter_width = P['filter']
     if P['engine'] == 'workbench':  # silhouettes for fast motion scoring (masks only)
         sc.render.engine = 'BLENDER_WORKBENCH'
         sc.display.shading.light = 'FLAT'
@@ -56,7 +60,6 @@ def scene():
         sc.cycles.device = 'CPU'
         sc.cycles.samples = int(P['samples'])
         sc.cycles.use_denoising = False
-        sc.cycles.filter_width = P['filter']
     sc.render.threads_mode = 'FIXED'
     sc.render.threads = int(P['threads'])
     sc.render.resolution_x = sc.render.resolution_y = CELL * SS
@@ -324,12 +327,14 @@ def main():
     rows = [int(r) for r in str(P['rows']).split(',')]
     masks = P['mask'] or P['mask_only']
     for old in os.listdir(OUT):
-        if old.endswith('.png') and (old.startswith('mask_') or (old.startswith('raw_') and not P['mask_only'])):
+        if old.endswith('.png') and (old.startswith('mask_') or (old.startswith(('raw_', 'alb_')) and not P['mask_only'])):
             os.remove(os.path.join(OUT, old))
     if masks:
         mask_frames(sc, root, rows, ob, wob, goto)
     if P['mask_only']:  # the colour frames, feet and reports from the full render stay as they were
         return
+    if P['albedo']:
+        albedo_frames.render_albedo(sc, root, rows, N, goto, OUT)
     feet = {}
     for row in rows:
         root.rotation_euler = (0, 0, math.radians(135 - 45 * row))
