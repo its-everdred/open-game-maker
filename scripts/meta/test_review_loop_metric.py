@@ -1,7 +1,11 @@
 import importlib.util
 import json
+import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -27,6 +31,37 @@ class ReviewLoopMetricTest(unittest.TestCase):
             path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
             observations = METRIC.read_observations(path, datetime.now(timezone.utc) - timedelta(hours=1))
         self.assertEqual(observations, [("42", 20.0)])
+
+    def test_counts_answered_review_cards_from_the_round_store(self):
+        cutoff = datetime(2026, 11, 26, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ogm.sqlite3"
+            with closing(sqlite3.connect(path)) as db:
+                db.execute("CREATE TABLE review_rounds (id TEXT, verdict TEXT, verdict_at TEXT)")
+                db.execute("CREATE TABLE command_reviews (game_id TEXT, decision_id TEXT, at TEXT)")
+                db.executemany("INSERT INTO review_rounds VALUES (?, ?, ?)", [
+                    ("answer", "approved", "2026-11-26T01:00:00Z"),
+                    ("old", "needs_work", "2026-11-25T23:59:59Z"),
+                    ("open", None, None),
+                ])
+                db.executemany("INSERT INTO command_reviews VALUES (?, ?, ?)", [
+                    ("g", "d", "2026-11-26T01:00:00Z"),
+                    ("g", "d", "2026-11-26T01:01:00Z"),
+                    ("g", "old", "2026-11-25T23:59:59Z"),
+                ])
+                db.commit()
+            self.assertEqual(METRIC.count_answered_rounds(path, cutoff), 1)
+            self.assertEqual(METRIC.count_answered_commands(path, cutoff), 1)
+            result = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--db", str(path), "--log", str(path.parent / "empty"), "--hours", "100000"],
+                capture_output=True, text=True, check=True,
+            )
+            self.assertIn("Creator review rounds answered: 2; recorded Command reviews: 2", result.stdout)
+
+    def test_missing_database_is_not_reported_as_zero_answers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(FileNotFoundError):
+                METRIC.count_answered_rounds(Path(directory) / "missing.sqlite3", datetime.now(timezone.utc))
 
 
 if __name__ == "__main__":

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Report the time from a review round being published to its first feed refresh."""
+"""Report recorded creator answers and review feed refresh latency."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import sqlite3
 import statistics
+import sys
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -50,6 +54,31 @@ def read_observations(path: Path, cutoff: datetime) -> list[tuple[str, float]]:
     return observations
 
 
+def count_answered_rounds(path: Path, cutoff: datetime) -> int:
+    """Read the same durable rounds that back the creator review feed."""
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    with closing(sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)) as db:
+        row = db.execute(
+            "SELECT count(*) FROM review_rounds WHERE verdict IS NOT NULL AND julianday(verdict_at) >= julianday(?)",
+            (cutoff.isoformat(),),
+        ).fetchone()
+    return int(row[0])
+
+
+def count_answered_commands(path: Path, cutoff: datetime) -> int:
+    """Count distinct recorded Command reviews, keeping them separate from rounds."""
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    with closing(sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)) as db:
+        row = db.execute(
+            "SELECT count(*) FROM (SELECT game_id, decision_id FROM command_reviews "
+            "WHERE julianday(at) >= julianday(?) GROUP BY game_id, decision_id)",
+            (cutoff.isoformat(),),
+        ).fetchone()
+    return int(row[0])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hours", type=float, default=24)
@@ -60,10 +89,24 @@ def main() -> int:
         default=Path.home() / ".local/state/ogm/review-publishes.log",
         help="feed log path (defaults to ~/.local/state/ogm/review-publishes.log)",
     )
+    parser.add_argument(
+        "--db",
+        type=Path,
+        default=Path(os.environ.get("OGM_DATA_DIR", Path.home() / ".local/share/ogm/data")) / "ogm.sqlite3",
+        help="API SQLite database (defaults to $OGM_DATA_DIR/ogm.sqlite3)",
+    )
     args = parser.parse_args()
     if args.hours <= 0:
         parser.error("--hours must be greater than zero")
-    rows = read_observations(args.log, datetime.now(timezone.utc) - timedelta(hours=args.hours))
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=args.hours)
+    try:
+        answered = count_answered_rounds(args.db, cutoff)
+        commands = count_answered_commands(args.db, cutoff)
+    except (OSError, sqlite3.Error) as error:
+        print(f"Review answers unavailable: {error}", file=sys.stderr)
+        return 1
+    print(f"Creator review rounds answered: {answered}; recorded Command reviews: {commands}")
+    rows = read_observations(args.log, cutoff)
     if not rows:
         print("No review feed observations in the selected window.")
         return 0
