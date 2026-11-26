@@ -29,17 +29,19 @@ def expression_material(surface, uv_names):
         if isinstance(value, (int, float)):
             if not math.isfinite(value):
                 raise ValueError('invalid shader blend weight')
-            return constant(value)
+            result = constant(value)
+            return [result] * 4
         if 'op' not in value:
             channel = value.get('channel')
-            if channel not in (0, 1, 2, 3):
+            if channel not in (0, 1, 2, 3, 'rgb'):
                 raise ValueError('invalid shader blend channel')
-            result = term(value['term'])[channel]
-            return math_node('SUBTRACT', constant(1), result) if value.get('invert') else result
+            channels = term(value['term'])
+            result = channels[:3] + [constant(1)] if channel == 'rgb' else [channels[channel]] * 4
+            return [math_node('SUBTRACT', constant(1), item) for item in result] if value.get('invert') else result
         args = [weight(arg) for arg in value['args']]
         op = value['op']
         if op == 'invert' and len(args) == 1:
-            return math_node('SUBTRACT', constant(1), args[0])
+            return [math_node('SUBTRACT', constant(1), item) for item in args[0]]
         # Cycles defines division by zero differently from the existing CPU
         # evaluator, so only accept a provably nonzero constant divisor.
         if op == 'divide' and (
@@ -50,12 +52,15 @@ def expression_material(surface, uv_names):
             raise ValueError('unsupported shader division for mesh bake')
         operations = {'add': 'ADD', 'subtract': 'SUBTRACT', 'multiply': 'MULTIPLY', 'divide': 'DIVIDE'}
         if op in operations and len(args) == 2:
-            return math_node(operations[op], *args)
+            return [math_node(operations[op], a, b) for a, b in zip(*args)]
         if op == 'clamp' and len(args) == 3:
-            return math_node('MINIMUM', math_node('MAXIMUM', args[0], args[1]), args[2])
+            return [math_node('MINIMUM', math_node('MAXIMUM', a, b), c) for a, b, c in zip(*args)]
         if op == 'contrast' and len(args) == 2:
             midpoint = constant(0.5 ** 2.2)
-            return math_node('ADD', math_node('MULTIPLY', math_node('SUBTRACT', args[0], midpoint), args[1]), midpoint)
+            return [
+                math_node('ADD', math_node('MULTIPLY', math_node('SUBTRACT', a, midpoint), b), midpoint)
+                for a, b in zip(*args)
+            ]
         raise ValueError('unsupported shader weight operation')
 
     def term(value):
@@ -107,13 +112,12 @@ def expression_material(surface, uv_names):
             if isinstance(blend['weight'], (int, float)) and not 0 <= blend['weight'] <= 1:
                 raise ValueError('invalid shader blend weight')
             a, b, amount = term(blend['a']), term(blend['b']), weight(blend['weight'])
-            one_minus = math_node('SUBTRACT', constant(1), amount)
             channels = [
                 math_node(
                     'MULTIPLY', channel,
-                    math_node('ADD', math_node('MULTIPLY', left, one_minus), math_node('MULTIPLY', right, amount)),
+                    math_node('ADD', math_node('MULTIPLY', left, math_node('SUBTRACT', constant(1), factor)), math_node('MULTIPLY', right, factor)),
                 )
-                for channel, left, right in zip(channels, a, b)
+                for channel, left, right, factor in zip(channels, a, b, amount)
             ]
         return channels
 

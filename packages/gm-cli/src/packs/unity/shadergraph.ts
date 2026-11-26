@@ -193,7 +193,20 @@ export function shaderGraphBase(
       if (mask)
         return { textures: [], factors: [], blends: [{ a: resolveInput(0), b: resolveInput(1), weight: mask }] };
       if (amountNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode') {
-        const weight = compileWeightExpression(amount, byId, incoming, floats, visit, new Set(ancestors).add(id));
+        const output = Array.isArray(amountNode?.m_Slots)
+          ? amountNode.m_Slots
+              .map((slot) => byId.get(nodeId(slot)))
+              .find((slot) => slot?.m_Id === amount.outputSlot && slot.m_SlotType === 1)
+          : undefined;
+        const destination = Array.isArray(node.m_Slots)
+          ? node.m_Slots.map((slot) => byId.get(nodeId(slot))).find((slot) => slot?.m_Id === 2 && slot.m_SlotType === 0)
+          : undefined;
+        const rgb =
+          output?.m_Type === 'UnityEditor.ShaderGraph.Vector3MaterialSlot' &&
+          ['UnityEditor.ShaderGraph.DynamicVectorMaterialSlot', 'UnityEditor.ShaderGraph.Vector3MaterialSlot'].includes(
+            String(destination?.m_Type),
+          );
+        const weight = compileWeightExpression(amount, byId, incoming, floats, visit, new Set(ancestors).add(id), rgb);
         if (typeof weight === 'number' && (weight < 0 || weight > 1))
           throw new Error('unsupported Unity shader graph interpolation amount');
         return { textures: [], factors: [], blends: [{ a: resolveInput(0), b: resolveInput(1), weight }] };

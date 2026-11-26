@@ -38,6 +38,7 @@ it.skipIf(!available)(
       const fbx = join(root, 'roof.fbx');
       const texture = join(root, 'color.png');
       const mask = join(root, 'mask.png');
+      const rgbMask = join(root, 'rgb-mask.png');
       await sharp({ create: { width: 2, height: 2, channels: 4, background: { r: 120, g: 160, b: 200, alpha: 1 } } })
         .png()
         .toFile(texture);
@@ -46,6 +47,9 @@ it.skipIf(!available)(
       })
         .png()
         .toFile(mask);
+      await sharp({ create: { width: 2, height: 2, channels: 4, background: { r: 0, g: 128, b: 255, alpha: 1 } } })
+        .png()
+        .toFile(rgbMask);
       const create = `import bpy\nbpy.ops.wm.read_factory_settings(use_empty=True)\nbpy.ops.mesh.primitive_cube_add()\nbpy.context.object.name='Roof'\nbpy.context.object.data.name='RoofGeometry'\nbpy.context.object.data.uv_layers.new(name='Secondary')\nbpy.context.object.data.uv_layers.new(name='Tertiary')\nbpy.context.object.data.materials.append(bpy.data.materials.new('Base'))\nbpy.ops.export_scene.fbx(filepath=${JSON.stringify(fbx)})`;
       const result = spawnSync(
         'blender',
@@ -336,6 +340,42 @@ it.skipIf(!available)(
         .filter((primitive) => primitive.getMaterial() === bakedMaterial);
       expect(bakedPrimitives).toHaveLength(2);
       expect(bakedPrimitives.every((primitive) => primitive.getAttribute('TEXCOORD_0'))).toBe(true);
+      const rgbPlan = [structuredClone(plan[3]!)];
+      rgbPlan[0]!.parentId = null;
+      rgbPlan[0]!.surfaces[0] = {
+        path: 'rgb.mat',
+        textures: [],
+        texturePaths: [],
+        textureSrgb: [],
+        color: [1, 1, 1, 1],
+        blends: [
+          {
+            a: { path: 'rgb.mat', textures: [], texturePaths: [], textureSrgb: [], color: [0, 0, 0, 1] },
+            b: { path: 'rgb.mat', textures: [], texturePaths: [], textureSrgb: [], color: [1, 1, 1, 1] },
+            weight: {
+              term: {
+                path: 'rgb.mat',
+                textures: [{ guid: 'rgb', scale: [1, 1], offset: [0, 0] }],
+                texturePaths: [rgbMask],
+                textureSrgb: [false],
+                color: [1, 1, 1, 1],
+              },
+              channel: 'rgb',
+            },
+          },
+        ],
+      };
+      const rgbOutput = join(root, 'rgb.glb');
+      await exportUnityAssembly(rgbPlan, rgbOutput);
+      const rgbDocument = await new NodeIO()
+        .registerExtensions([KHRTextureTransform])
+        .readBinary(await readFile(rgbOutput));
+      const rgbImage = rgbDocument.getRoot().listMaterials()[0]!.getBaseColorTexture()!.getImage()!;
+      const rgbPixels = await sharp(rgbImage).ensureAlpha().raw().toBuffer();
+      expect(rgbPixels[0]).toBeLessThan(3);
+      expect(rgbPixels[1]).toBeGreaterThan(185);
+      expect(rgbPixels[1]).toBeLessThan(191);
+      expect(rgbPixels[2]).toBeGreaterThan(252);
       const missing = [structuredClone(plan[3]!)];
       missing[0]!.parentId = null;
       missing[0]!.surfaces[0]!.textures[0]!.uv = 7;

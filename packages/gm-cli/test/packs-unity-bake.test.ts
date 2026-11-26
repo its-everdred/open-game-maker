@@ -53,7 +53,7 @@ surface={'path':'test.mat','textures':[{'uv':0,'scale':[1,1],'offset':[0,0]},{'u
 surface['textures'][1]['uvTransform']=[0,1,0,-1,0,1]
 constant=lambda value: {'path':'test.mat','textures':[],'texturePaths':[],'textureSrgb':[],'color':[value,value,value,1]}
 mask={'path':'test.mat','textures':[surface['textures'][1]],'texturePaths':[paths[1]],'textureSrgb':[False],'color':[1,1,1,1]}
-surface['blends']=[{'a':constant(1),'b':constant(.5),'weight':{'term':mask,'channel':1}}]
+surface['blends']=[{'a':constant(1),'b':constant(.5),'weight':{'term':mask,'channel':'rgb'}}]
 assert requires_mesh_bake([surface]); bake_mesh(obj,[surface])
 assert len(mesh.uv_layers)==1 and mesh.uv_layers[0].name=='OGM baked UV'
 assert not any(material.name.startswith('Unity bake source') for material in bpy.data.materials)
@@ -63,7 +63,7 @@ for loop in mesh.loops:
  x=min(size-1,int(u*size)); y=min(size-1,int(v*size)); ix=(y*size+x)*4
  vx,vy,_=mesh.vertices[loop.vertex_index].co
  green=.8*vx+.1; blend=1-.5*green
- for i,expected in [(0,(.8*vx+.1)*blend),(1,green*blend)]:
+ for i,expected in [(0,(.8*vx+.1)*.5),(1,green*blend),(2,.5)]:
   expected=expected*12.92 if expected<=.0031308 else 1.055*expected**(1/2.4)-.055
   assert abs(pixels[ix+i]-expected)<.12, (loop.vertex_index,i,pixels[ix+i],expected)
 for index in range(7): mesh.uv_layers.new(name=f'extra-{index}')

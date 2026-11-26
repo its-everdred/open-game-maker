@@ -92,3 +92,53 @@ it('preserves scalar operation order and rejects vector defaults', () => {
     ),
   ).toThrow('unsupported Unity vector scalar default');
 });
+
+it('keeps RGB texture weights per channel and refuses implicit scalar narrowing', async () => {
+  const { shaderGraphBase } = await import('../src/packs/unity/shadergraph.js');
+  const edge = (from: string, to: string, input: number, output = 0) => ({
+    m_OutputSlot: { m_Node: { m_Id: from }, m_SlotId: output },
+    m_InputSlot: { m_Node: { m_Id: to }, m_SlotId: input },
+  });
+  const docs = [
+    {
+      m_Type: 'UnityEditor.ShaderGraph.GraphData',
+      m_Edges: [
+        edge('lerp', 'base', 0, 3),
+        edge('a', 'lerp', 0),
+        edge('b', 'lerp', 1),
+        edge('contrast', 'lerp', 2, 2),
+        edge('mask', 'contrast', 0),
+        edge('factor', 'contrast', 1),
+      ],
+    },
+    {
+      m_ObjectId: 'base',
+      m_Type: 'UnityEditor.ShaderGraph.BlockNode',
+      m_SerializedDescriptor: 'SurfaceDescription.BaseColor',
+    },
+    { m_ObjectId: 'lerp', m_Type: 'UnityEditor.ShaderGraph.LerpNode', m_Slots: [{ m_Id: 'lerp-t' }] },
+    { m_ObjectId: 'lerp-t', m_Id: 2, m_SlotType: 0, m_Type: 'UnityEditor.ShaderGraph.DynamicVectorMaterialSlot' },
+    {
+      m_ObjectId: 'contrast',
+      m_Type: 'UnityEditor.ShaderGraph.ContrastNode',
+      m_Slots: [{ m_Id: 'contrast-in' }, { m_Id: 'contrast-factor' }, { m_Id: 'contrast-out' }],
+    },
+    { m_ObjectId: 'contrast-in', m_Id: 0, m_SlotType: 0, m_Type: 'UnityEditor.ShaderGraph.Vector3MaterialSlot' },
+    { m_ObjectId: 'contrast-factor', m_Id: 1, m_SlotType: 0, m_Type: 'UnityEditor.ShaderGraph.Vector1MaterialSlot' },
+    { m_ObjectId: 'contrast-out', m_Id: 2, m_SlotType: 1, m_Type: 'UnityEditor.ShaderGraph.Vector3MaterialSlot' },
+    ...['a', 'b', 'mask'].map((id) => ({ m_ObjectId: id, m_Type: 'UnityEditor.ShaderGraph.SampleTexture2DNode' })),
+    { m_ObjectId: 'factor', m_Type: 'UnityEditor.ShaderGraph.Vector1Node', m_Value: 1 },
+  ];
+  const source = () => docs.map((doc) => JSON.stringify(doc)).join('\n');
+  expect(shaderGraphBase(source()).blends?.[0]?.weight).toEqual({
+    op: 'contrast',
+    args: [{ term: { textures: ['_SampleTexture2D_mask_Texture_1'], factors: [] }, channel: 'rgb' }, 1],
+  });
+  docs[3]!.m_Type = 'UnityEditor.ShaderGraph.Vector1MaterialSlot';
+  expect(() => shaderGraphBase(source())).toThrow('unsupported Unity scalar texture output');
+  docs[3]!.m_Type = 'UnityEditor.ShaderGraph.DynamicVectorMaterialSlot';
+  docs[0]!.m_Edges!.find(
+    (entry) => entry.m_InputSlot.m_Node.m_Id === 'contrast' && entry.m_InputSlot.m_SlotId === 1,
+  )!.m_OutputSlot = { m_Node: { m_Id: 'mask' }, m_SlotId: 0 };
+  expect(() => shaderGraphBase(source())).toThrow('unsupported Unity scalar texture output');
+});

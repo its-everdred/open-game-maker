@@ -4,7 +4,7 @@ type Obj = Record<string, unknown>;
 type Edge = { node: string; inputSlot: number; outputSlot: number };
 export type WeightExpression<T> =
   | number
-  | { term: T; channel: number; invert?: boolean }
+  | { term: T; channel: number | 'rgb'; invert?: boolean }
   | {
       op: 'add' | 'subtract' | 'multiply' | 'divide' | 'clamp' | 'contrast' | 'invert';
       args: WeightExpression<T>[];
@@ -39,6 +39,7 @@ export function compileWeightExpression(
   floats: ReadonlyMap<string, unknown>,
   visitTexture: (id: string, ancestors: Set<string>) => ShaderGraphBase,
   ancestors: Set<string>,
+  allowRgb = false,
 ): WeightExpression<ShaderGraphBase> {
   const slotDefault = (node: Obj, slotId: number): number => {
     if (!Array.isArray(node.m_Slots)) throw new Error('missing Unity scalar input slot');
@@ -53,7 +54,12 @@ export function compileWeightExpression(
       throw new Error('unsupported Unity vector scalar default');
     return numeric(components[0]);
   };
-  const resolve = (edge: Edge, seen: Set<string>, narrow: boolean): WeightExpression<ShaderGraphBase> => {
+  const resolve = (
+    edge: Edge,
+    seen: Set<string>,
+    narrow: boolean,
+    vectorAllowed: boolean,
+  ): WeightExpression<ShaderGraphBase> => {
     if (seen.has(edge.node)) throw new Error('cyclic Unity shader graph');
     const node = byId.get(edge.node);
     if (!node) throw new Error('missing Unity scalar node');
@@ -65,11 +71,17 @@ export function compileWeightExpression(
       linked.length === 1 &&
       linked[0]!.inputSlot === 0
     )
-      return resolve(linked[0]!, next, true);
+      return resolve(linked[0]!, next, true, false);
     if (node.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode') {
       const channel =
-        edge.outputSlot >= 4 && edge.outputSlot <= 7 ? edge.outputSlot - 4 : narrow && edge.outputSlot === 0 ? 0 : -1;
-      if (channel < 0) throw new Error(`unsupported Unity scalar texture output ${edge.outputSlot} at ${edge.node}`);
+        edge.outputSlot >= 4 && edge.outputSlot <= 7
+          ? edge.outputSlot - 4
+          : narrow && edge.outputSlot === 0
+            ? 0
+            : vectorAllowed && edge.outputSlot === 0
+              ? 'rgb'
+              : -1;
+      if (channel === -1) throw new Error(`unsupported Unity scalar texture output ${edge.outputSlot} at ${edge.node}`);
       return { term: visitTexture(edge.node, seen), channel };
     }
     if (node.m_Type === 'UnityEditor.ShaderGraph.PropertyNode' && edge.outputSlot === 0 && linked.length === 0) {
@@ -87,7 +99,7 @@ export function compileWeightExpression(
       if (linked.length > 1 || (linked.length === 1 && linked[0]!.inputSlot !== 1))
         throw new Error('invalid Unity scalar constant');
       return linked.length
-        ? resolve(linked[0]!, next, false)
+        ? resolve(linked[0]!, next, false, false)
         : Array.isArray(node.m_Slots)
           ? slotDefault(node, 1)
           : numeric(node.m_Value);
@@ -120,9 +132,18 @@ export function compileWeightExpression(
       op: spec.op,
       args: spec.inputs.map((slot) => {
         const input = linked.find((entry) => entry.inputSlot === slot);
-        return input ? resolve(input, next, narrow) : slotDefault(node, slot);
+        const descriptor = Array.isArray(node.m_Slots)
+          ? node.m_Slots
+              .map((entry) => byId.get(ref(entry)))
+              .find((entry) => entry?.m_Id === slot && entry.m_SlotType === 0)
+          : undefined;
+        const allowsRgb =
+          vectorAllowed &&
+          descriptor?.m_Type !== 'UnityEditor.ShaderGraph.Vector1MaterialSlot' &&
+          descriptor?.m_Type !== 'UnityEditor.ShaderGraph.Vector2MaterialSlot';
+        return input ? resolve(input, next, narrow, allowsRgb) : slotDefault(node, slot);
       }),
     };
   };
-  return resolve(start, ancestors, false);
+  return resolve(start, ancestors, false, allowRgb);
 }

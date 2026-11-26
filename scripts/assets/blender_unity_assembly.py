@@ -119,7 +119,7 @@ def build_blended_material(material, surface, uv_names):
             for argument in weight["args"]:
                 collect_weight(argument)
         elif isinstance(weight, dict):
-            if weight.get("channel") not in (0, 1, 2, 3):
+            if weight.get("channel") not in (0, 1, 2, 3, "rgb"):
                 raise ValueError("invalid shader blend channel")
             collect(weight["term"])
         else:
@@ -165,7 +165,11 @@ def build_blended_material(material, surface, uv_names):
                 return weight
             if "op" in weight:
                 return arithmetic(weight["op"], [constant_weight(arg) for arg in weight["args"]])
-            value = constant(weight["term"])[weight["channel"]]
+            value = constant(weight["term"])
+            if weight["channel"] == "rgb":
+                value = np.array([*value[:3], 1], dtype=np.float32)
+            else:
+                value = value[weight["channel"]]
             return 1 - value if weight.get("invert") else value
 
         def constant(term):
@@ -192,7 +196,11 @@ def build_blended_material(material, surface, uv_names):
         if "op" in weight:
             return arithmetic(weight["op"], [evaluate_weight(arg) for arg in weight["args"]])
         channel = weight["channel"]
-        value = evaluate(weight["term"])[:, channel:channel + 1]
+        value = evaluate(weight["term"])
+        if channel == "rgb":
+            value[:, 3] = 1
+        else:
+            value = value[:, channel:channel + 1]
         return 1 - value if weight.get("invert") else value
 
     def evaluate(term):
