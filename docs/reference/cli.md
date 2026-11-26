@@ -134,6 +134,9 @@ gm look sheet <screen> --still <png> [--target <png>]
 gm look check [--changed [<base>] | --all] [--screen <id> ...] [--phase mock|prototype|build|polish] [--json]
 gm look scope add <screen> --still <png> [--still <png> ...] [--base <base>]
 gm look evidence --body <file> [--json]
+gm prefs list [--scope <scope>] [--json]
+gm prefs check
+gm prefs sync
 gm decisions check [--game <slug>]
 gm decisions render
 gm decisions next --ticket <n> [--body <file>]
@@ -167,6 +170,8 @@ loading art, or `images` slots pass without image checks.
 
 `gm images compose` renders every layered image slot into its declared viewport variants. It writes 2x PNGs under
 `public/media/slots/` by default, or to the paths listed in the slot's `variants` map.
+
+`gm prefs list` lists active creator preferences, including all-game rules when a scope is supplied. `gm prefs check` validates the registry and reports unresolved conflicts with their quotes and dates. `gm prefs sync` refreshes the generated section in gm-core after registry edits.
 
 `gm decisions check` validates `docs/<slug>/decisions.json` and fails when its grouped `decisions.md` render is stale;
 `gm decisions render` refreshes it. `gm decisions next --ticket <n> --body <ticket-body.md>` prints the ticket's open

@@ -1,0 +1,15 @@
+{
+  "id": "controller-layer",
+  "date": "2026-11-26",
+  "quote": "games should never draw their own [controls], OGM should be the controller layer with a flexible way for games to dictate the controller buttons and layouts needed for that game.",
+  "source": "https://github.com/its-everdred/open-game-maker/issues/1394",
+  "scope": "all",
+  "topic": "controller-layer",
+  "value": "host-only",
+  "owner_ticket": 1394,
+  "check": {
+    "kind": "review-only",
+    "reason": "The controller conformance rule is owned by ticket 1394 and is not yet registered here."
+  },
+  "status": "active"
+}

@@ -16,6 +16,13 @@ import { checkPrReview } from '../../pr-review-check.js';
 import { entriesForTicket, readInventory } from '../../decision-inventory.js';
 import { reviewScreens } from '../../look/screens.js';
 import { recipeSchema } from '../../sprite-forge.js';
+import {
+  checkPreferenceBundle,
+  checkPreferenceSection,
+  readPreferences,
+  validatePreferences,
+} from '../../preferences.js';
+import { bundledPreferences, bundledSkill, preferenceSkill, preferencesDirectory } from '../prefs/list.js';
 
 function ticketLabels(body: string): Set<string> {
   return new Set(
@@ -235,6 +242,14 @@ export const command: GmCommand = {
     let loadingErrors: string[] = [];
     let imageErrors: string[] = [];
     let playArea: Awaited<ReturnType<typeof checkPlayArea>> | undefined;
+    const preferenceEntries = readPreferences(preferencesDirectory);
+    const preferenceProblems = validatePreferences(preferenceEntries).errors;
+    if (preferenceProblems.length === 0)
+      preferenceProblems.push(
+        ...checkPreferenceSection(preferenceEntries, preferenceSkill),
+        ...checkPreferenceBundle(preferenceEntries, bundledPreferences, bundledSkill),
+      );
+    if (!ctx.json) preferenceProblems.forEach(ctx.err);
     const prProblems =
       typeof flags.body === 'string'
         ? [
@@ -299,14 +314,22 @@ export const command: GmCommand = {
       loadingErrors.length === 0 &&
       imageErrors.length === 0 &&
       playArea?.ok !== false &&
-      prProblems.length === 0;
-    if (ctx.json && (lookReport !== undefined || playArea !== undefined || typeof flags.body === 'string'))
+      prProblems.length === 0 &&
+      preferenceProblems.length === 0;
+    if (
+      ctx.json &&
+      (lookReport !== undefined ||
+        playArea !== undefined ||
+        typeof flags.body === 'string' ||
+        preferenceProblems.length > 0)
+    )
       ctx.out(
         JSON.stringify({
           ...gate,
           ok,
           look: lookReport,
           loadingErrors,
+          preferenceProblems,
           imageErrors,
           playArea,
           prototypeReview: typeof flags.body === 'string' ? { problems: prProblems } : undefined,

@@ -59,3 +59,7 @@ For `packages/pack-adapters/*`, check: themeless exports, required tunables, no 
 
 Never commit `assets-local/`, keys, download links, licence serials, or `prototypes/ui-v0/tools/_pf.mjs`. Prototypes are
 frozen. Deploys are manual because Netlify credits are limited.
+
+Creator preferences are recorded in `preferences/`; use `gm prefs list` for applicable active entries and `gm prefs check` to find conflicts.
+
+When Kevin states a new preference, record his exact words and date in the registry with an automated check or a reason it requires review. Resolve a clear replacement with reciprocal supersession links; raise a creator decision for ambiguous conflicts with both quotes and dates, recommending the newest.

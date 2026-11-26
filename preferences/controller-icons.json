@@ -1,0 +1,15 @@
+{
+  "id": "controller-icons",
+  "date": "2026-11-24",
+  "quote": "controller buttons on screen should always use icons. not letters",
+  "source": "https://github.com/its-everdred/open-game-maker/issues/1320",
+  "scope": "all",
+  "topic": "controller-button-labels",
+  "value": "icons",
+  "owner_ticket": 1394,
+  "check": {
+    "kind": "review-only",
+    "reason": "Visual review must distinguish action icons from letters in rendered controls."
+  },
+  "status": "active"
+}

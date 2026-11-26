@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GateResult } from '@ogm/gm-verify';
 
 import { gm, tempDir } from './helpers.js';
+import * as preferences from '../src/preferences.js';
 
 const state = vi.hoisted(() => ({
   l0: {
@@ -123,6 +124,20 @@ beforeEach(() => {
 });
 
 describe('gm check', () => {
+  it('fails when the preference registry has conflicts', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const spy = vi
+      .spyOn(preferences, 'validatePreferences')
+      .mockReturnValue({ active: [], errors: ['preference conflict'] });
+    try {
+      const result = await gm(['check', '--json']);
+      expect(result.code).toBe(1);
+      expect(JSON.parse(result.out[0]!).preferenceProblems).toContain('preference conflict');
+    } finally {
+      spy.mockRestore();
+    }
+  }, 180_000);
+
   it('runs the complete L0 gate and composes the registered asset check', async () => {
     state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [{ id: 'hook-present', ok: true }] };
 

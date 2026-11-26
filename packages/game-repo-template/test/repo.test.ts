@@ -54,6 +54,8 @@ describe('renderRepoTemplate', () => {
       expect(agents).toContain(`\`${command}\``);
     }
     expect(agents).toContain('gm-core');
+    expect(agents).toContain('gm prefs list');
+    expect(agents).toContain('gm prefs check');
     expect(agents).toContain('## Local tests');
     expect(requiredChecks).toEqual(['ci / required', 'ogm/boundary']);
   });

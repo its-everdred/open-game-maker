@@ -18,6 +18,8 @@ The hero jumps twice.
 
 
 
+Creator preferences are in the injected gm-core skill. Apply entries matching this game and the ticket role or lane; run `gm prefs check` and surface ambiguous conflicts with both quotes and dates, recommending the newest.
+
 ## Workflow
 
 1. Read the issue and current labels.

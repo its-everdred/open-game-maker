@@ -13,3 +13,5 @@ them does not list it. After every upload, and before `ogm-qa-game-play` plays a
 game in WebKit on every app domain and fails on a refused frame or an alias that does not redirect (#1297). The bare
 `makeopen.games` (and `www`) is the separate marketing site (`apps/site`, Netlify site `makeopen-site`), never an app
 alias; the app is `weaver.makeopen.games` (Kevin, 2026-11-25).
+
+Creator preferences are recorded in `preferences/`; use `gm prefs list` for applicable active entries and `gm prefs check` to find conflicts.
