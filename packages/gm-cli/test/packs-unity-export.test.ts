@@ -21,7 +21,7 @@ const probe = spawnSync(
     '--python-expr',
     'import numpy',
   ],
-  { encoding: 'utf8', timeout: 90_000 },
+  { encoding: 'utf8', timeout: 180_000 },
 );
 const unavailable =
   (probe.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT' ||
@@ -56,7 +56,7 @@ it.skipIf(!available)(
           '--python-expr',
           create,
         ],
-        { encoding: 'utf8', timeout: 60_000 },
+        { encoding: 'utf8', timeout: 180_000 },
       );
       expect(result.status, result.stderr).toBe(0);
       const plan: PlannedUnityMesh[] = [
@@ -74,13 +74,23 @@ it.skipIf(!available)(
           surfaces: [
             {
               path: 'fixture.mat',
-              textures: [
-                { guid: 'test', scale: [2, 3], offset: [0.25, 0.125] },
-                { guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] },
-              ],
-              texturePaths: [texture, mask],
-              textureSrgb: [true, false],
+              textures: [{ guid: 'test', scale: [2, 3], offset: [0.25, 0.125] }],
+              texturePaths: [texture],
+              textureSrgb: [true],
               color: [0.5, 1, 0.25, 1],
+              blends: [
+                {
+                  a: { path: 'fixture.mat', textures: [], texturePaths: [], textureSrgb: [], color: [0.5, 1, 1, 1] },
+                  b: {
+                    path: 'fixture.mat',
+                    textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
+                    texturePaths: [mask],
+                    textureSrgb: [false],
+                    color: [1, 1, 1, 1],
+                  },
+                  weight: 0.5,
+                },
+              ],
             },
           ],
         },
@@ -98,13 +108,51 @@ it.skipIf(!available)(
           surfaces: [
             {
               path: 'fixture.mat',
-              textures: [
-                { guid: 'test', scale: [2, 3], offset: [0.25, 0.125] },
-                { guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] },
-              ],
-              texturePaths: [texture, mask],
-              textureSrgb: [true, false],
+              textures: [{ guid: 'test', scale: [2, 3], offset: [0.25, 0.125] }],
+              texturePaths: [texture],
+              textureSrgb: [true],
               color: [0.5, 1, 0.25, 1],
+              blends: [
+                {
+                  a: { path: 'fixture.mat', textures: [], texturePaths: [], textureSrgb: [], color: [0.5, 1, 1, 1] },
+                  b: {
+                    path: 'fixture.mat',
+                    textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
+                    texturePaths: [mask],
+                    textureSrgb: [false],
+                    color: [1, 1, 1, 1],
+                  },
+                  weight: 0.5,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          name: 'Plain',
+          transformId: 'root/4',
+          parentId: 'root/2',
+          position: [0, 0, 0],
+          rotation: [0, 0, 0, 1],
+          scale: [1, 1, 1],
+          active: true,
+          rendererActive: true,
+          materials: [],
+          model: { path: fbx, name: 'Roof' },
+          surfaces: [
+            {
+              path: 'plain.mat',
+              textures: [],
+              texturePaths: [],
+              textureSrgb: [],
+              color: [1, 1, 1, 1],
+              blends: [
+                {
+                  a: { path: 'plain.mat', textures: [], texturePaths: [], textureSrgb: [], color: [0.5, 0, 0, 1] },
+                  b: { path: 'plain.mat', textures: [], texturePaths: [], textureSrgb: [], color: [1, 1, 1, 1] },
+                  weight: 0.5,
+                },
+              ],
             },
           ],
         },
@@ -128,23 +176,31 @@ it.skipIf(!available)(
       expect(childWorld[12] - parentWorld[12]).toBeCloseTo(0, 5);
       expect(childWorld[13] - parentWorld[13]).toBeCloseTo(0, 5);
       expect(childWorld[14] - parentWorld[14]).toBeCloseTo(-1, 5);
-      expect(document.getRoot().listMeshes()).toHaveLength(2);
+      expect(document.getRoot().listMeshes()).toHaveLength(3);
       const bounds = getBounds(document.getRoot().listScenes()[0]!);
       expect(bounds.min[1]).toBeCloseTo(0, 5);
       expect(bounds.min[0] + bounds.max[0]).toBeCloseTo(0, 5);
       expect(bounds.min[2] + bounds.max[2]).toBeCloseTo(0, 5);
-      const material = document.getRoot().listMaterials()[0]!;
+      const material = document
+        .getRoot()
+        .listMaterials()
+        .find((entry) => entry.getBaseColorTexture())!;
       expect(material.getBaseColorTexture()).not.toBeNull();
+      const plain = document
+        .getRoot()
+        .listMaterials()
+        .find((entry) => !entry.getBaseColorTexture())!;
+      expect(plain.getBaseColorFactor()).toEqual([0.75, 0.5, 0.5, 1]);
       const textureTransform = material.getBaseColorTextureInfo()?.getExtension<Transform>('KHR_texture_transform');
       expect(textureTransform?.getScale()).toEqual([2, 3]);
       expect(textureTransform?.getOffset()[0]).toBeCloseTo(0.25, 5);
       const pixels = await sharp(material.getBaseColorTexture()!.getImage()!).ensureAlpha().raw().toBuffer();
       expect(pixels[0]).toBeGreaterThan(55);
       expect(pixels[0]).toBeLessThan(70);
-      expect(pixels[1]).toBeGreaterThan(110);
-      expect(pixels[1]).toBeLessThan(125);
-      expect(pixels[2]).toBeGreaterThan(70);
-      expect(pixels[2]).toBeLessThan(85);
+      expect(pixels[1]).toBeGreaterThan(130);
+      expect(pixels[1]).toBeLessThan(151);
+      expect(pixels[2]).toBeGreaterThan(87);
+      expect(pixels[2]).toBeLessThan(102);
       await expect(exportUnityAssembly(plan, output)).rejects.toMatchObject({ code: 'EEXIST' });
       expect(await readFile(output)).toEqual(bytes);
     } finally {

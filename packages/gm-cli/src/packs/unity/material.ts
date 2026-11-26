@@ -2,7 +2,11 @@ import { parseUnityYaml } from './yaml.js';
 import type { ShaderGraphBase } from './shadergraph.js';
 
 export type UnityTexture = { guid: string; scale: [number, number]; offset: [number, number] };
-export type UnitySurface = { textures: UnityTexture[]; color: [number, number, number, number] };
+export type UnitySurface = {
+  textures: UnityTexture[];
+  color: [number, number, number, number];
+  blends?: Array<{ a: UnitySurface; b: UnitySurface; weight: number }>;
+};
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid Unity material property');
   return value as Record<string, unknown>;
@@ -56,31 +60,40 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
   if (!standard && !graph && [...environments.keys()].some((key) => /_SampleTexture2D_/i.test(key))) {
     throw new Error('unsupported Unity shader graph texture properties');
   }
-  const keys = graph?.textures ?? (standard ? [standard] : []);
-  const textures = keys.map((key) => {
-    const env = object(environments.get(key));
-    const reference = object(env.m_Texture);
-    if (typeof reference.guid !== 'string') throw new Error(`missing Unity texture for ${key}`);
+  const resolve = (term?: ShaderGraphBase): UnitySurface => {
+    const keys = term?.textures ?? (standard ? [standard] : []);
+    const textures = keys.map((key) => {
+      const env = object(environments.get(key));
+      const reference = object(env.m_Texture);
+      if (typeof reference.guid !== 'string') throw new Error(`missing Unity texture for ${key}`);
+      return {
+        guid: reference.guid,
+        scale: vector(env.m_Scale, ['x', 'y'], [1, 1]) as [number, number],
+        offset: vector(env.m_Offset, ['x', 'y'], [0, 0]) as [number, number],
+      };
+    });
+    const color = (
+      term ? [1, 1, 1, 1] : vector(colors.get('_BaseColor') ?? colors.get('_Color'), ['r', 'g', 'b', 'a'], [1, 1, 1, 1])
+    ) as [number, number, number, number];
+    for (const factor of term?.factors ?? []) {
+      const value =
+        factor.kind === 'constant'
+          ? (factor.defaultValue as number[])
+          : factor.kind === 'scalar'
+            ? Number(floats.get(factor.key) ?? factor.defaultValue)
+            : vector(colors.get(factor.key), ['r', 'g', 'b', 'a'], factor.defaultValue as number[]);
+      for (let index = 0; index < 4; index++)
+        color[index] = color[index]! * (typeof value === 'number' ? value : value[index]!);
+    }
+    if (color.some((value) => !Number.isFinite(value) || value < 0 || value > 1))
+      throw new Error('unsupported Unity base color factor');
     return {
-      guid: reference.guid,
-      scale: vector(env.m_Scale, ['x', 'y'], [1, 1]) as [number, number],
-      offset: vector(env.m_Offset, ['x', 'y'], [0, 0]) as [number, number],
+      textures,
+      color,
+      ...(term?.blends
+        ? { blends: term.blends.map(({ a, b, weight }) => ({ a: resolve(a), b: resolve(b), weight })) }
+        : {}),
     };
-  });
-  const color = (
-    graph ? [1, 1, 1, 1] : vector(colors.get('_BaseColor') ?? colors.get('_Color'), ['r', 'g', 'b', 'a'], [1, 1, 1, 1])
-  ) as [number, number, number, number];
-  for (const factor of graph?.factors ?? []) {
-    const value =
-      factor.kind === 'constant'
-        ? (factor.defaultValue as number[])
-        : factor.kind === 'scalar'
-          ? Number(floats.get(factor.key) ?? factor.defaultValue)
-          : vector(colors.get(factor.key), ['r', 'g', 'b', 'a'], factor.defaultValue as number[]);
-    for (let index = 0; index < 4; index++)
-      color[index] = color[index]! * (typeof value === 'number' ? value : value[index]!);
-  }
-  if (color.some((value) => !Number.isFinite(value) || value < 0 || value > 1))
-    throw new Error('unsupported Unity base color factor');
-  return { textures, color };
+  };
+  return resolve(graph);
 }

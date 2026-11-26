@@ -35,6 +35,8 @@ def build_material(surface):
     nodes = material.node_tree.nodes
     shader = nodes.get("Principled BSDF")
     shader.inputs["Base Color"].default_value = surface["color"]
+    if surface.get("blends"):
+        return build_blended_material(material, surface)
     textures = surface["textures"]
     texture_paths = surface["texturePaths"]
     texture_srgb = surface["textureSrgb"]
@@ -84,6 +86,81 @@ def build_material(surface):
         links.new(coords.outputs["UV"], mapping.inputs["Vector"])
         links.new(mapping.outputs["Vector"], image_node.inputs["Vector"])
         links.new(image_node.outputs["Color"], shader.inputs["Base Color"])
+    return material
+
+
+def build_blended_material(material, surface):
+    """Bake a material expression in linear light using a shared UV transform."""
+    layers = []
+
+    def collect(term):
+        textures, paths, spaces = term["textures"], term["texturePaths"], term["textureSrgb"]
+        if len(textures) != len(paths) or len(textures) != len(spaces):
+            raise ValueError("material texture references differ from resolved paths")
+        layers.extend(zip(textures, paths, spaces))
+        for blend in term.get("blends", []):
+            if not 0 <= blend["weight"] <= 1:
+                raise ValueError("invalid shader blend weight")
+            collect(blend["a"])
+            collect(blend["b"])
+
+    collect(surface)
+    if not layers:
+        def constant(term):
+            value = np.asarray(term["color"], dtype=np.float32)
+            for blend in term.get("blends", []):
+                weight = blend["weight"]
+                value = value * (constant(blend["a"]) * (1 - weight) + constant(blend["b"]) * weight)
+            return value
+        material.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value = constant(surface)
+        return material
+    first = layers[0][0]
+    if any(texture["scale"] != first["scale"] or texture["offset"] != first["offset"] for texture, _, _ in layers):
+        raise ValueError("cannot bake shader layers with different UV transforms")
+    images = [bpy.data.images.load(path, check_existing=True) for _, path, _ in layers]
+    width, height = max(image.size[0] for image in images), max(image.size[1] for image in images)
+    if width * height > 16777216:
+        raise ValueError("shader layer texture is too large to bake")
+    pixels_by_layer = iter(zip(images, (srgb for _, _, srgb in layers)))
+
+    def evaluate(term):
+        value = np.ones((width * height, 4), dtype=np.float32) * np.asarray(term["color"], dtype=np.float32)
+        for _ in term["textures"]:
+            image, srgb = next(pixels_by_layer)
+            image.colorspace_settings.name = "sRGB" if srgb else "Non-Color"
+            copy = image.copy()
+            copy.scale(width, height)
+            pixels = np.empty(width * height * 4, dtype=np.float32)
+            copy.pixels.foreach_get(pixels)
+            pixels = pixels.reshape((-1, 4))
+            if srgb:
+                rgb = pixels[:, :3]
+                pixels[:, :3] = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+            value *= pixels
+            bpy.data.images.remove(copy)
+        for blend in term.get("blends", []):
+            a, b, weight = evaluate(blend["a"]), evaluate(blend["b"]), blend["weight"]
+            value *= a * (1 - weight) + b * weight
+        return value
+
+    pixels = evaluate(surface)
+    rgb = np.clip(pixels[:, :3], 0, 1)
+    pixels[:, :3] = np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * rgb ** (1 / 2.4) - 0.055)
+    baked = bpy.data.images.new("Unity blended base color", width=width, height=height, alpha=True)
+    baked.pixels.foreach_set(pixels.reshape(-1))
+    baked.update()
+    baked.pack()
+    nodes, links = material.node_tree.nodes, material.node_tree.links
+    image_node = nodes.new("ShaderNodeTexImage")
+    image_node.image = baked
+    image_node.extension = "REPEAT"
+    coords = nodes.new("ShaderNodeTexCoord")
+    mapping = nodes.new("ShaderNodeMapping")
+    mapping.inputs["Scale"].default_value = (*first["scale"], 1)
+    mapping.inputs["Location"].default_value = (*first["offset"], 0)
+    links.new(coords.outputs["UV"], mapping.inputs["Vector"])
+    links.new(mapping.outputs["Vector"], image_node.inputs["Vector"])
+    links.new(image_node.outputs["Color"], nodes.get("Principled BSDF").inputs["Base Color"])
     return material
 
 

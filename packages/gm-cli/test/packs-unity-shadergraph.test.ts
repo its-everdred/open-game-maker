@@ -145,7 +145,8 @@ it('selects the material boolean branch without interpreting its inactive branch
   );
 });
 
-it('resolves interpolation endpoints and rejects non-endpoint blending', () => {
+it('resolves interpolation endpoints and represents intermediate blending', async () => {
+  const { parseUnitySurface } = await import('../src/packs/unity/material.js');
   const edge = (from: string, to: string, input: number, output = 0) => ({
     m_OutputSlot: { m_Node: { m_Id: from }, m_SlotId: output },
     m_InputSlot: { m_Node: { m_Id: to }, m_SlotId: input },
@@ -174,7 +175,24 @@ it('resolves interpolation endpoints and rejects non-endpoint blending', () => {
   const source = docs.map((doc) => JSON.stringify(doc)).join('\n');
   expect(shaderGraphBase(source).textures).toEqual(['_SampleTexture2D_a_Texture_1']);
   expect(shaderGraphBase(source, new Map([['_Weight', '1']])).textures).toEqual(['_SampleTexture2D_b_Texture_1']);
-  expect(() => shaderGraphBase(source, new Map([['_Weight', '0.5']]))).toThrow(
+  expect(shaderGraphBase(source, new Map([['_Weight', '0.5']])).blends).toMatchObject([
+    {
+      a: { textures: ['_SampleTexture2D_a_Texture_1'] },
+      b: { textures: ['_SampleTexture2D_b_Texture_1'] },
+      weight: 0.5,
+    },
+  ]);
+  const material = `--- !u!21 &1
+Material:
+  m_SavedProperties:
+    m_TexEnvs:
+    - _SampleTexture2D_a_Texture_1: {m_Texture: {guid: aaa}, m_Scale: {x: 1, y: 1}, m_Offset: {x: 0, y: 0}}
+    - _SampleTexture2D_b_Texture_1: {m_Texture: {guid: bbb}, m_Scale: {x: 1, y: 1}, m_Offset: {x: 0, y: 0}}
+`;
+  expect(parseUnitySurface(material, shaderGraphBase(source, new Map([['_Weight', '0.5']]))).blends).toMatchObject([
+    { a: { textures: [{ guid: 'aaa' }] }, b: { textures: [{ guid: 'bbb' }] }, weight: 0.5 },
+  ]);
+  expect(() => shaderGraphBase(source, new Map([['_Weight', '1.5']]))).toThrow(
     'unsupported Unity shader graph interpolation amount',
   );
 });

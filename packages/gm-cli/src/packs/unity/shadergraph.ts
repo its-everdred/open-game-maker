@@ -42,7 +42,11 @@ export type ShaderGraphFactor = {
   kind: 'scalar' | 'color' | 'constant';
   defaultValue: number | [number, number, number, number];
 };
-export type ShaderGraphBase = { textures: string[]; factors: ShaderGraphFactor[] };
+export type ShaderGraphBase = {
+  textures: string[];
+  factors: ShaderGraphFactor[];
+  blends?: Array<{ a: ShaderGraphBase; b: ShaderGraphBase; weight: number }>;
+};
 
 function graphOutputSlot(node: GraphObject | undefined): number {
   switch (node?.m_Type) {
@@ -134,12 +138,19 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
       )
         throw new Error('unsupported Unity shader graph interpolation property');
       const raw = floats.has(key) ? floats.get(key) : property.m_Value;
-      if (raw !== 0 && raw !== 1 && raw !== '0' && raw !== '1')
+      if ((typeof raw !== 'string' && typeof raw !== 'number') || String(raw).trim() === '')
         throw new Error('unsupported Unity shader graph interpolation amount');
-      const selected = inputs.find((input) => input.inputSlot === Number(raw))!;
-      if (selected.outputSlot !== graphOutputSlot(byId.get(selected.node)))
-        throw new Error('unsupported Unity shader graph output channel');
-      return visit(selected.node, new Set(ancestors).add(id));
+      const weight = Number(raw);
+      if (!Number.isFinite(weight) || weight < 0 || weight > 1)
+        throw new Error('unsupported Unity shader graph interpolation amount');
+      const resolveInput = (slot: number) => {
+        const input = inputs.find((entry) => entry.inputSlot === slot)!;
+        if (input.outputSlot !== graphOutputSlot(byId.get(input.node)))
+          throw new Error('unsupported Unity shader graph output channel');
+        return visit(input.node, new Set(ancestors).add(id));
+      };
+      if (weight === 0 || weight === 1) return resolveInput(weight);
+      return { textures: [], factors: [], blends: [{ a: resolveInput(0), b: resolveInput(1), weight }] };
     }
     if (type === 'UnityEditor.ShaderGraph.BranchNode') {
       if (
@@ -247,6 +258,7 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
       const term = visit(input.node, next);
       result.textures.push(...term.textures);
       result.factors.push(...term.factors);
+      if (term.blends) (result.blends ??= []).push(...term.blends);
     }
     return result;
   };

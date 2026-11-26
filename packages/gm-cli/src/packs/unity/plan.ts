@@ -10,9 +10,15 @@ import { textureIsSrgb } from './texture-meta.js';
 import { readUnityRecords } from './read.js';
 import type { UnityMeshNode, UnityReference } from './hierarchy.js';
 
+export type PlannedUnitySurface = Omit<UnitySurface, 'blends'> & {
+  path: string;
+  texturePaths: string[];
+  textureSrgb: boolean[];
+  blends?: Array<{ a: PlannedUnitySurface; b: PlannedUnitySurface; weight: number }>;
+};
 export type PlannedUnityMesh = UnityMeshNode & {
   model?: { path: string; name: string };
-  surfaces: Array<UnitySurface & { path: string; texturePaths: string[]; textureSrgb: boolean[] }>;
+  surfaces: PlannedUnitySurface[];
 };
 
 /** Build a complete, checked local input plan before invoking any model converter. */
@@ -109,11 +115,25 @@ export async function planUnityAssembly(
           throw new Error(`unsupported or missing Unity shader ${shaderGuid}`);
         surface = parseUnitySurface(contents);
       }
-      const texturePaths = surface.textures.map((texture) =>
-        file({ fileId: '0', guid: texture.guid }, ['.png', '.jpg', '.jpeg', '.tga', '.tif', '.tiff']),
-      );
-      const textureSrgb = texturePaths.map((texturePath) => textureIsSrgb(readFileSync(`${texturePath}.meta`, 'utf8')));
-      return { ...surface, path, texturePaths, textureSrgb };
+      const resolveSurface = (term: UnitySurface): PlannedUnitySurface => {
+        const texturePaths = term.textures.map((texture) =>
+          file({ fileId: '0', guid: texture.guid }, ['.png', '.jpg', '.jpeg', '.tga', '.tif', '.tiff']),
+        );
+        const textureSrgb = texturePaths.map((texturePath) =>
+          textureIsSrgb(readFileSync(`${texturePath}.meta`, 'utf8')),
+        );
+        const { blends, ...base } = term;
+        return {
+          ...base,
+          path,
+          texturePaths,
+          textureSrgb,
+          ...(blends
+            ? { blends: blends.map(({ a, b, weight }) => ({ a: resolveSurface(a), b: resolveSurface(b), weight })) }
+            : {}),
+        };
+      };
+      return resolveSurface(surface);
     });
     return { ...node, ...(model ? { model } : {}), surfaces };
   });
