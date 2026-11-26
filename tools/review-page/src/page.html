@@ -499,9 +499,10 @@
           const seq = (s.seq || 0) + 1;
           s.seq = seq;
           saved[c.key] = doc;
-          s.st.textContent = 'Answered ✓ · ' + doc.label;
+          const complete = finished(c, doc);
+          s.st.textContent = complete ? 'Answered ✓ · ' + doc.label : '';
           s.st.className = 'st';
-          s.card.classList.add('shut');
+          s.card.classList.toggle('shut', complete);
           count();
           s.queue = (s.queue || Promise.resolve()).catch(() => {}).then(() => db.doc('picks/' + c.key).set(doc));
           try {
@@ -521,9 +522,12 @@
         function finished(c, d) {
           const ch = d && d.choice;
           if (!ch) return false;
-          if (d.advance) return true;
+          if (d.advance || d.withdrawn) return true;
           const wants = (v) => /^(changes|revise|work|needs)/i.test(v);
-          if (c.mode === 'matrix') return true;
+          if (c.mode === 'matrix') {
+            const cells = c.rows.flatMap((row) => row.cells.filter((cell) => !cell.orig));
+            return cells.length > 0 && cells.every((cell) => ch[cell.id] || ((d.notes || {})[cell.id] || '').trim());
+          }
           if (c.mode === 'multi') {
             if (!c.groups.every((g) => ch[g.id])) return false;
             return !Object.values(ch).some(wants) || !!(d.note || '').trim();
@@ -849,9 +853,9 @@
                           ...(d.notes ? { notes: d.notes } : {}),
                         };
                   if (d.note) s.ta.value = d.note;
-                  s.st.textContent = 'Answered ✓ · ' + d.label;
+                  s.st.textContent = finished(c, d) ? 'Answered ✓ · ' + d.label : '';
                   mark(c);
-                  s.card.classList.add('shut');
+                  s.card.classList.toggle('shut', finished(c, d));
                 }
               } catch (e) {}
             }),

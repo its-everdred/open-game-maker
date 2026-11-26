@@ -10,6 +10,7 @@ export interface Source {
   decideRepo: string;
   id?: string;
   reviewLabel?: string;
+  trustedAuthors?: string[];
 }
 export type Run = (program: string, args: string[], cwd: string) => string;
 
@@ -128,11 +129,11 @@ export function collectReviewTickets(source: Source, run: Run, mediaFromText: (t
         '--limit',
         '1000',
         '--json',
-        'number,title,body,updatedAt',
+        'number,title,body,updatedAt,author',
       ],
       source.checkout,
     ),
-  ) as { number: number; title: string; body: string; updatedAt: string }[];
+  ) as { number: number; title: string; body: string; updatedAt: string; author?: { login: string } }[];
   return rows.flatMap((issue) => {
     const detail = JSON.parse(
       run(
@@ -140,7 +141,7 @@ export function collectReviewTickets(source: Source, run: Run, mediaFromText: (t
         ['issue', 'view', String(issue.number), '--repo', source.repository, '--json', 'comments'],
         source.checkout,
       ),
-    ) as { comments: { body: string }[] };
+    ) as { comments: { body: string; author?: { login: string } }[] };
     const prs = JSON.parse(
       run(
         source.gh ?? 'gh',
@@ -156,23 +157,26 @@ export function collectReviewTickets(source: Source, run: Run, mediaFromText: (t
           '--limit',
           '100',
           '--json',
-          'body',
+          'body,author',
         ],
         source.checkout,
       ),
-    ) as { body: string }[];
+    ) as { body: string; author?: { login: string } }[];
     const reference = new RegExp(`#${issue.number}(?!\\d)`);
+    const trusted = (author?: { login: string }) => !!author && (source.trustedAuthors ?? []).includes(author.login);
     const texts = [
-      issue.body,
-      ...detail.comments.map((comment) => comment.body).filter((body) => body.includes('## Agent Workpad')),
-      ...prs.map((pr) => pr.body).filter((body) => reference.test(body)),
+      ...(trusted(issue.author) ? [issue.body] : []),
+      ...detail.comments
+        .filter((comment) => trusted(comment.author) && comment.body.includes('## Agent Workpad'))
+        .map((comment) => comment.body),
+      ...prs.filter((pr) => trusted(pr.author) && reference.test(pr.body)).map((pr) => pr.body),
     ];
     const media = texts.flatMap((text) => mediaFromText(text || ''));
     const unique = [...new Map(media.map((item) => [item.src, item])).values()];
     if (!unique.length) return [];
     return [
       {
-        key: `ticket-${source.key}-${issue.number}`,
+        key: `ticket-${source.key}-${source.id ? `${source.id}-` : ''}${issue.number}`,
         repo: source.key,
         ticket: issue.number,
         decision: '',

@@ -12,8 +12,8 @@ and must deliver it to the Executor, returning a nonzero exit on failure.
 ```json
 {
   "sources": [
-    { "key": "open-games", "checkout": "<games-checkout>", "repository": "<owner>/<games-repository>", "aiur": "<aiur-command>", "decideRepo": "og" },
-    { "key": "core", "checkout": "<core-checkout>", "repository": "<owner>/<core-repository>", "aiur": "<aiur-command>", "decideRepo": "core" }
+    { "key": "open-games", "checkout": "<games-checkout>", "repository": "<owner>/<games-repository>", "aiur": "<aiur-command>", "decideRepo": "og", "trustedAuthors": ["<trusted-github-login>"] },
+    { "key": "core", "checkout": "<core-checkout>", "repository": "<owner>/<core-repository>", "aiur": "<aiur-command>", "decideRepo": "core", "trustedAuthors": ["<trusted-github-login>"] }
   ],
   "mediaRoots": ["<approved-media-root>"],
   "decisionsLogs": ["<decisions-log>"],
@@ -25,6 +25,7 @@ and must deliver it to the Executor, returning a nonzero exit on failure.
   "initialPublished": "<artifact-file-inventory-json>",
   "initialPage": "<existing-page-html>",
   "initialRelayed": "<existing-relay-ledger>",
+  "initialPicks": "<historical-picks-json>",
   "legacyMedia": "<existing-page-media-directory>",
   "decide": "<executor-decide-script>",
   "message": "<executor-message-script>"
@@ -50,6 +51,12 @@ that instance.
 `playLinks` maps card keys to verified HTTPS playable URLs. The build reports
 and omits media-free cards without a review or play link; Executor-only and
 explicit non-product Commands are omitted from the creator-facing page.
+Set each source's `trustedAuthors` to the GitHub logins allowed to contribute
+issue, workpad, and PR media. An omitted or empty list imports none of that
+repository's text media. For a key-only legacy relay ledger, `initialPicks`
+must be a historical pick snapshot captured before new answers are accepted;
+each ledger key needs its original timestamp. The relay fails closed when a
+historical timestamp is missing instead of silently discarding a newer answer.
 
 After reading ArtifactData picks into a JSON document, run:
 
@@ -68,7 +75,9 @@ node tools/review-page/src/cli.ts record <config.json> <version>
 ```
 
 The record step checks that the page and media have not changed since the
-build. Relay saves picks before delivery and retries failures on the next run,
+build. A new build is refused until the pending publish is recorded; if a
+publish definitely did not happen, reconcile the private pending snapshot
+before removing it. Relay saves picks before delivery and retries failures on the next run,
 even if that run receives an empty picks document. One failed pick does not
 prevent other picks from being delivered. It records the decision-delivery
 step separately so a failed Command answer can be retried without repeating

@@ -4,6 +4,53 @@ import { expect, it, vi } from 'vitest';
 import { renderPage } from './build.js';
 import type { Card } from './cards.js';
 
+it('keeps partial group answers open until every group is answered', async () => {
+  const card: Card = {
+    key: 'multi',
+    repo: 'core',
+    ticket: 1,
+    decision: '',
+    title: 'Review',
+    at: '',
+    mode: 'multi',
+    shared: [],
+    options: [],
+    groups: ['a', 'b'].map((id) => ({ id, label: id, media: [], options: [{ id: 'yes', label: 'Yes', media: [] }] })),
+  };
+  const page = renderPage(readFileSync(new URL('./page.html', import.meta.url), 'utf8'), [card]);
+  let saved: Record<string, unknown> | undefined;
+  const open = () =>
+    new JSDOM(page, {
+      runScripts: 'dangerously',
+      beforeParse(window) {
+        Object.assign(window, {
+          claude: {
+            use: async () => ({
+              doc: () => ({
+                get: async () => ({ exists: !!saved, data: () => saved }),
+                set: async (value: Record<string, unknown>) => {
+                  saved = value;
+                },
+              }),
+            }),
+          },
+        });
+      },
+    });
+  const first = open();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  first.window.document.querySelector<HTMLButtonElement>('button[data-g="a"]')!.click();
+  await vi.waitFor(() => expect(saved).toBeDefined());
+  expect(first.window.document.querySelector('.card')?.classList.contains('shut')).toBe(false);
+  first.window.close();
+  const second = open();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(second.window.document.querySelector('.card')?.classList.contains('shut')).toBe(false);
+  second.window.document.querySelector<HTMLButtonElement>('button[data-g="b"]')!.click();
+  expect(second.window.document.querySelector('.card')?.classList.contains('shut')).toBe(true);
+  second.window.close();
+}, 30_000);
+
 it('collapses an answered card immediately and restores the answered row on load', async () => {
   const card: Card = {
     key: 'dec_a',

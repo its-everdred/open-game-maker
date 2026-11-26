@@ -18,7 +18,7 @@ import { filesDelta } from './bundle.ts';
 import type { Card } from './cards.ts';
 import { commandMedia, encodeMedia, hashFile, MediaStager } from './media.ts';
 import { phaseFor, updatePhase } from './phase.ts';
-import { readPicks, relayPicks, validatePick, type Pick } from './relay.ts';
+import { isComplete, readPicks, relayPicks, validatePick, type Pick } from './relay.ts';
 import { collectCommands, collectReviewTickets, feedCards, type Source } from './sources.ts';
 
 interface Config {
@@ -34,6 +34,7 @@ interface Config {
   initialPublished?: string;
   initialPage?: string;
   initialRelayed?: string;
+  initialPicks?: string;
   ffmpeg?: string;
   legacyMedia?: string;
   playLinks?: string;
@@ -79,6 +80,8 @@ function pathsFromLogs(paths: string[]): Map<string, string> {
 function build(config: Config): void {
   mkdirSync(config.output, { recursive: true });
   mkdirSync(config.state, { recursive: true, mode: 0o700 });
+  if (existsSync(join(config.state, 'pending.json')))
+    throw new Error('Record or reconcile the pending build before building again');
   const stager = new MediaStager(
     config.output,
     config.mediaRoots,
@@ -151,7 +154,7 @@ function build(config: Config): void {
     if (!card.ticket) continue;
     const source = config.sources.find((item) => item.key === card.repo && (item.id ?? '') === (card.source ?? ''));
     if (!source) throw new Error(`Unknown card repository: ${card.repo}`);
-    const key = `${card.repo}#${card.ticket}`;
+    const key = `${card.repo}#${card.source ?? ''}#${card.ticket}`;
     if (!labelsByTicket.has(key)) {
       const result = JSON.parse(
         run(
@@ -186,6 +189,7 @@ function build(config: Config): void {
     else if (value && typeof value === 'object') Object.values(value).forEach(gather);
   };
   gather(cards);
+  for (const path of used) stager.restoreLegacy(path);
   const current = Object.fromEntries([...used].map((path) => [path, hashFile(join(config.output, path))]));
   const publishedPath = join(config.state, 'published.json');
   let published: Record<string, string>;
@@ -227,8 +231,22 @@ async function relay(config: Config, path: string): Promise<void> {
   const previous = previousCards(config);
   const queuePath = join(config.state, 'relay-pending.json');
   const pending = readJson<Record<string, { pick: Pick; card: Card }>>(queuePath, {});
-  if (!existsSync(ledger) && config.initialRelayed)
-    writeFileSync(ledger, [...delivered].join('\n') + '\n', { mode: 0o600 });
+  // A key-only legacy marker requires a separately captured historical
+  // snapshot. Current picks may already contain a newer answer.
+  const bare = [...delivered].filter((marker) => !marker.includes('@'));
+  if (bare.length) {
+    if (!config.initialPicks) throw new Error('Legacy ledger requires a historical initialPicks snapshot');
+    const historical = readPicks(JSON.parse(readFileSync(config.initialPicks, 'utf8')) as unknown);
+    for (const key of bare) {
+      const pick = historical.find((item) => item.key === key && Number.isFinite(item.at));
+      if (!pick) throw new Error(`Missing historical pick for legacy marker ${key}`);
+      delivered.delete(key);
+      delivered.add(`${key}@${pick.at}`);
+    }
+  }
+  const ledgerTemp = `${ledger}.${process.pid}.tmp`;
+  writeFileSync(ledgerTemp, [...delivered].join('\n') + '\n', { mode: 0o600 });
+  renameSync(ledgerTemp, ledger);
   for (const [marker, entry] of Object.entries(pending)) {
     if (delivered.has(marker) || delivered.has(entry.pick.key)) delete pending[marker];
   }
@@ -256,13 +274,14 @@ async function relay(config: Config, path: string): Promise<void> {
     else {
       try {
         validatePick(pick, card);
+        if (!isComplete(pick, card!)) continue;
         pending[marker] ??= { pick, card: card! };
       } catch {
         invalid++;
         continue;
       }
     }
-    if (pick.at > (times[pick.key] ?? 0)) {
+    if (pick.at > (times[pick.key] ?? 0) || (pick.at === times[pick.key] && !baselines[pick.key])) {
       if (card) baselines[pick.key] = { at: pick.at, card };
       else delete baselines[pick.key];
       times[pick.key] = pick.at;
@@ -375,6 +394,7 @@ function record(config: Config, version: string): void {
   writeState(join(config.state, 'published.json'), published);
   writeState(join(config.state, 'cards.json'), pending.cards);
   writeFileSync(join(config.state, 'version.txt'), `${version}\n`);
+  unlinkSync(join(config.state, 'pending.json'));
 }
 
 const [operation, configPath, argument] = process.argv.slice(2);

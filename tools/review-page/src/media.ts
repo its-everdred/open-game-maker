@@ -83,6 +83,17 @@ export class MediaStager {
     });
   }
 
+  restoreLegacy(path: string): void {
+    const destination = join(this.output, path);
+    if (existsSync(destination)) return;
+    if (!this.legacyMedia) throw new Error(`Missing retained media: ${path}`);
+    const source = join(this.legacyMedia, basename(path));
+    if (!existsSync(source) || !this.permitted(realpathSync(source)))
+      throw new Error(`Missing retained media: ${path}`);
+    mkdirSync(dirname(destination), { recursive: true });
+    copyFileSync(realpathSync(source), destination);
+  }
+
   stage(path: string, withOriginal = true): Media | undefined {
     if (!isAbsolute(path)) return undefined;
     if (!existsSync(path) && this.legacyMedia && existsSync(this.legacyMedia)) {

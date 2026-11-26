@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -36,6 +36,11 @@ it('stages permitted attachments and rejects paths outside the configured roots'
       legacy,
     );
     expect(withLegacy.stage(missing)?.kind).toBe('img');
+    writeFileSync(join(legacy, 'retained.jpg'), 'retained snapshot');
+    withLegacy.restoreLegacy('m/retained.jpg');
+    expect(readFileSync(join(tmp, 'out/m/retained.jpg'), 'utf8')).toBe('retained snapshot');
+    symlinkSync(outside, join(legacy, 'escape.jpg'));
+    expect(() => withLegacy.restoreLegacy('m/escape.jpg')).toThrow();
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

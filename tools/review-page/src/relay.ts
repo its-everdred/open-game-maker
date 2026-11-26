@@ -12,6 +12,32 @@ export interface Pick {
   source?: string;
   label?: string;
   note?: string;
+  notes?: Record<string, string>;
+}
+
+export function isComplete(pick: Pick, card: Card): boolean {
+  if (pick.advance || pick.withdrawn) return true;
+  if (!pick.choice) return false;
+  if (card.mode === 'matrix') {
+    const cells = card.rows?.flatMap((row) => row.cells.filter((cell) => !cell.orig)) ?? [];
+    return (
+      cells.length > 0 &&
+      cells.every(
+        (cell) => (typeof pick.choice === 'object' && !!pick.choice[cell.id]) || !!pick.notes?.[cell.id]?.trim(),
+      )
+    );
+  }
+  if (card.mode === 'multi') {
+    if (
+      typeof pick.choice !== 'object' ||
+      !card.groups?.every((group) => pick.choice && typeof pick.choice === 'object' && pick.choice[group.id])
+    )
+      return false;
+    return (
+      !Object.values(pick.choice).some((choice) => /^(changes|revise|work|needs)/i.test(choice)) || !!pick.note?.trim()
+    );
+  }
+  return typeof pick.choice === 'string' && (!/^(changes|revise|work|needs)/i.test(pick.choice) || !!pick.note?.trim());
 }
 
 /** Only a card actually published by this pipeline may route a pick. */
@@ -90,6 +116,7 @@ export async function relayPicks(
   let sent = 0;
   let skipped = 0;
   const failed: string[] = [];
+  const blockedKeys = new Set<string>();
   for (const pick of [...picks].sort((a, b) => a.at - b.at || a.key.localeCompare(b.key))) {
     if (
       !/^[A-Za-z0-9_-]+$/.test(pick.key) ||
@@ -101,14 +128,20 @@ export async function relayPicks(
       throw new Error('Invalid pick: key, time, repository and ticket are required');
     }
     const marker = `${pick.key}@${pick.at}`;
+    if (blockedKeys.has(pick.key)) continue;
     if (delivered.has(marker) || delivered.has(pick.key)) {
       skipped++;
       continue;
     }
     try {
       await send(pick);
-    } catch {
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      const reason =
+        code === 'ENOENT' ? 'executable missing' : code === 'ETIMEDOUT' ? 'delivery timed out' : 'delivery failed';
+      console.error(`Pick ${pick.key}: ${reason}`);
       failed.push(pick.key);
+      blockedKeys.add(pick.key);
       continue;
     }
     await record(marker);
