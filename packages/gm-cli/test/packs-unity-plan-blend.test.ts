@@ -95,6 +95,27 @@ it('resolves texture paths inside blended graph terms', async () => {
     expect(inverted[0]?.surfaces[0]?.blends).toMatchObject([
       { weight: { term: { texturePaths: [join(root, 'b.png')] }, channel: 0, invert: true } },
     ]);
+    docs[0]!.m_Edges = [
+      edge('lerp', 'base', 0, 3),
+      edge('a', 'lerp', 0),
+      edge('b', 'lerp', 1),
+      edge('inverse', 'lerp', 2, 1),
+      edge('scale', 'inverse', 0, 2),
+      edge('b', 'scale', 0, 4),
+      edge('amount', 'scale', 1),
+    ];
+    docs.push({ m_ObjectId: 'scale', m_Type: 'UnityEditor.ShaderGraph.MultiplyNode' } as (typeof docs)[number]);
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const scaled = await planUnityAssembly(root, prefab);
+    expect(scaled[0]?.surfaces[0]?.blends).toMatchObject([
+      {
+        weight: {
+          term: { texturePaths: [join(root, 'b.png')], color: [0.5, 0.5, 0.5, 0.5] },
+          channel: 0,
+          invert: true,
+        },
+      },
+    ]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

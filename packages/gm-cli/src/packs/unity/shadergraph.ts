@@ -131,37 +131,47 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
           throw new Error('unsupported Unity shader graph output channel');
         return visit(input.node, new Set(ancestors).add(id));
       };
-      if (
-        amountNode?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode' &&
-        [4, 5, 6, 7].includes(amount.outputSlot)
-      ) {
-        const term = visit(amount.node, new Set(ancestors).add(id));
-        return {
-          textures: [],
-          factors: [],
-          blends: [{ a: resolveInput(0), b: resolveInput(1), weight: { term, channel: amount.outputSlot - 4 } }],
-        };
-      }
-      if (amountNode?.m_Type === 'UnityEditor.ShaderGraph.OneMinusNode' && amount.outputSlot === 1) {
-        const inverseInputs = incoming.get(amount.node) ?? [];
-        if (inverseInputs.length !== 1 || inverseInputs[0]!.inputSlot !== 0)
-          throw new Error('unsupported Unity shader graph interpolation amount');
-        const input = inverseInputs[0]!;
-        const source = byId.get(input.node);
+      type Mask = { term: ShaderGraphBase; channel: number; invert?: boolean };
+      const maskFor = (edge: { node: string; outputSlot: number }, seen: Set<string>): Mask | undefined => {
+        if (seen.has(edge.node)) throw new Error('cyclic Unity shader graph');
+        const current = byId.get(edge.node);
+        const next = new Set(seen).add(edge.node);
+        if (current?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode' && [4, 5, 6, 7].includes(edge.outputSlot))
+          return { term: visit(edge.node, seen), channel: edge.outputSlot - 4 };
+        const linked = incoming.get(edge.node) ?? [];
         if (
-          source?.m_Type !== 'UnityEditor.ShaderGraph.SampleTexture2DNode' ||
-          ![4, 5, 6, 7].includes(input.outputSlot)
-        )
-          throw new Error('unsupported Unity shader graph interpolation amount');
-        const term = visit(input.node, new Set(ancestors).add(id).add(amount.node));
-        return {
-          textures: [],
-          factors: [],
-          blends: [
-            { a: resolveInput(0), b: resolveInput(1), weight: { term, channel: input.outputSlot - 4, invert: true } },
-          ],
-        };
-      }
+          current?.m_Type === 'UnityEditor.ShaderGraph.OneMinusNode' &&
+          edge.outputSlot === 1 &&
+          linked.length === 1 &&
+          linked[0]!.inputSlot === 0
+        ) {
+          const inner = maskFor(linked[0]!, next);
+          return inner ? { ...inner, invert: !inner.invert } : undefined;
+        }
+        if (
+          current?.m_Type === 'UnityEditor.ShaderGraph.MultiplyNode' &&
+          edge.outputSlot === 2 &&
+          linked.length === 2 &&
+          new Set(linked.map((entry) => entry.inputSlot)).size === 2 &&
+          linked.every((entry) => [0, 1].includes(entry.inputSlot))
+        ) {
+          for (const index of [0, 1]) {
+            const factorEdge = linked[index]!;
+            const factorNode = byId.get(factorEdge.node);
+            if (factorEdge.outputSlot !== 0 || factorNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode') continue;
+            const property = byId.get(nodeId(factorNode.m_Property));
+            if (property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty') continue;
+            const mask = maskFor(linked[1 - index]!, next);
+            if (!mask || mask.invert) continue;
+            const factor = visit(factorEdge.node, next);
+            return { ...mask, term: { ...mask.term, factors: [...mask.term.factors, ...factor.factors] } };
+          }
+        }
+        return undefined;
+      };
+      const mask = maskFor(amount, new Set(ancestors).add(id));
+      if (mask)
+        return { textures: [], factors: [], blends: [{ a: resolveInput(0), b: resolveInput(1), weight: mask }] };
       if (
         amount.outputSlot !== 0 ||
         amountNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode' ||

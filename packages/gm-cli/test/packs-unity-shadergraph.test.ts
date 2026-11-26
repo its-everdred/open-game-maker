@@ -223,6 +223,28 @@ Material:
   expect(shaderGraphBase(maskedDocs.map((doc) => JSON.stringify(doc)).join('\n')).blends).toMatchObject([
     { weight: { term: { textures: ['_SampleTexture2D_mask_Texture_1'] }, channel: 0, invert: true } },
   ]);
+  maskedDocs[0]!.m_Edges = [
+    edge('lerp', 'base', 0, 3),
+    edge('a', 'lerp', 0),
+    edge('b', 'lerp', 1),
+    edge('inverse', 'lerp', 2, 1),
+    edge('scale', 'inverse', 0, 2),
+    edge('mask', 'scale', 0, 4),
+    edge('amount', 'scale', 1),
+  ];
+  maskedDocs.push({
+    m_ObjectId: 'scale',
+    m_Type: 'UnityEditor.ShaderGraph.MultiplyNode',
+  } as (typeof maskedDocs)[number]);
+  expect(shaderGraphBase(maskedDocs.map((doc) => JSON.stringify(doc)).join('\n')).blends).toMatchObject([
+    {
+      weight: {
+        term: { textures: ['_SampleTexture2D_mask_Texture_1'], factors: [{ key: '_Weight', kind: 'scalar' }] },
+        channel: 0,
+        invert: true,
+      },
+    },
+  ]);
 });
 
 it('preserves a literal graph color independently of material properties', async () => {

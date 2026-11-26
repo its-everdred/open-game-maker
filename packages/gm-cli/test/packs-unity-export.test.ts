@@ -96,7 +96,7 @@ it.skipIf(!available)(
                       textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
                       texturePaths: [mask],
                       textureSrgb: [false],
-                      color: [1, 1, 1, 1],
+                      color: [0.5, 0.5, 0.5, 0.5],
                     },
                     channel: 0,
                     invert: true,
@@ -140,7 +140,7 @@ it.skipIf(!available)(
                       textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
                       texturePaths: [mask],
                       textureSrgb: [false],
-                      color: [1, 1, 1, 1],
+                      color: [0.5, 0.5, 0.5, 0.5],
                     },
                     channel: 0,
                     invert: true,
@@ -217,14 +217,14 @@ it.skipIf(!available)(
       expect(textureTransform?.getScale()).toEqual([2, 3]);
       expect(textureTransform?.getOffset()[0]).toBeCloseTo(0.25, 5);
       const pixels = await sharp(material.getBaseColorTexture()!.getImage()!).ensureAlpha().raw().toBuffer();
-      expect(pixels[0]).toBeGreaterThan(45);
-      expect(pixels[0]).toBeLessThan(51);
-      expect(pixels[1]).toBeGreaterThan(106);
-      expect(pixels[1]).toBeLessThan(113);
-      expect(pixels[2]).toBeGreaterThan(68);
-      expect(pixels[2]).toBeLessThan(75);
-      expect(pixels[4]).toBeGreaterThan(62);
-      expect(pixels[4]).toBeLessThan(69);
+      expect(pixels[0]).toBeGreaterThan(42);
+      expect(pixels[0]).toBeLessThan(49);
+      expect(pixels[1]).toBeGreaterThan(94);
+      expect(pixels[1]).toBeLessThan(102);
+      expect(pixels[2]).toBeGreaterThan(59);
+      expect(pixels[2]).toBeLessThan(67);
+      expect(pixels[4]).toBeGreaterThan(67);
+      expect(pixels[4]).toBeLessThan(74);
       await expect(exportUnityAssembly(plan, output)).rejects.toMatchObject({ code: 'EEXIST' });
       expect(await readFile(output)).toEqual(bytes);
     } finally {
