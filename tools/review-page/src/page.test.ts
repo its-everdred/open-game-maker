@@ -42,6 +42,9 @@ it('saves phase withdrawal alongside an existing choice', async () => {
   dom.window.document.querySelector<HTMLButtonElement>('button.adv')!.click();
   await vi.waitFor(() => expect(writes).toHaveLength(3));
   expect(writes[2]).toMatchObject({ choice: 'yes', withdrawn: 'prototype' });
+  dom.window.document.querySelector<HTMLButtonElement>('button[data-id="yes"]')!.click();
+  await vi.waitFor(() => expect(writes).toHaveLength(4));
+  expect(writes[3]).toMatchObject({ choice: 'yes', withdrawn: 'prototype' });
   dom.window.close();
 }, 30000);
 

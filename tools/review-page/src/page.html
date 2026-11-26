@@ -483,8 +483,8 @@
             label: p.label,
             ...(p.notes ? { notes: p.notes } : {}),
             ...(s.adv ? { advance: s.adv } : {}),
-            ...(!s.adv && saved[c.key]?.advance
-              ? { withdrawn: saved[c.key].advance }
+            ...(!s.adv && (saved[c.key]?.advance || saved[c.key]?.withdrawn)
+              ? { withdrawn: saved[c.key].advance || saved[c.key].withdrawn }
               : p.withdrawn
                 ? { withdrawn: p.withdrawn }
                 : {}),
