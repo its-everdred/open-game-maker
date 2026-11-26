@@ -25,8 +25,21 @@ export interface InputMergerOptions {
   mapFrame?: (frame: ActionFrame) => ActionFrame;
 }
 
+function active(value: ActionValue | undefined): boolean {
+  if (value === undefined) return false;
+  return typeof value === 'boolean' ? value : typeof value === 'number' ? value !== 0 : value.x !== 0 || value.y !== 0;
+}
+
 function mergeInto(target: Actions, source: Actions): void {
-  for (const [action, value] of Object.entries(source)) target[action] = structuredClone(value);
+  for (const [action, value] of Object.entries(source)) {
+    // An idle device must not cancel another device's active action.
+    if (!active(value) && active(target[action])) continue;
+    target[action] = structuredClone(value);
+  }
+}
+
+function hasActivity(actions: Actions | undefined): boolean {
+  return actions !== undefined && Object.values(actions).some(active);
 }
 
 export class InputMerger {
@@ -75,7 +88,8 @@ export class InputMerger {
       this.dropped += 1;
       return;
     }
-    this.setHeld(frame.playerIndex, frame.source, frame.actions);
+    if (frame.cancelPending) this.pendingPresses.get(frame.playerIndex)?.delete(frame.source);
+    this.setHeld(frame.playerIndex, frame.source, frame.actions, frame.cancelPending);
   }
 
   setKeyboardMapping(mapping: RigInputMapping['keyboard']): void {
@@ -131,6 +145,7 @@ export class InputMerger {
       .map((playerIndex): ActionFrame => {
         const actions: Actions = {};
         let source: Source = 'keyboard';
+        let activeSource: Source | undefined;
         let lookSource: Source | undefined;
         for (const candidate of sourceOrder) {
           const held = this.held.get(playerIndex)?.get(candidate);
@@ -141,8 +156,15 @@ export class InputMerger {
           const pending = this.pendingPresses.get(playerIndex)?.get(candidate);
           if (pending) mergeInto(actions, pending);
           if (transient) mergeInto(actions, transient);
-          if (held && 'look' in held) lookSource = candidate;
-          if (transient && 'look' in transient) lookSource = candidate;
+          if (held && active(held.look)) lookSource = candidate;
+          if (transient && active(transient.look)) lookSource = candidate;
+          if (
+            hasActivity(held) ||
+            hasActivity(pending) ||
+            hasActivity(transient) ||
+            (candidate === 'keyboard' && playerIndex === this.localPlayerIndex && hasActivity(keyboardSample))
+          )
+            activeSource = candidate;
           if (
             (held && Object.keys(held).length > 0) ||
             (pending && Object.keys(pending).length > 0) ||
@@ -150,7 +172,12 @@ export class InputMerger {
           )
             source = candidate;
         }
-        const frame = { playerIndex, tick, source: lookSource ?? source, actions } satisfies ActionFrame;
+        const frame = {
+          playerIndex,
+          tick,
+          source: lookSource ?? activeSource ?? source,
+          actions,
+        } satisfies ActionFrame;
         return this.options.mapFrame?.(frame) ?? frame;
       });
     this.transient.clear();
@@ -176,12 +203,15 @@ export class InputMerger {
     return Number.isInteger(playerIndex) && playerIndex >= 0 && playerIndex < this.maxLocalPlayers;
   }
 
-  private setHeld(playerIndex: number, source: Source, actions: Actions): void {
+  private setHeld(playerIndex: number, source: Source, actions: Actions, cancelPending = false): void {
     const bySource = this.held.get(playerIndex) ?? new Map<Source, Actions>();
     const previous = bySource.get(source) ?? {};
     const presses: Actions = {};
     for (const [action, value] of Object.entries(actions)) {
+      if (cancelPending) continue;
       if (value === true && previous[action] !== true) presses[action] = true;
+      // A D-pad is a stick action; preserve a direction that begins and ends between fixed steps.
+      if (source === 'touch' && typeof value === 'object' && (value.x !== 0 || value.y !== 0)) presses[action] = value;
     }
     if (Object.keys(presses).length) {
       const pending = this.pendingPresses.get(playerIndex) ?? new Map<Source, Actions>();

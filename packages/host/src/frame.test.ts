@@ -385,12 +385,8 @@ describe('createGameFrame', () => {
     frame.dispose();
   });
 
-  it('selects controls from the manifest while honoring self-drawn controls and explicit mappings', () => {
-    const readyWith = (
-      actions: Record<string, 'stick' | 'button'>,
-      touch?: 'self',
-      mapping?: 'tap' | 'stick' | 'two-stick',
-    ) => {
+  it('selects controls from the manifest and explicit mappings', () => {
+    const readyWith = (actions: Record<string, 'stick' | 'button'>, mapping?: 'tap' | 'stick' | 'two-stick') => {
       const on = vi.spyOn(HostBridge.prototype, 'on');
       const frame = createGameFrame({
         container: document.createElement('div'),
@@ -407,7 +403,7 @@ describe('createGameFrame', () => {
       });
       const onReady = on.mock.calls.find(([type]) => type === 'ready')?.[1] as (payload: unknown) => void;
       on.mockRestore();
-      onReady({ manifest: { inputs: { actions, touch } }, marks: [] });
+      onReady({ manifest: { inputs: { actions } }, marks: [] });
       const layer = frame.iframe.nextElementSibling as HTMLElement;
       const result = {
         sticks: layer.querySelectorAll('[data-stick]').length,
@@ -420,7 +416,6 @@ describe('createGameFrame', () => {
     expect(readyWith({ jump: 'button' })).toEqual({ sticks: 0, buttons: 1 });
     expect(readyWith({ move: 'stick', jump: 'button' })).toEqual({ sticks: 1, buttons: 1 });
     expect(readyWith({ move: 'stick', look: 'stick', fire: 'button' })).toEqual({ sticks: 2, buttons: 1 });
-    expect(readyWith({ move: 'stick', jump: 'button' }, 'self')).toEqual({ sticks: 0, buttons: 0 });
-    expect(readyWith({ move: 'stick', jump: 'button' }, undefined, 'tap')).toEqual({ sticks: 0, buttons: 0 });
+    expect(readyWith({ move: 'stick', jump: 'button' }, 'tap')).toEqual({ sticks: 0, buttons: 0 });
   });
 });

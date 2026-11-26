@@ -11,6 +11,12 @@ const BUTTON_PITCH = 76;
 /* What `@gm/sdk/menu` reads: the first stick moves focus, the first button confirms and the third goes back. */
 const MENU_BUTTONS = [0, 2];
 
+const LANDSCAPE_CSS = `
+@media (orientation: landscape) {
+  [data-ogm-dpad] { left: 8px !important; bottom: 8px !important; }
+  [data-ogm-compact-button] { right: var(--ogm-landscape-right) !important; bottom: var(--ogm-landscape-bottom) !important; }
+}`;
+
 /** `rotateCCW` → `Rotate CCW`, `soft_drop` → `Soft drop`: what a player hears, never the raw id. */
 export function actionLabel(action: string): string {
   const words = action
@@ -57,6 +63,7 @@ export class TouchOverlay {
   private suppressedUntil = -Infinity;
   private showTimer: ReturnType<typeof setTimeout> | undefined;
   private keepaliveTimer: ReturnType<typeof setInterval> | undefined;
+  private clearDpadPointers: (() => void) | undefined;
 
   constructor(private readonly options: TouchOverlayOptions) {
     this.inputs = options.inputs;
@@ -66,6 +73,12 @@ export class TouchOverlay {
     this.hostDocument = options.document ?? document;
     this.coarsePointer =
       options.coarsePointer ?? (() => this.hostWindow.matchMedia?.('(pointer: coarse)').matches ?? false);
+    if (!this.hostDocument.getElementById('ogm-touch-landscape-style')) {
+      const style = this.hostDocument.createElement('style');
+      style.id = 'ogm-touch-landscape-style';
+      style.textContent = LANDSCAPE_CSS;
+      this.hostDocument.head.append(style);
+    }
     Object.assign(options.layer.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
     this.hostWindow.addEventListener('keydown', this.onKeydown);
     this.hostDocument.addEventListener('gesturestart', this.preventGesture, { passive: false });
@@ -91,8 +104,11 @@ export class TouchOverlay {
     if (layout === this.layout) return;
     this.deactivate(true);
     this.layout = layout;
-    this.applyLayout();
-    this.refreshVisibility();
+    if (this.inputs.controls) this.render();
+    else {
+      this.applyLayout();
+      this.refreshVisibility();
+    }
   }
 
   /** Hidden while the game has not drawn its first frame. */
@@ -122,26 +138,43 @@ export class TouchOverlay {
   private render(): void {
     const layer = this.options.layer;
     layer.replaceChildren();
+    this.clearDpadPointers = undefined;
     this.outsideMenu = [];
+    const controls = this.inputs.controls;
+    const selected = controls && Object.hasOwn(controls, this.layout) ? controls[this.layout] : undefined;
+    if (this.inputs.controls && !selected) return this.refreshVisibility();
     const entries = Object.entries(this.inputs.actions);
-    if (this.touch === 'tap') return this.refreshVisibility();
-    const sticks = entries.filter(([, kind]) => kind === 'stick').slice(0, this.touch === 'two-stick' ? 2 : 1);
-    sticks.forEach(([action], index) => {
-      const stick = this.createStick(action, index);
-      if (index > 0) this.outsideMenu.push(stick);
-      layer.append(stick);
-    });
-    const buttons = entries.filter(([, kind]) => kind === 'button').slice(0, 5);
-    if (entries.filter(([, kind]) => kind === 'button').length > 5) {
-      console.warn('TouchOverlay supports at most five button actions');
-    }
-    /* With a stick in each corner the buttons sit above the right one, three across so they fit a landscape phone. */
-    const aboveStick = this.touch === 'two-stick' && sticks.length > 1;
+    if (!selected && this.touch === 'tap') return this.refreshVisibility();
+    const sticks = selected
+      ? [selected.stick, ...(selected.layout === 'two-stick' ? [selected.secondStick] : [])].filter(
+          (action): action is string => !!action && this.inputs.actions[action] === 'stick',
+        )
+      : entries
+          .filter(([, kind]) => kind === 'stick')
+          .slice(0, this.touch === 'two-stick' ? 2 : 1)
+          .map(([action]) => action);
+    if (selected?.layout !== 'tap')
+      sticks.forEach((action, index) => {
+        const stick = selected?.layout === 'dpad' ? this.createDpad(action) : this.createStick(action, index);
+        if (!selected && index > 0) this.outsideMenu.push(stick);
+        layer.append(stick);
+      });
+    const buttons = selected
+      ? selected.buttons
+          .filter((button) => this.inputs.actions[button.action] === 'button')
+          .map((button) => [button.action, button] as const)
+      : entries
+          .filter(([, kind]) => kind === 'button')
+          .slice(0, 5)
+          .map(([action]) => [action, undefined] as const);
+    const aboveStick =
+      (selected?.layout === 'two-stick' || (!selected && this.touch === 'two-stick')) && sticks.length > 1;
     const base = EDGE + (aboveStick ? STICK_SIZE + 12 : 0);
     const columns = aboveStick ? 3 : 2;
-    buttons.forEach(([action], index) => {
-      const button = this.createButton(action, index, base, columns);
-      if (!MENU_BUTTONS.includes(index)) this.outsideMenu.push(button);
+    buttons.forEach(([action, declaration], index) => {
+      const button = this.createButton(action, index, base, columns, declaration);
+      if (!aboveStick) button.dataset.ogmCompactButton = '';
+      if (!selected && !MENU_BUTTONS.includes(index)) this.outsideMenu.push(button);
       layer.append(button);
     });
     this.applyLayout();
@@ -158,6 +191,10 @@ export class TouchOverlay {
       left: index === 0 ? `${EDGE}px` : 'auto',
       right: index === 1 ? `${EDGE}px` : 'auto',
       bottom: `${EDGE}px`,
+      transform:
+        index === 0
+          ? 'translate(env(safe-area-inset-left, 0px), calc(-1 * env(safe-area-inset-bottom, 0px)))'
+          : 'translate(calc(-1 * env(safe-area-inset-right, 0px)), calc(-1 * env(safe-area-inset-bottom, 0px)))',
       width: `${STICK_SIZE}px`,
       height: `${STICK_SIZE}px`,
       borderRadius: '50%',
@@ -221,15 +258,115 @@ export class TouchOverlay {
     return stick;
   }
 
-  private createButton(action: string, index: number, base: number, columns: number): HTMLButtonElement {
+  private createDpad(action: string): HTMLElement {
+    const pad = this.hostDocument.createElement('div');
+    pad.dataset.stick = action;
+    pad.dataset.dpad = '';
+    pad.dataset.ogmDpad = '';
+    pad.setAttribute('role', 'group');
+    pad.setAttribute('aria-label', actionLabel(action));
+    Object.assign(pad.style, {
+      position: 'absolute',
+      left: `${EDGE}px`,
+      bottom: `${EDGE}px`,
+      transform: 'translate(env(safe-area-inset-left, 0px), calc(-1 * env(safe-area-inset-bottom, 0px)))',
+      width: '132px',
+      height: '132px',
+      pointerEvents: 'auto',
+      touchAction: 'none',
+    });
+    const directions = [
+      { name: 'up', x: 0, y: -1, left: 44, top: 0, icon: 'jump' },
+      { name: 'left', x: -1, y: 0, left: 0, top: 44, icon: 'left' },
+      { name: 'right', x: 1, y: 0, left: 88, top: 44, icon: 'right' },
+      { name: 'down', x: 0, y: 1, left: 44, top: 88, icon: 'down' },
+    ] as const;
+    const active = new Map<number, (typeof directions)[number] | undefined>();
+    this.clearDpadPointers = () => active.clear();
+    const update = () => {
+      let x = 0,
+        y = 0;
+      for (const direction of active.values()) {
+        if (!direction) continue;
+        x += direction.x;
+        y += direction.y;
+      }
+      this.actions[action] = { x: Math.sign(x), y: Math.sign(y) };
+      this.emit();
+    };
+    for (const direction of directions) {
+      const button = this.hostDocument.createElement('button');
+      button.type = 'button';
+      button.setAttribute('aria-label', `${actionLabel(action)} ${direction.name}`);
+      button.dataset.direction = direction.name;
+      button.innerHTML = TOUCH_ICON_SVG[direction.icon];
+      Object.assign(button.style, {
+        position: 'absolute',
+        left: `${direction.left}px`,
+        top: `${direction.top}px`,
+        width: '44px',
+        height: '44px',
+        padding: '5px',
+        color: 'white',
+        border: '1px solid rgba(255, 255, 255, 0.6)',
+        borderRadius: '6px',
+        background: 'rgba(0, 0, 0, 0.35)',
+        touchAction: 'none',
+      });
+      button.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        if (!this.shown(pad)) return;
+        try {
+          button.setPointerCapture(event.pointerId);
+        } catch {
+          /* Partial pointer capture support. */
+        }
+        active.set(event.pointerId, direction);
+        this.startKeepalive();
+        update();
+      });
+      button.addEventListener('pointermove', (event) => {
+        if (!active.has(event.pointerId) || !this.shown(pad)) return;
+        const hit = this.hostDocument.elementFromPoint(event.clientX, event.clientY)?.closest('[data-direction]');
+        const next =
+          hit && pad.contains(hit)
+            ? directions.find((item) => item.name === hit.getAttribute('data-direction'))
+            : undefined;
+        if (active.get(event.pointerId) === next) return;
+        active.set(event.pointerId, next);
+        update();
+      });
+      const release = (event: PointerEvent) => {
+        if (!active.delete(event.pointerId) || !this.shown(pad)) return;
+        update();
+        this.stopKeepaliveIfIdle();
+      };
+      button.addEventListener('pointerup', release);
+      button.addEventListener('pointercancel', release);
+      pad.append(button);
+    }
+    return pad;
+  }
+
+  private createButton(
+    action: string,
+    index: number,
+    base: number,
+    columns: number,
+    declaration?: NonNullable<GameManifest['inputs']['controls']>[string]['buttons'][number],
+  ): HTMLButtonElement {
     const button = this.hostDocument.createElement('button');
     button.type = 'button';
     button.dataset.action = action;
-    button.setAttribute('aria-label', actionLabel(action));
+    button.setAttribute('aria-label', declaration?.label ?? actionLabel(action));
+    if (declaration) {
+      button.dataset.behavior = declaration.behavior;
+      button.setAttribute('aria-description', declaration.behavior === 'hold' ? 'Hold' : 'Tap');
+    }
     const size = index === 0 ? 64 : 44;
     const icon = this.hostDocument.createElement('span');
     icon.setAttribute('aria-hidden', 'true');
-    const name = actionIcon(action, this.inputs.icons);
+    const name = declaration?.icon ?? actionIcon(action, this.inputs.icons);
     icon.dataset.icon = name;
     icon.innerHTML = TOUCH_ICON_SVG[name];
     icon.style.display = 'block';
@@ -237,10 +374,13 @@ export class TouchOverlay {
     icon.style.height = `${Math.round(size * 0.5)}px`;
     button.append(icon);
     const inset = (64 - size) / 2;
+    button.style.setProperty('--ogm-landscape-right', `${8 + index * 64 + inset}px`);
+    button.style.setProperty('--ogm-landscape-bottom', `${8 + inset}px`);
     Object.assign(button.style, {
       position: 'absolute',
       right: `${EDGE + (index % columns) * BUTTON_PITCH + inset}px`,
       bottom: `${base + Math.floor(index / columns) * BUTTON_PITCH + inset}px`,
+      transform: 'translate(calc(-1 * env(safe-area-inset-right, 0px)), calc(-1 * env(safe-area-inset-bottom, 0px)))',
       width: `${size}px`,
       height: `${size}px`,
       display: 'grid',
@@ -276,12 +416,13 @@ export class TouchOverlay {
     return button;
   }
 
-  private emit(): void {
+  private emit(cancelPending = false): void {
     if (!this.enabled || this.now() < this.suppressedUntil) return;
     this.options.onFrame({
       playerIndex: this.options.playerIndex,
       tick: Math.max(0, Math.floor(this.now())),
       source: 'touch',
+      ...(cancelPending ? { cancelPending: true } : {}),
       actions: { ...this.actions },
     });
   }
@@ -295,7 +436,7 @@ export class TouchOverlay {
   }
 
   private shown(control: HTMLElement): boolean {
-    return !this.options.layer.hidden && control.style.visibility !== 'hidden';
+    return this.options.layer.contains(control) && !this.options.layer.hidden && control.style.visibility !== 'hidden';
   }
 
   private applyLayout(): void {
@@ -319,6 +460,7 @@ export class TouchOverlay {
   }
 
   private deactivate(emitReset: boolean): void {
+    this.clearDpadPointers?.();
     let active = false;
     for (const [action, value] of Object.entries(this.actions)) {
       if (typeof value === 'boolean') {
@@ -336,7 +478,7 @@ export class TouchOverlay {
       clearInterval(this.keepaliveTimer);
       this.keepaliveTimer = undefined;
     }
-    if (active && emitReset) this.emit();
+    if (emitReset && (active || Object.keys(this.actions).length > 0)) this.emit(true);
   }
 
   private stopKeepaliveIfIdle(): void {

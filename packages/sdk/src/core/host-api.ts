@@ -1,4 +1,5 @@
 import type { ActionFrame, ActionValue, GmTestHooks, HostApi, PlayerSettings, Viewport } from '@ogm/contracts';
+import { setMenuControlLayout } from '../menu/host-frames.js';
 
 export type SendEnvelope = (type: string, payload: unknown, replyTo?: string) => void;
 
@@ -66,7 +67,10 @@ export class SdkHostApi implements HostApi {
   };
 
   readonly controls: NonNullable<HostApi['controls']> = {
-    set: ({ layout }) => this.send('host.controls', { layout }),
+    set: ({ layout }) => {
+      setMenuControlLayout(layout);
+      this.send('host.controls', { layout });
+    },
   };
 
   readonly test: HostApi['test'] = {

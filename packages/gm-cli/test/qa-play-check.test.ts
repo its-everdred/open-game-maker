@@ -177,8 +177,15 @@ describe('qa play-check manifest', () => {
   /* Restorebound declares a move stick but draws its own touch controls: no host stick is owed to it. */
   it('expects a host stick only for a move stick the game does not draw itself', () => {
     expect(expectsHostStick({ inputs: { actions: { move: 'stick' } } })).toBe(true);
-    expect(expectsHostStick({ inputs: { actions: { move: 'stick' }, touch: 'self' } })).toBe(false);
     expect(expectsHostStick({ inputs: { actions: { confirm: 'button' } } })).toBe(false);
+    expect(
+      expectsHostStick({ inputs: { actions: { move: 'stick' }, controls: { gameplay: { layout: 'tap' } } } }),
+    ).toBe(false);
+    expect(
+      expectsHostStick({
+        inputs: { actions: { move: 'stick' }, controls: { gameplay: { layout: 'dpad', stick: 'move' } } },
+      }),
+    ).toBe(true);
   });
 
   it('presses the key bound to moving right, else any move', () => {

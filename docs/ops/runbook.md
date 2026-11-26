@@ -565,7 +565,7 @@ from its hosted `manifest.json` (the first mode's `tap`, else `playArea.tap`), a
 host's move stick, else a key bound to `move.right`, else a swipe. It fails when the bridge is not ready, the shell
 shows Try again, no first frame arrives, a tap never appears, the frame is blank, or the input changes the frame no
 more than waiting does. A swipe that moves nothing is reported as unchecked instead, unless the host should have drawn
-the game's move stick (a `move` stick without `touch: "self"`). One game plays at a time, in the capture slot, and
+the game's declared `move` stick. One game plays at a time, in the capture slot, and
 each play has a load-adjusted wall-time budget capped at 340 s; capture-slot waiting is capped at 90 s. Published JSON fetches retry transient failures and report their final cause. A boot timeout is inconclusive. A game that fails is played once more and fails only when both plays fail: a loaded host
 can miss one boot, a broken game misses both.
 

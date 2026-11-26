@@ -22,6 +22,9 @@
         "network"
       ]
     },
+    "cancelPending": {
+      "type": "boolean"
+    },
     "actions": {
       "type": "object",
       "propertyNames": {

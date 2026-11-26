@@ -1,8 +1,9 @@
 import type { ActionFrame } from '@ogm/contracts/input';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { deliverMenuFrame, setMenuActionKinds } from './host-frames.js';
+import { deliverMenuFrame, setMenuActionKinds, setMenuControlInputs } from './host-frames.js';
 import { createMenu, type Menu } from './index.js';
+import { SdkHostApi } from '../core/host-api.js';
 
 // Dusk Helm's shape: one stick, then buttons in the order the host draws them (first = A) and binds pads (a, x, b).
 const kinds = { move: 'stick', attack: 'button', block: 'button', charge: 'button' } as const;
@@ -58,6 +59,41 @@ describe('createMenu', () => {
     const menu = open({ root });
     expect(menu.focused?.id).toBe('play');
     expect(document.querySelector('[data-gm-focus]')?.id).toBe('play');
+  });
+
+  it('uses the active named set for touch confirm and back', () => {
+    setMenuControlInputs({
+      actions: {
+        move: 'stick',
+        attack: 'button',
+        block: 'button',
+        charge: 'button',
+        accept: 'button',
+        cancel: 'button',
+      },
+      controls: {
+        menu: {
+          layout: 'dpad',
+          stick: 'move',
+          buttons: [
+            { action: 'accept', icon: 'confirm', label: 'Confirm', behavior: 'tap' },
+            { action: 'cancel', icon: 'back', label: 'Back', behavior: 'tap' },
+          ],
+        },
+      },
+    });
+    const host = new SdkHostApi(
+      () => undefined,
+      () => undefined,
+    );
+    host.controls.set({ layout: 'menu' });
+    const { root, clicks } = title();
+    const onBack = vi.fn();
+    open({ root, onBack });
+    deliverMenuFrame(frame('touch', { accept: true }));
+    deliverMenuFrame(frame('touch', { accept: false, cancel: true }));
+    expect(clicks).toEqual(['play']);
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 
   it('starts the game from the title when Enter or Space is pressed, once per press', () => {

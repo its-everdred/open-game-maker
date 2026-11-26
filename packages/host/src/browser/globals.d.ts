@@ -1,5 +1,6 @@
 interface Window {
   __host: {
+    frame: import('../frame.js').GameFrame;
     errors: unknown[];
     ready: { id: string }[];
     relays: unknown[];

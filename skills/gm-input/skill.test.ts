@@ -19,13 +19,14 @@ describe('gm-input skill', () => {
     expect(text).toContain('manifest.inputs.actions');
     expect(text).toContain('playerIndex');
     expect(text).toContain('host owns gamepad');
-    expect(text).toContain('host owns the touch overlay');
+    expect(text).toContain('the touch overlay');
     /* The cross-device default (#600): phone buttons, laptop keyboard and gamepad, proven per game, never universal. */
     expect(text).toMatch(/phone with ordinary translucent on-screen buttons/);
     expect(text).toMatch(/keyboard\s+and a connected gamepad/);
-    expect(text).toContain('keep button actions to five');
-    expect(text).toContain('including for games with no stick');
-    expect(text).toContain("`inputs.touch: 'self'`");
+    expect(text).toContain('up to five buttons');
+    expect(text).toContain('`inputs.controls`');
+    expect(text).toContain('games must not draw a controller');
+    expect(text).not.toContain("`inputs.touch: 'self'`");
     expect(text).toContain('Never claim universal device support');
     expect(text).toContain('`phone-touch.json`');
     expect(text).toContain('`laptop-keys.json`');

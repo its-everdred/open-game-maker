@@ -265,6 +265,8 @@ export type HostToGame = z.infer<typeof hostToGameSchema>;
 const sharedMedia = (extensions: string) => z.string().regex(new RegExp(`^/a/[0-9a-f]{64}\\.(${extensions})$`, 'u'));
 const buildLoading = gameManifestSchema.shape.loading.unwrap().shape;
 const readyManifestSchema = gameManifestSchema.extend({
+  // Published builds embed their original manifest and cannot be rewritten. New manifests still reject this field.
+  inputs: gameManifestSchema.shape.inputs.extend({ touch: z.literal('self').optional() }),
   logo: gameManifestSchema.shape.logo.unwrap().or(sharedMedia('png|webp|svg')).optional(),
   loading: z
     .looseObject({

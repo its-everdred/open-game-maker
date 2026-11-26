@@ -36,7 +36,7 @@ const BUTTONS: Record<string, number> = {
 };
 
 export function defaultGamepadMapping(actions: ActionKinds): GamepadMapping {
-  const mapping: GamepadMapping = {};
+  const mapping: GamepadMapping = Object.create(null) as GamepadMapping;
   const sticks = ['leftStick', 'rightStick'];
   const buttons = ['a', 'x', 'b', 'y', 'lb', 'rb'];
   let stick = 0;
@@ -54,6 +54,7 @@ export class GamepadPoller {
   private readonly frameCallbacks = new Set<FrameCallback>();
   private readonly snapshotCallbacks = new Set<SnapshotCallback>();
   private readonly claims = new Map<number, number>();
+  private readonly blocked = new Map<number, Set<string>>();
   private readonly previous = new Map<number, { actions: Record<string, ActionValue>; sentAt: number }>();
   private readonly getGamepads: () => readonly (Gamepad | null)[];
   private readonly raf: (callback: FrameRequestCallback) => number;
@@ -71,9 +72,37 @@ export class GamepadPoller {
     this.now = options.now ?? (() => performance.now());
   }
 
-  setMapping(mapping: GamepadMapping | undefined, actions: ActionKinds): void {
+  setMapping(mapping: GamepadMapping | undefined, actions: ActionKinds, contextChanged = false): void {
+    const nextMapping = { ...defaultGamepadMapping(actions), ...mapping };
+    if (
+      !contextChanged &&
+      JSON.stringify(this.actions) === JSON.stringify(actions) &&
+      JSON.stringify(this.mapping) === JSON.stringify(nextMapping)
+    )
+      return;
+    // Release the previous context before a physical button can acquire a new meaning.
+    for (const [playerIndex, previous] of this.previous) {
+      const neutral = this.neutralActions(previous.actions);
+      const blocked = this.blocked.get(playerIndex) ?? new Set<string>();
+      for (const [action, value] of Object.entries(previous.actions)) {
+        const binding = this.mapping[action];
+        if (binding && this.active(value)) blocked.add(binding);
+      }
+      if (blocked.size) this.blocked.set(playerIndex, blocked);
+      if (this.mode === 'play') {
+        const frame: ActionFrame = {
+          playerIndex,
+          tick: Math.max(0, Math.floor(this.now())),
+          source: 'gamepad',
+          cancelPending: true,
+          actions: neutral,
+        };
+        for (const callback of this.frameCallbacks) callback(frame);
+      }
+    }
+    this.previous.clear();
     this.actions = actions;
-    this.mapping = { ...defaultGamepadMapping(actions), ...mapping };
+    this.mapping = nextMapping;
   }
 
   setMode(mode: 'play' | 'edit'): void {
@@ -120,6 +149,7 @@ export class GamepadPoller {
       }
       this.claims.delete(deviceIndex);
       this.previous.delete(playerIndex);
+      this.blocked.delete(playerIndex);
     }
     for (const pad of pads) {
       if (!pad?.connected) continue;
@@ -135,7 +165,7 @@ export class GamepadPoller {
         for (const callback of this.snapshotCallbacks) callback(snapshot);
         continue;
       }
-      const actions = this.mapActions(pad);
+      const actions = this.mapActions(pad, playerIndex);
       const previous = this.previous.get(playerIndex);
       if (previous && this.sameActions(previous.actions, actions) && at - previous.sentAt < 250) continue;
       this.previous.set(playerIndex, { actions, sentAt: at });
@@ -154,14 +184,30 @@ export class GamepadPoller {
     }
   }
 
-  private mapActions(pad: Gamepad): Record<string, ActionValue> {
-    const values: Record<string, ActionValue> = {};
+  private mapActions(pad: Gamepad, playerIndex: number): Record<string, ActionValue> {
+    const values: Record<string, ActionValue> = Object.create(null) as Record<string, ActionValue>;
+    const blocked = this.blocked.get(playerIndex);
+    for (const binding of blocked ?? []) {
+      const kind = binding === 'leftStick' || binding === 'rightStick' || binding === 'dpad' ? 'stick' : 'button';
+      if (!this.active(this.readBinding(pad, binding, kind))) blocked!.delete(binding);
+    }
     for (const [action, kind] of Object.entries(this.actions)) {
       const binding = this.mapping[action];
       if (!binding) continue;
-      values[action] = this.readBinding(pad, binding, kind);
+      const value = this.readBinding(pad, binding, kind);
+      if (blocked?.has(binding)) {
+        values[action] = this.neutralActions({ [action]: value })[action]!;
+      } else values[action] = value;
     }
     return values;
+  }
+
+  private active(value: ActionValue): boolean {
+    return typeof value === 'boolean'
+      ? value
+      : typeof value === 'number'
+        ? value !== 0
+        : value.x !== 0 || value.y !== 0;
   }
 
   private readBinding(pad: Gamepad, binding: string, kind: ActionKinds[string]): ActionValue {
