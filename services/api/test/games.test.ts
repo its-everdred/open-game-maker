@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { sweepPlaySessions } from '../src/analytics/retention.js';
 import { createGameRow } from '../src/games/games.js';
@@ -15,6 +15,10 @@ import { markComplete } from '../../games-host/src/layout.js';
 import { signBuildAccess } from '../src/games/build-access-token.js';
 
 const now = '2026-11-01T00:00:00.000Z';
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 const familyId = 'f-family';
 const creator: TestUser = {
   kind: 'user',
