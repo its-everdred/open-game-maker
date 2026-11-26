@@ -243,3 +243,11 @@ Call `host.haptics.pulse('light' | 'medium' | 'heavy')` for a short response, or
 Mark the visible board element with `data-gm-play-area`. For reserved control bands inside the game viewport, set `data-gm-control-top` and `data-gm-control-bottom` to their heights in CSS pixels. Fixed-aspect play areas can set `data-gm-play-area-aspect` to their width divided by height; the minimum fill then tracks the largest rectangle of that aspect that fits. The verification shell measures the board on each captured screen; see the `gm-verify` skill for thresholds and configuration.
 
 Canvas-rendered HUD elements can participate in the play-area gate by calling `reportUiSprites(() => sprites)` from `@gm/sdk`. Return current visible sprite bounds as `{ name, left, top, width, height }` in game-frame CSS pixels; set `overlayAllowed: true` for intentional overlays. Call the returned cleanup function when the reporter is no longer active. Mark the game rendering canvas and intentional DOM overlays with `data-gm-overlay-allowed`. If the rendering canvas is fully opaque, also mark it `data-gm-opaque` so the gate can ignore elements entirely behind it.
+
+## Effects (Effekseer)
+
+`@gm/sdk/vfx` plays Effekseer `.efk` effects on a canvas laid over the game canvas, for Phaser (`phaserCamera`) and
+three.js (`threeCamera`). `createVfx({ canvas, wasmUrl })` loads the runtime on first use; in Vite, import the wasm URL
+with `import wasmUrl from '@gm/sdk/vfx/effekseer.wasm?url'`. Pixel games set `pixelSize`, and optionally a `palette`,
+so effects render coarse and upscale with hard pixels. Each scene caps its effects and particles, and slow frames step
+quality down to off. The `gm-vfx` skill covers authoring effects by script and the budget.

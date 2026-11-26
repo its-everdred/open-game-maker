@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>vfx fixture</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #172128;
+      }
+      #stage {
+        position: relative;
+        margin: 24px 0 0 40px;
+      }
+      canvas {
+        display: block;
+      }
+      #game {
+        width: 640px;
+        height: 360px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><canvas id="game" width="640" height="360"></canvas></div>
+    <script type="module" src="/vfx/main.js"></script>
+  </body>
+</html>
