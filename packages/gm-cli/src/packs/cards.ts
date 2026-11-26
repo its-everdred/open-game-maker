@@ -5,6 +5,7 @@ import { basename, extname, join } from 'node:path';
 import { measureFont, measureGltf, measureImage } from '@ogm/asset-measure';
 import { validateCard, type AssetCard } from '@ogm/contracts';
 
+import { packMetadata } from './pack-metadata.js';
 import type { Item } from './identify.js';
 import type { Vendor } from './vendor.js';
 import { writeThumbnail } from './previews.js';
@@ -20,12 +21,16 @@ type CreateCardsOptions = {
   top: 'packs' | 'inspiration';
   id: string;
   title: string;
+  styleFamily?: AssetCard['style_family'];
+  cameras?: AssetCard['cameras'];
   version: string;
   tier: 1 | 2;
   vendor: Vendor;
   origin: 'vendor-pack' | 'drive-drop' | 'mirror';
   extracted: string;
   items: Item[];
+  sceneSources: string[];
+  prefabSources: string[];
   filesTotal: number;
   hashManifest: string;
   date: string;
@@ -159,6 +164,7 @@ export async function createCards(options: CreateCardsOptions): Promise<CardSet>
       title: options.title,
       license: 'NOASSERTION',
       rights: defaultRights(options.date),
+      ...packMetadata(options),
       collection_info: {
         vendor: options.vendor,
         version: options.version,
@@ -168,7 +174,10 @@ export async function createCards(options: CreateCardsOptions): Promise<CardSet>
         hash_manifest: `${options.top}/${options.id}/${options.version}/${options.hashManifest}`,
         files_total: options.filesTotal,
       },
-      provenance: { '*': { by: 'code', tool: 'gm-intake@0.1', at } },
+      provenance: {
+        '*': { by: 'code', tool: 'gm-intake@0.1', at },
+        settings: { by: 'filename', tool: 'gm-intake@0.1', at },
+      },
     },
     validationErrors,
   );

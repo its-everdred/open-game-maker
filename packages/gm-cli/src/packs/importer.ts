@@ -7,6 +7,7 @@ import { licenseFor } from '@ogm/asset-cards';
 import { createCards } from './cards.js';
 import { confirmCollection } from './confirm.js';
 import { identify } from './identify.js';
+import { LINE, sha256File } from './hashwalk.js';
 import type { DriveManifest, ImportOptions, QueueEntry } from './import-options.js';
 import { applyTier2Rights, filterLicensedItems, validateLicenseMap, type LicenseMap } from './license-map.js';
 import { archiveStem, unpack, type UnpackCaps } from './unpack.js';
@@ -206,15 +207,49 @@ async function publishCards(packRoot: string, cards: Awaited<ReturnType<typeof c
   await writeJson(join(packRoot, 'collection.card.json'), cards.collection);
 }
 
-async function hasSameVersion(packRoot: string, version: string, hashName: string, hash: string): Promise<boolean> {
+/** The old intake discarded engine scene files. Only accept its projection for byte-identical originals. */
+async function sameOriginals(left: string, right: string): Promise<boolean> {
+  let leftFiles: string[];
+  let rightFiles: string[];
   try {
-    const existing = await readFile(join(packRoot, version, hashName), 'utf8');
-    if (existing !== hash) throw new PackRefusal(`version ${version} already exists with different content`);
-    return true;
+    leftFiles = await filesUnder(left);
+    rightFiles = await filesUnder(right);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
     throw error;
   }
+  const leftPaths = leftFiles.map((file) => relative(left, file));
+  const rightPaths = rightFiles.map((file) => relative(right, file));
+  if (JSON.stringify(leftPaths) !== JSON.stringify(rightPaths)) return false;
+  for (let index = 0; index < leftFiles.length; index += 1) {
+    if ((await sha256File(leftFiles[index]!)) !== (await sha256File(rightFiles[index]!))) return false;
+  }
+  return true;
+}
+
+async function hasSameVersion(
+  packRoot: string,
+  version: string,
+  hashName: string,
+  hash: string,
+  candidateOriginals: string,
+): Promise<{ kind: 'exact' | 'legacy'; manifest: string } | null> {
+  let existing: string;
+  try {
+    existing = await readFile(join(packRoot, version, hashName), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+  if (existing === hash) return { kind: 'exact', manifest: existing };
+  const lines = hash.split('\n').filter(Boolean);
+  const parsed = lines.map((line) => LINE.exec(line));
+  const legacy = parsed.every(Boolean)
+    ? `${lines.filter((_line, index) => !/\.(?:meta|unity|prefab|umap)$/i.test(parsed[index]![3]!)).join('\n')}\n`
+    : '';
+  if (legacy === existing && (await sameOriginals(join(packRoot, version, 'originals'), candidateOriginals)))
+    return { kind: 'legacy', manifest: existing };
+  throw new PackRefusal(`version ${version} already exists with different content`);
 }
 
 async function writeIntakeIfMissing(path: string, value: unknown): Promise<void> {
@@ -277,28 +312,41 @@ export async function importPack(options: ImportOptions) {
     let licenseDropped: string[] = [];
     if (licenseMap) {
       try {
-        licenseDropped = await filterLicensedItems(extracted, identified.items, licenseMap);
+        licenseDropped = await filterLicensedItems(extracted, identified.items, licenseMap, [
+          ...identified.sceneSources.filter((path) => !/\.glb$/i.test(path)),
+          ...identified.prefabSources,
+        ]);
       } catch (error) {
         throw new PackRefusal(error instanceof Error ? error.message : String(error));
       }
       identified = await identify(extracted);
       identified.dropped = [...new Set([...securityDropped, ...identified.dropped])].sort();
     }
-    const extractedFiles = await filesUnder(extracted);
+    let extractedFiles = await filesUnder(extracted);
     const hashName = 'hash-manifest.txt';
     await writeText(join(stagedVersion, hashName), identified.hashManifest);
     const packRoot = join(topDir, id);
     const collectionId = `t${tier}:${id}@${version}`;
     const requestedLicense = options.license;
     const requestedRow = tier === 1 && requestedLicense ? licenseFor(requestedLicense) : undefined;
-    if (await hasSameVersion(packRoot, version, hashName, identified.hashManifest)) {
+    const versionMatch = await hasSameVersion(packRoot, version, hashName, identified.hashManifest, originals);
+    if (versionMatch) {
       let collection = JSON.parse(await readFile(join(packRoot, 'collection.card.json'), 'utf8')) as {
         id: string;
         status: string;
         license: string;
+        style_family?: string;
+        cameras?: string[];
         rights?: unknown;
         collection_info?: { counts?: Record<string, number> };
       };
+      if (
+        collection.id === collectionId &&
+        ((options.styleFamily && collection.style_family !== options.styleFamily) ||
+          (options.cameras && JSON.stringify(collection.cameras) !== JSON.stringify(options.cameras)))
+      ) {
+        throw new PackRefusal('existing version has different discovery metadata; edit its card instead');
+      }
       if (
         collection.id === collectionId &&
         requestedRow?.confirmed &&
@@ -350,6 +398,23 @@ export async function importPack(options: ImportOptions) {
           dropped: [...new Set([...identified.dropped, ...licenseDropped])].sort(),
         };
       }
+      if (versionMatch.kind === 'legacy') {
+        // Only publish paths already present in the installed legacy extraction.
+        const retained = new Set(
+          versionMatch.manifest
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => LINE.exec(line)?.[3]),
+        );
+        identified = {
+          ...identified,
+          items: identified.items.filter((item) => retained.has(item.path)),
+          sceneSources: identified.sceneSources.filter((path) => retained.has(path)),
+          prefabSources: identified.prefabSources.filter((path) => retained.has(path)),
+          hashManifest: versionMatch.manifest,
+        };
+        extractedFiles = extractedFiles.filter((file) => retained.has(relative(extracted, file).split(sep).join('/')));
+      }
     }
     const top = options.inspiration ? 'inspiration' : 'packs';
     const cards = await createCards({
@@ -357,12 +422,18 @@ export async function importPack(options: ImportOptions) {
       top,
       id,
       title: options.title ?? manifest?.name ?? titleFromId(id),
+      ...(options.styleFamily ? { styleFamily: options.styleFamily } : {}),
+      ...(options.cameras ? { cameras: options.cameras } : {}),
       version,
       tier,
       vendor: identified.vendor,
       origin: tier === 2 ? 'mirror' : manifest ? 'drive-drop' : 'vendor-pack',
       extracted,
       items: identified.items,
+      sceneSources: licenseMap
+        ? identified.sceneSources.filter((path) => !/\.glb$/i.test(path))
+        : identified.sceneSources,
+      prefabSources: identified.prefabSources,
       filesTotal: extractedFiles.length,
       hashManifest: hashName,
       date: dateOnly(manifest?.downloaded_at),
