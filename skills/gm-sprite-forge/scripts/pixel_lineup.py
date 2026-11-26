@@ -9,8 +9,9 @@ and props stand on it too; each weapon is shown beside a copy of --holder (defau
 Sprites are placed by their alpha box: its bottom on the ground line, its centre on the slot. Never resizes a sprite.
 Weapons are not shown at the pack's own scale (a chibi pack normalised to a 43 px hero inflates them): each is
 re-sized from its raw render so its longest side is a real-world fraction of the holder's height (REAL_SIZE; the pack
-6Barbarian's long axe measures ~36 px against a ~43 px body, 0.84, which anchors the two-handed axe), then given finish B
-again. The fractions and factors go to <preview_out>/lineup.json. Everything else keeps its render's size.
+6Barbarian's long axe measures ~36 px against a ~43 px body, 0.84, which anchors the two-handed axe), then given the
+preview's finish again (recipe.json: B; or C, re-sized by picking source pixels, never averaging, from the 4x render and
+its albedo and depth passes). The fractions and factors go to <preview_out>/lineup.json. Everything else keeps its render's size.
 A sprite without its own shadow pixels gets a soft contact shadow, and the strip is lit with --light (default: Dusk
 Helm's breezy daylight, field.hd2d.json: ambient #e8f0ff x 0.85 plus the #ffe2a8 x 0.12 sun fill, contrast 1.1).
 """
@@ -25,6 +26,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from pixel_finish_c import finish_c, pick_resize  # noqa: E402
 from pixel_preview import pixelate  # noqa: E402
 
 PER_STRIP = 12
@@ -48,11 +50,23 @@ def real_size(name):
     return next((f for rx, f in REAL_SIZE if re.search(rx, n)), DEFAULT_SIZE)
 
 
-def resize_weapon(raw_path, target, colours):
-    """The raw render scaled so its longest side is `target` px, then finish B: pixel art made at the new size."""
-    raw = crop(raw_path)
+def resize_weapon(raw_path, target, colours, finish=None):
+    """The raw render scaled so its longest side is `target` px, then the preview's finish: pixel art made at the new
+    size. finish: the preview recipe's finish (None or B: LANCZOS and finish B; C: source pixels picked, never averaged)."""
+    full = Image.open(raw_path).convert('RGBA')
+    box = full.getbbox() or (0, 0, full.width, full.height)
+    raw = full.crop(box)
     k = target / max(raw.size)
-    im = raw.resize((max(1, round(raw.width * k)), max(1, round(raw.height * k))), Image.LANCZOS)
+    size = (max(1, round(raw.width * k)), max(1, round(raw.height * k)))
+    if (finish or {}).get('name') == 'C':
+        ss, root = finish['ss'], raw_path.parent.parent
+        k = k * ss  # the raw render is at ss x the sprite: k is the sprite's scale against the model at 1x
+        alb = np.asarray(Image.open(root / 'alb' / raw_path.name).convert('RGB'))[box[1]:box[3], box[0]:box[2]]
+        dep = np.asarray(Image.open(root / 'depth' / raw_path.name))[box[1]:box[3], box[0]:box[2]]
+        r4, a4, d4 = pick_resize(np.asarray(raw), size[0] * ss, size[1] * ss, alb, dep)
+        out, _ = finish_c(r4, a4, d4, finish['params'], finish.get('ssi', []), ss)
+        return Image.fromarray(out), k
+    im = raw.resize(size, Image.LANCZOS)
     return Image.fromarray(pixelate([np.asarray(im)], colours)[0]), k
 
 
@@ -155,10 +169,13 @@ def main():
     ap.add_argument('--holder', type=Path, help='who stands beside each weapon (default: the second ref)')
     ap.add_argument('--dir', default='S')
     ap.add_argument('--zoom', type=int, default=3)
-    ap.add_argument('--colours', type=int, default=14, help='finish B colours for re-sized weapons')
+    ap.add_argument('--colours', type=int, default=14, help='finish B colours for re-sized weapons (a finish C preview '
+                    'uses its own recipe)')
     ap.add_argument('--light', default=DAYLIGHT, help='colour:weight,... ,contrast (default: Dusk Helm daylight)')
     a = ap.parse_args()
     sheets = json.loads((a.preview / 'sheets.json').read_text())
+    recipe = a.preview / 'recipe.json'
+    fin = json.loads(recipe.read_text()).get('finish') if recipe.exists() else None
     refs = [crop(p) for p in a.refs]
     holder = crop(a.holder) if a.holder else refs[min(1, len(refs) - 1)]
     tiles = a.ground.split(',')
@@ -168,7 +185,7 @@ def main():
             items = []
             for n in info['models']:
                 f = real_size(n)
-                im, k = resize_weapon(a.preview / 'raw' / f'{n}_{a.dir}.png', f * holder.height, a.colours)
+                im, k = resize_weapon(a.preview / 'raw' / f'{n}_{a.dir}.png', f * holder.height, a.colours, fin)
                 items.append((n, im))
                 sizes[n] = {'fraction_of_holder': f, 'px': max(im.size), 'raw_scale': round(k, 3)}
         else:
