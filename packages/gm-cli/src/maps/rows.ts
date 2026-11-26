@@ -48,18 +48,18 @@ function list(value: string | string[] | undefined): string[] {
 }
 
 /**
- * Reads columns from the words and the flags. The shared word parser turns "small crypt 3-5 rooms one loop secret door"
- * into size/type/count filters, so the C3 §10 example keeps working; a word naming a drawn feature (`water`, `stairs`)
- * becomes a feature filter, because a column-only index has no free text to score it against.
+ * Reads columns from the words and flags. In map-only searches, bare place and feature words rank results; explicit
+ * type, biome and feature flags remain filters. Other searches retain the structured word parser's filters.
  */
 export function parseRowQuery(tokens: string[], flags: RowFlags = {}): RowQuery {
-  const base = parseQuery(tokens, flags);
+  const base = parseQuery(tokens, flags.maps ? { ...flags, type: undefined } : flags);
   const features = list(flags.feature);
   const words: string[] = [];
   for (const word of base.words) {
-    if (FEATURES.has(word)) features.push(word);
+    if (!flags.maps && FEATURES.has(word)) features.push(word);
     else words.push(word);
   }
+  if (flags.maps) words.push(...base.types);
   return {
     ...(base.rooms ? { rooms: base.rooms } : {}),
     ...(base.loops ? { loops: base.loops } : {}),
@@ -69,7 +69,7 @@ export function parseRowQuery(tokens: string[], flags: RowFlags = {}): RowQuery 
     ...(flags.levels === undefined ? {} : { levels: flags.levels }),
     ...(flags.tilesets === true ? { resource: 'tileset' as const } : {}),
     ...(flags.maps === true ? { resource: 'map' as const } : {}),
-    places: [...new Set([...base.types, ...list(flags.biome)])],
+    places: [...new Set([...(flags.maps ? list(flags.type) : base.types), ...list(flags.biome)])],
     scales: list(flags.scale),
     grids: list(flags.grid),
     flows: list(flags.flow),
@@ -98,19 +98,33 @@ export function matchRow(row: LayoutRow, q: RowQuery): { hard: boolean; score: n
   if (q.features.length > 0 && !q.features.every((feature) => (row.features as string[]).includes(feature)))
     return { hard: false, score: 0 };
 
-  const text = [...places, row.size, row.flow, row.grid, ...row.features].filter(
-    (value): value is string => typeof value === 'string',
-  );
+  const text = [
+    ...places,
+    row.size,
+    row.flow,
+    row.grid,
+    ...row.features,
+    row.title,
+    row.source_file,
+    row.source_folder,
+  ].filter((value): value is string => typeof value === 'string');
   let score = [q.rooms, q.loops, q.secrets, q.levels, q.size].filter((term) => term !== undefined).length;
   score += q.places.length + q.scales.length + q.grids.length + q.flows.length + q.features.length;
   if (q.sizeWord !== undefined && row.size === q.sizeWord) score += 1;
-  for (const word of q.words) if (text.includes(word) || text.includes(word.replace(/s$/, ''))) score += 1;
+  const normalize = (value: string) => value.toLowerCase().replace(/s$/, '');
+  const tokens = (value: string) => [value.toLowerCase(), ...value.toLowerCase().split(/[^a-z0-9]+/)].map(normalize);
+  const terms = text.flatMap(tokens);
+  const sourceTerms = [row.title, row.source_file].flatMap((value) => (typeof value === 'string' ? tokens(value) : []));
+  for (const word of q.words) {
+    if (terms.includes(normalize(word))) score += 1;
+    if (sourceTerms.includes(normalize(word))) score += 2;
+  }
   return { hard: true, score };
 }
 
 const dash = (value: string | number | null) => (value === null ? '-' : String(value));
 
-/** One row, no path and no preview key: `id  type  biome  scale  grid  rooms/loops/secrets  size  flow  features`. */
+/** One row of layout facts, followed by vision-authorized thumbnail and source information when available. */
 export function layoutLine(row: LayoutRow): string {
   const grid = row.grid === null ? '-' : `${row.grid}${row.cell_px === null ? '' : `@${row.cell_px}`}`;
   const graph = [row.rooms, row.loops, row.secrets].map(dash).join('/');
@@ -124,7 +138,17 @@ export function layoutLine(row: LayoutRow): string {
     dash(row.size),
     dash(row.flow),
     row.features.length > 0 ? row.features.join(',') : '-',
-  ].join('  ');
+    ...(row.resource === 'map' && (row.thumbnail || row.source_folder || row.source_file)
+      ? [row.thumbnail ?? '-', row.source_folder ?? '-', row.source_file ?? '-']
+      : []),
+  ]
+    .map((value) =>
+      Array.from(value, (character) => {
+        const code = character.codePointAt(0)!;
+        return code < 32 || (code >= 127 && code <= 159) ? `\\u${code.toString(16).padStart(4, '0')}` : character;
+      }).join(''),
+    )
+    .join('  ');
 }
 
 /** `20 of 41 (map 39, tileset 2) — biome: dungeon 12, crypt 5`, so an agent narrows instead of paging. */

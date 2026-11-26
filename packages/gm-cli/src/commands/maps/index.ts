@@ -31,7 +31,8 @@ export const command: GmCommand = {
       ctx.out(
         `${summary.maps} maps, ${summary.tilesets} tilesets (${summary.with_layout} with a layout spec) -> ${path}`,
       );
-      if (hidden > 0) ctx.out(`hidden: ${hidden} resources (a map needs derive-layout, a tileset in-game)`);
+      if (hidden > 0)
+        ctx.out(`hidden: ${hidden} resources (a map needs vision-input or derive-layout, a tileset in-game)`);
     }
     if (summary.errors > 0) for (const error of index.errors) ctx.err(`${error.path}: ${error.errors.join('; ')}`);
     for (const line of invalid) ctx.err(`invalid: ${line}`);

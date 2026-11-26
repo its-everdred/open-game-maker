@@ -53,11 +53,17 @@ export type MapFeature = (typeof MAP_FEATURES)[number];
 const FEATURES = new Set<string>(MAP_FEATURES);
 
 /**
- * One queryable row per map or tileset resource. Columns only: no file path, no preview key and no description, so a
- * result page costs an agent a line per hit and can never send it to look at the image (research 2026-11-05 §4).
+ * One queryable row per map or tileset. Source and preview fields are included only for vision-authorized maps.
  */
 export type LayoutRow = {
   id: string;
+  /** Searchable title and source metadata, exposed only when vision input is permitted. */
+  title?: string;
+  collection?: string;
+  source_file?: string;
+  source_folder?: string;
+  content_hash?: string;
+  thumbnail?: string;
   /** `map` for an inspiration map, `tileset` for a tile card a map can be drawn with. */
   resource: 'map' | 'tileset';
   /** Map type for a map; the compatibility set (else the style family) for a tileset. */
@@ -196,11 +202,23 @@ export function layoutRow(card: ResolvedCard, spec?: LayoutSpecRow): LayoutRow |
   }
   if (card.kind !== 'inspiration' || card.subkind !== 'map') return null;
   if (card.map?.is_map === false || card.map?.usable === 'no') return null;
+  const canDerive = card.resolved.rights.uses.includes('derive-layout');
+  const allowedSpec = canDerive ? spec : undefined;
   const row: LayoutRow = {
     id: card.id,
+    ...(card.resolved.rights.uses.includes('vision-input')
+      ? {
+          title: card.title,
+          collection: card.collection,
+          source_file: card.source?.files.find((file) => file.role === 'primary')?.path,
+          source_folder: card.library_root,
+          content_hash: card.source?.content_hash,
+          thumbnail: card.previews?.thumb,
+        }
+      : {}),
     resource: 'map',
     type: card.map?.map_type ?? null,
-    themes: themesOf(card, spec),
+    themes: themesOf(card, allowedSpec),
     biome: biomeOf(card),
     scale: card.map?.scale ?? null,
     grid: null,
@@ -217,15 +235,14 @@ export function layoutRow(card: ResolvedCard, spec?: LayoutSpecRow): LayoutRow |
     size: null,
     flow: null,
     features: featuresOf(card),
-    from: spec ? 'spec' : 'card',
-    layout_id: spec?.id ?? null,
+    from: allowedSpec ? 'spec' : 'card',
+    layout_id: allowedSpec?.id ?? null,
   };
-  return { ...row, ...gridOf(card, spec), ...countsOf(card, spec) };
+  return { ...row, ...gridOf(card, allowedSpec), ...(canDerive ? countsOf(card, allowedSpec) : {}) };
 }
 
 /**
- * The layout index. Rows are gated on the source card's resolved rights here, so a spec whose source lacks
- * `derive-layout` never reaches the file an agent queries; the count of what the gate held back is returned instead.
+ * Maps with vision-input can be discovered, but only derive-layout permits joining a graph. Tilesets need in-game.
  */
 export function buildMapIndex(index: CardIndex, specs: LayoutSpecRow[] = []): { maps: MapIndex; hidden: number } {
   const byCard = new Map<string, LayoutSpecRow[]>();
@@ -236,11 +253,16 @@ export function buildMapIndex(index: CardIndex, specs: LayoutSpecRow[] = []): { 
     if (!statusAllowed(card.kind, card.status)) continue;
     // One spec per card: the one the card points at wins, so a newer extraction on the same image never displaces it.
     const candidates = byCard.get(card.id) ?? [];
-    const spec = candidates.find((one) => one.id === card.map?.layout_spec.id) ?? candidates[0];
+    const uses = card.resolved.rights.uses;
+    const spec = uses.includes('derive-layout')
+      ? (candidates.find((one) => one.id === card.map?.layout_spec.id) ?? candidates[0])
+      : undefined;
     const row = layoutRow(card, spec);
     if (!row) continue;
-    const uses = card.resolved.rights.uses;
-    const allowed = row.resource === 'map' ? uses.includes('derive-layout') : uses.includes('in-game');
+    const allowed =
+      row.resource === 'map'
+        ? uses.includes('derive-layout') || uses.includes('vision-input')
+        : uses.includes('in-game');
     if (!allowed) {
       hidden += 1;
       continue;

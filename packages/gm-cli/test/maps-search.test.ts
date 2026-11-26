@@ -4,9 +4,11 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import type { MapLayoutSpec } from '@ogm/contracts';
+import { validateCard, type MapLayoutSpec } from '@ogm/contracts';
+import type { LayoutRow } from '@ogm/asset-cards';
 
 import { parseQuery } from '../src/maps/specs.js';
+import { layoutLine, matchRow, parseRowQuery } from '../src/maps/rows.js';
 import { gm } from './helpers.js';
 import { EXAMPLE_SPEC, mapsLibrary } from './library-rights.js';
 
@@ -73,12 +75,11 @@ describe('gm maps index', () => {
   it('writes one layout row per map and tileset resource an agent may build from, and hides the rest', async () => {
     const result = await index();
     expect(result.code).toBe(0);
-    expect(result.out).toContainEqual(expect.stringContaining('2 maps, 1 tilesets (2 with a layout spec)'));
-    expect(result.out).toContainEqual(expect.stringContaining('hidden: 1 resources'));
+    expect(result.out).toContainEqual(expect.stringContaining('3 maps, 1 tilesets (2 with a layout spec)'));
     expect(result.err).toContainEqual(expect.stringContaining(`invalid: ${DRIFTED}: tags.computed.loop_count is 4`));
   });
 
-  it('carries the card layout columns and never a preview path or a description', async () => {
+  it('carries layout columns and vision-authorized preview paths without descriptions', async () => {
     const library = mapsLibrary();
     await gm(['maps', 'index'], { env: { OGM_ASSETS_ROOT: library } });
     const result = await gm(['maps', 'search', '--json', '--biome', 'crypt', '--limit', '100'], {
@@ -89,7 +90,7 @@ describe('gm maps index', () => {
     expect(card).toMatchObject({ resource: 'map', biome: 'crypt', scale: 'battlemap', levels: 2, grid: 'square' });
     expect(card?.cell_px).toBe(32);
     expect(card?.features).toEqual(['road', 'stairs', 'tomb', 'water']);
-    expect(result.out.join('\n')).not.toContain('previews');
+    expect(card?.thumbnail).toBe('private/previews/11/1111111111111111-thumb.webp');
     expect(result.out.join('\n')).not.toContain('A crypt under a crossroads');
   });
 });
@@ -125,15 +126,20 @@ describe('gm maps info', () => {
     });
   });
 
-  it('refuses a tileset, a rights-hidden map, and an unknown id', async () => {
+  it('refuses a tileset, a vision-only graph, and an unknown id', async () => {
     const library = mapsLibrary();
     await gm(['maps', 'index'], { env: { OGM_ASSETS_ROOT: library } });
 
-    for (const id of [TILESET, 't1:vision-only-maps/example-dungeon-01@illustrative', 't1:missing/map@v1']) {
+    for (const id of [TILESET, 't1:missing/map@v1']) {
       const result = await gm(['maps', 'info', id], { env: { OGM_ASSETS_ROOT: library } });
       expect(result.code).toBe(2);
       expect(result.err).toContainEqual(expect.stringContaining('is not in the searchable inspiration index'));
     }
+    const vision = await gm(['maps', 'info', 't1:vision-only-maps/example-dungeon-01@illustrative'], {
+      env: { OGM_ASSETS_ROOT: library },
+    });
+    expect(vision.code).toBe(1);
+    expect(vision.err).toContainEqual(expect.stringContaining('has no validated layout graph'));
   });
 
   it('rejects a stale layout revision and a graph whose computed metrics drifted', async () => {
@@ -187,11 +193,73 @@ describe('gm maps info', () => {
 });
 
 describe('gm maps search', () => {
+  it('ranks source terms and displays vision-authorized map metadata', () => {
+    const row = {
+      id: 'map',
+      resource: 'map',
+      type: null,
+      biome: null,
+      themes: [],
+      scale: null,
+      grid: null,
+      cell_px: null,
+      rooms: null,
+      loops: null,
+      secrets: null,
+      size: null,
+      flow: null,
+      features: [],
+      title: 'Ancient retreat',
+      source_file: 'maps/Forest/Camp.png',
+      thumbnail: 'private/previews/camp.webp',
+    } as LayoutRow;
+    expect(matchRow(row, parseRowQuery(['retreat'])).score).toBeGreaterThan(0);
+    expect(matchRow(row, parseRowQuery(['retreat'])).score).toBeGreaterThan(
+      matchRow({ ...row, title: 'Other', themes: ['retreat'] }, parseRowQuery(['retreat'])).score,
+    );
+    expect(layoutLine(row)).toContain('private/previews/camp.webp  -  maps/Forest/Camp.png');
+    expect(layoutLine({ ...row, thumbnail: undefined, source_folder: 'inspiration/sample' })).toContain(
+      ' -  inspiration/sample  maps/Forest/Camp.png',
+    );
+    const cave = { ...row, title: 'Keep', source_file: 'maps/Castles/Keep.png', flow: 'hub-and-spoke' };
+    expect(matchRow(cave, parseRowQuery(['castle'], { maps: true })).score).toBeGreaterThan(0);
+    expect(matchRow(cave, parseRowQuery(['hub-and-spoke'], { maps: true })).score).toBeGreaterThan(0);
+    expect(matchRow(cave, parseRowQuery(['cave water'], { maps: true })).hard).toBe(true);
+    expect(matchRow(cave, parseRowQuery(['cave'], { maps: true, feature: 'water' })).hard).toBe(false);
+  });
+
+  it('escapes terminal controls in a schema-valid map source path', () => {
+    const library = mapsLibrary();
+    const file = join(library, 'inspiration/profantasy-cartographers-annual/cards/example-dungeon-01.card.json');
+    const card = JSON.parse(readFileSync(file, 'utf8'));
+    card.source.files[0].path = 'maps/evil\u001b]0;title\u0007.png';
+    expect(validateCard(card).ok).toBe(true);
+    const row = {
+      id: 'test',
+      resource: 'map',
+      type: null,
+      biome: null,
+      scale: null,
+      grid: null,
+      cell_px: null,
+      rooms: null,
+      loops: null,
+      secrets: null,
+      size: null,
+      flow: null,
+      features: [],
+      thumbnail: 'thumb',
+      source_file: card.source.files[0].path,
+    } as LayoutRow;
+    expect(layoutLine(row)).toContain('evil\\u001b]0;title\\u0007.png');
+    expect(layoutLine(row)).not.toContain('\u001b');
+  });
+
   it('answers the C3 §10 example: small crypt 3-5 rooms one loop secret door', async () => {
     const result = await search(['small crypt 3-5 rooms one loop secret door']);
     expect(result.code).toBe(0);
     expect(result.out).toEqual([
-      `${CC0_MAP}  crypt  crypt  battlemap  square@32  4/1/1  small  loop  road,stairs,tomb,water`,
+      `${CC0_MAP}  crypt  crypt  battlemap  square@32  4/1/1  small  loop  road,stairs,tomb,water  private/previews/11/1111111111111111-thumb.webp  inspiration/cc0-dungeon-maps  maps/roads-of-the-old-crypt.png`,
     ]);
     expect(result.err.join('\n')).not.toContain('vision-only-maps');
   });
@@ -202,6 +270,14 @@ describe('gm maps search', () => {
     expect(tilesets.out[0]).toContain('square@16');
     const crypt = await search(['--biome', 'crypt', '--feature', 'road']);
     expect(ids(crypt)).toEqual([CC0_MAP]);
+  });
+
+  it('finds vision-only maps and ranks place words against source names', async () => {
+    const result = await search(['--maps', 'example', '--limit', '100']);
+    expect(ids(result)).toContain('t1:vision-only-maps/example-dungeon-01@illustrative');
+    const query = parseRowQuery(['cave'], { maps: true });
+    expect(query.places).toEqual([]);
+    expect(query.words).toContain('cave');
   });
 
   it('filters by scale and grid, and prints a facet line so an agent narrows instead of paging', async () => {
