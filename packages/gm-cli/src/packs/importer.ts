@@ -313,6 +313,28 @@ export async function importPack(options: ImportOptions) {
         collection = JSON.parse(await readFile(join(packRoot, 'collection.card.json'), 'utf8')) as typeof collection;
       }
       if (collection.id === collectionId) {
+        const packPath = join(packRoot, 'pack.json');
+        const existing = JSON.parse(await readFile(packPath, 'utf8')) as Record<string, unknown>;
+        const source = (existing.source ?? {}) as Record<string, unknown>;
+        await writeJson(packPath, {
+          ...existing,
+          requires: existing.requires ?? [],
+          ...(options.vendor !== undefined ? { vendor: options.vendor } : {}),
+          ...(options.title !== undefined ? { title: options.title } : {}),
+          ...(options.sourceUrl
+            ? { source: { ...source, label: options.vendor ?? existing.vendor, url: options.sourceUrl } }
+            : {}),
+        });
+        if (options.title !== undefined || options.vendor !== undefined) {
+          const cardPath = join(packRoot, 'collection.card.json');
+          const card = JSON.parse(await readFile(cardPath, 'utf8')) as {
+            title: string;
+            collection_info: Record<string, unknown>;
+          };
+          if (options.title !== undefined) card.title = options.title;
+          if (options.vendor !== undefined) card.collection_info.vendor = options.vendor;
+          await writeJson(cardPath, card);
+        }
         const status =
           tier === 2
             ? 'imported'
@@ -360,6 +382,7 @@ export async function importPack(options: ImportOptions) {
       version,
       tier,
       vendor: identified.vendor,
+      ...(options.vendor !== undefined ? { displayVendor: options.vendor } : {}),
       origin: tier === 2 ? 'mirror' : manifest ? 'drive-drop' : 'vendor-pack',
       extracted,
       items: identified.items,
@@ -388,10 +411,11 @@ export async function importPack(options: ImportOptions) {
     }
     const pack = {
       id,
-      vendor: identified.vendor,
+      vendor: options.vendor ?? identified.vendor,
       title: options.title ?? manifest?.name ?? titleFromId(id),
       license: tier === 2 ? options.license! : 'NOASSERTION',
       ...(tier === 2 ? { license_source: options.licenseRef ?? 'operator-confirmed mirror metadata' } : {}),
+      requires: [],
       current: version,
       versions: {
         [version]: {
@@ -404,18 +428,21 @@ export async function importPack(options: ImportOptions) {
           dropped: [...new Set([...unpacked.dropped, ...identified.dropped, ...licenseDropped])].sort(),
         },
       },
-      ...(manifest
+      ...(manifest || options.source || options.sourceUrl
         ? {
             source: {
-              type: 'google-drive',
-              drive_id: manifest.source?.drive_id ?? manifest.drop_id,
-              quarantine: manifest.quarantine,
-              intake_path: intakePath,
+              ...(manifest
+                ? {
+                    type: 'google-drive',
+                    drive_id: manifest.source?.drive_id ?? manifest.drop_id,
+                    quarantine: manifest.quarantine,
+                    intake_path: intakePath,
+                  }
+                : (options.source ?? {})),
+              ...(options.sourceUrl ? { label: options.vendor ?? identified.vendor, url: options.sourceUrl } : {}),
             },
           }
-        : options.source
-          ? { source: options.source }
-          : {}),
+        : {}),
     };
     await writeJson(join(stagedPack, 'pack.json'), pack);
     await publishCards(stagedPack, cards);
@@ -435,6 +462,7 @@ export async function importPack(options: ImportOptions) {
       await writeJson(join(packRoot, 'pack.json'), {
         ...existingPack,
         ...pack,
+        requires: existingPack.requires ?? [],
         versions: { ...existingPack.versions, ...pack.versions },
       });
       await publishCards(packRoot, cards);

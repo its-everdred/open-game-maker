@@ -205,8 +205,10 @@ Every archive is checked for absolute and `..` paths before it is extracted. Kay
 Import a local directory or archive directly:
 
 ```sh
-gm packs import <dir-or-archive> --id <vendor-name> --version <version> --json
+gm packs import <dir-or-archive> --id <vendor-name> --version <version> --vendor <vendor> --title <title> --source-url <url> --json
 ```
+
+The metadata flags are optional: the importer detects the vendor, derives the title from the drop or ID, and records a source URL only when supplied.
 
 The importer copies originals, preflights every archive member before extraction, performs one nested-archive pass, drops executables, writes cards and image thumbnails, and leaves unknown licences quarantined. Confirm a reviewed collection with:
 

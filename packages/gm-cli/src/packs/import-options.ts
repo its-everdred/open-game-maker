@@ -6,6 +6,8 @@ export type ImportOptions = {
   input?: string;
   id: string;
   title?: string;
+  vendor?: string;
+  sourceUrl?: string;
   version?: string;
   license?: string;
   licenseMap?: LicenseMap;
