@@ -1,3 +1,4 @@
+import type { AssetCard } from '@ogm/contracts';
 import type { LicenseMap } from './license-map.js';
 
 export type ImportOptions = {
@@ -6,6 +7,8 @@ export type ImportOptions = {
   input?: string;
   id: string;
   title?: string;
+  styleFamily?: AssetCard['style_family'];
+  cameras?: AssetCard['cameras'];
   vendor?: string;
   sourceUrl?: string;
   version?: string;
