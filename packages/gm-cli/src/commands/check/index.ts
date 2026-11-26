@@ -299,7 +299,7 @@ export const command: GmCommand = {
       preferenceWarnings = checkInstalledPreferenceSections(preferenceEntries, ctx.cwd, Boolean(playAreaGame));
     if (!ctx.json)
       preferenceWarnings.forEach((warning) =>
-        ctx.err(`warning: ${warning}${warning.startsWith('no installed') ? '' : '; run gm prefs refresh'}`),
+        ctx.err(`warning: ${warning}${warning.startsWith('no installed') ? '' : '; update the CLI and skill pack'}`),
       );
     if (playAreaGame) {
       playArea = await checkPlayArea(ctx, playAreaGame);
