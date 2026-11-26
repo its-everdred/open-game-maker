@@ -6,6 +6,7 @@ scripts/assets/blender_unity_assembly.py -- <plan.json> <output.glb>
 import json
 from pathlib import Path
 import sys
+from uuid import uuid4
 
 import bpy
 import numpy as np
@@ -110,12 +111,15 @@ def main():
         raise ValueError("empty assembly plan")
     bpy.ops.wm.read_factory_settings(use_empty=True)
     objects = {}
+    reserved = f"__ogm_{uuid4().hex}_"
+    names = []
     by_id = {node["transformId"]: node for node in plan}
-    for node in plan:
+    for index, node in enumerate(plan):
         key = node["transformId"]
         if key in objects:
             raise ValueError(f"duplicate transform: {key}")
-        obj = bpy.data.objects.new(node["name"] or key, None)
+        obj = bpy.data.objects.new(f"{reserved}transform_{index}", None)
+        names.append((obj, node["name"] or key))
         bpy.context.scene.collection.objects.link(obj)
         objects[key] = obj
     for node in plan:
@@ -152,7 +156,8 @@ def main():
                 if key not in materials:
                     materials[key] = build_material(surface)
                 mesh.materials[index] = materials[key]
-            obj = bpy.data.objects.new(node["name"] or model["name"], mesh)
+            obj = bpy.data.objects.new(f"{reserved}mesh_{count}", mesh)
+            names.append((obj, node["name"] or model["name"]))
             bpy.context.scene.collection.objects.link(obj)
             obj.parent = objects[node["transformId"]]
             obj.matrix_basis = matrix
@@ -160,6 +165,10 @@ def main():
             count += 1
     if not count:
         raise ValueError("assembly contains no active meshes")
+    # Rename only after all FBX files have been imported: otherwise Blender
+    # suffixes their source object names before we can resolve Unity's mesh name.
+    for obj, name in names:
+        obj.name = name
     bpy.context.view_layer.update()
     corners = [obj.matrix_world @ Vector(corner) for obj in exported_meshes for corner in obj.bound_box]
     minimum = Vector(tuple(min(point[axis] for point in corners) for axis in range(3)))

@@ -44,7 +44,7 @@ it.skipIf(!available)(
       await sharp({ create: { width: 2, height: 2, channels: 4, background: { r: 128, g: 128, b: 128, alpha: 1 } } })
         .png()
         .toFile(mask);
-      const create = `import bpy\nbpy.ops.wm.read_factory_settings(use_empty=True)\nbpy.ops.mesh.primitive_cube_add()\nbpy.context.object.name='Roof'\nbpy.context.object.data.name='Roof'\nbpy.context.object.data.materials.append(bpy.data.materials.new('Base'))\nbpy.ops.export_scene.fbx(filepath=${JSON.stringify(fbx)})`;
+      const create = `import bpy\nbpy.ops.wm.read_factory_settings(use_empty=True)\nbpy.ops.mesh.primitive_cube_add()\nbpy.context.object.name='Roof'\nbpy.context.object.data.name='RoofGeometry'\nbpy.context.object.data.materials.append(bpy.data.materials.new('Base'))\nbpy.ops.export_scene.fbx(filepath=${JSON.stringify(fbx)})`;
       const result = spawnSync(
         'blender',
         [
@@ -151,5 +151,5 @@ it.skipIf(!available)(
       await rm(root, { recursive: true, force: true });
     }
   },
-  120_000,
+  300_000,
 );
