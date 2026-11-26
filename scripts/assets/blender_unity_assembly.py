@@ -30,22 +30,43 @@ def transform(node):
     return BASIS @ Matrix.Translation(position) @ rotation.to_matrix().to_4x4() @ scale @ BASIS.inverted()
 
 
-def build_material(surface):
+def validate_texture_uv(texture, uv_names):
+    channel = texture.get("uv", 0)
+    if type(channel) is not int or not 0 <= channel <= 7 or channel >= len(uv_names):
+        raise ValueError("missing or unsupported Unity UV channel")
+    return channel
+
+
+def connect_texture_uv(material, image_node, texture, uv_names):
+    channel = validate_texture_uv(texture, uv_names)
+    nodes, links = material.node_tree.nodes, material.node_tree.links
+    coords = nodes.new("ShaderNodeUVMap")
+    coords.uv_map = uv_names[channel]
+    mapping = nodes.new("ShaderNodeMapping")
+    mapping.inputs["Scale"].default_value = (*texture["scale"], 1)
+    mapping.inputs["Location"].default_value = (*texture["offset"], 0)
+    links.new(coords.outputs["UV"], mapping.inputs["Vector"])
+    links.new(mapping.outputs["Vector"], image_node.inputs["Vector"])
+    links.new(image_node.outputs["Color"], nodes.get("Principled BSDF").inputs["Base Color"])
+
+
+def build_material(surface, uv_names):
     material = bpy.data.materials.new(Path(surface["path"]).stem)
     material.use_nodes = True
     nodes = material.node_tree.nodes
     shader = nodes.get("Principled BSDF")
     shader.inputs["Base Color"].default_value = surface["color"]
     if surface.get("blends"):
-        return build_blended_material(material, surface)
+        return build_blended_material(material, surface, uv_names)
     textures = surface["textures"]
     texture_paths = surface["texturePaths"]
     texture_srgb = surface["textureSrgb"]
     if len(textures) != len(texture_paths) or len(textures) != len(texture_srgb):
         raise ValueError("material texture references differ from resolved paths")
     if textures:
-        if any(texture["scale"] != textures[0]["scale"] or texture["offset"] != textures[0]["offset"] for texture in textures):
+        if any(texture["scale"] != textures[0]["scale"] or texture["offset"] != textures[0]["offset"] or texture.get("uv", 0) != textures[0].get("uv", 0) for texture in textures):
             raise ValueError("cannot bake shader layers with different UV transforms")
+        validate_texture_uv(textures[0], uv_names)
         images = [bpy.data.images.load(path, check_existing=True) for path in texture_paths]
         for image, srgb in zip(images, texture_srgb):
             image.colorspace_settings.name = "sRGB" if srgb else "Non-Color"
@@ -79,18 +100,11 @@ def build_material(surface):
         image_node = nodes.new("ShaderNodeTexImage")
         image_node.image = baked
         image_node.extension = "REPEAT"
-        coords = nodes.new("ShaderNodeTexCoord")
-        mapping = nodes.new("ShaderNodeMapping")
-        mapping.inputs["Scale"].default_value = (*textures[0]["scale"], 1)
-        mapping.inputs["Location"].default_value = (*textures[0]["offset"], 0)
-        links = material.node_tree.links
-        links.new(coords.outputs["UV"], mapping.inputs["Vector"])
-        links.new(mapping.outputs["Vector"], image_node.inputs["Vector"])
-        links.new(image_node.outputs["Color"], shader.inputs["Base Color"])
+        connect_texture_uv(material, image_node, textures[0], uv_names)
     return material
 
 
-def build_blended_material(material, surface):
+def build_blended_material(material, surface, uv_names):
     """Bake a material expression in linear light using a shared UV transform."""
     layers = []
 
@@ -160,8 +174,9 @@ def build_blended_material(material, surface):
         material.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value = constant(surface)
         return material
     first = layers[0][0]
-    if any(texture["scale"] != first["scale"] or texture["offset"] != first["offset"] for texture, _, _ in layers):
+    if any(texture["scale"] != first["scale"] or texture["offset"] != first["offset"] or texture.get("uv", 0) != first.get("uv", 0) for texture, _, _ in layers):
         raise ValueError("cannot bake shader layers with different UV transforms")
+    validate_texture_uv(first, uv_names)
     images = [bpy.data.images.load(path, check_existing=True) for _, path, _ in layers]
     width, height = max(image.size[0] for image in images), max(image.size[1] for image in images)
     if width * height > 16777216:
@@ -206,17 +221,11 @@ def build_blended_material(material, surface):
     baked.pixels.foreach_set(pixels.reshape(-1))
     baked.update()
     baked.pack()
-    nodes, links = material.node_tree.nodes, material.node_tree.links
+    nodes = material.node_tree.nodes
     image_node = nodes.new("ShaderNodeTexImage")
     image_node.image = baked
     image_node.extension = "REPEAT"
-    coords = nodes.new("ShaderNodeTexCoord")
-    mapping = nodes.new("ShaderNodeMapping")
-    mapping.inputs["Scale"].default_value = (*first["scale"], 1)
-    mapping.inputs["Location"].default_value = (*first["offset"], 0)
-    links.new(coords.outputs["UV"], mapping.inputs["Vector"])
-    links.new(mapping.outputs["Vector"], image_node.inputs["Vector"])
-    links.new(image_node.outputs["Color"], nodes.get("Principled BSDF").inputs["Base Color"])
+    connect_texture_uv(material, image_node, first, uv_names)
     return material
 
 
@@ -285,9 +294,10 @@ def main():
             if len(surfaces) != len(mesh.materials):
                 raise ValueError(f"material slot count differs for {model['name']}")
             for index, surface in enumerate(surfaces):
-                key = json.dumps(surface, sort_keys=True)
+                uv_names = [layer.name for layer in mesh.uv_layers]
+                key = json.dumps([surface, uv_names], sort_keys=True)
                 if key not in materials:
-                    materials[key] = build_material(surface)
+                    materials[key] = build_material(surface, uv_names)
                 mesh.materials[index] = materials[key]
             obj = bpy.data.objects.new(f"{reserved}mesh_{count}", mesh)
             names.append((obj, node["name"] or model["name"]))

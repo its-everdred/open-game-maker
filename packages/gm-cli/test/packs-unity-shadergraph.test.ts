@@ -22,6 +22,14 @@ it('follows texture multiplication into base color and rejects unknown graph nod
   ];
   const source = docs.map((value) => JSON.stringify(value)).join('\n');
   expect(shaderGraphBase(source).textures).toEqual(['_SampleTexture2D_a_Texture_1', '_SampleTexture2D_b_Texture_1']);
+  const mixed = structuredClone(docs);
+  mixed[0]!.m_Edges.push(edge('uv', 'b', 2));
+  mixed.push({
+    m_ObjectId: 'uv',
+    m_Type: 'UnityEditor.ShaderGraph.UVNode',
+    m_OutputChannel: 1,
+  } as (typeof mixed)[number]);
+  expect(shaderGraphBase(mixed.map((value) => JSON.stringify(value)).join('\n')).textureChannels).toEqual([0, 1]);
   expect(() => shaderGraphBase(source.replace('MultiplyNode', 'AddNode'))).toThrow('unsupported Unity shader graph');
 });
 
@@ -95,7 +103,9 @@ it('resolves an explicit texture property with the default UV channel', () => {
   ];
   const source = docs.map((doc) => JSON.stringify(doc)).join('\n');
   expect(shaderGraphBase(source).textures).toEqual(['BaseTexture']);
-  expect(() => shaderGraphBase(source.replace('"m_OutputChannel":0', '"m_OutputChannel":1'))).toThrow(
+  expect(shaderGraphBase(source.replace('"m_OutputChannel":0', '"m_OutputChannel":1')).textureChannels).toEqual([1]);
+  expect(shaderGraphBase(source.replace('"m_OutputChannel":0', '"m_OutputChannel":2')).textureChannels).toEqual([2]);
+  expect(() => shaderGraphBase(source.replace('"m_OutputChannel":0', '"m_OutputChannel":8'))).toThrow(
     'unsupported Unity texture UV graph',
   );
 });

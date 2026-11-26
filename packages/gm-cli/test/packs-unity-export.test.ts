@@ -46,7 +46,7 @@ it.skipIf(!available)(
       })
         .png()
         .toFile(mask);
-      const create = `import bpy\nbpy.ops.wm.read_factory_settings(use_empty=True)\nbpy.ops.mesh.primitive_cube_add()\nbpy.context.object.name='Roof'\nbpy.context.object.data.name='RoofGeometry'\nbpy.context.object.data.materials.append(bpy.data.materials.new('Base'))\nbpy.ops.export_scene.fbx(filepath=${JSON.stringify(fbx)})`;
+      const create = `import bpy\nbpy.ops.wm.read_factory_settings(use_empty=True)\nbpy.ops.mesh.primitive_cube_add()\nbpy.context.object.name='Roof'\nbpy.context.object.data.name='RoofGeometry'\nbpy.context.object.data.uv_layers.new(name='Secondary')\nbpy.context.object.data.uv_layers.new(name='Tertiary')\nbpy.context.object.data.materials.append(bpy.data.materials.new('Base'))\nbpy.ops.export_scene.fbx(filepath=${JSON.stringify(fbx)})`;
       const result = spawnSync(
         'blender',
         [
@@ -76,7 +76,7 @@ it.skipIf(!available)(
           surfaces: [
             {
               path: 'fixture.mat',
-              textures: [{ guid: 'test', scale: [2, 3], offset: [0.25, 0.125] }],
+              textures: [{ guid: 'test', scale: [2, 3], offset: [0.25, 0.125], uv: 2 }],
               texturePaths: [texture],
               textureSrgb: [true],
               color: [0.5, 1, 0.25, 1],
@@ -85,7 +85,7 @@ it.skipIf(!available)(
                   a: { path: 'fixture.mat', textures: [], texturePaths: [], textureSrgb: [], color: [0.5, 1, 1, 1] },
                   b: {
                     path: 'fixture.mat',
-                    textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
+                    textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125], uv: 2 }],
                     texturePaths: [mask],
                     textureSrgb: [false],
                     color: [1, 1, 1, 1],
@@ -102,7 +102,7 @@ it.skipIf(!available)(
                               {
                                 term: {
                                   path: 'fixture.mat',
-                                  textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
+                                  textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125], uv: 2 }],
                                   texturePaths: [mask],
                                   textureSrgb: [false],
                                   color: [1, 1, 1, 1],
@@ -138,7 +138,7 @@ it.skipIf(!available)(
           surfaces: [
             {
               path: 'fixture.mat',
-              textures: [{ guid: 'test', scale: [2, 3], offset: [0.25, 0.125] }],
+              textures: [{ guid: 'test', scale: [2, 3], offset: [0.25, 0.125], uv: 2 }],
               texturePaths: [texture],
               textureSrgb: [true],
               color: [0.5, 1, 0.25, 1],
@@ -147,7 +147,7 @@ it.skipIf(!available)(
                   a: { path: 'fixture.mat', textures: [], texturePaths: [], textureSrgb: [], color: [0.5, 1, 1, 1] },
                   b: {
                     path: 'fixture.mat',
-                    textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
+                    textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125], uv: 2 }],
                     texturePaths: [mask],
                     textureSrgb: [false],
                     color: [1, 1, 1, 1],
@@ -164,7 +164,7 @@ it.skipIf(!available)(
                               {
                                 term: {
                                   path: 'fixture.mat',
-                                  textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125] }],
+                                  textures: [{ guid: 'mask', scale: [2, 3], offset: [0.25, 0.125], uv: 2 }],
                                   texturePaths: [mask],
                                   textureSrgb: [false],
                                   color: [1, 1, 1, 1],
@@ -239,6 +239,27 @@ it.skipIf(!available)(
             },
           ],
         },
+        {
+          name: 'Default UV',
+          transformId: 'root/5',
+          parentId: 'root/2',
+          position: [0, 0, 0],
+          rotation: [0, 0, 0, 1],
+          scale: [1, 1, 1],
+          active: true,
+          rendererActive: true,
+          materials: [],
+          model: { path: fbx, name: 'Roof' },
+          surfaces: [
+            {
+              path: 'default-uv.mat',
+              textures: [{ guid: 'test', scale: [1, 1], offset: [0, 0] }],
+              texturePaths: [texture],
+              textureSrgb: [true],
+              color: [1, 1, 1, 1],
+            },
+          ],
+        },
       ];
       const output = join(root, 'assembly.glb');
       await exportUnityAssembly(plan, output);
@@ -259,7 +280,7 @@ it.skipIf(!available)(
       expect(childWorld[12] - parentWorld[12]).toBeCloseTo(0, 5);
       expect(childWorld[13] - parentWorld[13]).toBeCloseTo(0, 5);
       expect(childWorld[14] - parentWorld[14]).toBeCloseTo(-1, 5);
-      expect(document.getRoot().listMeshes()).toHaveLength(3);
+      expect(document.getRoot().listMeshes()).toHaveLength(4);
       const bounds = getBounds(document.getRoot().listScenes()[0]!);
       expect(bounds.min[1]).toBeCloseTo(0, 5);
       expect(bounds.min[0] + bounds.max[0]).toBeCloseTo(0, 5);
@@ -267,17 +288,25 @@ it.skipIf(!available)(
       const material = document
         .getRoot()
         .listMaterials()
-        .find((entry) => entry.getBaseColorTexture())!;
-      expect(material.getBaseColorTexture()).not.toBeNull();
+        .find((entry) => entry.getBaseColorTextureInfo()?.getTexCoord() === 2);
+      expect(material).toBeDefined();
+      expect(material!.getBaseColorTexture()).not.toBeNull();
+      expect(material!.getBaseColorTextureInfo()?.getTexCoord()).toBe(2);
+      expect(
+        document
+          .getRoot()
+          .listMaterials()
+          .some((entry) => entry.getBaseColorTexture() && entry.getBaseColorTextureInfo()?.getTexCoord() === 0),
+      ).toBe(true);
       const plain = document
         .getRoot()
         .listMaterials()
         .find((entry) => !entry.getBaseColorTexture())!;
       expect(plain.getBaseColorFactor()).toEqual([0.75, 0.5, 0.5, 1]);
-      const textureTransform = material.getBaseColorTextureInfo()?.getExtension<Transform>('KHR_texture_transform');
+      const textureTransform = material!.getBaseColorTextureInfo()?.getExtension<Transform>('KHR_texture_transform');
       expect(textureTransform?.getScale()).toEqual([2, 3]);
       expect(textureTransform?.getOffset()[0]).toBeCloseTo(0.25, 5);
-      const pixels = await sharp(material.getBaseColorTexture()!.getImage()!).ensureAlpha().raw().toBuffer();
+      const pixels = await sharp(material!.getBaseColorTexture()!.getImage()!).ensureAlpha().raw().toBuffer();
       expect(pixels[0]).toBeGreaterThan(54);
       expect(pixels[0]).toBeLessThan(61);
       expect(pixels[1]).toBeGreaterThan(143);
@@ -286,11 +315,20 @@ it.skipIf(!available)(
       expect(pixels[2]).toBeLessThan(102);
       expect(pixels[4]).toBeGreaterThan(64);
       expect(pixels[4]).toBeLessThan(73);
+      const mixed = structuredClone(plan);
+      mixed[0]!.surfaces[0]!.blends![0]!.b.textures[0]!.uv = 0;
+      await expect(exportUnityAssembly(mixed, join(root, 'mixed.glb'))).rejects.toThrow('different UV transforms');
+      const missing = [structuredClone(plan[3]!)];
+      missing[0]!.parentId = null;
+      missing[0]!.surfaces[0]!.textures[0]!.uv = 7;
+      await expect(exportUnityAssembly(missing, join(root, 'missing.glb'))).rejects.toThrow(
+        'missing or unsupported Unity UV channel',
+      );
       await expect(exportUnityAssembly(plan, output)).rejects.toMatchObject({ code: 'EEXIST' });
       expect(await readFile(output)).toEqual(bytes);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   },
-  300_000,
+  420_000,
 );

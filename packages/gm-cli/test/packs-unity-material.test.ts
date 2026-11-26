@@ -17,6 +17,18 @@ Material:
     textures: [{ guid: 'texture', scale: [2, 3], offset: [0.25, 0] }],
     color: [0.5, 1, 0.25, 1],
   });
+  expect(
+    parseUnitySurface(source, { textures: ['_BaseColorMap'], factors: [], textureChannels: [1] }).textures,
+  ).toEqual([{ guid: 'texture', scale: [2, 3], offset: [0.25, 0], uv: 1 }]);
+  expect(
+    parseUnitySurface(source, { textures: ['_BaseColorMap'], factors: [], textureChannels: [2] }).textures[0]?.uv,
+  ).toBe(2);
+  expect(() => parseUnitySurface(source, { textures: ['_BaseColorMap'], factors: [], textureChannels: [] })).toThrow(
+    'invalid Unity texture UV channels',
+  );
+  expect(() => parseUnitySurface(source, { textures: ['_BaseColorMap'], factors: [], textureChannels: [8] })).toThrow(
+    'invalid Unity texture UV channels',
+  );
   expect(() => parseUnitySurface(source.replace('_BaseColorMap', '_SampleTexture2D_abcdef_Texture_1'))).toThrow(
     'unsupported Unity shader graph',
   );

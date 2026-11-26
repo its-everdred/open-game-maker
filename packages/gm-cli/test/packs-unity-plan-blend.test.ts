@@ -201,6 +201,30 @@ it('resolves texture paths inside blended graph terms', async () => {
         },
       },
     ]);
+    docs[0]!.m_Edges!.push(edge('uv', 'b', 2));
+    docs.push({
+      m_ObjectId: 'uv',
+      m_Type: 'UnityEditor.ShaderGraph.UVNode',
+      m_OutputChannel: 2,
+    } as (typeof docs)[number]);
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const uvPlan = await planUnityAssembly(root, prefab);
+    expect(uvPlan[0]?.surfaces[0]?.blends).toMatchObject([
+      {
+        b: { textures: [{ uv: 2 }] },
+        weight: {
+          op: 'clamp',
+          args: [
+            {
+              op: 'add',
+              args: [{ op: 'multiply', args: [{ term: { textures: [{ uv: 2 }] }, channel: 0 }, 0.5] }, 0.1],
+            },
+            0,
+            1,
+          ],
+        },
+      },
+    ]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

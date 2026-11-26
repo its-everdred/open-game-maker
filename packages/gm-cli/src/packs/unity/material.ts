@@ -2,7 +2,7 @@ import { parseUnityYaml } from './yaml.js';
 import type { ShaderGraphBase } from './shadergraph.js';
 import { mapWeightExpression, type WeightExpression } from './weight-expression.js';
 
-export type UnityTexture = { guid: string; scale: [number, number]; offset: [number, number] };
+export type UnityTexture = { guid: string; scale: [number, number]; offset: [number, number]; uv?: number };
 export type UnitySurface = {
   textures: UnityTexture[];
   color: [number, number, number, number];
@@ -67,7 +67,13 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
   }
   const resolve = (term?: ShaderGraphBase): UnitySurface => {
     const keys = term?.textures ?? (standard ? [standard] : []);
-    const textures = keys.map((key) => {
+    if (
+      term?.textureChannels &&
+      (term.textureChannels.length !== keys.length ||
+        term.textureChannels.some((channel) => !Number.isInteger(channel) || channel < 0 || channel > 7))
+    )
+      throw new Error('invalid Unity texture UV channels');
+    const textures = keys.map((key, index) => {
       const env = object(environments.get(key));
       const reference = object(env.m_Texture);
       if (typeof reference.guid !== 'string') throw new Error(`missing Unity texture for ${key}`);
@@ -75,6 +81,7 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
         guid: reference.guid,
         scale: vector(env.m_Scale, ['x', 'y'], [1, 1]) as [number, number],
         offset: vector(env.m_Offset, ['x', 'y'], [0, 0]) as [number, number],
+        ...(term?.textureChannels?.[index] ? { uv: term.textureChannels[index] } : {}),
       };
     });
     const color = (

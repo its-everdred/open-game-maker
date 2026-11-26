@@ -46,6 +46,7 @@ export type ShaderGraphFactor = {
 };
 export type ShaderGraphBase = {
   textures: string[];
+  textureChannels?: number[];
   factors: ShaderGraphFactor[];
   blends?: Array<{
     a: ShaderGraphBase;
@@ -256,18 +257,28 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
         inputs.some((input) => ![1, 2].includes(input.inputSlot) || input.outputSlot !== 0) ||
         new Set(inputs.map((input) => input.inputSlot)).size !== inputs.length
       )
-        throw new Error('unsupported Unity texture sample input');
+        throw new Error(`unsupported Unity texture sample input at ${id}`);
       const uv = inputs.find((input) => input.inputSlot === 2);
+      let uvChannel = 0;
       if (uv) {
         const uvNode = byId.get(uv.node);
         if (
           uvNode?.m_Type !== 'UnityEditor.ShaderGraph.UVNode' ||
-          (uvNode.m_OutputChannel !== undefined && uvNode.m_OutputChannel !== 0)
+          (uvNode.m_OutputChannel !== undefined &&
+            (!Number.isInteger(uvNode.m_OutputChannel) ||
+              (uvNode.m_OutputChannel as number) < 0 ||
+              (uvNode.m_OutputChannel as number) > 7))
         )
           throw new Error(`unsupported Unity texture UV graph at ${id}`);
+        uvChannel = (uvNode.m_OutputChannel as number | undefined) ?? 0;
       }
       const texture = inputs.find((input) => input.inputSlot === 1);
-      if (!texture) return { textures: [`_SampleTexture2D_${id}_Texture_1`], factors: [] };
+      if (!texture)
+        return {
+          textures: [`_SampleTexture2D_${id}_Texture_1`],
+          factors: [],
+          ...(uvChannel ? { textureChannels: [uvChannel] } : {}),
+        };
       const textureNode = byId.get(texture.node);
       if (textureNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode')
         throw new Error('unsupported Unity texture property');
@@ -279,7 +290,7 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
         !key
       )
         throw new Error('unsupported Unity texture property');
-      return { textures: [key], factors: [] };
+      return { textures: [key], factors: [], ...(uvChannel ? { textureChannels: [uvChannel] } : {}) };
     }
     if (type === 'UnityEditor.ShaderGraph.PropertyNode' && inputs.length === 0) {
       const property = byId.get(nodeId(node.m_Property));
@@ -320,7 +331,12 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
       const outputSlot = graphOutputSlot(source);
       if (input.outputSlot !== outputSlot) throw new Error('unsupported Unity shader graph output channel');
       const term = visit(input.node, next);
+      const channels = [
+        ...(result.textureChannels ?? result.textures.map(() => 0)),
+        ...(term.textureChannels ?? term.textures.map(() => 0)),
+      ];
       result.textures.push(...term.textures);
+      if (channels.some((channel) => channel !== 0)) result.textureChannels = channels;
       result.factors.push(...term.factors);
       if (term.blends) (result.blends ??= []).push(...term.blends);
     }
