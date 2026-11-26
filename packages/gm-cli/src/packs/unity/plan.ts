@@ -17,7 +17,7 @@ export type PlannedUnitySurface = Omit<UnitySurface, 'blends'> & {
   blends?: Array<{
     a: PlannedUnitySurface;
     b: PlannedUnitySurface;
-    weight: number | { term: PlannedUnitySurface; channel: number };
+    weight: number | { term: PlannedUnitySurface; channel: number; invert?: boolean };
   }>;
 };
 export type PlannedUnityMesh = UnityMeshNode & {
@@ -137,10 +137,7 @@ export async function planUnityAssembly(
                 blends: blends.map(({ a, b, weight }) => ({
                   a: resolveSurface(a),
                   b: resolveSurface(b),
-                  weight:
-                    typeof weight === 'number'
-                      ? weight
-                      : { term: resolveSurface(weight.term), channel: weight.channel },
+                  weight: typeof weight === 'number' ? weight : { ...weight, term: resolveSurface(weight.term) },
                 })),
               }
             : {}),

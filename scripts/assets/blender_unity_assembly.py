@@ -116,7 +116,8 @@ def build_blended_material(material, surface):
             for blend in term.get("blends", []):
                 weight = blend["weight"]
                 if isinstance(weight, dict):
-                    weight = constant(weight["term"])[weight["channel"]]
+                    value_at_channel = constant(weight["term"])[weight["channel"]]
+                    weight = 1 - value_at_channel if weight.get("invert") else value_at_channel
                 value = value * (constant(blend["a"]) * (1 - weight) + constant(blend["b"]) * weight)
             return value
         material.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value = constant(surface)
@@ -149,7 +150,8 @@ def build_blended_material(material, surface):
             a, b, weight = evaluate(blend["a"]), evaluate(blend["b"]), blend["weight"]
             if isinstance(weight, dict):
                 channel = weight["channel"]
-                weight = evaluate(weight["term"])[:, channel:channel + 1]
+                value_at_channel = evaluate(weight["term"])[:, channel:channel + 1]
+                weight = 1 - value_at_channel if weight.get("invert") else value_at_channel
             value *= a * (1 - weight) + b * weight
         return value
 

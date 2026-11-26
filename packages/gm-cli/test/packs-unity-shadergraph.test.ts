@@ -209,6 +209,20 @@ Material:
   expect(shaderGraphBase(maskedDocs.map((doc) => JSON.stringify(doc)).join('\n')).blends).toMatchObject([
     { weight: { term: { textures: ['_SampleTexture2D_mask_Texture_1'] }, channel: 0 } },
   ]);
+  maskedDocs[0]!.m_Edges = [
+    edge('lerp', 'base', 0, 3),
+    edge('a', 'lerp', 0),
+    edge('b', 'lerp', 1),
+    edge('inverse', 'lerp', 2, 1),
+    edge('mask', 'inverse', 0, 4),
+  ];
+  maskedDocs.push({
+    m_ObjectId: 'inverse',
+    m_Type: 'UnityEditor.ShaderGraph.OneMinusNode',
+  } as (typeof maskedDocs)[number]);
+  expect(shaderGraphBase(maskedDocs.map((doc) => JSON.stringify(doc)).join('\n')).blends).toMatchObject([
+    { weight: { term: { textures: ['_SampleTexture2D_mask_Texture_1'] }, channel: 0, invert: true } },
+  ]);
 });
 
 it('preserves a literal graph color independently of material properties', async () => {

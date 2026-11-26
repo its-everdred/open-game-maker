@@ -48,7 +48,7 @@ export type ShaderGraphBase = {
   blends?: Array<{
     a: ShaderGraphBase;
     b: ShaderGraphBase;
-    weight: number | { term: ShaderGraphBase; channel: number };
+    weight: number | { term: ShaderGraphBase; channel: number; invert?: boolean };
   }>;
 };
 
@@ -140,6 +140,26 @@ export function shaderGraphBase(source: string, floats: ReadonlyMap<string, unkn
           textures: [],
           factors: [],
           blends: [{ a: resolveInput(0), b: resolveInput(1), weight: { term, channel: amount.outputSlot - 4 } }],
+        };
+      }
+      if (amountNode?.m_Type === 'UnityEditor.ShaderGraph.OneMinusNode' && amount.outputSlot === 1) {
+        const inverseInputs = incoming.get(amount.node) ?? [];
+        if (inverseInputs.length !== 1 || inverseInputs[0]!.inputSlot !== 0)
+          throw new Error('unsupported Unity shader graph interpolation amount');
+        const input = inverseInputs[0]!;
+        const source = byId.get(input.node);
+        if (
+          source?.m_Type !== 'UnityEditor.ShaderGraph.SampleTexture2DNode' ||
+          ![4, 5, 6, 7].includes(input.outputSlot)
+        )
+          throw new Error('unsupported Unity shader graph interpolation amount');
+        const term = visit(input.node, new Set(ancestors).add(id).add(amount.node));
+        return {
+          textures: [],
+          factors: [],
+          blends: [
+            { a: resolveInput(0), b: resolveInput(1), weight: { term, channel: input.outputSlot - 4, invert: true } },
+          ],
         };
       }
       if (
