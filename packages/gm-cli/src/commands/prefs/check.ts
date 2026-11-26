@@ -1,5 +1,6 @@
 import { EXIT, type GmCommand } from '../../command.js';
 import {
+  checkInstalledPreferenceSections,
   checkPreferenceBundle,
   checkPreferenceSection,
   readPreferences,
@@ -18,7 +19,10 @@ export const command: GmCommand = {
       result.errors.push(
         ...checkPreferenceSection(entries, preferenceSkill),
         ...checkPreferenceBundle(entries, bundledPreferences, bundledSkill),
+        ...checkInstalledPreferenceSections(entries, ctx.cwd),
       );
+    if (result.errors.some((error) => error.includes('/skills/gm-core/SKILL.md: preference section is stale')))
+      ctx.err('run gm skills sync to refresh installed skills');
     if (result.errors.length) {
       result.errors.forEach(ctx.err);
       return EXIT.failed;

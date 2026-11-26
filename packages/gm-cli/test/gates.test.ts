@@ -138,10 +138,24 @@ describe('gm check', () => {
     }
   }, 180_000);
 
+  it('reports a stale worker skill without failing a game check', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const spy = vi.spyOn(preferences, 'checkInstalledPreferenceSections').mockReturnValue(['stale worker skill']);
+    try {
+      const result = await gm(['check', '--json']);
+      expect(result.code).toBe(0);
+      expect(JSON.parse(result.out[0]!).preferenceWarnings).toContain('stale worker skill');
+    } finally {
+      spy.mockRestore();
+    }
+  }, 180_000);
+
   it('runs the complete L0 gate and composes the registered asset check', async () => {
     state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [{ id: 'hook-present', ok: true }] };
 
-    expect(await gm(['check'])).toEqual({ code: 0, out: [], err: [] });
+    const root = tempDir();
+    execFileSync('git', ['-C', root, 'init', '-q']);
+    expect(await gm(['check'], { cwd: root })).toEqual({ code: 0, out: [], err: [] });
     expect(state.l0Options).toBeUndefined();
   }, 60_000);
 

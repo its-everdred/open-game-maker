@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  checkInstalledPreferenceSections,
   checkPreferenceBundle,
   checkPreferenceSection,
   readPreferences,
@@ -129,5 +130,22 @@ it('keeps the CLI tarball registry current', () => {
   expect(checkPreferenceBundle(entries, bundledPreferences, bundledSkill)).toEqual([]);
   expect(checkPreferenceBundle(entries.slice(1), bundledPreferences, bundledSkill)).toContain(
     'bundled preferences are stale',
+  );
+});
+
+it('reports stale installed worker skills', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = mkdtempSync(join(tmpdir(), 'gm-pref-skill-'));
+  const { execFileSync } = await import('node:child_process');
+  execFileSync('git', ['-C', root, 'init', '-q']);
+  const nested = join(root, 'games', 'example');
+  mkdirSync(nested, { recursive: true });
+  const dir = join(root, '.agents', 'skills', 'gm-core');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'SKILL.md'), 'old skill');
+  expect(checkInstalledPreferenceSections(readPreferences(preferencesDirectory), nested).join(' ')).toContain(
+    '.agents/skills/gm-core/SKILL.md: preference section is stale',
   );
 });

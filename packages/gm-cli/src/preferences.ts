@@ -1,5 +1,6 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { CommandError } from './command.js';
 
@@ -133,4 +134,29 @@ export function checkPreferenceBundle(entries: Preference[], directory: string, 
   const bundled = readPreferences(directory);
   const problems = JSON.stringify(entries) === JSON.stringify(bundled) ? [] : ['bundled preferences are stale'];
   return [...problems, ...checkPreferenceSection(entries, skillPath).map(() => 'bundled preference section is stale')];
+}
+
+export function checkInstalledPreferenceSections(entries: Preference[], cwd: string): string[] {
+  let boundary = resolve(cwd);
+  try {
+    boundary = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    // A standalone command or fixture only checks its current directory.
+  }
+  const warnings: string[] = [];
+  let current = resolve(cwd);
+  for (;;) {
+    for (const root of ['.agents', '.claude', '.codex']) {
+      const path = join(current, root, 'skills', 'gm-core', 'SKILL.md');
+      if (existsSync(path))
+        warnings.push(...checkPreferenceSection(entries, path).map(() => `${path}: preference section is stale`));
+    }
+    if (current === boundary || dirname(current) === current) break;
+    current = dirname(current);
+  }
+  return warnings;
 }

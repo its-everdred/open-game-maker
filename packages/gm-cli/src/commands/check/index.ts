@@ -17,6 +17,7 @@ import { entriesForTicket, readInventory } from '../../decision-inventory.js';
 import { reviewScreens } from '../../look/screens.js';
 import { recipeSchema } from '../../sprite-forge.js';
 import {
+  checkInstalledPreferenceSections,
   checkPreferenceBundle,
   checkPreferenceSection,
   readPreferences,
@@ -249,7 +250,12 @@ export const command: GmCommand = {
         ...checkPreferenceSection(preferenceEntries, preferenceSkill),
         ...checkPreferenceBundle(preferenceEntries, bundledPreferences, bundledSkill),
       );
-    if (!ctx.json) preferenceProblems.forEach(ctx.err);
+    const preferenceWarnings =
+      preferenceProblems.length === 0 ? checkInstalledPreferenceSections(preferenceEntries, ctx.cwd) : [];
+    if (!ctx.json) {
+      preferenceProblems.forEach(ctx.err);
+      preferenceWarnings.forEach((warning) => ctx.err(`warning: ${warning}; run gm skills sync`));
+    }
     const prProblems =
       typeof flags.body === 'string'
         ? [
@@ -321,7 +327,8 @@ export const command: GmCommand = {
       (lookReport !== undefined ||
         playArea !== undefined ||
         typeof flags.body === 'string' ||
-        preferenceProblems.length > 0)
+        preferenceProblems.length > 0 ||
+        preferenceWarnings.length > 0)
     )
       ctx.out(
         JSON.stringify({
@@ -330,6 +337,7 @@ export const command: GmCommand = {
           look: lookReport,
           loadingErrors,
           preferenceProblems,
+          preferenceWarnings,
           imageErrors,
           playArea,
           prototypeReview: typeof flags.body === 'string' ? { problems: prProblems } : undefined,
