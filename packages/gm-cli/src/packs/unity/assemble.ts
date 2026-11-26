@@ -26,6 +26,7 @@ export async function assemblePackBuilding(options: {
   slug: string;
   title: string;
   objectName?: string;
+  pieceIds?: string[];
   binary2text?: string;
   env?: NodeJS.ProcessEnv;
 }): Promise<{ id: string; output: string; warnings: string[] }> {
@@ -71,7 +72,8 @@ export async function assemblePackBuilding(options: {
   if (!source || !/\.(?:prefab|unity)$/i.test(source))
     throw new Error('source must be a Unity prefab or scene in the extracted pack');
   const warnings: string[] = ['material export preserves base color only; inspect surface shading before use'];
-  if (source.toLowerCase().endsWith('.unity') && !options.objectName)
+  if (options.objectName && options.pieceIds) throw new Error('choose either an object or scene piece IDs');
+  if (source.toLowerCase().endsWith('.unity') && !options.objectName && !options.pieceIds)
     throw new Error('scene assemblies require a building object name');
   const plan = await planUnityAssembly(
     extracted,
@@ -79,6 +81,7 @@ export async function assemblePackBuilding(options: {
     (warning) => warnings.push(warning),
     options.objectName,
     options.binary2text,
+    options.pieceIds,
   );
   const directory = join(extracted, 'assembled');
   await mkdir(directory, { recursive: true });

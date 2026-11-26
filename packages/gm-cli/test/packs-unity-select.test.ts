@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { selectUnityBuilding } from '../src/packs/unity/select.js';
+import { selectUnityBuilding, selectUnityPieces } from '../src/packs/unity/select.js';
 import type { UnityMeshNode } from '../src/packs/unity/hierarchy.js';
 
 it('isolates a building while retaining parent transforms and excluding other meshes', () => {
@@ -28,4 +28,13 @@ it('isolates a building while retaining parent transforms and excluding other me
   ]);
   expect(selectUnityBuilding(nodes, 'House')[0]?.mesh).toBeUndefined();
   expect(() => selectUnityBuilding([...nodes, node('house2', 'House', 'world')], 'House')).toThrow('ambiguous');
+  expect(selectUnityPieces(nodes, ['house', 'other'])).toMatchObject([
+    { transformId: 'world', rendererActive: false },
+    { transformId: 'house', rendererActive: true },
+    { transformId: 'roof', rendererActive: true },
+    { transformId: 'other', rendererActive: true },
+  ]);
+  expect(selectUnityPieces(nodes, ['world', 'house'])[0]?.mesh).toBeDefined();
+  expect(() => selectUnityPieces(nodes, ['house', 'house'])).toThrow('unique');
+  expect(() => selectUnityPieces(nodes, ['Tree'])).toThrow('missing');
 });

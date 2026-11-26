@@ -6,12 +6,14 @@ import { printSafeJson, terminalText } from '../../packs/discovery.js';
 export const command: GmCommand = {
   name: 'packs assemble',
   summary: 'assemble a Unity prefab or scene into a building model',
-  usage: '<pack-id> <source-relative-path> --id <slug> --title <title> [--object <name>] [--binary2text <path>]',
+  usage:
+    '<pack-id> <source-relative-path> --id <slug> --title <title> [--object <name> | --pieces <ids>] [--binary2text <path>]',
   example: 'packs assemble example Buildings/House.prefab --id house --title House',
   flags: {
     id: { type: 'string', help: 'building asset slug' },
     title: { type: 'string', help: 'building title' },
     object: { type: 'string', help: 'unique building name or scoped transform ID (required for scenes)' },
+    pieces: { type: 'string', help: 'comma-separated scoped transform IDs for modular scene pieces' },
     binary2text: { type: 'string', help: 'path to Unity binary2text for binary assets' },
   },
   async run(ctx, args, flags) {
@@ -26,6 +28,7 @@ export const command: GmCommand = {
       slug: flags.id,
       title: flags.title,
       ...(typeof flags.object === 'string' ? { objectName: flags.object } : {}),
+      ...(typeof flags.pieces === 'string' ? { pieceIds: flags.pieces.split(',').map((id) => id.trim()) } : {}),
       ...(typeof flags.binary2text === 'string' ? { binary2text: resolve(ctx.cwd, flags.binary2text) } : {}),
       ...(ctx.env ? { env: ctx.env } : {}),
     }).catch((error: unknown) => {

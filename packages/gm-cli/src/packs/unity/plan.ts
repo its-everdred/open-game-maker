@@ -5,7 +5,7 @@ import { expandUnityInstances } from './instances.js';
 import { meshNameFromMeta } from './model-meta.js';
 import { materialShaderGuid, parseUnitySurface, type UnitySurface } from './material.js';
 import { shaderGraphBase } from './shadergraph.js';
-import { selectUnityBuilding } from './select.js';
+import { selectUnityBuilding, selectUnityPieces } from './select.js';
 import { textureIsSrgb } from './texture-meta.js';
 import { readUnityRecords } from './read.js';
 import type { UnityMeshNode, UnityReference } from './hierarchy.js';
@@ -22,6 +22,7 @@ export async function planUnityAssembly(
   onWarning?: (message: string) => void,
   objectName?: string,
   binary2text?: string,
+  pieceIds?: string[],
 ): Promise<PlannedUnityMesh[]> {
   const canonicalRoot = realpathSync(root);
   const canonicalSource = realpathSync(source);
@@ -49,7 +50,11 @@ export async function planUnityAssembly(
     },
     onWarning ? (guid, id, path) => onWarning(`stale override ${guid}:${id} ${path}`) : undefined,
   );
-  const selected = objectName ? selectUnityBuilding(nodes, objectName) : nodes;
+  const selected = pieceIds
+    ? selectUnityPieces(nodes, pieceIds)
+    : objectName
+      ? selectUnityBuilding(nodes, objectName)
+      : nodes;
   const byId = new Map(selected.map((node) => [node.transformId, node]));
   const visible = (node: UnityMeshNode): boolean => {
     let current: UnityMeshNode | undefined = node;
