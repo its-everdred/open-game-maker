@@ -25,6 +25,7 @@ export type UnpackCaps = { maxMembers: number; maxUnpackedMb: number; maxRatio: 
 export type UnpackResult = { files: number; nested: number; dropped: string[] };
 
 const execFileAsync = promisify(execFile);
+const MAX_NESTED_DEPTH = 5;
 const ARCHIVE = /\.(?:zip|7z|rar|tar|tgz|tar\.gz|unitypackage)$/i;
 const EXECUTABLE = /\.(?:exe|msi|dll|so|dylib|sh|bat|cmd|ps1|appimage|jar|apk|deb|rpm|dmg|app|com|scr|vbs)$/i;
 
@@ -308,9 +309,12 @@ export async function unpack(source: string, destination: string, caps: UnpackCa
   try {
     await extractArchive(source, staging, caps);
     await stripWrapper(staging);
-    const nestedArchives = (await walk(staging)).filter((file) => ARCHIVE.test(file));
+    const nestedArchives = (await walk(staging))
+      .filter((file) => ARCHIVE.test(file))
+      .map((file) => ({ file, depth: 1 }));
     const aggregate = await treeUsage(staging);
-    for (const archive of nestedArchives) {
+    for (const { file: archive, depth } of nestedArchives) {
+      if (depth > MAX_NESTED_DEPTH) throw new Error(`archive exceeds nesting depth limit ${MAX_NESTED_DEPTH}`);
       const remainingBytes = limitBytes(caps) - aggregate.bytes;
       const remainingMembers = caps.maxMembers - aggregate.members - 1;
       if (remainingBytes <= 0) throw new Error('archive exceeds unpacked-size limit');
@@ -325,6 +329,9 @@ export async function unpack(source: string, destination: string, caps: UnpackCa
       await stripWrapper(nestedStaging);
       const nestedUsage = await treeUsage(nestedStaging);
       await rename(nestedStaging, target);
+      nestedArchives.push(
+        ...(await walk(target)).filter((file) => ARCHIVE.test(file)).map((file) => ({ file, depth: depth + 1 })),
+      );
       aggregate.members += nestedUsage.members + 1;
       aggregate.bytes += nestedUsage.bytes;
       nested += 1;

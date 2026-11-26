@@ -108,6 +108,40 @@ describe('unpack', () => {
     ).rejects.toThrow(/unpacked-size limit/);
   });
 
+  it('enforces the size limit on a second nested archive without publishing files', async () => {
+    const root = await directory('gm-unpack-deep-cap-');
+    const inner = new AdmZip();
+    inner.addFile('large.bin', Buffer.alloc(1024 * 1024));
+    const middle = new AdmZip();
+    middle.addFile('inner.zip', inner.toBuffer());
+    const outer = new AdmZip();
+    outer.addFile('middle.zip', middle.toBuffer());
+    const archive = join(root, 'outer.zip');
+    const destination = join(root, 'out');
+    outer.writeZip(archive);
+    await mkdir(destination);
+    await expect(unpack(archive, destination, { ...caps, maxUnpackedMb: 1, maxRatio: 10_000 })).rejects.toThrow(
+      /unpacked-size limit/,
+    );
+    expect(await readdir(destination)).toEqual([]);
+  });
+
+  it('rejects archives nested beyond the depth limit without publishing files', async () => {
+    const root = await directory('gm-unpack-depth-');
+    let contents = Buffer.from('end');
+    for (let depth = 0; depth < 7; depth += 1) {
+      const zip = new AdmZip();
+      zip.addFile(depth === 0 ? 'end.txt' : `level${depth}.zip`, contents);
+      contents = zip.toBuffer();
+    }
+    const archive = join(root, 'outer.zip');
+    const destination = join(root, 'out');
+    await writeFile(archive, contents);
+    await mkdir(destination);
+    await expect(unpack(archive, destination, caps)).rejects.toThrow(/nesting depth limit/);
+    expect(await readdir(destination)).toEqual([]);
+  });
+
   it('extracts one nested archive pass and drops executable files', async () => {
     const root = await directory('gm-unpack-nested-');
     const archive = join(root, 'outer.zip');
