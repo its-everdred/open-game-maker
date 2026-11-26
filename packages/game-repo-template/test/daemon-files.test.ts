@@ -29,6 +29,27 @@ describe('renderDaemonFiles', () => {
     expect(Object.keys(parse(hooks))).toEqual(['after_create', 'before_run', 'before_remove']);
   });
 
+  it('keeps creator quotes literal when they contain Liquid control tags', async () => {
+    const { renderPromptPreferenceSection } = await import('../../gm-cli/src/preferences.js');
+    const quote = 'literal {% endraw %}{{ "not executable" }}{% raw %}';
+    const section = renderPromptPreferenceSection([
+      {
+        id: 'literal',
+        date: '2026-01-01',
+        quote,
+        source: 'https://example.com/source',
+        scope: 'all',
+        topic: 'example',
+        value: 'one',
+        owner_ticket: 1,
+        status: 'active',
+        check: { kind: 'review-only', reason: 'requires review' },
+      },
+    ]);
+    const rendered = await new Liquid().parseAndRender(`{% raw %}${section}{% endraw %}`);
+    expect(rendered).toContain(quote);
+  });
+
   it('renders a game daemon’s sparse checkout and game-scope prompt', () => {
     const { hooks, prompt } = renderDaemonFiles({ gameSlug: 'castle-run' });
     const script = parse(hooks).after_create as string;

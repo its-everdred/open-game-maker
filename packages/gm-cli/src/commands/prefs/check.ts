@@ -1,12 +1,16 @@
+import { existsSync } from 'node:fs';
 import { EXIT, type GmCommand } from '../../command.js';
+import { gameDir, workspaceRoot } from '../../outbox.js';
+import { findPlayAreaGame } from '../../play-area-config.js';
 import {
   checkInstalledPreferenceSections,
   checkPreferenceBundle,
+  checkPromptPreferenceSection,
   checkPreferenceSection,
   readPreferences,
   validatePreferences,
 } from '../../preferences.js';
-import { bundledPreferences, bundledSkill, preferenceSkill, preferencesDirectory } from './list.js';
+import { bundledPreferences, bundledSkill, preferencePrompt, preferenceSkill, preferencesDirectory } from './list.js';
 
 export const command: GmCommand = {
   name: 'prefs check',
@@ -14,15 +18,25 @@ export const command: GmCommand = {
   flags: {},
   async run(ctx) {
     const entries = readPreferences(preferencesDirectory);
+    let game = ctx.cwd;
+    try {
+      const root = workspaceRoot(ctx.cwd);
+      game = gameDir(ctx.cwd, root);
+    } catch {
+      // Outside a repository, there is no enclosing game workspace.
+    }
+    const requireSkill = findPlayAreaGame(ctx.cwd, game) !== undefined;
     const result = validatePreferences(entries);
     if (result.errors.length === 0)
       result.errors.push(
         ...checkPreferenceSection(entries, preferenceSkill),
         ...checkPreferenceBundle(entries, bundledPreferences, bundledSkill),
-        ...checkInstalledPreferenceSections(entries, ctx.cwd),
+        ...checkInstalledPreferenceSections(entries, ctx.cwd, requireSkill),
       );
+    if (result.errors.length === 0 && existsSync(preferencePrompt))
+      result.errors.push(...checkPromptPreferenceSection(entries, preferencePrompt));
     if (result.errors.some((error) => error.includes('/skills/gm-core/SKILL.md: preference section is stale')))
-      ctx.err('run gm skills sync to refresh installed skills');
+      ctx.err('run gm prefs refresh to refresh installed preferences');
     if (result.errors.length) {
       result.errors.forEach(ctx.err);
       return EXIT.failed;

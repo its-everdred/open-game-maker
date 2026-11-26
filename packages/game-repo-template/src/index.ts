@@ -24,7 +24,7 @@ export {
   type Role,
   type SkillsConfig,
 } from './roles.js';
-export { skillPack, type SkillPack } from './skills.js';
+export { skillPack, skillPackVersion, type SkillPack } from './skills.js';
 
 // OGM-035's `TemplateSource` for `game-<engine>@1` refs.
 export class GameRepoTemplateSource {

@@ -19,11 +19,18 @@ import { recipeSchema } from '../../sprite-forge.js';
 import {
   checkInstalledPreferenceSections,
   checkPreferenceBundle,
+  checkPromptPreferenceSection,
   checkPreferenceSection,
   readPreferences,
   validatePreferences,
 } from '../../preferences.js';
-import { bundledPreferences, bundledSkill, preferenceSkill, preferencesDirectory } from '../prefs/list.js';
+import {
+  bundledPreferences,
+  bundledSkill,
+  preferencePrompt,
+  preferenceSkill,
+  preferencesDirectory,
+} from '../prefs/list.js';
 
 function ticketLabels(body: string): Set<string> {
   return new Set(
@@ -250,12 +257,10 @@ export const command: GmCommand = {
         ...checkPreferenceSection(preferenceEntries, preferenceSkill),
         ...checkPreferenceBundle(preferenceEntries, bundledPreferences, bundledSkill),
       );
-    const preferenceWarnings =
-      preferenceProblems.length === 0 ? checkInstalledPreferenceSections(preferenceEntries, ctx.cwd) : [];
-    if (!ctx.json) {
-      preferenceProblems.forEach(ctx.err);
-      preferenceWarnings.forEach((warning) => ctx.err(`warning: ${warning}; run gm skills sync`));
-    }
+    if (preferenceProblems.length === 0 && existsSync(preferencePrompt))
+      preferenceProblems.push(...checkPromptPreferenceSection(preferenceEntries, preferencePrompt));
+    let preferenceWarnings: string[] = [];
+    if (!ctx.json) preferenceProblems.forEach(ctx.err);
     const prProblems =
       typeof flags.body === 'string'
         ? [
@@ -283,6 +288,12 @@ export const command: GmCommand = {
       // The static gate also works outside a game repository.
     }
     const playAreaGame = findPlayAreaGame(ctx.cwd, game);
+    if (preferenceProblems.length === 0)
+      preferenceWarnings = checkInstalledPreferenceSections(preferenceEntries, ctx.cwd, Boolean(playAreaGame));
+    if (!ctx.json)
+      preferenceWarnings.forEach((warning) =>
+        ctx.err(`warning: ${warning}${warning.startsWith('no installed') ? '' : '; run gm prefs refresh'}`),
+      );
     if (playAreaGame) {
       playArea = await checkPlayArea(ctx, playAreaGame);
       if (!ctx.json) playArea.output.forEach(playArea.ok ? ctx.out : ctx.err);

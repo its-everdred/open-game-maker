@@ -5,6 +5,12 @@ import { readPreferences, validatePreferences } from '../../preferences.js';
 
 export const bundledPreferences = fileURLToPath(new URL('../../../preferences/', import.meta.url));
 export const bundledSkill = fileURLToPath(new URL('../../../preferences-worker.md', import.meta.url));
+export const preferencePromptFixture = fileURLToPath(
+  new URL('../../../../game-repo-template/test/fixtures/prompt.expected.md', import.meta.url),
+);
+export const preferencePrompt = fileURLToPath(
+  new URL('../../../../game-repo-template/templates/prompt.md.liquid', import.meta.url),
+);
 const corePreferences = fileURLToPath(new URL('../../../../../preferences/', import.meta.url));
 const coreSkill = fileURLToPath(new URL('../../../../../skills/gm-core/SKILL.md', import.meta.url));
 export const preferencesDirectory = existsSync(corePreferences) ? corePreferences : bundledPreferences;

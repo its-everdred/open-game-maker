@@ -1,26 +1,64 @@
 import { copyFileSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CommandError, EXIT, type GmCommand } from '../../command.js';
-import { readPreferences, renderPreferenceSection, updatePreferenceSection } from '../../preferences.js';
-import { bundledPreferences, bundledSkill, preferenceSkill, preferencesDirectory } from './list.js';
+import {
+  readPreferences,
+  renderPreferenceSection,
+  updatePreferenceSection,
+  updatePromptPreferenceSection,
+} from '../../preferences.js';
+import {
+  bundledPreferences,
+  bundledSkill,
+  preferencePrompt,
+  preferencePromptFixture,
+  preferenceSkill,
+  preferencesDirectory,
+} from './list.js';
+
+type SyncPaths = {
+  source: string;
+  bundle: string;
+  skill: string;
+  prompt: string;
+  fixture: string;
+  bundledSkill: string;
+};
+
+export function syncPreferenceCopies(paths: SyncPaths): void {
+  if (paths.source === paths.bundle) throw new CommandError('gm prefs sync requires the core repository checkout');
+  const entries = readPreferences(paths.source);
+  const updated = [paths.skill, paths.fixture].map((path) => ({
+    path,
+    contents: updatePreferenceSection(readFileSync(path, 'utf8'), entries),
+  }));
+  updated.push({
+    path: paths.prompt,
+    contents: updatePromptPreferenceSection(readFileSync(paths.prompt, 'utf8'), entries),
+  });
+  const names = new Set(entries.map((entry) => `${entry.id}.json`));
+  for (const name of readdirSync(paths.bundle)) {
+    if (name.endsWith('.json') && !names.has(name)) unlinkSync(join(paths.bundle, name));
+  }
+  for (const name of names) copyFileSync(join(paths.source, name), join(paths.bundle, name));
+  writeFileSync(paths.bundledSkill, `${renderPreferenceSection(entries)}\n`);
+  for (const { path, contents } of updated) writeFileSync(path, contents);
+}
 
 export const command: GmCommand = {
   name: 'prefs sync',
   summary: 'refresh the worker section and packaged preferences',
   flags: {},
   async run(ctx) {
-    if (preferencesDirectory === bundledPreferences)
-      throw new CommandError('gm prefs sync requires the core repository checkout');
-    const entries = readPreferences(preferencesDirectory);
-    const updated = updatePreferenceSection(readFileSync(preferenceSkill, 'utf8'), entries);
-    const names = new Set(entries.map((entry) => `${entry.id}.json`));
-    for (const name of readdirSync(bundledPreferences)) {
-      if (name.endsWith('.json') && !names.has(name)) unlinkSync(join(bundledPreferences, name));
-    }
-    for (const name of names) copyFileSync(join(preferencesDirectory, name), join(bundledPreferences, name));
-    writeFileSync(bundledSkill, `${renderPreferenceSection(entries)}\n`);
-    writeFileSync(preferenceSkill, updated);
-    ctx.out('updated gm-core and packaged preferences');
+    syncPreferenceCopies({
+      source: preferencesDirectory,
+      bundle: bundledPreferences,
+      skill: preferenceSkill,
+      prompt: preferencePrompt,
+      fixture: preferencePromptFixture,
+      bundledSkill,
+    });
+    ctx.out('updated gm-core, daemon prompt and packaged preferences');
     return EXIT.ok;
   },
 };

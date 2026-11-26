@@ -86,7 +86,12 @@ describe('gm skills sync', () => {
     expect(existsSync(join(repo, '.claude/skills/gm-set-kaykit'))).toBe(false);
 
     const lock = JSON.parse(readFileSync(join(repo, 'skills.lock'), 'utf8')) as SkillsLock;
-    expect(lock).toMatchObject({ v: 1, pack: '0.0.0', vendored: { 'phaserjs/phaser': 'abc123' } });
+    const { skillPackVersion } = await import('@ogm/game-repo-template');
+    expect(lock).toMatchObject({
+      v: 1,
+      pack: skillPackVersion(pack, '0.0.0'),
+      vendored: { 'phaserjs/phaser': 'abc123' },
+    });
     expect(lock.skills['gm-core/SKILL.md']?.sha256).toBe(sha(join(repo, '.claude/skills/gm-core/SKILL.md')));
     expect(lock.skills['gm-core/references/rules.md']?.sha256).toBe(
       sha(join(repo, '.claude/skills/gm-core/references/rules.md')),
@@ -245,9 +250,11 @@ describe('gm skills sync', () => {
 
     const list = await gm(['skills', 'list', '--limit', '3'], { cwd: repo, env: { GM_SKILLS_DIR: pack } });
     expect(list.code).toBe(0);
-    expect(list.out).toContain('gm-core  0.0.0');
+    const { skillPackVersion } = await import('@ogm/game-repo-template');
+    const version = skillPackVersion(pack, '0.0.0');
+    expect(list.out).toContain(`gm-core  ${version}`);
     expect(list.out).toContain('cameras  vendored');
-    expect(list.out).not.toContain('gm-extra  0.0.0');
+    expect(list.out).not.toContain(`gm-extra  ${version}`);
     expect(list.out.at(-1)).toBe('+1 more  (--limit 4)');
   });
 

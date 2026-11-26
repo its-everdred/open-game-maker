@@ -8,6 +8,7 @@ import type { GateResult } from '@ogm/gm-verify';
 
 import { gm, tempDir } from './helpers.js';
 import * as preferences from '../src/preferences.js';
+import * as playAreaCheck from '../src/play-area-check.js';
 
 const state = vi.hoisted(() => ({
   l0: {
@@ -145,6 +146,24 @@ describe('gm check', () => {
       const result = await gm(['check', '--json']);
       expect(result.code).toBe(0);
       expect(JSON.parse(result.out[0]!).preferenceWarnings).toContain('stale worker skill');
+    } finally {
+      spy.mockRestore();
+    }
+  }, 180_000);
+
+  it('reports a failed capture gate for an SDK game with a nonstandard layout', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const root = tempDir();
+    execFileSync('git', ['-C', root, 'init', '-q']);
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ dependencies: { '@gm/sdk': '*' } }));
+    const spy = vi
+      .spyOn(playAreaCheck, 'checkPlayArea')
+      .mockResolvedValue({ ok: false, output: ['capture unavailable'] });
+    try {
+      const result = await gm(['check', '--json'], { cwd: root });
+      expect(result.code).toBe(1);
+      expect(JSON.parse(result.out[0]!).playArea.output).toContain('capture unavailable');
+      expect(spy).toHaveBeenCalled();
     } finally {
       spy.mockRestore();
     }
