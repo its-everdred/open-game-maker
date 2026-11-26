@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { expandUnityInstances } from '../src/packs/unity/instances.js';
 import { parseUnityYaml } from '../src/packs/unity/yaml.js';
 
@@ -51,4 +51,19 @@ it('refuses unsupported removals instead of producing an incomplete mesh', () =>
   const mutated = structuredClone(scene);
   (mutated.get('12')!.data.m_Modification as Record<string, unknown>).m_RemovedComponents = [{ fileID: '5' }];
   expect(() => expandUnityInstances(mutated, () => prefab)).toThrow('unsupported prefab m_RemovedComponents');
+});
+
+it('loads repeated prefabs once while keeping instance overrides independent', () => {
+  const duplicated = structuredClone(scene);
+  const second = structuredClone(duplicated.get('12')!);
+  second.id = '13';
+  const modification = second.data.m_Modification as { m_Modifications: Array<{ value: string }> };
+  modification.m_Modifications[0]!.value = '8';
+  duplicated.set('13', second);
+  const load = vi.fn(() => prefab);
+  const nodes = expandUnityInstances(duplicated, load);
+  expect(load).toHaveBeenCalledTimes(1);
+  expect(nodes.find((node) => node.transformId === 'root/12/2')?.position).toEqual([0, 3, 0]);
+  expect(nodes.find((node) => node.transformId === 'root/13/2')?.position).toEqual([0, 8, 0]);
+  expect(prefab.get('2')?.data.m_LocalPosition).toEqual({ x: '0', y: '0', z: '0' });
 });

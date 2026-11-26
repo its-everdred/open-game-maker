@@ -20,6 +20,7 @@ export function expandUnityInstances(
   onStale?: (guid: string, id: string, path: string) => void,
 ): UnityMeshNode[] {
   const result: UnityMeshNode[] = [];
+  const prefabs = new Map<string, Map<string, UnityRecord>>();
   const visit = (records: Map<string, UnityRecord>, scope: string, parent: string | null, stack: string[]) => {
     const aliases = new Map<string, string>();
     for (const record of records.values()) {
@@ -48,7 +49,12 @@ export function expandUnityInstances(
         if (Array.isArray(entries) && entries.length) throw new Error(`unsupported prefab ${field}`);
       }
       const parentId = id(modification.m_TransformParent);
-      const child = applyPrefabOverrides(load(guid), modification.m_Modifications ?? [], {
+      let prefab = prefabs.get(guid);
+      if (!prefab) {
+        prefab = load(guid);
+        prefabs.set(guid, prefab);
+      }
+      const child = applyPrefabOverrides(prefab, modification.m_Modifications ?? [], {
         sourceGuid: guid,
         ...(onStale ? { onStale: (id, path) => onStale(guid, id, path) } : {}),
       });
