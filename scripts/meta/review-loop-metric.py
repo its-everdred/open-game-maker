@@ -17,6 +17,7 @@ from pathlib import Path
 def read_observations(path: Path, cutoff: datetime) -> list[tuple[str, float]]:
     published: dict[tuple[str, str, str], tuple[str, datetime]] = {}
     refreshes: dict[tuple[str, str, str], list[datetime]] = {}
+    feed_posts: dict[tuple[str, str, str], tuple[str, datetime]] = {}
     if not path.exists():
         return []
     with path.open(encoding="utf-8") as stream:
@@ -44,10 +45,18 @@ def read_observations(path: Path, cutoff: datetime) -> list[tuple[str, float]]:
                         continue
                     key = (source, game, str(item["id"]))
                     refreshes.setdefault(key, []).append(timestamp)
+                    try:
+                        posted = datetime.fromisoformat(item["postedAt"].replace("Z", "+00:00"))
+                        if posted.tzinfo is not None and cutoff <= posted <= timestamp:
+                            feed_posts.setdefault(key, (str(item["ticket"]), posted))
+                    except (KeyError, TypeError, ValueError):
+                        pass
             except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                 continue
     observations = []
-    for key, (ticket, posted) in published.items():
+    # Round publish events remain authoritative where available. Command feeds
+    # have no publish event, so use the original timestamp in the visible card.
+    for key, (ticket, posted) in (feed_posts | published).items():
         first_refresh = min((timestamp for timestamp in refreshes.get(key, []) if timestamp >= posted), default=None)
         if first_refresh is not None:
             observations.append((ticket, (first_refresh - posted).total_seconds()))
@@ -111,7 +120,7 @@ def main() -> int:
         print("No review feed observations in the selected window.")
         return 0
     seconds = [elapsed for _, elapsed in rows]
-    print(f"S6 first feed refresh: {len(rows)} rounds; median {statistics.median(seconds):.1f}s; worst {max(seconds):.1f}s")
+    print(f"S6 first feed refresh: {len(rows)} cards; median {statistics.median(seconds):.1f}s; worst {max(seconds):.1f}s")
     if args.rows:
         for ticket, elapsed in rows:
             print(f"ticket {ticket}: {elapsed:.1f}s")

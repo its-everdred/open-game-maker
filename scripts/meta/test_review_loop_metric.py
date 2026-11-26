@@ -32,6 +32,19 @@ class ReviewLoopMetricTest(unittest.TestCase):
             observations = METRIC.read_observations(path, datetime.now(timezone.utc) - timedelta(hours=1))
         self.assertEqual(observations, [("42", 20.0)])
 
+    def test_observes_command_feed_without_a_separate_publish_record(self):
+        posted = datetime(2026, 11, 26, tzinfo=timezone.utc)
+        refresh = posted + timedelta(seconds=20)
+        item = {"ticket": "42", "id": "decision-1", "postedAt": posted.isoformat()}
+        rows = [
+            {"timestamp": refresh.isoformat(), "event": "feed_refresh", "source": "game_commands", "gameId": "g1", "items": [item]},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "review-publishes.log"
+            path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+            observations = METRIC.read_observations(path, posted - timedelta(seconds=1))
+        self.assertEqual(observations, [("42", 20.0)])
+
     def test_counts_answered_review_cards_from_the_round_store(self):
         cutoff = datetime(2026, 11, 26, tzinfo=timezone.utc)
         with tempfile.TemporaryDirectory() as directory:
