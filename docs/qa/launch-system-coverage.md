@@ -22,6 +22,7 @@ Baseline: `ed58582f20b103ba01029899819256c31d9ca947`. This table distinguishes b
 - Local post-deploy logs contain 14 New Game runs. The latest, `ed58582f20b1`, exited 1 with missing API, repository, internal token or QA session configuration. The launch plan records earlier timeouts and a 502. The later decisions replace production create/delete checks with local temporary-folder tests (#1402).
 - The latest voice log, `2f4c0698b837`, exited 1 after truncated dictation; two-way audio passed. The preceding `aa7366ad9abe` run passed both. An earlier `fe5db11dc45b` run timed out in both paths.
 - The latest review log, `328c6688e4ea`, exited 0; `df2f74c14f91` exited 1 when the review-note fill timed out at 820×1180. These historical production observations do not prove local system coverage.
+- An exploratory local Blobs draft build needed the workspace SDK's `scenery` export because the game checkout's installed SDK lacked it. With credits redirected to scratch the build completed, but the existing app-switch test failed loading the generated asset manifest. A scratch asset build then failed because the installed asset tool tried to rewrite the read-only shared library index. This run provides no CPU, online, or successful lifecycle evidence.
 
 ## Deliberate breaks
 
