@@ -23,4 +23,4 @@ export {
 } from './GlassChrome';
 export { GlassDialog } from './GlassDialog';
 export { GlassField, GlassSegmented, GlassSlider } from './GlassForms';
-export { GlassCover, GlassOption } from './GlassMedia';
+export { GlassChoice, GlassCover, GlassOption } from './GlassMedia';

@@ -58,3 +58,36 @@ export function GlassCover({ title, image, imageAlt = '', aspect = 'wide', badge
     </div>
   );
 }
+
+type ChoiceProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-label' | 'aria-pressed'> & {
+  'aria-label': string;
+  letter: string;
+  selected: boolean;
+  children: ReactNode;
+};
+
+export function GlassChoice({
+  letter,
+  selected,
+  children,
+  className,
+  type = 'button',
+  onClick,
+  ...props
+}: ChoiceProps) {
+  if (!props['aria-label'].trim()) throw new Error('GlassChoice requires a non-empty aria-label');
+  return (
+    <button
+      {...props}
+      type={type}
+      aria-pressed={selected}
+      onClick={glassActivation(props['aria-disabled'], onClick)}
+      className={classes('ogm-glass-choice', className)}
+    >
+      {children}
+      <span className="ogm-choice-letter" aria-hidden="true">
+        {letter}
+      </span>
+    </button>
+  );
+}

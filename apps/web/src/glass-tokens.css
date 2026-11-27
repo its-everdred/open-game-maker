@@ -147,6 +147,10 @@
   );
   --ogm-component-cover-name-font: 700 22px/1.05 var(--ogm-font-display);
   --ogm-component-cover-name-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  --ogm-component-choice-ring: 3px;
+  --ogm-component-choice-shadow: 0 12px 30px -10px var(--ogm-role-needs-you);
+  --ogm-component-choice-badge-font: 700 20px/1 var(--ogm-font-display);
+  --ogm-component-choice-badge-size: 36px;
   --ogm-radius-xs: 8px;
   --ogm-radius-sm: 12px;
   --ogm-radius-md: 16px;

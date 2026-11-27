@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import { GlassCover, GlassOption } from './GlassMedia';
+import { GlassChoice, GlassCover, GlassOption } from './GlassMedia';
 
 it('exposes the selected state and suppresses disabled activation', () => {
   const onClick = vi.fn();
@@ -31,4 +31,18 @@ it('renders the game title, image and badges in the requested cover format', () 
   expect(screen.getByText('Blobs VS Blocks')).toBeVisible();
   expect(screen.getByText('Private')).toBeVisible();
   expect(container.firstChild).toHaveClass('ogm-cover-phone');
+});
+
+it('exposes a media choice and its selected state', () => {
+  const onClick = vi.fn();
+  render(
+    <GlassChoice aria-label="Cooler dusk" letter="B" selected onClick={onClick}>
+      <img src="/dusk.png" alt="" />
+    </GlassChoice>,
+  );
+  const choice = screen.getByRole('button', { name: 'Cooler dusk' });
+  expect(choice).toHaveAttribute('aria-pressed', 'true');
+  expect(choice.querySelector('img')).toHaveAttribute('src', '/dusk.png');
+  fireEvent.click(choice);
+  expect(onClick).toHaveBeenCalledOnce();
 });
