@@ -57,6 +57,11 @@ export function materialColorProperties(source: string): Map<string, unknown> {
   return properties(object(material(source).m_SavedProperties).m_Colors);
 }
 
+/** Return saved texture environments when resolving Unity texture defaults. */
+export function materialTextureProperties(source: string): Map<string, unknown> {
+  return properties(object(material(source).m_SavedProperties).m_TexEnvs);
+}
+
 /** Interpret standard base-color properties or explicit graph-resolved texture slots. */
 export function parseUnitySurface(source: string, graph?: ShaderGraphBase): UnitySurface {
   const materialData = material(source);

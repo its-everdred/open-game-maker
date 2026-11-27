@@ -6,6 +6,7 @@ import { meshNameFromMeta } from './model-meta.js';
 import {
   materialColorProperties,
   materialFloatProperties,
+  materialTextureProperties,
   materialShaderGuid,
   parseUnitySurface,
   type UnitySurface,
@@ -122,6 +123,7 @@ export async function planUnityAssembly(
               ),
               materialFloatProperties(contents),
               materialColorProperties(contents),
+              materialTextureProperties(contents),
             ),
           );
         } catch (error) {

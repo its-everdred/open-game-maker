@@ -30,7 +30,7 @@ it('resolves texture paths inside blended graph terms', async () => {
     await writeFile(join(root, 'surface.mat.meta'), `guid: ${material}\n`);
     await writeFile(
       join(root, 'surface.mat'),
-      `--- !u!21 &1\nMaterial:\n  m_Shader: {fileID: 4800000, guid: ${shader}}\n  m_SavedProperties:\n    m_Floats:\n    - _Weight: 0.5\n    m_Colors:\n    - _Offset: {r: 0.25, g: 0.125, b: 0, a: 0}\n    m_TexEnvs:\n    - _SampleTexture2D_a_Texture_1: {m_Texture: {guid: ${first}}, m_Scale: {x: 1, y: 1}, m_Offset: {x: 0, y: 0}}\n    - _SampleTexture2D_b_Texture_1: {m_Texture: {guid: ${second}}, m_Scale: {x: 1, y: 1}, m_Offset: {x: 0, y: 0}}\n`,
+      `--- !u!21 &1\nMaterial:\n  m_Shader: {fileID: 4800000, guid: ${shader}}\n  m_SavedProperties:\n    m_Floats:\n    - _Weight: 0.5\n    m_Colors:\n    - _Offset: {r: 0.25, g: 0.125, b: 0, a: 0}\n    m_TexEnvs:\n    - _SampleTexture2D_a_Texture_1: {m_Texture: {guid: ${first}}, m_Scale: {x: 1, y: 1}, m_Offset: {x: 0, y: 0}}\n    - _SampleTexture2D_b_Texture_1: {m_Texture: {guid: ${second}}, m_Scale: {x: 1, y: 1}, m_Offset: {x: 0, y: 0}}\n    - _SampleTexture2D_white_Texture_1: {m_Texture: {fileID: 0}, m_Scale: {x: 1, y: 1}, m_Offset: {x: 0, y: 0}}\n`,
     );
     const edge = (from: string, to: string, input: number, output = 0) => ({
       m_OutputSlot: { m_Node: { m_Id: from }, m_SlotId: output },
@@ -263,6 +263,26 @@ it('resolves texture paths inside blended graph terms', async () => {
       adjustment: { op: 'power', amount: 0.5 },
       products: [{ texturePaths: [join(root, 'b.png')], textureSrgb: [true] }],
     });
+    docs[0]!.m_Edges = [edge('power', 'base', 0, 2), edge('b', 'power', 0), edge('white', 'power', 1, 6)];
+    docs.push(
+      {
+        m_ObjectId: 'white',
+        m_Type: 'UnityEditor.ShaderGraph.SampleTexture2DNode',
+        m_TextureType: 0,
+        m_Slots: [{ m_Id: 'white-slot' }],
+      } as (typeof docs)[number],
+      {
+        m_ObjectId: 'white-slot',
+        m_Type: 'UnityEditor.ShaderGraph.Texture2DInputMaterialSlot',
+        m_Id: 1,
+        m_SlotType: 0,
+        m_DefaultType: 0,
+        m_Texture: { m_SerializedTexture: '{"texture":{"instanceID":0}}', m_Guid: '' },
+      } as (typeof docs)[number],
+    );
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const defaultPlan = await planUnityAssembly(root, prefab);
+    expect(defaultPlan[0]?.surfaces[0]?.adjustment).toEqual({ op: 'power', amount: 1 });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

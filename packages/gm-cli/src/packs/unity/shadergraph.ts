@@ -1,5 +1,6 @@
 import { compileWeightExpression, type WeightExpression } from './weight-expression.js';
 import { compileUvAffine, type UvAffine } from './uv-affine.js';
+import { createScalarFactor } from './color-factor.js';
 
 type GraphObject = Record<string, unknown>;
 function object(value: unknown): GraphObject {
@@ -84,6 +85,7 @@ export function shaderGraphBase(
   source: string,
   floats: ReadonlyMap<string, unknown> = new Map(),
   colors: ReadonlyMap<string, unknown> = new Map(),
+  textures?: ReadonlyMap<string, unknown>,
 ): ShaderGraphBase {
   const docs = shaderGraphDocuments(source);
   const graph = docs.find((doc) => doc.m_Type === 'UnityEditor.ShaderGraph.GraphData');
@@ -110,56 +112,7 @@ export function shaderGraphBase(
       { node: nodeId(output.m_Node), inputSlot: input.m_SlotId, outputSlot: output.m_SlotId },
     ]);
   }
-  const scalarFactor = (edge: { node: string; outputSlot: number }): ShaderGraphFactor => {
-    const node = byId.get(edge.node);
-    const inputs = incoming.get(edge.node) ?? [];
-    if (node?.m_Type === 'UnityEditor.ShaderGraph.SplitNode' && edge.outputSlot >= 1 && edge.outputSlot <= 4) {
-      if (inputs.length !== 1 || inputs[0]!.inputSlot !== 0 || inputs[0]!.outputSlot !== 0)
-        throw new Error('unsupported Unity color adjustment component');
-      const source = byId.get(inputs[0]!.node);
-      if (source?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode' || (incoming.get(inputs[0]!.node) ?? []).length)
-        throw new Error('unsupported Unity color adjustment component');
-      const property = byId.get(nodeId(source.m_Property));
-      const key = property?.m_OverrideReferenceName || property?.m_DefaultReferenceName;
-      const channel = edge.outputSlot - 1;
-      if (
-        property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.ColorShaderProperty' ||
-        (property.m_ColorMode !== undefined && property.m_ColorMode !== 0) ||
-        typeof key !== 'string' ||
-        !key
-      )
-        throw new Error('unsupported Unity color adjustment property');
-      const value = Number(object(property.m_Value)[['r', 'g', 'b', 'a'][channel]!]);
-      if (!Number.isFinite(value)) throw new Error('invalid Unity color adjustment property');
-      return { key, kind: 'component', channel, defaultValue: value };
-    }
-    if (node?.m_Type === 'UnityEditor.ShaderGraph.PropertyNode' && edge.outputSlot === 0 && !inputs.length) {
-      const property = byId.get(nodeId(node.m_Property));
-      const key = property?.m_OverrideReferenceName || property?.m_DefaultReferenceName;
-      if (
-        property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty' ||
-        typeof key !== 'string' ||
-        !key ||
-        typeof property.m_Value !== 'number' ||
-        !Number.isFinite(property.m_Value)
-      )
-        throw new Error('unsupported Unity color adjustment property');
-      return { key, kind: 'scalar', defaultValue: property.m_Value };
-    }
-    if (node?.m_Type === 'UnityEditor.ShaderGraph.Vector1Node' && edge.outputSlot === 0 && !inputs.length) {
-      const slots = Array.isArray(node.m_Slots) ? node.m_Slots.map((slot) => byId.get(nodeId(slot))) : [];
-      const matches = slots.filter((slot) => slot?.m_Id === 1 && slot.m_SlotType === 0);
-      if (node.m_Slots !== undefined && matches.length !== 1)
-        throw new Error('invalid Unity color adjustment constant');
-      const value = matches.length ? matches[0]!.m_Value : node.m_Value;
-      if (typeof value !== 'number' || !Number.isFinite(value))
-        throw new Error('invalid Unity color adjustment constant');
-      return { key: '', kind: 'constant', defaultValue: value };
-    }
-    throw new Error(
-      `unsupported Unity color adjustment amount: ${String(node?.m_Type)} output ${edge.outputSlot} at ${edge.node}`,
-    );
-  };
+  const scalarFactor = createScalarFactor(byId, incoming, floats, colors, textures);
   const visit = (id: string, ancestors: Set<string>): ShaderGraphBase => {
     if (ancestors.has(id)) throw new Error('cyclic Unity shader graph');
     const node = byId.get(id);
@@ -436,8 +389,13 @@ export function shaderGraphBase(
       const source = byId.get(input.node);
       if (source?.m_Type === 'UnityEditor.ShaderGraph.SplitNode')
         return { textures: [], factors: [scalarFactor(input)] };
+      if (source?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode' && [4, 5, 6, 7].includes(input.outputSlot))
+        return { textures: [], factors: [scalarFactor(input)] };
       const outputSlot = graphOutputSlot(source);
-      if (input.outputSlot !== outputSlot) throw new Error('unsupported Unity shader graph output channel');
+      if (input.outputSlot !== outputSlot)
+        throw new Error(
+          `unsupported Unity shader graph output channel ${input.outputSlot} from ${String(source?.m_Type)} at ${input.node}`,
+        );
       return visit(input.node, next);
     });
     if (expected === 1) return terms[0]!;
