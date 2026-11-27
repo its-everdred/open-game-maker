@@ -1,18 +1,21 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { expect, it } from 'vitest';
-import { NullRepoProvisioner } from '../../src/games/repo-provisioner.js';
+import { createLocalInstance } from '../../../../apps/web/e2e/support/local-instance.js';
 import { asUser } from '../helpers.js';
 import { startLocalApi } from './local-api.js';
+import { localProvisioner } from './local-provisioner.js';
 
 it('serves the real API with the test principal only when supplied', async () => {
   const root = mkdtempSync(join(tmpdir(), 'ogm-system-api-'));
+  let instance: ReturnType<typeof createLocalInstance> | undefined;
   let api: Awaited<ReturnType<typeof startLocalApi>> | undefined;
   try {
-    const provisioner = new NullRepoProvisioner();
-    api = await startLocalApi(root, { repoProvisioner: provisioner });
+    instance = createLocalInstance();
+    api = await startLocalApi(root, { repoProvisioner: localProvisioner(instance.checkout) });
     expect((await fetch(`${api.origin}/api/v1/games`)).status).toBe(401);
     const response = await fetch(`${api.origin}/api/v1/games`, { headers: asUser(api.userId) });
     expect(response.status).toBe(200);
@@ -23,9 +26,15 @@ it('serves the real API with the test principal only when supplied', async () =>
       body: JSON.stringify({ title: 'System game', repoVisibility: 'private' }),
     });
     expect(created.status).toBe(201);
-    expect(provisioner.calls).toHaveLength(1);
+    const game = (await created.json()) as { slug: string };
+    expect(
+      execFileSync('git', ['--git-dir', instance.bare, 'show', `main:games/${game.slug}/package.json`], {
+        encoding: 'utf8',
+      }),
+    ).toContain('name');
   } finally {
     await api?.close();
     rmSync(root, { recursive: true, force: true });
+    instance?.cleanup();
   }
 }, 120_000);
