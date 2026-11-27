@@ -30,23 +30,36 @@ async function startWeb(apiOrigin: string): Promise<ChildProcess> {
     { cwd: process.cwd(), env: { ...env, OGM_API_PORT: new URL(apiOrigin).port }, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   try {
-    await new Promise<void>((resolveReady, reject) => {
-      let output = '';
-      const timeout = setTimeout(() => reject(new Error('web server did not start')), 120_000);
-      const finish = (error?: Error) => {
-        clearTimeout(timeout);
-        if (error) reject(error);
-        else resolveReady();
-      };
-      child.once('error', finish);
-      child.once('exit', (code) => finish(new Error(`web server exited (${code}): ${output.slice(-500)}`)));
-      const onOutput = (chunk: Buffer) => {
-        output += chunk.toString();
-        if (output.includes(webOrigin)) finish();
-      };
-      child.stdout!.on('data', onOutput);
-      child.stderr!.on('data', onOutput);
+    let output = '';
+    let failure: Error | undefined;
+    child.once('error', (error) => {
+      failure = error;
     });
+    child.once('exit', (code) => {
+      failure = new Error(`web server exited (${code})`);
+    });
+    const onOutput = (chunk: Buffer) => {
+      output += chunk.toString();
+    };
+    child.stdout!.on('data', onOutput);
+    child.stderr!.on('data', onOutput);
+    try {
+      await expect
+        .poll(
+          async () => {
+            if (failure) throw failure;
+            try {
+              return (await fetch(webOrigin)).ok;
+            } catch {
+              return false;
+            }
+          },
+          { timeout: 120_000, message: 'web server did not start' },
+        )
+        .toBe(true);
+    } catch (error) {
+      throw new Error(`web server did not start: ${output.slice(-1000)}`, { cause: error });
+    }
     return child;
   } catch (error) {
     child.kill();
