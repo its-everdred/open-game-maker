@@ -95,7 +95,7 @@ export function glassScreens(files) {
     )
       screens.add('Unmapped');
     else if (file.startsWith('apps/web/public/')) screens.add('Unmapped');
-    else if (file.startsWith('apps/web/src/') && /\.(?:ts|tsx|css)$/.test(file)) screens.add('Unmapped');
+    else if (file.startsWith('apps/web/src/')) screens.add('Unmapped');
   }
   return [...screens].sort();
 }

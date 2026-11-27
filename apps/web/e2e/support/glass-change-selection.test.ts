@@ -11,6 +11,8 @@ it('selects affected screens and fails closed on other visible routes', () => {
   expect(glassScreens(['apps/web/src/routes/new/StyleStep.tsx'])).toEqual(['NewGame', 'Unmapped']);
   expect(glassScreens(['apps/web/src/routes/login/route.tsx'])).toEqual(['SignIn', 'Unmapped']);
   expect(glassScreens(['apps/web/src/icons.ts'])).toEqual(['Unmapped']);
+  expect(glassScreens(['apps/web/src/routes/games/showcase-data.json'])).toEqual(['GameSheet', 'Home']);
+  expect(glassScreens(['apps/web/src/shared-visual.json'])).toEqual(['Unmapped']);
   expect(glassScreens(['apps/web/src/routes/admin/Members.tsx'])).toEqual(['Admin']);
   expect(glassScreens(['apps/web/src/routes/admin/admin.css'])).toEqual(['Admin', 'Unmapped']);
   expect(glassScreens(['apps/web/src/features/worker-builds/BuildTracker.tsx'])).toEqual(['Activity', 'Unmapped']);
