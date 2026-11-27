@@ -4,6 +4,7 @@ import { readFile, realpath } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { compareGlassScreen } from '../../../packages/gm-cli/src/design-parity/compare';
+import { assertGameFramePainted } from '../../../packages/gm-cli/src/design-parity/game-frame';
 import { verifyGlassReference } from '../../../packages/gm-cli/src/design-parity/reference';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { mockGamesRoutes } from './fixtures/games-routes';
@@ -11,6 +12,7 @@ import { installNewRoutes } from './fixtures/new-routes';
 import { buildId, installGameApi } from './support/mock-game-api';
 import { captureBuildSuffix, captureUrlFile } from './support/shell-capture-files';
 import { parityBridgePort } from './support/parity-bridge';
+import { parityEditorRoute } from './support/parity-editor-route';
 import { intersectsViewport } from './support/parity-viewport';
 import { gameHeaders } from '@ogm/contracts';
 import type { DesignDoc } from '@ogm/contracts/browser';
@@ -333,7 +335,8 @@ for (const target of screens) {
           );
         }
       }
-      await page.goto(target.route, { waitUntil: 'domcontentloaded' });
+      const route = target.screen === 'Editor' ? parityEditorRoute(target.route, actualGameId) : target.route;
+      await page.goto(route, { waitUntil: 'domcontentloaded' });
       const selector =
         target.screen === 'Title'
           ? '.title-screen'
@@ -385,22 +388,8 @@ for (const target of screens) {
           await expect(game.locator('html')).toHaveAttribute('data-boot-stage', 'ready', {
             timeout: 180_000,
           });
-          for (const [screen, text, next] of [
-            ['title', 'Play', 'menu'],
-            ['menu', 'Endless', 'pieces'],
-            ['pieces', 'Blobs', 'select'],
-            ['select', 'Play', 'solo'],
-          ] as const) {
-            const flow = game.locator('#blobs-flow');
-            await expect(flow).toHaveAttribute('data-screen', screen, { timeout: 30_000 });
-            const button =
-              screen === 'select' ? flow.locator('.blobs-menu__play') : flow.getByText(text, { exact: true }).first();
-            await expect(button).toBeVisible({ timeout: 30_000 });
-            // Activate the game's own control while the editor owns pointer input.
-            await button.evaluate((element: HTMLElement) => element.click());
-            expect(pageErrors, 'Game errors during capture setup').toEqual([]);
-            await expect(flow).toHaveAttribute('data-screen', next, { timeout: 30_000 });
-          }
+          await expect(game.locator('html')).toHaveAttribute('data-scenario', 'sandbox', { timeout: 30_000 });
+          expect(pageErrors, 'Game errors during capture setup').toEqual([]);
         }
       }
       for (const placeholder of await page.locator('[data-game-id^="showcase:"]:visible').all()) {
@@ -432,6 +421,11 @@ for (const target of screens) {
       });
       console.log(`Capturing ${target.name}`);
       const actual = await page.screenshot({ timeout: 120_000 });
+      if (target.screen === 'Editor') {
+        const frame = await page.locator('.game-frame iframe').boundingBox();
+        if (!frame) throw new Error('Game frame is not visible');
+        await assertGameFramePainted(actual, frame, target.scale);
+      }
       const reference = await readFile(resolve(baseline, `${target.name}.png`));
       const manifest: unknown = JSON.parse(await readFile(resolve(baseline, 'manifest.json'), 'utf8'));
       verifyGlassReference(reference, manifest, `${target.name}.png`);
