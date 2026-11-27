@@ -114,7 +114,7 @@ async function bytesOf(stream: NodeJS.ReadableStream): Promise<Buffer> {
 }
 
 describe('scope session routes', () => {
-  it('keeps an admitted scope session open while its ticket is being filed', async () => {
+  it('abandons a stalled scope filing whose ticket has no spend cap', async () => {
     const deps = setup();
     const app = createApp(deps);
     app.route('/api/v1/games', scopeRoutes);
@@ -123,6 +123,32 @@ describe('scope session routes', () => {
     deps.db
       .insert(schema.jobTickets)
       .values({ jobId: created.jobId, key: 'scope', issueNumber: 42, repo: 'owner/game', sig: 'scope' })
+      .run();
+
+    const result = await app.request(`/api/v1/games/${ids.game}/scope/sessions/${created.sessionId}/abandon`, {
+      method: 'POST',
+      headers: asUser(ids.creator),
+    });
+    expect(result.status).toBe(200);
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+    expect(deps.db.select().from(schema.scopeSessions).get()?.status).toBe('abandoned');
+  });
+  it('keeps an admitted scope session open while its ticket is being filed', async () => {
+    const deps = setup();
+    const app = createApp(deps);
+    app.route('/api/v1/games', scopeRoutes);
+    const created = (await (await create(app)).json()) as { sessionId: string; jobId: string };
+    deps.db.update(schema.jobs).set({ state: 'admitted' }).where(eq(schema.jobs.id, created.jobId)).run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({
+        jobId: created.jobId,
+        key: 'scope',
+        issueNumber: 42,
+        repo: 'owner/game',
+        sig: 'scope',
+        capSetAt: '2026-11-01T18:00:00.000Z',
+      })
       .run();
 
     const result = await app.request(`/api/v1/games/${ids.game}/scope/sessions/${created.sessionId}/abandon`, {

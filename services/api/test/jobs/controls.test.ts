@@ -126,12 +126,41 @@ describe('job controls', () => {
     deps.db.update(schema.jobs).set({ state: 'admitted' }).run();
     deps.db
       .insert(schema.jobTickets)
-      .values({ jobId: ids.job, key: 'first', issueNumber: 142, repo: 'owner/game', sig: 'first' })
+      .values({
+        jobId: ids.job,
+        key: 'first',
+        issueNumber: 142,
+        repo: 'owner/game',
+        sig: 'first',
+        capSetAt: NOW.toISOString(),
+      })
       .run();
     const { app } = appWith(deps);
 
     expect((await post(app, 'cancel')).status).toBe(409);
     expect(deps.db.select().from(schema.jobs).get()).toMatchObject({ state: 'admitted', releasedAt: null });
+  });
+  it('cancels a stalled filing before any ticket has a spend cap', async () => {
+    const deps = setup('queued');
+    deps.db.update(schema.jobs).set({ state: 'admitted' }).run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: ids.job, key: 'first', issueNumber: 142, repo: 'owner/game', sig: 'first' })
+      .run();
+    const { app } = appWith(deps);
+
+    expect((await post(app, 'cancel')).status).toBe(200);
+    expect(deps.db.select().from(schema.jobs).get()).toMatchObject({
+      state: 'cancelled',
+      releasedAt: expect.any(String),
+    });
+  });
+  it('does not cancel an admitted New Game request while its parent may be in flight', async () => {
+    const deps = setup('queued');
+    deps.db.update(schema.jobs).set({ state: 'admitted', kind: 'new_game' }).run();
+    const { app } = appWith(deps);
+    expect((await post(app, 'cancel')).status).toBe(409);
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('admitted');
   });
   it('confirms every ticket before cancelling a multi-ticket job', async () => {
     const deps = setup();
