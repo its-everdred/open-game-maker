@@ -44,7 +44,12 @@ export function glassScreens(files) {
   const screens = new Set();
   for (const file of files) {
     if (/\.(?:test|spec)\.[^.]+$/.test(file)) continue;
-    if (file.startsWith('apps/web/src/routes/games/')) {
+    if (file.startsWith('apps/web/src/routes/signin/') || file.startsWith('apps/web/src/routes/login/')) {
+      screens.add('SignIn');
+    } else if (file === 'apps/web/src/routes/auth.css') {
+      screens.add('SignIn');
+      screens.add('Unmapped');
+    } else if (file.startsWith('apps/web/src/routes/games/')) {
       screens.add('Home');
       if (/GameDetail|games-responsive\.css/.test(file)) screens.add('Unmapped');
     } else if (file.startsWith('apps/web/src/routes/settings/')) {

@@ -19,7 +19,7 @@ const selected = process.env.OGM_GLASS_PARITY_SCREEN;
 const gameDist = process.env.OGM_GLASS_GAME_DIST;
 // eslint-disable-next-line no-restricted-properties
 const bridgePort = process.env.OGM_WEB_BRIDGE_PORT ?? '43176';
-if (selected && !['all', 'Home', 'Editor', 'Settings'].includes(selected)) {
+if (selected && !['all', 'Home', 'Editor', 'Settings', 'SignIn'].includes(selected)) {
   throw new Error(`Unknown glass parity screen: ${selected}`);
 }
 const root = resolve(process.cwd(), '../..');
@@ -28,6 +28,7 @@ const runId = randomUUID();
 test.use({ trace: 'off' });
 test.setTimeout(180_000);
 const screens = [
+  { screen: 'SignIn', name: 'SignIn-780x1688', width: 390, height: 844, scale: 2, route: '/signin?test' },
   { screen: 'Home', name: 'Home-780x1688', width: 390, height: 844, scale: 2, route: '/all?test' },
   { screen: 'Home', name: 'HomeLandscape-844x390', width: 844, height: 390, scale: 1, route: '/all?test' },
   { screen: 'Home', name: 'HomeDesktop-1440x900', width: 1440, height: 900, scale: 1, route: '/all?test' },
@@ -66,7 +67,7 @@ for (const target of screens) {
     try {
       const page = await context.newPage();
       await page.route('**/api/v1/**', (route) => route.fulfill({ status: 404, json: { error: 'unmocked' } }));
-      await installAuthRoutes(page, { signedIn: true });
+      await installAuthRoutes(page, { signedIn: target.screen !== 'SignIn' });
       if (target.screen === 'Editor') {
         if (!gameDist) throw new Error('Editor parity requires a real game build via --dist');
         const dist = await realpath(gameDist);
@@ -174,11 +175,13 @@ for (const target of screens) {
       }
       await page.goto(target.route, { waitUntil: 'domcontentloaded' });
       const selector =
-        target.screen === 'Editor'
-          ? '.edit-workspace'
-          : target.screen === 'Home'
-            ? '[data-game-id]'
-            : '.settings-screen';
+        target.screen === 'SignIn'
+          ? '.signin-screen'
+          : target.screen === 'Editor'
+            ? '.edit-workspace'
+            : target.screen === 'Home'
+              ? '[data-game-id]'
+              : '.settings-screen';
       await expect(page.locator(selector).first()).toBeVisible({ timeout: 30_000 });
       if (target.screen === 'Editor') {
         await expect(page.locator('.game-frame iframe')).toBeVisible();
@@ -192,20 +195,33 @@ for (const target of screens) {
         );
       }
       await page.evaluate(async () => {
-        await document.fonts.ready;
-        await Promise.all(
-          Array.from(document.images)
+        const ready = Promise.all([
+          document.fonts.ready,
+          ...Array.from(document.images)
             .filter((image) => image.currentSrc && image.getClientRects().length > 0)
             .map((image) => image.decode()),
-        );
+        ]);
+        let timer: ReturnType<typeof setTimeout>;
+        try {
+          await Promise.race([
+            ready,
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => reject(new Error('Visible images or fonts did not finish loading')), 30_000);
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer!);
+        }
       });
-      const actual = await page.screenshot();
+      console.log(`Capturing ${target.name}`);
+      const actual = await page.screenshot({ timeout: 60_000 });
       const reference = await readFile(resolve(baseline, `${target.name}.png`));
       const manifest: unknown = JSON.parse(await readFile(resolve(baseline, 'manifest.json'), 'utf8'));
       verifyGlassReference(reference, manifest, `${target.name}.png`);
       const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
       const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim() !== '';
       const out = resolve(root, 'assets-local/review/design-parity', dirty ? `${sha}-dirty` : sha, runId, target.name);
+      console.log(`Comparing ${target.name}`);
       const result = await compareGlassScreen(reference, actual, out, resolve(baseline, 'masks.json'), target.name);
       for (const [name, contentType] of [
         ['side-by-side.png', 'image/png'],
@@ -218,7 +234,7 @@ for (const target of screens) {
       console.log(`Glass parity evidence: ${out}`);
       expect(result.pass, `${target.name}: SSIM ${result.ssim}, ΔE > 3 ${result.deltaEOver3Percent}%`).toBe(true);
     } finally {
-      await context.close();
+      await context.close().catch(() => undefined);
     }
   });
 }
