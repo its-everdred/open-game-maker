@@ -1,7 +1,7 @@
 import type { AssemblyPlacement } from './assembly-map.js';
 import type { Cell } from './placement.js';
 
-/** Provisional two-row gable, locally inspected against a rectangular stone shell. */
+/** Two-row gable made from the solid fantasy roof tile inspected against the stone shell. */
 export function stoneGable(footprint: readonly Cell[]): AssemblyPlacement[] {
   if (!footprint.length) throw new Error('roof footprint must not be empty');
   if (footprint.some(({ x, y }) => !Number.isSafeInteger(x) || !Number.isSafeInteger(y))) {
@@ -19,9 +19,10 @@ export function stoneGable(footprint: readonly Cell[]): AssemblyPlacement[] {
   return cells.map((cell) => ({
     cell,
     layer: 'roof',
-    asset: 't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/roof-d1@2026-11-01',
+    asset: 't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/roof-a1@2026-11-01',
     facing: cell.y === minY ? 'N' : 'S',
     solid: false,
     elevation: 1.75,
+    depthOffset: 64,
   }));
 }

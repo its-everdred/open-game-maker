@@ -79,6 +79,14 @@ describe('no-overlap', () => {
     expect(ids(scene(stacked))).toContain('no-overlap/shared-cell');
   });
 
+  it('fails a gravestone placed in a fence cell', () => {
+    const crowded = yard();
+    crowded.pieces.push({ layer: 'decor', x: 2, y: 1, asset: 'pack:gravestone', solid: true });
+    const report = checkScene('yard', scene(crowded), options);
+    expect(report.findings.find((finding) => finding.id === 'no-overlap/fence-gravestone')?.severity).toBe('high');
+    expect(report.pass).toBe(false);
+  });
+
   it('fails sprites that interpenetrate on screen in one depth band', () => {
     const crowded = without(yard(), (p) => p.x === 7 && p.y === 2 && p.layer === 'decor');
     crowded.pieces.push({ layer: 'decor', x: 7, y: 2, asset: 'pack:bush', solid: false });
@@ -251,7 +259,7 @@ describe('review follow-ups', () => {
   });
 
   it('keeps a garden wall that runs on from a closed house out of the shell check', () => {
-    const fixture = yard();
+    const fixture = without(yard(), (piece) => piece.asset === 'pack:flower' && piece.x === 6 && piece.y === 3);
     fixture.pieces.push(
       { layer: 'wall', x: 5, y: 3, asset: 'pack:wall', facing: 'N', solid: true },
       { layer: 'wall', x: 6, y: 3, asset: 'pack:wall', facing: 'N', solid: true },
