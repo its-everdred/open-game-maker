@@ -28,7 +28,7 @@ it('recognizes assembled gate posts and checks their scaled alpha bounds', () =>
   const scaled = screenBox(scene, posts[0]!)!;
   const full = screenBox(scene, { ...posts[0]!, scale: 1 })!;
   for (const [actual, expected] of scaled.map(
-    (value, index) => [value, [-151.6, 112.4, -109.2, 203.6][index]!] as const,
+    (value, index) => [value, [-151.6, 144.4, -109.2, 235.6][index]!] as const,
   )) {
     expect(actual).toBeCloseTo(expected);
   }

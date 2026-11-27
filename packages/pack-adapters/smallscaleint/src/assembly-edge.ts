@@ -72,14 +72,14 @@ export function edgeRun(
     )
       throw new Error('gate post placement is only inspected for Stone A14 facing E at scale 0.4');
     for (const vertex of postVertices) {
-      const cell = { x: vertex.x - inspected.placementOffset.x, y: vertex.y - inspected.placementOffset.y };
-      if (cell.x < 0 || cell.y < 0) throw new Error('gate posts need an enclosing map margin');
+      const cell = { ...vertex };
       placements.push({
         cell,
         layer: 'decor',
         asset: postStyle.asset,
         facing: postStyle.facing,
         scale: postStyle.scale,
+        elevation: inspected.elevation,
         role: 'post',
         solid: false,
       });

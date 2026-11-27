@@ -13,16 +13,16 @@ export const inspectedGatePost: Fact<{
   asset: string;
   facing: TileFacing;
   scale: number;
-  placementOffset: { x: number; y: number };
+  elevation: number;
 }> = {
   value: {
     asset: 't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01',
     facing: 'E',
     scale: 0.4,
-    placementOffset: { x: 1, y: 1 },
+    elevation: 0.5,
   },
   verified:
-    'Stone A14 alpha bounds scanned and its approximate scaled position inspected in a phone render; the fence connection is not verified (2026-11-26).',
+    'Stone A14 alpha bounds scanned and a vertex-aligned scaled position inspected in a standalone render; game depth, collision and the fence connection remain unverified (2026-11-26).',
 };
 
 /**

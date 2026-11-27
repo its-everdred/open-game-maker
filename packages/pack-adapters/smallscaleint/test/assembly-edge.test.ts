@@ -90,9 +90,9 @@ it('places scaled posts at the inspected gate ends without blocking the entry', 
   };
   const run = edgeRun(cells, 'fence', [gate], style);
   const map = new IsoMap(assemblyMap(6, 6, run.placements));
-  expect(map.pieces('decor').map(({ x, y, scale, solid }) => ({ x, y, scale, solid }))).toEqual([
-    { x: 2, y: 4, scale: 0.4, solid: false },
-    { x: 3, y: 4, scale: 0.4, solid: false },
+  expect(map.pieces('decor').map(({ x, y, scale, elevation, solid }) => ({ x, y, scale, elevation, solid }))).toEqual([
+    { x: 3, y: 5, scale: 0.4, elevation: 0.5, solid: false },
+    { x: 4, y: 5, scale: 0.4, elevation: 0.5, solid: false },
   ]);
   expect(run.placements.filter((placement) => placement.layer === 'decor').map((placement) => placement.role)).toEqual([
     'post',
