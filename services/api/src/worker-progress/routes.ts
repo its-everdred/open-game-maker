@@ -34,7 +34,10 @@ const ticketChatKey = (gameId: string, repo: { owner: string; name: string }, ti
 function orderConversation<T extends { at?: string }>(messages: T[]): Omit<T, 'at'>[] {
   return messages
     .sort((a, b) => (Date.parse(a.at ?? '') || 0) - (Date.parse(b.at ?? '') || 0))
-    .map(({ at: _at, ...message }) => message);
+    .map(({ at, ...message }) => {
+      void at;
+      return message;
+    });
 }
 
 export const prefix = '/api/v1';
