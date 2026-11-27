@@ -121,11 +121,11 @@ describe('GET /internal/jobs/by-ticket/:identifier/bundle', () => {
     expect(JSON.stringify(body)).not.toMatch(/aiur_|ghp_|sk-|@/);
   });
 
-  it("hands the build agent the instance's Energy, without dollars", async () => {
+  it("hands the build agent the instance's build budget with unknown resource status, without dollars", async () => {
     const { deps, get } = await setup();
     writeLimits(deps.db, { day: 1_000_000, week: null, month: null, voice: null, images: null }, new Date());
     const { energy } = JobBundle.parse(await (await get('/internal/jobs/by-ticket/12/bundle', SECRET_A)).json());
-    expect(energy).toMatchObject({ level: 'healthy', windows: [{ window: 'day', usedPercent: 0 }, {}, {}] });
+    expect(energy).toMatchObject({ level: 'unknown', windows: [{ window: 'day', usedPercent: 0 }, {}, {}] });
     expect(JSON.stringify(energy)).not.toMatch(/MicroUsd|provider/);
   });
 
