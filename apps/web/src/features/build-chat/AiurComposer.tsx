@@ -154,24 +154,25 @@ export function AiurComposer({
             dictation: {
               start: async ({ onPartial }) => {
                 let resolveCancelled: () => void = () => {};
-                let unsubscribe: () => void = () => {};
+                let cleanup: () => void = () => {};
                 const result = new Promise<string>((resolve, reject) => {
-                  resolveCancelled = () => resolve('');
+                  resolveCancelled = () => {
+                    cleanup();
+                    resolve('');
+                  };
                   const offTranscript = dictation.on('transcript', (value) => {
                     if (value.kind !== 'final') {
                       onPartial(value.text);
                       return;
                     }
-                    offTranscript();
-                    offError();
+                    cleanup();
                     resolve(value.text);
                   });
                   const offError = dictation.on('error', (value) => {
-                    offTranscript();
-                    offError();
+                    cleanup();
                     reject(codedError(value.code, value.message));
                   });
-                  unsubscribe = () => {
+                  cleanup = () => {
                     offTranscript();
                     offError();
                   };
@@ -180,7 +181,7 @@ export function AiurComposer({
                 void result.catch(() => {});
                 cancelDictation.current = () => {
                   dictation.cancel();
-                  unsubscribe();
+                  cleanup();
                   resolveCancelled();
                 };
                 dictation.pressStart();

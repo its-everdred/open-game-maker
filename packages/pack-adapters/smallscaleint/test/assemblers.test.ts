@@ -56,6 +56,6 @@ it('composes a fenced yard whose gate path reaches the chapel door and stays cle
 
 it('refuses building styles it cannot assemble', () => {
   expect(() =>
-    building([{ x: 0, y: 0 }], 'timber' as 'stone', { cell: { x: 0, y: 0 }, edge: 'yMax' }, [{ x: 0, y: 1 }]),
-  ).toThrow('stone');
+    building([{ x: 0, y: 0 }], 'glass' as 'stone', { cell: { x: 0, y: 0 }, edge: 'yMax' }, [{ x: 0, y: 1 }]),
+  ).toThrow('only stone and timber building styles are assembled');
 });

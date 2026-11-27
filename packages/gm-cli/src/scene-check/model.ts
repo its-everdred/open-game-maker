@@ -25,6 +25,12 @@ export interface Piece {
   /** Free-form tile tags: `ruin`, `formal`, `gate`, `exit`. */
   tags: ReadonlySet<string>;
   elevation: number;
+  /** Uniform scale about the pack's image anchor. */
+  scale?: number;
+  /** Adjustment to the projected draw-order key, in screen pixels. */
+  depthOffset?: number;
+  /** Measured terminal offset for this exact scaled post placement. */
+  postSocket?: Cell & { fenceAsset: string; fenceEdge: CellEdge };
   /** Drawn by a map beneath the scene (a surround): it closes the frame but is not the scene's own dressing. */
   under: boolean;
   /** The grid edge this piece draws, when its pack measured it. */
