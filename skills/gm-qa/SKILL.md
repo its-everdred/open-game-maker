@@ -34,6 +34,17 @@ into one run directory (`--out`, default `shots/qa`) so `gm qa look` sees the wh
 
 The Executor runs all four against a game's newest build with `ops/bin/ogm-qa <slug>` on the host.
 
+To play a local `dist` in the real signed-in app shell, run from the game directory:
+`gm qa drive --app https://<app>/play/<slug> --journey qa/journeys/<j>.json --viewport phone --out shots/qa`.
+The command loads the reusable Playwright state from `~/.config/ogm/qa/storage.json` (or `--storage <path>`),
+checks `/api/v1/me`, and substitutes the local build for the game's frame. It records the journey, console errors,
+stills and clip as above. Text and selector steps target the game frame; coordinate taps and swipes use the whole phone
+viewport, while pixel expectation regions are fractions of the game frame.
+Use `--viewport phone-landscape` for landscape, or `tablet` and `tablet-landscape` for tablet sizes.
+Review `journey-result.json` and the stills. An absent or expired session is a failure: on the host,
+refresh it through the normal magic-link flow with `ops/bin/ogm-qa-signin`. The session file is a credential; keep it
+private and outside the repository. This run does not test the deployed build or a physical phone.
+
 A milestone gate (`qa/gate`) fails without a `gm look sheet` per approved screen for the build under test; capture
 the signed-in app with `gm run --frame app` (storage state from `ops/bin/ogm-qa-signin` on the host).
 
