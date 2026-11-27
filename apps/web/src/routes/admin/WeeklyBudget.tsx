@@ -24,7 +24,7 @@ export function WeeklyBudget({
       }}
     >
       <label>
-        New games{' '}
+        Interim new-game limit{' '}
         <input
           aria-label={`Weekly new games for ${user.email}`}
           type="number"
@@ -36,7 +36,7 @@ export function WeeklyBudget({
         />
       </label>
       <label>
-        Edits{' '}
+        Interim edit limit{' '}
         <input
           aria-label={`Weekly edits for ${user.email}`}
           type="number"

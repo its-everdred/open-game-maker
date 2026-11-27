@@ -22,7 +22,7 @@ describe('bug report Energy refusal', () => {
     fireEvent.change(screen.getByLabelText('What went wrong?'), { target: { value: 'stuck' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByRole('status')).toHaveTextContent(
-      'Report saved. The fix needs more Energy. Energy resets',
+      'Report saved. The interim edit limit is exhausted. The limit resets',
     );
     expect(close).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText('What went wrong?'), { target: { value: 'another problem' } });

@@ -15,7 +15,7 @@
     "huge": [6000000, 9000000]
   },
   "expected": [
-    "Remaining this week: 2 new games, 19 edits. Resets Nov 2 at 12:00 am. Remaining today: 2.0 stars (40%). Resets at 12:00 am. Free slots: 1 new game, 2 edits. Queued: none.",
+    "Interim weekly limit remaining: 2 new games, 19 edits. Resets Nov 2 at 12:00 am. Remaining today: 2.0 stars (40%). Resets at 12:00 am. Free slots: 1 new game, 2 edits. Queued: none.",
     "Rough sizes: small ≈ 0.5 star, medium ≈ 1–2, large ≈ 3–5, huge ≈ 6+ (low confidence)."
   ]
 }

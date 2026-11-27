@@ -234,9 +234,11 @@ const ENERGY_WINDOWS = { day: 'today', week: 'this week', month: 'this month' } 
 
 // An Energy block names its window and only the offers admission made (#598); the member allowance keeps its wording.
 function refusalText(body: AdmissionRefused['body'], reset: string): string {
+  if (body.reason === 'weekly_user')
+    return `The interim weekly job limit is exhausted: resets ${reset}, or ask an admin`;
   if (body.error !== 'energy_limit_reached')
     return `Doesn't fit today: trim, split, queue for ${reset}, or ask an admin`;
-  const left = `Needs more Energy than is left ${ENERGY_WINDOWS[body.window ?? 'day']}`;
+  const left = `Exceeds the overall build budget ${ENERGY_WINDOWS[body.window ?? 'day']}`;
   return body.offers.includes('queue')
     ? `${left}: queue for ${reset}, or ask an admin`
     : `${left}: resets ${reset}, or ask an admin`;

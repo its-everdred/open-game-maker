@@ -87,10 +87,11 @@ describe('energy level', () => {
   it('is unknown with no limit set, never healthy by default', () => expect(level({})).toBe('unknown'));
   it('is unknown when the only cap is on a service Game Maker does not meter', () =>
     expect(level({ voice: 1_000_000 })).toBe('unknown'));
-  it('is healthy with room in every window', () => expect(level({ day: 10_000_000 })).toBe('healthy'));
-  it('follows the tightest overlapping window', () =>
-    expect(level({ day: 10_000_000, month: 3_500_000 })).toBe('limited'));
-  it('is critical once a window is spent', () => expect(level({ week: 3_000_000 })).toBe('critical'));
+  it('keeps aggregate build windows out of resource status', () => expect(level({ day: 10_000_000 })).toBe('unknown'));
+  it('does not use overlapping build windows as resource usage', () =>
+    expect(level({ day: 10_000_000, month: 3_500_000 })).toBe('unknown'));
+  it('does not use a spent build window as resource exhaustion', () =>
+    expect(level({ week: 3_000_000 })).toBe('unknown'));
 });
 
 describe('energy routes', () => {
@@ -103,7 +104,7 @@ describe('energy routes', () => {
     const body = await response.json();
     expect(EnergyView.parse(body)).toEqual(body);
     expect(body).toEqual({
-      level: 'healthy',
+      level: 'unknown',
       preference: 'balanced',
       weeklyJobs: {
         newGames: { limit: 2, remaining: 2 },
@@ -123,7 +124,7 @@ describe('energy routes', () => {
     });
   });
 
-  it('marks the creator Energy critical when the weekly job limit is empty', async () => {
+  it('keeps an exhausted interim limit out of resource status', async () => {
     const deps = worked();
     const date = new Date();
     deps.db
@@ -144,7 +145,7 @@ describe('energy routes', () => {
     deps.db.insert(schema.weeklyJobBudgets).values({ email: 'energy@example.test', newGames: 2, edits: 0 }).run();
     const { app } = await makeApp(deps);
     expect(await (await app.request('/api/v1/energy', { headers: asUser(ids.creator) })).json()).toMatchObject({
-      level: 'critical',
+      level: 'unknown',
       weeklyJobs: { edits: { limit: 0, remaining: 0 } },
     });
   });
@@ -178,7 +179,7 @@ describe('energy routes', () => {
     const set = await app.request('/api/v1/energy/admin/limits', { method: 'PUT', ...json(ids.admin, limits) });
     expect(set.status).toBe(200);
     const view = EnergyAdminView.parse(await set.json());
-    expect(view).toMatchObject({ limits, usage: { week: 3_000_000, images: null }, level: 'healthy' });
+    expect(view).toMatchObject({ limits, usage: { week: 3_000_000, images: null }, level: 'unknown' });
     const player = await (await app.request('/api/v1/energy', { headers: asUser(ids.creator) })).json();
     expect(player.windows[1]).toMatchObject({ window: 'week', usedPercent: 50 });
   });

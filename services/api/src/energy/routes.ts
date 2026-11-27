@@ -33,27 +33,8 @@ async function creatorView(c: Context<ApiBindings>, userId: string, preference: 
   const weekly = weeklyJobs(deps.db, userId, new Date(), deps.config.resetZoneDefault);
   const view = playerView(await snapshot(c), preference);
   const remaining = weekly.remaining;
-  const shares = (['newGames', 'edits'] as const).flatMap((kind) => {
-    const limit = weekly.limits[kind];
-    const left = remaining[kind];
-    return limit === null || left === null ? [] : [limit === 0 ? 0 : left / limit];
-  });
-  const lowest = shares.length ? Math.min(...shares) : null;
-  const level =
-    lowest === null
-      ? view.level
-      : lowest <= 0
-        ? 'critical'
-        : lowest < 0.25
-          ? view.level === 'critical'
-            ? 'critical'
-            : 'limited'
-          : view.level === 'unknown'
-            ? 'healthy'
-            : view.level;
   return {
     ...view,
-    level,
     weeklyJobs: {
       newGames: { limit: weekly.limits.newGames, remaining: remaining.newGames },
       edits: { limit: weekly.limits.edits, remaining: weekly.remaining.edits },

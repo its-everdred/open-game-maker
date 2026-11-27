@@ -108,7 +108,7 @@ function budgetText(
       new Date(weekly.resetsAt),
     );
   }
-  const weeklyText = `Remaining this week: ${count(weekly.newGames)} new games, ${count(weekly.edits)} edits. Resets ${resetDate} at ${localTime(weekly.resetsAt, deps.defaults.resetZone)}. `;
+  const weeklyText = `Interim weekly limit remaining: ${count(weekly.newGames)} new games, ${count(weekly.edits)} edits. Resets ${resetDate} at ${localTime(weekly.resetsAt, deps.defaults.resetZone)}. `;
   const dailyText = status.dailyLimitActive
     ? `Remaining today: ${remainingUnits.toFixed(1)} ${unitLabel(settings.unitLabel, remainingUnits)} (${status.remainingPercent}%). Resets at ${localTime(status.resetsAt, settings.resetZone)}. `
     : '';
@@ -121,7 +121,7 @@ function budgetText(
   const sizes = status.dailyLimitActive
     ? `Rough sizes: small ≈ ${range(...small)} ${unitLabel(settings.unitLabel, small[1])}, ` +
       `medium ≈ ${range(...medium)}, large ≈ ${range(...large)}, huge ≈ ${huge}+ (low confidence).`
-    : 'Each new game uses one new-game unit; each edit or fix uses one edit unit.';
+    : 'The interim limit counts each new game and each edit or fix.';
   return { remaining, sizes };
 }
 

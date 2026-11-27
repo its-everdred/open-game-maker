@@ -70,25 +70,24 @@ export const WINDOW_LABELS: Record<EnergyWindowName, string> = {
 const WINDOW_PHRASES: Record<EnergyWindowName, string> = { day: 'today', week: 'this week', month: 'this month' };
 
 // A refused build, said in terms of the build the player asked for.
-export function energyRefusalText(window: EnergyWindowName | undefined, resetsAt?: string): string | undefined {
+export function energyRefusalText(
+  window: EnergyWindowName | undefined,
+  resetsAt?: string,
+  reason?: 'weekly_user',
+): string | undefined {
   if (!window) return undefined;
   const reset = resetsAt
-    ? ` Energy resets ${new Date(resetsAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.`
+    ? ` The limit resets ${new Date(resetsAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.`
     : '';
-  return `This build needs more Energy than is left ${WINDOW_PHRASES[window]}.${reset}`;
+  return reason === 'weekly_user'
+    ? `The interim weekly job limit is exhausted.${reset}`
+    : `This build exceeds the overall build budget ${WINDOW_PHRASES[window]}.${reset}`;
 }
 
 // The ring shows what is left in the tightest known window or provider reading; null when none is known.
 export function energyLeftPercent(view: EnergyView | undefined): number | null {
-  const used = [...(view?.windows ?? []), ...(view?.sources ?? [])].flatMap(({ usedPercent }) =>
-    usedPercent === null ? [] : [usedPercent],
-  );
-  const weekly = view?.weeklyJobs;
-  if (weekly) {
-    for (const bucket of [weekly.newGames, weekly.edits]) {
-      if (bucket.limit !== null && bucket.remaining !== null)
-        used.push(bucket.limit === 0 ? 100 : 100 * (1 - bucket.remaining / bucket.limit));
-    }
-  }
+  const used = (view?.sources ?? [])
+    .filter(({ id }) => /^(claude|codex):/.test(id) || id === 'fal')
+    .flatMap(({ usedPercent }) => (usedPercent === null ? [] : [usedPercent]));
   return used.length === 0 ? null : Math.round(100 - Math.max(...used));
 }

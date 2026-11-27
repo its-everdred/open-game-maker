@@ -73,7 +73,7 @@ describe('useScopeSession', () => {
     );
     const { result } = renderHook(() => useScopeSession('g_1', choices, transport));
     await waitFor(() => expect(result.current.status).toBe('unavailable'));
-    expect(result.current.error).toContain('Energy resets');
+    expect(result.current.error).toContain('The limit resets');
     expect(result.current.error).not.toContain('builder is unavailable');
   });
 

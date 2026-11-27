@@ -65,9 +65,9 @@ export function BugSheet({ draft, close }: { draft: BugDraft; close(): void }) {
     <form id="bug-sheet" className="bug-sheet" aria-label="Report a problem" onSubmit={submit}>
       {energyReset !== undefined ? (
         <p role="status">
-          Report saved. The fix needs more Energy.
+          Report saved. The interim edit limit is exhausted.
           {energyReset
-            ? ` Energy resets ${new Date(energyReset).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.`
+            ? ` The limit resets ${new Date(energyReset).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.`
             : ''}
         </p>
       ) : null}

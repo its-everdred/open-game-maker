@@ -111,7 +111,7 @@ describe('buildBriefing', () => {
     expect(briefing.target_key).toBe('scope:s_1');
     expect(briefing.extra[0].title).toBe('Budget');
     expect(text).toBe(
-      'Remaining this week: 2 new games, 19 edits. Resets Nov 2 at 12:00 am. ' +
+      'Interim weekly limit remaining: 2 new games, 19 edits. Resets Nov 2 at 12:00 am. ' +
         'Remaining today: 20.0 energy (40%). Resets at 12:00 am. ' +
         'Free slots: 1 new game, 2 edits. Queued: none.',
     );
@@ -131,11 +131,11 @@ describe('buildBriefing', () => {
       { db: deps.db, defaults: { ...defaults, defaultAllowanceConfigured: false }, now: () => NOW },
       scope,
     );
-    expect(briefing.extra[0].text).toContain('Remaining this week: 2 new games, 19 edits. Resets Nov 2 at 12:00 am.');
-    expect(briefing.extra[0].text).not.toContain('Remaining today');
-    expect(briefing.sections[2].text).toBe(
-      'Each new game uses one new-game unit; each edit or fix uses one edit unit.',
+    expect(briefing.extra[0].text).toContain(
+      'Interim weekly limit remaining: 2 new games, 19 edits. Resets Nov 2 at 12:00 am.',
     );
+    expect(briefing.extra[0].text).not.toContain('Remaining today');
+    expect(briefing.sections[2].text).toBe('The interim limit counts each new game and each edit or fix.');
   });
 
   it('reports a build waiting on an admin with its stage words', async () => {
@@ -147,7 +147,7 @@ describe('buildBriefing', () => {
       waiting_on: 'Build paused at its reservation: ask an admin to raise it, or trim',
       summary: 'Goblin camp',
     });
-    expect(paused.extra[0].text).toMatch(/^Build paused at its reservation\. Remaining this week:/);
+    expect(paused.extra[0].text).toMatch(/^Build paused at its reservation\. Interim weekly limit remaining:/);
     expect(paused.current_task).toBe('paused_budget');
 
     deps.db

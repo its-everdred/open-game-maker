@@ -5,7 +5,6 @@ import type { AgreedScope, ScopeChoices } from '@ogm/contracts';
 import { ApiError } from '../../lib/api/client';
 import { reduceMessages, type StreamedChatMessage } from '../build-chat/stream';
 import { scopeTransport, type ScopeTransport } from './transport';
-import { energyRefusalText } from '../energy/api';
 
 export type ScopeTurn = { id: string; who: 'you' | 'builder'; text: string };
 export type ScopeStatus = 'connecting' | 'open' | 'agreed' | 'unavailable' | 'error';
@@ -90,7 +89,9 @@ export function useScopeSession(
         typeof cause.body.resetsAt === 'string'
       ) {
         setStatus('unavailable');
-        setError(energyRefusalText('week', cause.body.resetsAt) ?? 'Energy is empty.');
+        setError(
+          `The interim new-game limit is exhausted. The limit resets ${new Date(cause.body.resetsAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.`,
+        );
       } else if (cause instanceof ApiError && (cause.status === 402 || cause.status === 404 || cause.status === 503)) {
         setStatus('unavailable');
         setError('The builder is unavailable right now. Try again later.');
