@@ -7,13 +7,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { Liquid } from 'liquidjs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parse } from 'yaml';
 
 import { renderDaemonFiles, renderRepoTemplate } from '../src/index.js';
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
 const SECRET = 'hook-secret-for-tests';
+// Hook tests launch real Git and Node processes; the default five seconds can expire under host contention.
+vi.setConfig({ testTimeout: 30_000 });
 // aiur daemons run hooks with plain git; drop an agent workspace's git guard from PATH.
 const HOOK_PATH = (process.env.PATH ?? '')
   .split(':')
