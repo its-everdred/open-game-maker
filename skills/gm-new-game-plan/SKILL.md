@@ -23,7 +23,7 @@ Every child ticket must carry a lane and its current prototype rung when filed. 
 `lane:creative phase:mock`; sprite rebuilds and variations use `lane:clone`. Keep the `phase:*` label in sync with the
 deliverable. For a screen covered by an approved design, apply the `gm-prototype` choice: use its components at
 `phase:prototype` or attach its artboards and component stills to the mock. Label OGM app UI tickets
-`design:ogm-glass` so workers can identify the approved design. Otherwise a creative prototype needs an approved mock.
+`design:ogm-glass` so workers can identify the approved design (pass `--ogm-ui` when using the host filing tool). Otherwise a creative prototype needs an approved mock.
 
 The general rules for cutting tickets, typing dependencies, waves and the critical path are in the `build-order` skill;
 this section adds what is specific to games.
