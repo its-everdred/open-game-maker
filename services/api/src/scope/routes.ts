@@ -258,9 +258,14 @@ const routes = new Hono<ApiBindings>()
           if (error instanceof AiurHttpError && error.status === 409 && error.code === 'agent_not_running') {
             try {
               const writer = deps.registry.issueStateWriter;
-              if (!writer) throw new Error('issue state writer unavailable');
+              if (!writer) throw new Error('issue state writer unavailable', { cause: error });
               await writer.setStateLabel(job.aiurRepo, job.aiurIssueNumber, 'cancelled', game.slug ?? 'agent');
-            } catch {
+            } catch (fallbackError) {
+              deps.log({
+                event: 'scope-cancel-upstream-failed',
+                jobId: job.id,
+                error: fallbackError instanceof Error ? fallbackError.name : 'unknown',
+              });
               throw new HttpError(503, 'scope_cancel_unconfirmed');
             }
           } else {

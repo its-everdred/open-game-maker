@@ -1,6 +1,6 @@
 import { JobPlan, Reservation, type CreateJobAccepted, type Job, type JobState } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
-import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, lte, or, sql } from 'drizzle-orm';
 
 import { HttpError } from '../app/errors.js';
 import { daemonRowForGame } from './daemons.js';
