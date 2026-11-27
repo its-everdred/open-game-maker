@@ -9,6 +9,7 @@ import { createGameRow } from '../src/games/games.js';
 import { CommitServiceRepoProvisioner, NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
 import { writeQaState } from '../src/qa/state.js';
+import { signIn } from './auth-helpers.js';
 
 const now = '2026-11-01T00:00:00.000Z';
 const familyId = 'f-family';
@@ -209,6 +210,17 @@ describe('games routes', () => {
     const { app } = await makeApp(deps);
     const created = await createGame(app);
     const { id } = (await created.json()) as { id: string };
+    const outbox = () =>
+      deps.sqlite.prepare('SELECT text FROM mail_outbox ORDER BY created_at').all() as { text: string }[];
+    const { session } = await signIn(app, outbox, 'kevin@example.com');
+    const owner = deps.db.select().from(schema.user).where(eq(schema.user.email, 'kevin@example.com')).get()!;
+    deps.db.update(schema.games).set({ ownerId: owner.id }).where(eq(schema.games.id, id)).run();
+    deps.db
+      .insert(schema.familyMembers)
+      .values({ familyId, userId: owner.id, role: 'member', capability: 'creator', joinedAt: now })
+      .run();
+    installUsers(deps, [{ ...creator, userId: owner.id, email: owner.email }]);
+    const ownerHeaders = { ...asUser(owner.id), cookie: session };
     deps.db
       .insert(schema.branches)
       .values({
@@ -235,7 +247,7 @@ describe('games routes', () => {
       writeFileSync(join(directory, 'media', file), file);
     const list = async () =>
       (
-        (await (await app.request('/api/v1/games', { headers: asUser(creator.userId) })).json()) as {
+        (await (await app.request('/api/v1/games', { headers: ownerHeaders })).json()) as {
           games: Array<Record<string, unknown>>;
         }
       ).games[0]!;
@@ -306,7 +318,9 @@ describe('games routes', () => {
     );
     const draftPath = (path: string) =>
       expect.stringMatching(
-        new RegExp(`^https://games\\.example\\.test/d/${id}/build1/[A-Za-z0-9_-]{43}/${path.replace('.', '\\.')}$`),
+        new RegExp(
+          `^https://games\\.example\\.test/d/${id}/build1/[A-Za-z0-9_-]{44,2048}/${path.replace('.', '\\.')}$`,
+        ),
       );
     const pendingMedia = await list();
     expect(pendingMedia.logoUrl).toEqual(draftPath(`a/${'1'.repeat(64)}.png`));
@@ -320,9 +334,7 @@ describe('games routes', () => {
       tags: ['Cozy'],
       logoUrl: expect.any(String),
     });
-    expect(
-      (await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: asUser(creator.userId) })).status,
-    ).toBe(200);
+    expect((await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: ownerHeaders })).status).toBe(200);
     const sources = Object.fromEntries(
       ['avif', 'webp', 'png'].map((format) => [
         format,
@@ -370,7 +382,7 @@ describe('games routes', () => {
         },
       },
     });
-    const detail = await (await app.request(`/api/v1/games/${id}`, { headers: asUser(creator.userId) })).json();
+    const detail = await (await app.request(`/api/v1/games/${id}`, { headers: ownerHeaders })).json();
     expect(detail).toMatchObject({
       loadingUrls: { portrait: draftPath(`a/${'3'.repeat(64)}.png`) },
       loadingImages: {
