@@ -42,8 +42,6 @@ remaining tradeoff instead of calling a number "better" without an observable ou
 
 ## Keep debug UI out of the game
 
-Approved OGM UI: `prototypes/ogm-glass/` (open `index.html`); match it exactly. Editor picks and panels: `Editor`, `EditorPicks`, `Arena`, `Visuals`, `DevPanelKit`.
-
 Never ship lil-gui, a tuning overlay, or a debug panel in production. The editor controls are the product surface.
 Temporary test-only controls may use the existing draft/test hooks, must be unreachable in published builds, and must
 not become a second source of defaults.
