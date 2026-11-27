@@ -17,7 +17,9 @@
   .ogm-glass-field,
   .ogm-glass-segmented,
   .ogm-glass-slider,
-  .ogm-glass-meter
+  .ogm-glass-meter,
+  .ogm-glass-option,
+  .ogm-glass-cover
 ),
 :is(
     .ogm-glass-button,
@@ -36,7 +38,9 @@
     .ogm-glass-field,
     .ogm-glass-segmented,
     .ogm-glass-slider,
-    .ogm-glass-meter
+    .ogm-glass-meter,
+    .ogm-glass-option,
+    .ogm-glass-cover
   )
   * {
   box-sizing: border-box;
@@ -725,4 +729,105 @@
   gap: 10px;
   padding: 10px 12px;
   border-radius: var(--ogm-radius-pill);
+}
+
+.ogm-glass-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 92px;
+  padding: 10px 6px;
+  border: 0;
+  border-radius: var(--ogm-radius-md);
+  background: var(--ogm-component-option-fill);
+  color: var(--ogm-ink-ink);
+  font: var(--ogm-component-option-font);
+  cursor: pointer;
+}
+.ogm-glass-option::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--ogm-glass-edge);
+  -webkit-mask:
+    var(--ogm-component-mask-gradient) content-box,
+    var(--ogm-component-mask-gradient);
+  mask:
+    var(--ogm-component-mask-gradient) content-box,
+    var(--ogm-component-mask-gradient);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+.ogm-glass-option[aria-pressed='true'] {
+  background: color-mix(
+    in srgb,
+    var(--ogm-action-color) var(--ogm-component-tint-mix),
+    var(--ogm-component-option-selected-base)
+  );
+  box-shadow: var(--ogm-component-option-shadow);
+}
+.ogm-glass-option[aria-pressed='true']::before {
+  background: var(--ogm-component-option-edge);
+}
+.ogm-glass-option:disabled,
+.ogm-glass-option[aria-disabled='true'] {
+  opacity: var(--ogm-component-disabled-opacity);
+}
+.ogm-glass-option:focus-visible {
+  outline: var(--ogm-component-focus-width) solid var(--ogm-role-focus);
+  outline-offset: var(--ogm-component-focus-offset);
+}
+.ogm-option-icon {
+  color: var(--ogm-action-color);
+}
+.ogm-glass-cover {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--ogm-radius-lg);
+  background: var(--ogm-component-cover-fill);
+}
+.ogm-cover-wide {
+  aspect-ratio: 16 / 9;
+}
+.ogm-cover-phone {
+  aspect-ratio: 4 / 3;
+}
+.ogm-glass-cover > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ogm-cover-shade {
+  position: absolute;
+  inset: 0;
+  background: var(--ogm-component-cover-shade);
+  pointer-events: none;
+}
+.ogm-cover-meta {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.ogm-cover-name {
+  color: var(--ogm-ink-ink);
+  font: var(--ogm-component-cover-name-font);
+  text-shadow: var(--ogm-component-cover-name-shadow);
+}
+.ogm-cover-badges {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  display: flex;
+  gap: 8px;
 }

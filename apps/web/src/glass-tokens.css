@@ -53,7 +53,6 @@
   --ogm-component-button-edge: rgba(255, 255, 255, 0.3);
   --ogm-component-button-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 6px 18px rgba(0, 0, 0, 0.25);
   --ogm-component-action-edge: rgba(255, 255, 255, 0.55);
-  --ogm-component-action-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 12px 30px -10px var(--ogm-action-color);
   --ogm-component-pane-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
   --ogm-component-row-fill: rgba(57, 54, 67, 0.5);
   --ogm-component-row-edge: rgba(242, 234, 214, 0.08);
@@ -114,18 +113,6 @@
     var(--ogm-role-agents)
   );
   --ogm-component-banner-pulse-shadow: 0 0 0 4px color-mix(in srgb, var(--ogm-role-agents) 30%, transparent);
-  --ogm-component-tint-edge: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--ogm-action-color) 18%, transparent),
-    var(--ogm-action-color)
-  );
-  --ogm-component-glassy-fill: color-mix(in srgb, var(--ogm-action-color) 30%, rgba(24, 22, 32, 0.35));
-  --ogm-component-glassy-edge: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--ogm-action-color) 20%, transparent),
-    var(--ogm-action-color)
-  );
-  --ogm-component-glassy-shadow: 0 10px 30px -10px var(--ogm-action-color);
   --ogm-component-overlay-z: 1000;
   --ogm-component-sheet-title-font: 600 24px/1.15 var(--ogm-font-display);
   --ogm-component-sheet-enter-distance: 12px;
@@ -137,11 +124,6 @@
   --ogm-component-slider-track-height: 8px;
   --ogm-component-slider-knob-offset: -9px;
   --ogm-component-slider-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --ogm-component-slider-track: linear-gradient(
-    to right,
-    var(--ogm-role-go) 0 var(--ogm-slider-fill),
-    var(--ogm-component-progress-track) var(--ogm-slider-fill) 100%
-  );
   --ogm-component-menu-font: 600 16px/1 var(--ogm-font-display);
   --ogm-component-meter-fill: rgba(57, 54, 67, 0.42);
   --ogm-component-meter-title-font: 600 16px/1 var(--ogm-font-display);
@@ -153,6 +135,18 @@
     var(--ogm-resource-minerals-3)
   );
   --ogm-component-gas-gradient: linear-gradient(90deg, var(--ogm-resource-gas-1), var(--ogm-resource-gas-3));
+  --ogm-component-option-fill: rgba(255, 255, 255, 0.03);
+  --ogm-component-option-selected-base: rgba(255, 255, 255, 0.02);
+  --ogm-component-option-font: 700 13px/1.1 var(--ogm-font-body);
+  --ogm-component-cover-fill: #000000;
+  --ogm-component-cover-shade: linear-gradient(
+    to top,
+    rgba(11, 10, 7, 0.92),
+    rgba(11, 10, 7, 0.35) 38%,
+    transparent 62%
+  );
+  --ogm-component-cover-name-font: 700 22px/1.05 var(--ogm-font-display);
+  --ogm-component-cover-name-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
   --ogm-radius-xs: 8px;
   --ogm-radius-sm: 12px;
   --ogm-radius-md: 16px;
@@ -179,4 +173,46 @@
   --ogm-motion-ease-duration: 300ms;
   --ogm-motion-spring: cubic-bezier(0.2, 0.9, 0.3, 1.2);
   --ogm-motion-spring-duration: 600ms;
+}
+:is(
+  .ogm-tone-go,
+  .ogm-tone-create,
+  .ogm-tone-warn,
+  .ogm-tone-info,
+  .ogm-tone-danger,
+  .ogm-tone-live,
+  .ogm-tone-glassy,
+  .ogm-accent-go,
+  .ogm-accent-create,
+  .ogm-accent-warn,
+  .ogm-accent-info,
+  .ogm-accent-danger,
+  .ogm-accent-live
+) {
+  --ogm-component-action-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 12px 30px -10px var(--ogm-action-color);
+  --ogm-component-tint-edge: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--ogm-action-color) 18%, transparent),
+    var(--ogm-action-color)
+  );
+  --ogm-component-glassy-fill: color-mix(in srgb, var(--ogm-action-color) 30%, rgba(24, 22, 32, 0.35));
+  --ogm-component-glassy-edge: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--ogm-action-color) 20%, transparent),
+    var(--ogm-action-color)
+  );
+  --ogm-component-glassy-shadow: 0 10px 30px -10px var(--ogm-action-color);
+  --ogm-component-option-edge: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--ogm-action-color) 40%, #fbf1c7),
+    var(--ogm-action-color)
+  );
+  --ogm-component-option-shadow: 0 16px 40px -16px var(--ogm-action-color);
+}
+.ogm-glass-slider {
+  --ogm-component-slider-track: linear-gradient(
+    to right,
+    var(--ogm-role-go) 0 var(--ogm-slider-fill),
+    var(--ogm-component-progress-track) var(--ogm-slider-fill) 100%
+  );
 }

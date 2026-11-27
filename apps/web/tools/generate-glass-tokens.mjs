@@ -8,8 +8,15 @@ const source = new URL('../../../docs/design/ogm-glass/tokens.json', import.meta
 const destination = new URL('../src/glass-tokens.css', import.meta.url);
 const tokens = JSON.parse(await readFile(source, 'utf8'));
 const properties = [];
+const accentProperties = [];
+const sliderProperties = [];
 function emit(name, value) {
-  properties.push(`  --ogm-${name}: ${value};`);
+  const target = String(value).includes('var(--ogm-action-color)')
+    ? accentProperties
+    : String(value).includes('var(--ogm-slider-fill)')
+      ? sliderProperties
+      : properties;
+  target.push(`  --ogm-${name}: ${value};`);
 }
 for (const [group, entries] of Object.entries(tokens.color)) {
   for (const [name, token] of Object.entries(entries)) {
@@ -30,7 +37,9 @@ for (const name of ['ease', 'spring']) {
   emit(`motion-${name}-duration`, tokens.motion[name].duration);
 }
 const output = await format(
-  `/* Generated from docs/design/ogm-glass/tokens.json. Do not edit. */\n:root {\n${properties.join('\n')}\n}\n`,
+  `/* Generated from docs/design/ogm-glass/tokens.json. Do not edit. */\n:root {\n${properties.join('\n')}\n}\n` +
+    `:is(.ogm-tone-go, .ogm-tone-create, .ogm-tone-warn, .ogm-tone-info, .ogm-tone-danger, .ogm-tone-live, .ogm-tone-glassy, .ogm-accent-go, .ogm-accent-create, .ogm-accent-warn, .ogm-accent-info, .ogm-accent-danger, .ogm-accent-live) {\n${accentProperties.join('\n')}\n}\n` +
+    `.ogm-glass-slider {\n${sliderProperties.join('\n')}\n}\n`,
   { ...(await resolveConfig(fileURLToPath(destination))), parser: 'css' },
 );
 if (process.argv.includes('--check')) {
