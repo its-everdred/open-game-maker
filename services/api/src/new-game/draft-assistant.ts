@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 
 import type { AiurClient } from '@ogm/aiur-client';
 import type { ScopeChoices } from '@ogm/contracts';
+import type { Db } from '@ogm/db';
+
+import type { DraftScopeAssistant } from '../app/registry.js';
+import { daemonRowForRepo } from '../jobs/daemons.js';
 import type { IssuesClient } from '@ogm/builder';
 
 export type DraftScopeTicket = { repo: string; ticket: string };
@@ -53,4 +57,33 @@ export async function createDraftScopeTicket(input: {
     throw error;
   }
   return { repo: input.repo, ticket: String(issue.number) };
+}
+
+export function createDraftScopeAssistant(input: {
+  db: Db;
+  repo: string;
+  issues: Pick<IssuesClient, 'create' | 'ensureLabel' | 'findByMarkers' | 'close'>;
+  clientForSlug(slug: string): Promise<AiurClient | null>;
+}): DraftScopeAssistant {
+  const clientForRepo = async (repo: string) => {
+    const daemon = daemonRowForRepo(input.db, repo);
+    return daemon ? input.clientForSlug(daemon.slug) : null;
+  };
+  return {
+    async create({ draftId, choices }) {
+      const aiur = await clientForRepo(input.repo);
+      if (!aiur) throw new Error('shared_aiur_unavailable');
+      return createDraftScopeTicket({ repo: input.repo, draftId, choices, issues: input.issues, aiur });
+    },
+    async close({ repo, ticket, draftId }) {
+      if (!input.issues.close) throw new Error('draft_ticket_close_unavailable');
+      const issue = ticket ? { number: Number(ticket) } : await input.issues.findByMarkers(repo, draftId, 'scope');
+      if (issue) await input.issues.close(repo, issue.number);
+    },
+    async transcript({ repo, ticket }) {
+      const aiur = await clientForRepo(repo);
+      if (!aiur) return [];
+      return (await aiur.ticketTranscript(ticket)).events;
+    },
+  };
 }

@@ -211,6 +211,34 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
+  it('includes the running build id in player bug reports', async () => {
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return new Response(JSON.stringify({ reportId: 'r1', signature: 's', route: 'platform' }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar', ownerId: 'another-player' });
+    renderGame();
+    await readyPlayFrame();
+    await waitFor(() => expect(host.mountGameFrame.mock.calls.at(-1)?.[0]).toMatchObject({ buildId: 'build' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'File a bug' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Describe the issue' }), {
+      target: { value: 'The door is stuck' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith('/api/v1/reports', expect.anything()));
+    const request = fetchSpy.mock.calls.find(([url]) => url === '/api/v1/reports')?.[1] as RequestInit | undefined;
+    expect(JSON.parse(String(request?.body))).toMatchObject({ gameId: 'game', buildHash: 'build' });
+    vi.unstubAllGlobals();
+  });
+
   it('does not record play when opening a nested screen', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(new Response('{}', { headers: { 'content-type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchSpy);

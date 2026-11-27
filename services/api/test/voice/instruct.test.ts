@@ -139,6 +139,19 @@ describe('POST /internal/voice/instruct', () => {
       at: new Date(NOW),
     });
     gameDrafts.attachTicket(deps.db, draft.id, 'owner/instance', 42, NOW.toISOString());
+    deps.db
+      .insert(schema.gameDaemons)
+      .values({
+        slug: 'instance',
+        repo: 'owner/instance',
+        checkoutPath: '/games/instance',
+        unit: 'instance',
+        envFile: '/config/instance',
+        port: 4101,
+        status: 'running',
+        createdAt: NOW.toISOString(),
+      })
+      .run();
     const target: VoiceTarget = {
       kind: 'scope',
       game_id: draft.id,
