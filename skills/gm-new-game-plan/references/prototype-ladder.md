@@ -99,7 +99,9 @@ One feature ticket carries the union of roles needed across its activities, plus
 
 - File **one ticket per feature**, with `game:<slug>` and every applicable `role:*` from the table. Start it at
   `phase:mock` / `model:low`; approval advances the same ticket through prototype / medium, build / xhigh and
-  polish / high. Rejection stays on the current rung. Never file Review, Continue or Verify follow-ups.
+  polish / high. For a screen covered by an approved design, use `gm-prototype` to choose the component prototype
+  or a mock with the approved references. Label OGM app UI tickets `design:ogm-glass`. Rejection stays on the
+  current rung. Never file Review, Continue or Verify follow-ups.
 - Plan the evidence for all five activities in `games/<name>/design/ladder.md`; use the same ticket in every row for
   a feature. Research later activities when their inputs exist. Skeleton work provides scenarios and evidence folders.
 - Every option carries media; decisions are non-blocking. Ship the recommendation while waiting, recording it as

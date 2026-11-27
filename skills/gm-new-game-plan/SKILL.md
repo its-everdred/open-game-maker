@@ -21,7 +21,9 @@ chat, voice transcript, attachments), the instance repo (`games/`, `packages/`),
 Every child ticket must carry a lane and its current prototype rung when filed. Visual and other creative work
 (towns, settings, screens, HUD, menus, title/loading/end screens, logos and thumbnails) starts with
 `lane:creative phase:mock`; sprite rebuilds and variations use `lane:clone`. Keep the `phase:*` label in sync with the
-deliverable and do not file implementation work for a creative ticket before the mock has creator approval.
+deliverable. For a screen covered by an approved design, apply the `gm-prototype` choice: use its components at
+`phase:prototype` or attach its artboards and component stills to the mock. Label OGM app UI tickets
+`design:ogm-glass` so workers can identify the approved design. Otherwise a creative prototype needs an approved mock.
 
 The general rules for cutting tickets, typing dependencies, waves and the critical path are in the `build-order` skill;
 this section adds what is specific to games.
@@ -58,7 +60,8 @@ or revising tickets so the answer changes the plan.
    Depend on interfaces, not on finished features. Avoid two tickets editing the same file.
 6. **One ticket per feature.** Each creator-request ticket climbs `phase:mock` (`model:low`),
    `phase:prototype` (`model:medium`), `phase:build` (`model:xhigh`) and `phase:polish` (`model:high`)
-   on the same issue. Approval changes the phase and effort labels in place; rejection stays on that rung.
+   on the same issue, with the approved-design exception above. Approval changes the phase and effort labels in place;
+   rejection stays on that rung.
    Never file Review, Continue or Verify follow-ups. The five activities in `references/prototype-ladder.md`
    describe evidence within these rungs, not separate tickets. Use `references/build-order-template.md`,
    `references/examples/blobs-ladder.md` and `scripts/check-ladder.ts` for the plan.

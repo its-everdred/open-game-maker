@@ -93,6 +93,8 @@ describe('ticket roles', () => {
     expect(plan).toContain('### Label tickets when filing');
     expect(plan).toContain('`lane:creative phase:mock`');
     expect(plan).toContain('`lane:clone`');
+    expect(plan).toContain('`design:ogm-glass`');
+    expect(plan).toContain('approved design');
   });
 });
 
