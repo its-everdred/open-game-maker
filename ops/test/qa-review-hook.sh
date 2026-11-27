@@ -59,6 +59,9 @@ chmod +x "$scratch/gm" "$scratch/session" "$scratch/boot" "$scratch/paid" "$scra
 export OGM_QA_GM=$scratch/gm OGM_QA_SESSION_CMD=$scratch/session OGM_TEST_CALLS=$scratch/calls
 export OGM_QA_GAME_BOOT=$scratch/boot OGM_QA_PAID_APIS=$scratch/paid OGM_TEST_PAID=$scratch/paid-calls
 export OGM_QA_GAME_PLAY=$scratch/play
+printf '#!/usr/bin/env bash\necho executor-notify >> "$OGM_TEST_CALLS"\nexit "${OGM_TEST_RC_NOTIFY:-0}"\n' > "$scratch/notify"
+chmod +x "$scratch/notify"
+export OGM_QA_EXECUTOR_NOTIFY=$scratch/notify
 attention=$scratch/attention
 
 # Bad usage.
@@ -84,6 +87,19 @@ rc=$?
 set -e
 assert_eq 1 "$rc" 'a paid-API refusal regression fails the deploy hook'
 assert_grep "qa-paid-apis failed on $short (exit 1): $OGM_QA_ROOT/paid-apis/$short.log" "$attention"
+rm -f "$attention"
+
+# A notifier change runs the real feed-to-row check and reports a failed check.
+from=$(git -C "$stack" rev-parse HEAD)
+to=$(commit services/api/src/executor-thread/notify.ts)
+: > "$scratch/calls"
+set +e
+OGM_TEST_RC=0 OGM_TEST_RC_NOTIFY=1 "$hook" "$from" "$to" --repo "$stack" --attention "$attention" > "$scratch/out"
+rc=$?
+set -e
+assert_eq 1 "$rc" 'a missing executor notification fails the deploy hook'
+assert_grep 'executor-notify' "$scratch/calls"
+assert_grep 'qa-executor-notify failed on' "$attention"
 rm -f "$attention"
 
 # Each New Game dependency triggers its smoke, and the daily run does so without a change.

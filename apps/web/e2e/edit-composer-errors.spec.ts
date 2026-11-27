@@ -19,14 +19,16 @@ test('the edit page names a blocked microphone, a refused voice token and a fail
   const composer = page.locator('.edit-workspace-chat aiur-composer');
   const alert = page.locator('.edit-workspace-chat [role="alert"]');
 
-  await composer.getByRole('button', { name: 'Hold to dictate' }).press(' ');
+  await composer.getByRole('button', { name: 'Dictate' }).click();
+  await composer.getByRole('button', { name: 'Stop dictation' }).click();
   await expect(alert).toHaveText(/^Microphone blocked\..*Safari.*\(dictation: mic_denied\)$/);
   await page.screenshot({ path: testInfo.outputPath('edit-mic-denied.png') });
   await expect
     .poll(() => reports)
     .toContainEqual(expect.objectContaining({ action: 'dictation', code: 'mic_denied', target_kind: 'edit' }));
 
-  await composer.getByRole('button', { name: 'Start voice conversation' }).click();
+  await composer.getByRole('button', { name: 'Dictate' }).click();
+  await composer.getByRole('button', { name: 'Switch to voice conversation' }).click();
   await expect(alert).toHaveText('Voice unavailable. (voice: api_403)');
   await page.screenshot({ path: testInfo.outputPath('edit-token-403.png') });
   await expect

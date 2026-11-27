@@ -20,10 +20,27 @@ const VIEWPORT = { width: 390, height: 844 };
 const TITLE = 'QA voice';
 /** The vendored aiur composer's button names (apps/web/vendor/aiur-conversation); a renamed button blinds this check. */
 export const LABELS = {
-  dictate: 'Hold to dictate',
-  startVoice: 'Start voice conversation',
+  dictate: 'Dictate',
+  startVoice: 'Switch to voice conversation',
   endVoice: 'End voice conversation',
 } as const;
+
+/** Voice is offered from the active dictation row in the shared composer. */
+export async function startVoiceFromDictation(dialog: ReturnType<Page['getByRole']>): Promise<void> {
+  await dialog.getByRole('button', { name: LABELS.dictate }).click({ timeout: 20_000 });
+  await dialog.getByRole('button', { name: LABELS.startVoice }).click({ timeout: 20_000 });
+}
+
+export async function endVoiceConversation(dialog: ReturnType<Page['getByRole']>): Promise<void> {
+  await dialog.getByRole('button', { name: LABELS.endVoice }).click({ timeout: 20_000 });
+}
+
+/** Release a failed one-way attempt so it cannot hide the next attempt's microphone. */
+export async function cancelFailedDictation(page: Page, dialog: ReturnType<Page['getByRole']>): Promise<void> {
+  const cancel = dialog.getByRole('button', { name: 'Cancel dictation' });
+  if (await cancel.isVisible().catch(() => false)) await cancel.dispatchEvent('click').catch(() => undefined);
+  await page.mouse.up().catch(() => undefined);
+}
 
 export type VoiceE2eConfig = {
   origin: string;
@@ -316,6 +333,7 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
     const dialog = page
       .getByRole('dialog', { name: TITLE })
       .and(page.locator('.job-conversation-dialog:not(.ticket-detail-dialog)'));
+    let reopenForVoice = false;
 
     try {
       await openChat(page, config.origin);
@@ -337,22 +355,26 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       await until(async () => dictationFailure(await textbox.inputValue()) === null, wait);
       const text = await textbox.inputValue();
       const failure = dictationFailure(text);
-      if (failure) await failed('dictation', new StepFailed(failure));
-      else {
+      if (failure) {
+        reopenForVoice = true;
+        await failed('dictation', new StepFailed(failure));
+      } else {
         await still('dictation');
         // The words stay a draft: the run never sends them.
         await textbox.fill('');
         steps.push({ name: 'dictation', ok: true, detail: text });
       }
     } catch (error) {
+      await cancelFailedDictation(page, dialog);
+      reopenForVoice = true;
       await failed('dictation', error);
     }
 
     try {
-      if (!(await dialog.isVisible())) await openChat(page, config.origin);
+      if (reopenForVoice || !(await dialog.isVisible())) await openChat(page, config.origin);
       frames.length = 0;
       callStarted = Date.now();
-      await dialog.getByRole('button', { name: LABELS.startVoice }).click({ timeout: 20_000 });
+      await startVoiceFromDictation(dialog);
       const listening = await until(() => tallyFrames(frames).states.includes('listening'), wait);
       if (!listening)
         throw new StepFailed(
@@ -367,8 +389,7 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       const playedSeconds = await played();
       await still('voice');
       // Hang up as soon as the reply is in: the call is billed by the minute.
-      const end = dialog.getByRole('button', { name: LABELS.endVoice });
-      if (await end.isVisible().catch(() => false)) await end.click();
+      await endVoiceConversation(dialog);
       cost.callSeconds = (Date.now() - callStarted) / 1000;
       callStarted = undefined;
       let stored: { actor: string; text: string | null }[] = [];
