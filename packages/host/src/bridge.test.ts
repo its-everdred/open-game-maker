@@ -42,6 +42,8 @@ function ready(id = 'ready-1'): Envelope<'ready', unknown> {
 function harness(
   role: () => 'owner' | 'editor' | 'player' | 'watcher',
   options: Partial<Pick<HostBridgeOptions, 'monitorIntervalMs' | 'now' | 'onFatal' | 'readyTimeoutMs'>> = {},
+  captureUnavailable = false,
+  captureResponse?: unknown,
 ) {
   let inbound!: TransportOptions['onMessage'];
   let validator!: TransportOptions['validate'];
@@ -57,32 +59,43 @@ function harness(
     },
     request: async <R>(message: Envelope<string, unknown>) => {
       requests.push(message);
+      if (message.t === 'capture.still' && captureUnavailable) throw new Error('capture unavailable');
+      if (message.t === 'capture.still' && captureResponse !== undefined)
+        return { ...(captureResponse as object), replyTo: message.id } as R;
       return (
-        message.t === 'save.restore'
-          ? { v: 1, id: 'restored-1', replyTo: message.id, t: 'save.restored', payload: { save: message.payload } }
-          : message.t === 'editor.project'
-            ? {
-                v: 1,
-                id: 'projected-1',
-                replyTo: message.id,
-                t: 'editor.projected',
-                payload: { position: [2, 0, -1] },
-              }
-            : message.t === 'editor.pick'
+        message.t === 'capture.still'
+          ? {
+              v: 1,
+              id: 'capture-1',
+              replyTo: message.id,
+              t: 'capture.frame',
+              payload: { image: 'data:image/webp;base64,YWJj', capturedAt: 1_000 },
+            }
+          : message.t === 'save.restore'
+            ? { v: 1, id: 'restored-1', replyTo: message.id, t: 'save.restored', payload: { save: message.payload } }
+            : message.t === 'editor.project'
               ? {
                   v: 1,
-                  id: 'picked-1',
+                  id: 'projected-1',
                   replyTo: message.id,
-                  t: 'editor.picked',
-                  payload: { targets: [{ kind: 'entity', id: 'tree' }] },
+                  t: 'editor.projected',
+                  payload: { position: [2, 0, -1] },
                 }
-              : {
-                  v: 1,
-                  id: 'result-1',
-                  replyTo: message.id,
-                  t: 'test.result',
-                  payload: { ok: true, value: { rendered: true } },
-                }
+              : message.t === 'editor.pick'
+                ? {
+                    v: 1,
+                    id: 'picked-1',
+                    replyTo: message.id,
+                    t: 'editor.picked',
+                    payload: { targets: [{ kind: 'entity', id: 'tree' }] },
+                  }
+                : {
+                    v: 1,
+                    id: 'result-1',
+                    replyTo: message.id,
+                    t: 'test.result',
+                    payload: { ok: true, value: { rendered: true } },
+                  }
       ) as R;
     },
     close,
@@ -200,6 +213,45 @@ describe('HostBridge', () => {
     await bridge.whenReady;
     await expect(bridge.request('test.renderInfo', {})).resolves.toEqual({ rendered: true });
     bridge.close();
+  });
+
+  it('requests an optional still from the game without failing when the SDK cannot answer', async () => {
+    const { bridge, inbound, requests } = harness(() => 'owner');
+    inbound(ready());
+    await bridge.whenReady;
+    await expect(bridge.captureStill(5_000)).resolves.toBe('data:image/webp;base64,YWJj');
+    expect(requests.at(-1)).toMatchObject({ t: 'capture.still', payload: { offsetMs: 5_000 } });
+    bridge.close();
+  });
+
+  it('returns no still for an unready bridge or a missing game response', async () => {
+    const unready = harness(() => 'owner');
+    await expect(unready.bridge.captureStill(0)).resolves.toBeUndefined();
+    unready.bridge.close();
+
+    const unavailable = harness(() => 'owner', {}, true);
+    unavailable.inbound(ready());
+    await unavailable.bridge.whenReady;
+    await expect(unavailable.bridge.captureStill(5_000)).resolves.toBeUndefined();
+    unavailable.bridge.close();
+  });
+
+  it('rejects malformed and oversized still replies', async () => {
+    for (const response of [
+      { v: 1, id: 'capture-invalid', t: 'capture.unknown', payload: {} },
+      {
+        v: 1,
+        id: 'capture-oversized',
+        t: 'capture.frame',
+        payload: { image: `data:image/webp;base64,${'a'.repeat(32_769)}` },
+      },
+    ]) {
+      const { bridge, inbound } = harness(() => 'owner', {}, false, response);
+      inbound(ready());
+      await bridge.whenReady;
+      await expect(bridge.captureStill(0)).resolves.toBeUndefined();
+      bridge.close();
+    }
   });
 
   it('returns the state confirmed by a correlated save restore', async () => {

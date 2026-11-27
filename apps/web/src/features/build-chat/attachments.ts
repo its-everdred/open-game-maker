@@ -63,11 +63,17 @@ export function addPastedText(current: PendingAttachment[], text: string): Pendi
   return [...next.slice(0, -1), { ...added, title: 'Pasted text', preview: text }];
 }
 
-export async function uploadChatAttachment(jobId: string, file: File, type: string): Promise<ChatAttachment> {
+export async function uploadChatAttachment(
+  jobId: string,
+  file: File,
+  type: string,
+  signal?: AbortSignal,
+): Promise<ChatAttachment> {
   return api<ChatAttachment>(`/jobs/${encodeURIComponent(jobId)}/chat/attachments`, {
     method: 'POST',
     headers: { 'content-type': type, 'x-file-name': encodeURIComponent(file.name) },
     body: file,
+    signal,
   });
 }
 

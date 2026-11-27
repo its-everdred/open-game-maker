@@ -44,21 +44,49 @@ export function createSaveThumbnailCache(options: {
   const capture = options.capture ?? captureSaveThumbnail;
   const now = options.now ?? (() => performance.now());
   let lastCapture = -Infinity;
+  let frozenAt: number | undefined;
   let current: string | undefined;
+  const history: { at: number; image: string }[] = [];
+  const historyLimit = 13;
   let queued = false;
   let disposed = false;
   const stop = options.onFrame(() => {
     const time = now();
-    if (queued || time - lastCapture < 2_000) return;
+    if (frozenAt !== undefined || queued || time - lastCapture < 1_000) return;
     queued = true;
     lastCapture = time;
     queueMicrotask(() => {
       queued = false;
-      if (!disposed) current = capture();
+      if (disposed) return;
+      current = capture();
+      if (current) {
+        const capturedAt = now();
+        history.push({ at: capturedAt, image: current });
+        while (history.length > historyLimit) history.shift();
+      }
     });
   });
   return {
     current: () => current,
+    atOffset: (offsetMs: 0 | 5_000 | 10_000) => {
+      if (history.length === 0) return undefined;
+      const target = (frozenAt ?? now()) - offsetMs;
+      const sample = history.filter((item) => item.at <= target).at(-1);
+      return sample && target - sample.at <= 2_500 ? sample : undefined;
+    },
+    pause: () => {
+      if (frozenAt !== undefined) return;
+      frozenAt = now();
+      const pausedImage = capture();
+      if (pausedImage) {
+        current = pausedImage;
+        history.push({ at: frozenAt, image: current });
+        while (history.length > historyLimit) history.shift();
+      }
+    },
+    resume: () => {
+      frozenAt = undefined;
+    },
     dispose: () => {
       disposed = true;
       stop();

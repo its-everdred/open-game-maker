@@ -139,6 +139,21 @@ export class HostBridge {
     return result.data.payload.value;
   }
 
+  /** Older and non-SDK games simply produce no still; bug reporting continues with diagnostics only. */
+  async captureStill(offsetMs: 0 | 5_000 | 10_000): Promise<string | undefined> {
+    if (!this.readyPayload) return undefined;
+    const parsed = hostToGameSchema.safeParse({ v: 1, id: this.nextId(), t: 'capture.still', payload: { offsetMs } });
+    if (!parsed.success) throw new TypeError('invalid capture.still payload');
+    try {
+      const reply = await this.transport.request<Envelope<string, unknown>>(parsed.data, 500);
+      const result = gameToHostSchema.safeParse(reply);
+      if (!result.success || result.data.t !== 'capture.frame') return undefined;
+      return result.data.payload.image;
+    } catch {
+      return undefined;
+    }
+  }
+
   async restoreSave(payload: HostPayload<'save.restore'>): Promise<HostPayload<'save.restore'>> {
     if (!this.readyPayload) throw new BridgeError('not_ready');
     const parsed = hostToGameSchema.parse({ v: 1, id: this.nextId(), t: 'save.restore', payload });

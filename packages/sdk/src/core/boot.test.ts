@@ -1,6 +1,6 @@
 import type { Envelope, HostToGame } from '@ogm/contracts';
 import { z } from 'zod';
-import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import { boot } from './boot.js';
 import { RuntimeImpl } from './runtime.js';
@@ -49,6 +49,12 @@ async function start(options: { helloBuild?: 'draft' | 'test' | 'published'; mig
 }
 
 describe('boot', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState({}, '', '/');
+    document.body.replaceChildren();
+  });
+
   beforeEach(() => {
     id = 0;
     bridge.close.mockReset();
@@ -120,6 +126,74 @@ describe('boot', () => {
     expect(project).toHaveBeenCalledWith(0.25, 0.75, 'scenery:tree');
     expect(bridge.send).toHaveBeenCalledWith(
       expect.objectContaining({ t: 'editor.projected', payload: { position: [2, 3, 0] } }),
+    );
+    runtime.dispose();
+  });
+
+  it('answers a still request from a cached game frame even when saves are disabled', async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 200;
+    canvas.height = 100;
+    document.body.append(canvas);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: () => ({ data: new Uint8ClampedArray([0, 0, 0, 255, 1, 0, 0, 255]) }),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/webp;base64,YWJj');
+    const fixture = createCounterGame();
+    const module = { ...fixture.module, manifest: { ...fixture.module.manifest, saves: false } };
+    const pending = boot(module, { hostOrigin: 'https://app.test', headless: true });
+    await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+    bridge.onMessage!(hello());
+    const runtime = await pending;
+    (runtime as RuntimeImpl<unknown, unknown>).render();
+    await Promise.resolve();
+
+    bridge.onMessage!(message('capture.still', { offsetMs: 0 }));
+
+    expect(bridge.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        t: 'capture.frame',
+        payload: { image: 'data:image/webp;base64,YWJj', capturedAt: expect.any(Number) },
+        replyTo: expect.any(String),
+      }),
+    );
+    expect(module.manifest.saves).toBe(false);
+    runtime.dispose();
+    canvas.remove();
+  });
+
+  it('answers still requests for a declared scenario without enabling saves', async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 200;
+    canvas.height = 100;
+    document.body.append(canvas);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: () => ({ data: new Uint8ClampedArray([0, 0, 0, 255, 1, 0, 0, 255]) }),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/webp;base64,YWJj');
+    const fixture = createCounterGame();
+    fixture.module.scenarios = {
+      debug: () => ({ saveSchemaVersion: 1, data: { counter: 0, entities: {}, players: [] } }),
+    };
+    window.history.replaceState({}, '', '/?scenario=debug');
+    const pending = boot(fixture.module, { hostOrigin: 'https://app.test', headless: true });
+    await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+    bridge.onMessage!(hello());
+    const runtime = await pending;
+    (runtime as RuntimeImpl<unknown, unknown>).render();
+    await Promise.resolve();
+
+    bridge.onMessage!(message('capture.still', { offsetMs: 0 }));
+
+    const ready = bridge.send.mock.calls.find(([envelope]) => envelope.t === 'ready')?.[0];
+    expect(ready?.payload.manifest).toMatchObject({ saves: false, manualSaveSlots: false });
+    expect(bridge.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        t: 'capture.frame',
+        payload: { image: 'data:image/webp;base64,YWJj', capturedAt: expect.any(Number) },
+      }),
     );
     runtime.dispose();
   });

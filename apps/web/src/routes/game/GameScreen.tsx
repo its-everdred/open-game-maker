@@ -49,7 +49,7 @@ import { starterPalette } from '../../features/editor/starter-palette';
 import { containedStagePoint, mountStagePreview } from '../../features/editor/stage-preview';
 import { admitJob } from '../../features/scope-chat/admit';
 import { sendReport, setBugContext } from '../../features/bug-report';
-import type { FileBug } from '../../features/game-menu/BugComposer';
+import type { BugCapture, FileBug } from '../../features/game-menu/BugComposer';
 import { bugLog } from '../../features/game-menu/bug-log';
 import { fileBug as fileBugRequest } from '../../features/game-menu/file-bug';
 import { useSession } from '../../lib/api/session';
@@ -638,13 +638,13 @@ export function GameScreen() {
   const { data: session } = useSession();
   const ownsGame = Boolean(session && game.data && game.data.ownerId === session.user?.id);
   const fileBug = useCallback<FileBug>(
-    async (text, log, attempt) => {
+    async (text, log, attempt, captures) => {
       const owner = ownsGame && room.snapshot?.role !== 'peer' && jobBranch === 'main';
       if (!owner) setBugContext({ gameId });
       const result = await fileBugRequest(
         { admit: admitJob, report: sendReport },
         { gameId, branchId: jobBranch, owner },
-        { text, log, attempt },
+        { text, log, attempt, captures },
       );
       if (result.jobId) {
         void queryClient.invalidateQueries({ queryKey: gameJobsQueryKey(gameId) });
@@ -658,6 +658,17 @@ export function GameScreen() {
     () => bugLog({ gameId, buildId: runningBuildId, mode, frame: frameState }),
     [frameState, gameId, mode, runningBuildId],
   );
+  const captureBugStills = useCallback(async (): Promise<BugCapture[]> => {
+    const frame = frameRef.current;
+    if (!frame) return [];
+    const requests = [
+      [0, 'Now'],
+      [5_000, '−5 s'],
+      [10_000, '−10 s'],
+    ] as const;
+    const images = await Promise.all(requests.map(([offsetMs]) => frame.captureStill(offsetMs)));
+    return requests.flatMap((request, index) => (images[index] ? [{ label: request[1], image: images[index]! }] : []));
+  }, []);
   const askForChange = useCallback(() => {
     if (room.snapshot?.role === 'peer') return;
     requestMode('edit');
@@ -938,6 +949,7 @@ export function GameScreen() {
             editDisabled={room.snapshot?.role === 'peer'}
             onMoreHost={setMoreHost}
             onFileBug={fileBug}
+            captureBugStills={captureBugStills}
             bugLog={readBugLog}
             onResume={() => {
               if (roomId !== undefined && room.snapshot?.matchPause) room.session?.send({ t: 'match.resume.request' });

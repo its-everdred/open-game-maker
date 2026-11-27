@@ -19,6 +19,7 @@ type FrameLike = Pick<GameFrame, 'dispose' | 'on' | 'send' | 'setMode' | 'setSet
   bridge: Pick<GameFrame['bridge'], 'dropped'>;
   /** Optional so a test double need not answer diagnostics; `netInfo()` reports `undefined` when it cannot ask. */
   request?: GameFrame['request'];
+  captureStill?: GameFrame['captureStill'];
   project?: GameFrame['project'];
   pick?: GameFrame['pick'];
 };
@@ -88,6 +89,7 @@ export type GameFrameController = {
    * within `timeoutMs`. Read by the diagnostics overlay; nothing in the product path calls it.
    */
   netInfo(timeoutMs?: number): Promise<unknown>;
+  captureStill(offsetMs: 0 | 5_000 | 10_000): Promise<string | undefined>;
   dispose(): void;
 };
 
@@ -509,6 +511,8 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
             resolve(undefined);
           });
       }),
+    captureStill: (offsetMs) =>
+      disposed || frame.captureStill === undefined ? Promise.resolve(undefined) : frame.captureStill(offsetMs),
     onSaveWrite: (callback) => {
       startupWriteWindow = false;
       saveWriteSubscribers += 1;

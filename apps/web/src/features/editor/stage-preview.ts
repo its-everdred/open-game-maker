@@ -87,6 +87,7 @@ export function mountStagePreview(
     onSaveWrite: () => noop,
     onEvent: () => noop,
     netInfo: async () => undefined,
+    captureStill: async () => undefined,
     dispose: () => media.remove(),
   };
 }

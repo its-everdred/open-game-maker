@@ -110,7 +110,7 @@ describe('PlatformHud pause panel', () => {
     });
     fireEvent.click(within(page).getByRole('button', { name: 'Send' }));
 
-    await waitFor(() => expect(onFileBug).toHaveBeenCalledWith('Frozen goblin', 'game game', expect.any(String)));
+    await waitFor(() => expect(onFileBug).toHaveBeenCalledWith('Frozen goblin', 'game game', expect.any(String), []));
     fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
     expect(screen.getByRole('dialog', { name: 'Paused' })).toBeVisible();
   });
