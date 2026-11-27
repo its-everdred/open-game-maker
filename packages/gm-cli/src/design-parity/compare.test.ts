@@ -1,9 +1,9 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { compareGlass } from './compare.js';
+import { compareGlass, compareGlassScreen } from './compare.js';
 
 it('writes evidence and enforces the parity thresholds', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ogm-glass-parity-'));
@@ -14,6 +14,10 @@ it('writes evidence and enforces the parity thresholds', async () => {
         .toBuffer();
     const black = await make('#000');
     const white = await make('#fff');
+    const masks = join(dir, 'masks.json');
+    await writeFile(masks, JSON.stringify({ Home: [] }));
+    await expect(compareGlassScreen(black, black, dir, masks, 'Settings')).rejects.toThrow('No reviewed mask entry');
+    expect((await compareGlassScreen(black, black, dir, masks, 'Home')).pass).toBe(true);
     expect((await compareGlass(black, black, dir, [])).pass).toBe(true);
     expect((await compareGlass(black, white, dir, [])).pass).toBe(false);
     expect(JSON.parse(await readFile(join(dir, 'score.json'), 'utf8')).deltaEOver3Percent).toBe(100);
