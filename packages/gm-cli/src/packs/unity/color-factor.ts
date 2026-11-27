@@ -13,6 +13,59 @@ function nodeId(value: unknown): string {
   return id;
 }
 
+/** A null material texture with Shader Graph's black mode has zero RGB. */
+export function hasBlackRgbFallback(
+  id: string,
+  byId: Map<string, GraphObject>,
+  incoming: Map<string, Edge[]>,
+  textures?: ReadonlyMap<string, unknown>,
+): boolean {
+  const node = byId.get(id);
+  const inputs = incoming.get(id) ?? [];
+  if (
+    !textures ||
+    node?.m_Type !== 'UnityEditor.ShaderGraph.SampleTexture2DNode' ||
+    node.m_TextureType !== 0 ||
+    inputs.some((input) => ![1, 2].includes(input.inputSlot)) ||
+    new Set(inputs.map((input) => input.inputSlot)).size !== inputs.length
+  )
+    return false;
+  const texture = inputs.find((input) => input.inputSlot === 1);
+  if (!texture || texture.outputSlot !== 0) return false;
+  const uv = inputs.find((input) => input.inputSlot === 2);
+  if (uv) {
+    const node = byId.get(uv.node);
+    const channel = node?.m_OutputChannel ?? 0;
+    if (
+      node?.m_Type !== 'UnityEditor.ShaderGraph.UVNode' ||
+      uv.outputSlot !== 0 ||
+      !Number.isInteger(channel) ||
+      (channel as number) < 0 ||
+      (channel as number) > 7 ||
+      (incoming.get(uv.node) ?? []).length
+    )
+      return false;
+  }
+  const source = byId.get(texture.node);
+  if (source?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode' || (incoming.get(texture.node) ?? []).length)
+    return false;
+  const property = byId.get(nodeId(source.m_Property));
+  const key = property?.m_OverrideReferenceName || property?.m_DefaultReferenceName;
+  if (
+    property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.Texture2DShaderProperty' ||
+    property.m_DefaultType !== 1 ||
+    property.m_Modifiable !== true ||
+    property.m_GeneratePropertyBlock !== true ||
+    typeof key !== 'string' ||
+    !key
+  )
+    return false;
+  const saved = textures.get(key);
+  if (saved === undefined) return false;
+  const reference = object(object(saved).m_Texture);
+  return !reference.guid && String(reference.fileID) === '0';
+}
+
 /** Resolve scalar properties and verified unassigned white texture slots. */
 export function createScalarFactor(
   byId: Map<string, GraphObject>,

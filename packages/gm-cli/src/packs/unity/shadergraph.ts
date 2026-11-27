@@ -1,6 +1,6 @@
 import { compileWeightExpression, type WeightExpression } from './weight-expression.js';
 import { compileUvAffine, type UvAffine } from './uv-affine.js';
-import { createScalarFactor } from './color-factor.js';
+import { createScalarFactor, hasBlackRgbFallback } from './color-factor.js';
 
 type GraphObject = Record<string, unknown>;
 function object(value: unknown): GraphObject {
@@ -114,6 +114,12 @@ export function shaderGraphBase(
     ]);
   }
   const scalarFactor = createScalarFactor(byId, incoming, floats, colors, textures);
+  // Only RGB or a single RGB channel consumes this value; the unused alpha is
+  // a placeholder because Unity versions disagree on black fallback alpha.
+  const blackMask = (id: string, channel: number | 'rgb'): ShaderGraphBase | undefined =>
+    channel !== 3 && hasBlackRgbFallback(id, byId, incoming, textures)
+      ? { textures: [], factors: [{ key: '', kind: 'constant', defaultValue: [0, 0, 0, 1] }] }
+      : undefined;
   const visit = (id: string, ancestors: Set<string>): ShaderGraphBase => {
     if (ancestors.has(id)) throw new Error('cyclic Unity shader graph');
     const node = byId.get(id);
@@ -127,6 +133,8 @@ export function shaderGraphBase(
       if (source?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode' && [4, 5, 6, 7].includes(input.outputSlot)) {
         if (source.m_TextureType !== undefined && source.m_TextureType !== 0)
           throw new Error('unsupported Unity texture sample type');
+        if (blackMask(input.node, input.outputSlot - 4))
+          return { textures: [], factors: [{ key: '', kind: 'constant', defaultValue: 0 }] };
         try {
           return { textures: [], factors: [scalarFactor(input)] };
         } catch (error) {
@@ -209,7 +217,10 @@ export function shaderGraphBase(
         const current = byId.get(edge.node);
         const next = new Set(seen).add(edge.node);
         if (current?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode' && [4, 5, 6, 7].includes(edge.outputSlot))
-          return { term: visit(edge.node, seen), channel: edge.outputSlot - 4 };
+          return {
+            term: blackMask(edge.node, edge.outputSlot - 4) ?? visit(edge.node, seen),
+            channel: edge.outputSlot - 4,
+          };
         const linked = incoming.get(edge.node) ?? [];
         if (
           current?.m_Type === 'UnityEditor.ShaderGraph.OneMinusNode' &&
@@ -258,7 +269,15 @@ export function shaderGraphBase(
           ['UnityEditor.ShaderGraph.DynamicVectorMaterialSlot', 'UnityEditor.ShaderGraph.Vector3MaterialSlot'].includes(
             String(destination?.m_Type),
           );
-        const weight = compileWeightExpression(amount, byId, incoming, floats, visit, new Set(ancestors).add(id), rgb);
+        const weight = compileWeightExpression(
+          amount,
+          byId,
+          incoming,
+          floats,
+          (sample, seen, channel) => blackMask(sample, channel) ?? visit(sample, seen),
+          new Set(ancestors).add(id),
+          rgb,
+        );
         if (typeof weight === 'number' && (weight < 0 || weight > 1))
           throw new Error('unsupported Unity shader graph interpolation amount');
         return { textures: [], factors: [], blends: [{ a: resolveInput(0), b: resolveInput(1), weight }] };

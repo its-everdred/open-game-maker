@@ -37,7 +37,7 @@ export function compileWeightExpression(
   byId: Map<string, Obj>,
   incoming: Map<string, Edge[]>,
   floats: ReadonlyMap<string, unknown>,
-  visitTexture: (id: string, ancestors: Set<string>) => ShaderGraphBase,
+  visitTexture: (id: string, ancestors: Set<string>, channel: number | 'rgb') => ShaderGraphBase,
   ancestors: Set<string>,
   allowRgb = false,
 ): WeightExpression<ShaderGraphBase> {
@@ -82,7 +82,7 @@ export function compileWeightExpression(
               ? 'rgb'
               : -1;
       if (channel === -1) throw new Error(`unsupported Unity scalar texture output ${edge.outputSlot} at ${edge.node}`);
-      return { term: visitTexture(edge.node, seen), channel };
+      return { term: visitTexture(edge.node, seen, channel), channel };
     }
     if (node.m_Type === 'UnityEditor.ShaderGraph.PropertyNode' && edge.outputSlot === 0 && linked.length === 0) {
       const property = byId.get(ref(node.m_Property));
