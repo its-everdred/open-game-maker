@@ -24,6 +24,13 @@ function hasControlClass(node) {
   return false;
 }
 
+function hasControlRole(node) {
+  if (node.type === 'Literal') return typeof node.value === 'string' && controlRoles.has(node.value);
+  if (node.type === 'ConditionalExpression') return hasControlRole(node.consequent) || hasControlRole(node.alternate);
+  if (node.type === 'LogicalExpression') return hasControlRole(node.left) || hasControlRole(node.right);
+  return false;
+}
+
 // Native controls belong inside the shared library so every screen gets the
 // same semantics and states. Test fixtures are excluded by the caller.
 export const glassComponentsRule = {
@@ -45,10 +52,10 @@ export const glassComponentsRule = {
           if (
             attr.type === 'JSXAttribute' &&
             attr.name.name === 'role' &&
-            attr.value?.type === 'Literal' &&
-            controlRoles.has(attr.value.value)
+            attr.value &&
+            hasControlRole(attr.value.type === 'JSXExpressionContainer' ? attr.value.expression : attr.value)
           )
-            context.report({ node: attr, messageId: 'control', data: { name: attr.value.value } });
+            context.report({ node: attr, messageId: 'control', data: { name: 'role' } });
           if (
             attr.type === 'JSXAttribute' &&
             attr.name.name === 'className' &&

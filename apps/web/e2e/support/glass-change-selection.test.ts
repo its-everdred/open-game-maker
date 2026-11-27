@@ -13,6 +13,7 @@ it('selects affected screens and fails closed on other visible routes', () => {
   expect(glassScreens(['apps/web/src/features/worker-builds/BuildTracker.tsx'])).toEqual(['Activity', 'Unmapped']);
   expect(glassScreens(['apps/web/src/routes/auth.css'])).toEqual(['SignIn', 'Unmapped']);
   expect(glassScreens(['apps/web/src/routes/title/TitleScreen.tsx'])).toEqual(['Title']);
+  expect(glassScreens(['apps/web/title-town/city.js'])).toEqual(['Title']);
   expect(glassScreens(['apps/web/src/routes/games/GameDetail.tsx'])).toEqual(['GameSheet', 'Home']);
   expect(glassScreens(['apps/web/src/components/GlassButton.tsx'])).toEqual(['Unmapped']);
   expect(glassScreens(['apps/web/public/new-image.png'])).toEqual(['Unmapped']);
@@ -68,6 +69,12 @@ it('finds changed screen files from the repository root', async () => {
     git('add', '.');
     git('commit', '-qm', 'change tokens');
     expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Unmapped']);
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    await mkdir(join(root, 'apps/web/title-town'), { recursive: true });
+    await writeFile(join(root, 'apps/web/title-town/city.js'), 'export {}');
+    git('add', '.');
+    git('commit', '-qm', 'change title town');
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Title']);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

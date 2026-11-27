@@ -14,6 +14,7 @@ export function changedGlassFiles(root, base) {
       '--',
       'apps/web/src',
       'apps/web/public',
+      'apps/web/title-town',
     ],
     {
       cwd: root,
@@ -44,7 +45,7 @@ export function glassScreens(files) {
   const screens = new Set();
   for (const file of files) {
     if (/\.(?:test|spec)\.[^.]+$/.test(file)) continue;
-    if (file.startsWith('apps/web/src/routes/title/')) {
+    if (file.startsWith('apps/web/src/routes/title/') || file.startsWith('apps/web/title-town/')) {
       screens.add('Title');
     } else if (file.startsWith('apps/web/src/features/worker-builds/')) {
       screens.add('Activity');

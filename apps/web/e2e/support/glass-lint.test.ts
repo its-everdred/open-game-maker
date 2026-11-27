@@ -82,3 +82,16 @@ it('rejects ad-hoc controls in conditional and template class names', async () =
   );
   expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(2);
 }, 30_000);
+
+it('rejects control roles selected conditionally', async () => {
+  const eslint = new ESLint({
+    overrideConfig: [
+      { plugins: { glass: { rules: { components: glassComponentsRule } } }, rules: { 'glass/components': 'error' } },
+    ],
+  });
+  const [result] = await eslint.lintText(
+    'const Screen = ({ active }) => <><div role={active ? "switch" : "presentation"} /><div role="presentation" /></>;',
+    { filePath: 'src/Screen.tsx' },
+  );
+  expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(1);
+}, 30_000);
