@@ -211,6 +211,40 @@ for (const viewport of [
       await expect(page.getByRole('button', { name: /^Test game:/ })).toBeVisible({ timeout: 30_000 });
     });
 
+    test('player files a bug from a hosted game', async ({ page, system }) => {
+      test.setTimeout(600_000);
+      await signIn(page, system);
+      system.seedChat();
+      const game = await system.seedEditor();
+      system.makePlayer();
+      await page.route(
+        (url) => [bridgeOrigin, 'http://127.0.0.1:10000'].includes(url.origin),
+        async (route) => {
+          const incoming = new URL(route.request().url());
+          const target = new URL(incoming.pathname + incoming.search, game.origin);
+          await route.fulfill({ response: await route.fetch({ url: target.href, maxRedirects: 0 }) });
+        },
+      );
+      await page.goto(`/g/${game.gameId}?test`, { waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: 'Menu', exact: true }).tap({ timeout: 120_000 });
+      const paused = page.getByRole('dialog', { name: 'Paused' });
+      await paused.getByRole('button', { name: 'File a bug' }).tap();
+      const bug = page.getByRole('dialog', { name: 'File a bug' });
+      await bug.getByRole('textbox', { name: 'Describe the issue' }).fill('The lantern vanished');
+      await bug.getByRole('button', { name: 'Send', exact: true }).tap();
+      await expect
+        .poll(() => system.reports(), { timeout: 30_000 })
+        .toEqual([
+          expect.objectContaining({
+            game_id: game.gameId,
+            build_hash: expect.any(String),
+            text: expect.stringContaining('The lantern vanished'),
+          }),
+        ]);
+      expect(system.reports()[0]?.build_hash).toMatch(/^[0-9a-f]{64}$/);
+      await expect(bug.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
+    });
+
     test('manual edit persists through the real game host', async ({ page, system }) => {
       test.setTimeout(600_000);
       await signIn(page, system);
@@ -251,9 +285,18 @@ for (const viewport of [
       const frame = gameFrame()!;
       await frame.waitForFunction(() => typeof (window as TestWindow).advanceTime === 'function');
       const snapshot = () =>
-        frame.evaluate(
-          () => JSON.parse((window as TestWindow).render_game_to_text!()) as { tick: number; mode: string },
-        );
+        frame.evaluate(() => {
+          const { tick, mode } = JSON.parse((window as TestWindow).render_game_to_text!()) as {
+            tick: number;
+            mode: string;
+          };
+          return { tick, mode };
+        });
+      await page.getByRole('button', { name: 'Menu', exact: true }).tap();
+      const editMenu = page.getByRole('dialog', { name: 'Paused' });
+      await editMenu.getByRole('button', { name: 'More', exact: true }).tap();
+      await editMenu.getByRole('button', { name: 'select', exact: true }).tap();
+      await editMenu.getByRole('button', { name: 'Resume', exact: true }).tap();
       await expect.poll(async () => (await snapshot()).mode).toBe('edit');
       const beforePlay = (await snapshot()).tick;
       await page.getByRole('button', { name: 'Play', exact: true }).tap();

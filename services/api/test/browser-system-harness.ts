@@ -132,6 +132,28 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
             commands_json: string;
           }[]
         ).map(({ label, commands_json }) => ({ label, commands: JSON.parse(commands_json) as unknown })),
+      makePlayer() {
+        const owner = 'u_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e03';
+        deps!.sqlite
+          .prepare(
+            'INSERT INTO user (id, name, email, email_verified, created_at, updated_at) VALUES (?, ?, ?, 1, 0, 0)',
+          )
+          .run(owner, 'Game owner', 'owner@example.test');
+        deps!.sqlite.prepare('UPDATE families SET owner_user_id = ?').run(owner);
+        deps!.sqlite.prepare("UPDATE family_members SET role = 'member', capability = 'player'").run();
+        deps!.sqlite
+          .prepare(
+            "INSERT INTO family_members (family_id, user_id, role, capability, joined_at) SELECT id, ?, 'owner', 'creator', created_at FROM families",
+          )
+          .run(owner);
+        deps!.sqlite.prepare("UPDATE games SET owner_id = ?, visibility = 'listed'").run(owner);
+      },
+      reports: () =>
+        deps!.sqlite.prepare('SELECT game_id, build_hash, text FROM reports ORDER BY created_at').all() as {
+          game_id: string;
+          build_hash: string;
+          text: string | null;
+        }[],
       seedChat() {
         const user = deps!.sqlite.prepare('SELECT id FROM user WHERE email = ?').get('player@example.test') as
           { id: string } | undefined;
