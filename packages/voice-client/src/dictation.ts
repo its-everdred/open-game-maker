@@ -47,6 +47,8 @@ export class Dictation {
   private released = false;
   private committed = false;
   private finished = false;
+  private settled: string[] = [];
+  private partial = '';
 
   constructor(private readonly options: DictationOptions) {}
 
@@ -91,6 +93,8 @@ export class Dictation {
     this.released = false;
     this.committed = false;
     this.finished = false;
+    this.settled = [];
+    this.partial = '';
     return this.generation;
   }
 
@@ -184,8 +188,13 @@ export class Dictation {
     }
 
     if (isTranscript(frame)) {
-      this.emit('transcript', { kind: frame.kind, text: frame.text });
-      if (frame.kind === 'final') this.finish();
+      if (frame.kind === 'final') {
+        if (frame.text.trim()) this.settled.push(frame.text.trim());
+        this.partial = '';
+      } else {
+        this.partial = frame.text.trim();
+      }
+      this.emit('transcript', { kind: 'partial', text: this.transcript() });
       return;
     }
     if (isError(frame)) {
@@ -193,10 +202,19 @@ export class Dictation {
       return;
     }
     if (isEnded(frame)) {
+      if (this.partial) {
+        this.fail({ code: 'incomplete_transcript', message: 'Dictation ended before the final words were confirmed.' });
+        return;
+      }
+      this.emit('transcript', { kind: 'final', text: this.transcript() });
       this.finish();
       return;
     }
     this.fail({ code: 'invalid_frame', message: 'Dictation returned an invalid response.' });
+  }
+
+  private transcript(): string {
+    return [...this.settled, this.partial].filter(Boolean).join(' ');
   }
 
   private fail(error: DictationError): void {
