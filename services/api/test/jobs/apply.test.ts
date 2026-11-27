@@ -165,7 +165,7 @@ describe('applyAiurEvent', () => {
     applyAiurEvent(deps, DAEMON, event(1, 'ticket.142.lifecycle.changed', { lifecycle: 'running' }));
     applyAiurEvent(deps, DAEMON, event(2, 'ticket.142.lifecycle.changed', { lifecycle: 'paused', reason: 'budget' }));
     applyAiurEvent(deps, DAEMON, event(3, 'ticket.142.lifecycle.changed', { lifecycle: 'running' }));
-    const completed = event(4, 'ticket.142.lifecycle.changed', { lifecycle: 'completed' });
+    const completed = event(4, 'ticket.142.lifecycle.changed', { lifecycle: 'completed', lifecycle_source: 'tracker' });
     applyAiurEvent(deps, DAEMON, completed);
     applyAiurEvent(deps, DAEMON, completed);
 

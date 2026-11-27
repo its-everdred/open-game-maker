@@ -54,7 +54,14 @@ export function recordTicketLifecycle(
   if (rows.length === 0) return 'legacy';
   const current = rows.find((row) => row.issueNumber === ticket);
   if (!current) return 'stale';
-  const terminalState = lifecycle === 'completed' ? 'done' : lifecycle === 'cancelled' ? 'cancelled' : null;
+  const terminalState =
+    lifecycle === 'completed'
+      ? 'done'
+      : lifecycle === 'cancelled'
+        ? 'cancelled'
+        : lifecycle === 'unconfirmed'
+          ? current.terminalState
+          : null;
   const updated = db
     .update(schema.jobTickets)
     .set({ terminalState, lifecycleSeq: seq })

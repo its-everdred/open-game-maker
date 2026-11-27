@@ -158,7 +158,6 @@ export function activeJobs(db: Db, daemonSlug: string): { jobId: string; ticket:
     )
     .orderBy(asc(schema.jobs.aiurIssueNumber), asc(schema.jobs.id))
     .all()
-    .filter((row): row is { jobId: string; gameId: string; issueNumber: number } => row.issueNumber !== null)
     .filter((row) => daemonRowForGame(db, row.gameId)?.slug === daemonSlug)
     .flatMap(({ jobId, issueNumber }) => {
       const tickets = db
@@ -167,7 +166,7 @@ export function activeJobs(db: Db, daemonSlug: string): { jobId: string; ticket:
         .where(eq(schema.jobTickets.jobId, jobId))
         .orderBy(asc(schema.jobTickets.issueNumber))
         .all();
-      return (tickets.length === 0 ? [{ issueNumber }] : tickets).map((ticket) => ({
+      return (tickets.length === 0 ? (issueNumber === null ? [] : [{ issueNumber }]) : tickets).map((ticket) => ({
         jobId,
         ticket: String(ticket.issueNumber),
       }));

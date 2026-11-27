@@ -180,6 +180,40 @@ describe('multi-ticket job lifecycle', () => {
     applyAiurEvent(projection, 'game', completed(2, 11));
     expect(transitions).toEqual(['done']);
   });
+  it('waits for tracker confirmation after a worker reports completion', () => {
+    const { deps, projection, transitions } = setup();
+    applyAiurEvent(projection, 'game', completed(1, 10));
+    applyAiurEvent(projection, 'game', {
+      ...completed(2, 11),
+      payload: { lifecycle: 'completed', lifecycle_source: 'status_report' },
+    });
+    expect(transitions).toEqual([]);
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('running');
+    applyAiurEvent(projection, 'game', completed(3, 11));
+    expect(transitions).toEqual(['done']);
+    applyAiurEvent(projection, 'game', {
+      ...completed(4, 11),
+      payload: { lifecycle: 'completed', lifecycle_source: 'status_report' },
+    });
+    expect(
+      deps.db.select().from(schema.jobTickets).where(eq(schema.jobTickets.issueNumber, 11)).get()?.terminalState,
+    ).toBe('done');
+  });
+  it('resets the sequence fence of a ticket filed before job admission completes', () => {
+    const { deps, projection, transitions } = setup();
+    deps.db
+      .update(schema.jobs)
+      .set({ state: 'admitted', aiurIssueNumber: null })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    applyAiurEvent(projection, 'game', { ...completed(100, 10), payload: { lifecycle: 'running' } });
+    resetTicketSequences(deps.db, 'game');
+    applyAiurEvent(projection, 'game', completed(1, 10));
+    expect(
+      deps.db.select().from(schema.jobTickets).where(eq(schema.jobTickets.issueNumber, 10)).get()?.terminalState,
+    ).toBe('done');
+    expect(transitions).toEqual([]);
+  });
   it('keeps separate ticket ordering when an older event arrives late', () => {
     const { deps, projection, transitions } = setup();
     applyAiurEvent(projection, 'game', completed(2, 11));

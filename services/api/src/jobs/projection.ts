@@ -176,9 +176,11 @@ export function applyAiurEvent(
     if (job !== null && ticket !== undefined) {
       const kind = match?.[2] ?? '';
       const lifecycle = record.payload.lifecycle;
+      const confirmedLifecycle =
+        lifecycle === 'completed' && record.payload.lifecycle_source !== 'tracker' ? 'unconfirmed' : lifecycle;
       ticketAggregate =
-        kind === 'lifecycle.changed' && typeof lifecycle === 'string'
-          ? recordTicketLifecycle(deps.db, job.id, Number(ticket), record.seq, lifecycle)
+        kind === 'lifecycle.changed' && typeof confirmedLifecycle === 'string'
+          ? recordTicketLifecycle(deps.db, job.id, Number(ticket), record.seq, confirmedLifecycle)
           : 'legacy';
       job = deps.jobs.byTicket(daemonSlug, ticket);
       if (
@@ -229,7 +231,11 @@ export function applyAiurEvent(
     const patch = older ? {} : eventPatch(kind, record.payload);
     if (
       kind === 'lifecycle.changed' &&
-      (ticketAggregate === 'waiting' || job.state === 'admitted') &&
+      (ticketAggregate === 'waiting' ||
+        job.state === 'admitted' ||
+        (record.payload.lifecycle === 'completed' &&
+          record.payload.lifecycle_source !== 'tracker' &&
+          !aggregateTerminal)) &&
       ['completed', 'cancelled'].includes(String(record.payload.lifecycle))
     ) {
       patch.lifecycle = 'waiting';
@@ -285,6 +291,7 @@ function applyLifecycle(
       break;
     }
     case 'completed':
+      if (payload.lifecycle_source !== 'tracker') break;
       if (aggregate === 'legacy' || aggregate === 'done') deps.lifecycle.markTerminal(jobId, 'done');
       else if (aggregate === 'cancelled') deps.lifecycle.markTerminal(jobId, 'cancelled');
       break;
