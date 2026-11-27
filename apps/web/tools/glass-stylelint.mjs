@@ -5,7 +5,7 @@ export const glassStylelintConfig = {
   rules: {
     'declaration-property-value-disallowed-list': {
       '/.*/': [literal],
-      '/^(?:border(?:-top|-right|-bottom|-left)?-radius)$/': ['/\\b\\d*\\.?\\d+px\\b/i'],
+      '/^border(?:-(?:top|bottom)-(?:left|right))?-radius$/': ['/\\b\\d*\\.?\\d+px\\b/i'],
       '/^(?:box-shadow|text-shadow|backdrop-filter|-webkit-backdrop-filter|font|font-size|font-weight|line-height|letter-spacing|transition-duration|transition-timing-function|animation-duration|animation-timing-function)$/':
         [nonToken, '/\\)\\s*,?\\s+[-+]?\\d*\\.?\\d+(?:px|rem|em|%|ms|s)?\\b/i'],
       '/^(?:transition|animation)$/': [

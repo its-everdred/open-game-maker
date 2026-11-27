@@ -9,6 +9,7 @@ it('rejects literal design values and accepts generated token references', async
     '.a { color: #fff }',
     '.a { background: rgb(1 2 3) }',
     '.a { border-radius: 8px }',
+    '.a { border-top-left-radius: 8px }',
     '.a { box-shadow: 0 2px black }',
     '.a { box-shadow: var(--shadow), 0 2px black }',
     '.a { font-size: 16px }',
