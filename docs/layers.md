@@ -83,3 +83,5 @@ This directory: `~/.aiur/repo/its-everdred/open-game-maker-2000/executor/` (scri
 | decide.sh (decision delivery as rework) | aiur: an Executor decision on a Command should resume the worker |
 | mock broker reference policy | core gm-image-mock / a core mock service |
 | PC (everdred@100.89.62.105, RTX 4080): 3D render studio, renders only, `~/ogm-render` | Executor host step (no game, aiur or Claude work there) |
+
+- **PC core daemon** (since 2026-11-27): aiur-everdred-ac3633df7f on the PC runs its-everdred/open-game-maker tickets labelled `pc:*` (aiur main only, cap 4). The PC merges its own tickets; visual looks get a review card first. Pack-render GIFs and stills land in `assets-local/review/pack-renders/<slug>/` with a card.json, carded by the review relay.
