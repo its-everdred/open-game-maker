@@ -158,8 +158,12 @@ export function ConversationReviews({
         !commands.isLoading &&
         !reviews.loading &&
         !ledger.isLoading &&
-        !history.isLoading && <p>No reviews yet.</p>}
-      {(commands.isError || reviews.error || ledger.isError || history.isError) && (
+        !history.isLoading &&
+        !commands.isError &&
+        !reviews.error &&
+        !ledger.isError &&
+        !history.isError && <p>No reviews yet.</p>}
+      {visible && (commands.isError || reviews.error || ledger.isError || history.isError) && (
         <p role="alert">Some reviews could not be loaded.</p>
       )}
     </div>

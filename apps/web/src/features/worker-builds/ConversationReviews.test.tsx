@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ConversationReviews } from './ConversationReviews';
 
@@ -67,4 +67,28 @@ it('shows only this ticket’s reviews in chronological order', async () => {
     'Old review',
     'New review',
   ]);
+});
+
+it('does not render review errors while the panel is hidden', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response('', { status: 500 })),
+  );
+  const client = new QueryClient();
+  const view = render(
+    <QueryClientProvider client={client}>
+      <ConversationReviews gameId="game" ticket="12" creatorId="owner" visible={false} />
+    </QueryClientProvider>,
+  );
+  await waitFor(
+    () => expect(client.getQueryState(['ticket-review-history', 'owner', 'game', '12'])?.status).toBe('error'),
+    { timeout: 30000 },
+  );
+  expect(screen.queryByRole('alert')).toBeNull();
+  view.rerender(
+    <QueryClientProvider client={client}>
+      <ConversationReviews gameId="game" ticket="12" creatorId="owner" visible />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole('alert')).toHaveTextContent('Some reviews could not be loaded.');
 });
