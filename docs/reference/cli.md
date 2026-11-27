@@ -122,7 +122,7 @@ gm qa games-cache [--origin <app origin>] [--game <slug>] [--after-publish <buil
 ```
 
 ```text
-gm check [--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase mock|prototype|build|polish] [--design ogm-glass] [--design-screen <artboard>] [--json]
+gm check [--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase mock|prototype|build|polish] [--design ogm-glass|none] [--design-screen <artboard>] [--json]
 gm check static [--json]
 gm check hooks [--json]
 gm check images [--json]
@@ -288,7 +288,7 @@ sheet. The creative ticket gate requires a recorded mock approval before prototy
 For a ticket labeled `design:ogm-glass`, pass `--design ogm-glass`; for a covered prototype also pass
 `--design-screen <artboard>`. The PR body must name the ticket, and the base branch's `docs/design/ogm-glass/screens.md` must contain that
 artboard. With an OGM GitHub remote, the gate also reads the named ticket's labels; if that lookup fails, pass the design
-explicitly for a glass ticket. Glass mock references may use `assets-local/review/design-ogm-glass/`.
+explicitly for a glass ticket or `--design none` for a confirmed non-glass ticket. Glass mock references may use `assets-local/review/design-ogm-glass/`.
 
 Pass the active rung with `gm check --phase <rung>`; the phase does not auto-advance from the branch or ticket. While a
 provisional scope exists, omitting `--phase` fails closed and asks for the current rung.

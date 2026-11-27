@@ -138,7 +138,7 @@ describe('gm check ticket lanes', () => {
     expect(result.err.join('\n')).toContain('needs at least two assets-local/packs or assets-local/sets refs');
   });
 
-  it('requires glass references and ticket-specific coverage before skipping a mock', async () => {
+  it('requires glass references and an approved artboard before skipping a mock', async () => {
     const { cwd, git } = repo();
     mkdirSync(join(cwd, 'docs/design/ogm-glass'), { recursive: true });
     writeFileSync(

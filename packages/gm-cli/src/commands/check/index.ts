@@ -146,9 +146,15 @@ function ticketGate(
   const labels = ticketLabels(body);
   if (lane) labels.add(`lane:${lane}`);
   if (phase) labels.add(`phase:${phase}`);
-  if (design) labels.add(`design:${design}`);
+  if (design && design !== 'none') labels.add(`design:${design}`);
   const ticketNumber = /\b(?:closes|refs|fixes|resolves)\s+#(\d+)/i.exec(body)?.[1];
-  if (!design && !labels.has('design:ogm-glass') && ticketNumber && labels.has('lane:creative')) {
+  if (
+    !design &&
+    !labels.has('design:ogm-glass') &&
+    ticketNumber &&
+    labels.has('lane:creative') &&
+    (labels.has('phase:mock') || labels.has('phase:prototype'))
+  ) {
     const issue = ticketDesignFromIssue(cwd, ticketNumber);
     if (issue.error) return [issue.error];
     if (issue.design) labels.add(`design:${issue.design}`);
@@ -286,14 +292,17 @@ export const command: GmCommand = {
   name: 'check',
   summary: 'run deterministic static, hook, and asset gates',
   usage:
-    '[--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase <mock|prototype|build|polish>] [--design ogm-glass] [--design-screen <artboard>] [--json]',
+    '[--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase <mock|prototype|build|polish>] [--design ogm-glass|none] [--design-screen <artboard>] [--json]',
   example: 'check',
   flags: {
     body: { type: 'string', help: 'pull request body markdown for ticket PR gates' },
     base: { type: 'string', help: 'base ref for changed-file detection (default origin/main)' },
     lane: { type: 'string', help: 'ticket lane for ticket PR gates: creative or clone' },
     phase: { type: 'string', help: 'current look rung: mock, prototype, build, or polish' },
-    design: { type: 'string', help: 'approved design from ticket label: ogm-glass' },
+    design: {
+      type: 'string',
+      help: 'approved design from ticket label: ogm-glass, or none for a known non-glass ticket',
+    },
     'design-screen': { type: 'string', help: 'covered glass artboard identifier' },
   },
   async run(ctx, args, flags) {
@@ -305,8 +314,8 @@ export const command: GmCommand = {
     if (lane !== undefined && !['creative', 'clone'].includes(lane))
       throw new UsageError(`invalid ticket lane "${lane}"`, 'use --lane creative|clone');
     const design = flags.design as string | undefined;
-    if (design !== undefined && design !== 'ogm-glass')
-      throw new UsageError(`invalid approved design "${design}"`, 'use --design ogm-glass');
+    if (design !== undefined && !['ogm-glass', 'none'].includes(design))
+      throw new UsageError(`invalid approved design "${design}"`, 'use --design ogm-glass|none');
     const screen = flags['design-screen'] as string | undefined;
     const verify = await import('@ogm/gm-verify');
     const gate = verify.runL0(ctx.cwd);
