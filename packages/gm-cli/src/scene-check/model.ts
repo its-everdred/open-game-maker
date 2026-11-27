@@ -25,6 +25,8 @@ export interface Piece {
   /** Free-form tile tags: `ruin`, `formal`, `gate`, `exit`. */
   tags: ReadonlySet<string>;
   elevation: number;
+  /** Uniform scale about the pack's image anchor. */
+  scale?: number;
   /** Drawn by a map beneath the scene (a surround): it closes the frame but is not the scene's own dressing. */
   under: boolean;
   /** The grid edge this piece draws, when its pack measured it. */

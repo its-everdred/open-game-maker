@@ -27,6 +27,7 @@ export {
   wallF6Edges,
   wallC1Edges,
   structuralImageBounds,
+  inspectedGatePost,
   type AlphaBounds,
   type StructuralImageBounds,
 } from './structural-bounds.js';

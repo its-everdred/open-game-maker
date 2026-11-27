@@ -46,7 +46,6 @@ set preview; the client displays only the pre-rendered files.
 
 Finding and previewing new packs before any download: `gm-pack-scout`.
 
-
 1. **Licence first**, on the author's official page and on each model's own page. CC0 or the creator's explicit OK.
 2. Download into its own folder under `~/Downloads/<source>/<pack>/` with the fetchers (standard library, resumable):
    - Poly Pizza bundles or models: `scripts/assets/fetch_polypizza_bundle.py <url> <out> [--licenses CC0]` (writes
@@ -80,8 +79,9 @@ When a game needs a pack asset at angles or rotations the pack doesn't ship (fre
 Fences, walls, buildings, paths and dressing in a SmallScaleInt scene come from the adapter's assemblers
 (`edgeRun`, `building`, `path`, `scatter`, written out with `assemblyMap`; `@gm/pack-smallscaleint` README). Never place
 structural pieces one sprite at a time or hard-code a facing-to-edge table in a game: a missing kind or style goes into
-the adapter as a measured fact with a test, so every game gets it. For an inspected `yMax` fence opening, pass a gate
-post asset, facing and scale to `edgeRun`; other gate orientations, steps and non-stone buildings are not bound yet.
+the adapter as a measured fact with a test, so every game gets it. For an inspected `yMax` fence opening, pass Stone
+A14 facing E at scale 0.4 to `edgeRun` for approximate posts; their fence connections are not yet verified. Other post
+styles, gate orientations, steps and non-stone buildings are not bound yet.
 Leave those gaps visible rather than hand-placing sprites.
 
 ## Sound

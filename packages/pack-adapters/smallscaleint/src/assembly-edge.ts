@@ -4,7 +4,7 @@ import type { TileFacing } from './map.js';
 import { verticesForOpenings } from './openings.js';
 import { polylineEdges, type EdgePolyline } from './polyline-edges.js';
 import type { Cell } from './placement.js';
-import { fenceB1Edges, wallC1Edges, wallF1Edges } from './structural-bounds.js';
+import { fenceB1Edges, inspectedGatePost, wallC1Edges, wallF1Edges } from './structural-bounds.js';
 
 export type EdgeKind = 'fence' | 'stone' | 'timber';
 export interface GatePostStyle {
@@ -27,7 +27,7 @@ const STYLES = {
   },
 } as const;
 
-/** Boundary placements and opening endpoints; a supplied post style binds inspected yMax gate endpoints. */
+/** Boundary placements and opening endpoints; a supplied post style adds approximate yMax gate posts. */
 export function edgeRun(
   shape: readonly Cell[] | EdgePolyline,
   kind: EdgeKind,
@@ -64,8 +64,15 @@ export function edgeRun(
       postStyle.scale <= 0
     )
       throw new Error('gate post style needs an asset, facing, and positive scale');
+    const inspected = inspectedGatePost.value;
+    if (
+      postStyle.asset !== inspected.asset ||
+      postStyle.facing !== inspected.facing ||
+      postStyle.scale !== inspected.scale
+    )
+      throw new Error('gate post placement is only inspected for Stone A14 facing E at scale 0.4');
     for (const vertex of postVertices) {
-      const cell = { x: vertex.x - 1, y: vertex.y - 1 };
+      const cell = { x: vertex.x - inspected.placementOffset.x, y: vertex.y - inspected.placementOffset.y };
       if (cell.x < 0 || cell.y < 0) throw new Error('gate posts need an enclosing map margin');
       placements.push({
         cell,
@@ -73,6 +80,7 @@ export function edgeRun(
         asset: postStyle.asset,
         facing: postStyle.facing,
         scale: postStyle.scale,
+        role: 'post',
         solid: false,
       });
     }

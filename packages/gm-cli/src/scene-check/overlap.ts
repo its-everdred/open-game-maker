@@ -9,10 +9,16 @@ export const OVERLAP_LIMIT = 0.25;
 export function screenBox(scene: Scene, piece: Piece): [number, number, number, number] | undefined {
   if (!piece.alpha || !piece.size) return undefined;
   const [tw, th] = scene.tile;
-  const px = ((piece.x - piece.y) * tw) / 2 - piece.size[0] / 2;
-  const py = ((piece.x + piece.y) * th) / 2 - scene.anchorY - piece.elevation * th;
+  const px = ((piece.x - piece.y) * tw) / 2;
+  const py = ((piece.x + piece.y) * th) / 2 - piece.elevation * th;
+  const scale = piece.scale ?? 1;
   const [l, t, r, b] = piece.alpha;
-  return [px + l, py + t, px + r + 1, py + b + 1];
+  return [
+    px + (l - piece.size[0] / 2) * scale,
+    py + (t - scene.anchorY) * scale,
+    px + (r + 1 - piece.size[0] / 2) * scale,
+    py + (b + 1 - scene.anchorY) * scale,
+  ];
 }
 
 /** Props never share a cell or interpenetrate on screen, and characters never start inside a solid. */

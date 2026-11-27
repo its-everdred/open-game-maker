@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { cellAt, cellCenter, IsoMap, isoMapToScene, sceneDrawList, sceneToIsoMap } from '../src/index.js';
+import { cellAt, cellCenter, IsoMap, isoMapToScene, sceneDrawList, sceneExtent, sceneToIsoMap } from '../src/index.js';
 import { facingLoader, fakeIsoScene } from './fake-iso-scene.js';
 import { fixtureMap4x4 } from './fixtures/map-4x4.js';
 
@@ -38,6 +38,37 @@ describe('sceneDrawList', () => {
     const hidden = structuredClone(doc);
     hidden.layers.wall!.visible = false;
     expect(sceneDrawList(hidden).some((piece) => piece.layer === 'wall')).toBe(false);
+  });
+
+  it('exposes sprite scale for the editor while keeping the ground anchor fixed', () => {
+    const scaled = structuredClone(doc);
+    const tile = Object.values(scaled.layers.wall!.tiles!)[0]!;
+    tile.props = { ...tile.props, scale: 0.4 };
+    const before = sceneDrawList(doc).find((piece) => piece.asset === tile.asset)!;
+    const after = sceneDrawList(scaled).find((piece) => piece.asset === tile.asset)!;
+    expect(after.scale).toBe(0.4);
+    expect(after.center).toEqual(before.center);
+    expect(after.anchorY).toBe(before.anchorY);
+  });
+
+  it('extends the fitted scene bounds for sprites larger than their original size', () => {
+    const enlarged = structuredClone(doc);
+    const tile = Object.values(enlarged.layers.wall!.tiles!)[0]!;
+    tile.props = { ...tile.props, scale: 2 };
+    const original = sceneExtent(doc);
+    const extent = sceneExtent(enlarged);
+    expect(extent.left).toBe(original.left - 128);
+    expect(extent.top).toBe(original.top - 208);
+    expect(extent.width).toBe(original.width + 256);
+    expect(extent.height).toBe(original.height + 256);
+  });
+
+  it('does not preview an unsupported floor scale', () => {
+    const altered = structuredClone(doc);
+    const tile = Object.values(altered.layers.floor!.tiles!)[0]!;
+    tile.props = { ...tile.props, scale: 2 };
+    expect(sceneDrawList(altered).find((piece) => piece.floor)?.scale).toBe(1);
+    expect(sceneExtent(altered)).toEqual(sceneExtent(doc));
   });
 });
 

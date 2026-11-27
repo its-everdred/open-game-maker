@@ -230,11 +230,7 @@ export class IsoMap {
         }
         const elevation = property(tile.properties, 'elevation');
         const scale = property(tile.properties, 'scale');
-        if (
-          scale !== undefined &&
-          (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0 || name === 'floor')
-        )
-          throw new Error(`tile gid ${storedGid} scale must be positive and cannot be set on floor tiles`);
+        const validScale = typeof scale === 'number' && Number.isFinite(scale) && scale > 0;
         if (
           elevation !== undefined &&
           (typeof elevation !== 'number' || !Number.isFinite(elevation) || elevation < 0)
@@ -257,7 +253,7 @@ export class IsoMap {
           facing: facingOf(property(tile.properties, 'rotation'), storedGid),
           depth: this.depthOf(x, y, name),
           ...(typeof elevation === 'number' ? { elevation } : {}),
-          ...(typeof scale === 'number' ? { scale } : {}),
+          ...(validScale && (name !== 'floor' || scale === 1) ? { scale } : {}),
           solid,
           visible: true,
         });

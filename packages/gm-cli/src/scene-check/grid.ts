@@ -1,4 +1,15 @@
-import { GROUND, NEIGHBORS, cellKey, corners, segment, type Cell, type Piece, type Role, type Scene } from './model.js';
+import {
+  GROUND,
+  NEIGHBORS,
+  RUN,
+  cellKey,
+  corners,
+  segment,
+  type Cell,
+  type Piece,
+  type Role,
+  type Scene,
+} from './model.js';
 
 const OPEN: ReadonlySet<Role> = new Set(['ground', 'path', 'door', 'opening']);
 const TERMINATES: ReadonlySet<Role> = new Set(['post', 'roof', 'door', 'opening']);
@@ -7,7 +18,12 @@ const TERMINATES: ReadonlySet<Role> = new Set(['post', 'roof', 'door', 'opening'
 export function terminals(pieces: readonly Piece[]): Set<string> {
   const ends = new Set<string>();
   for (const piece of pieces) {
-    if (TERMINATES.has(piece.role) || piece.tags.has('gate')) for (const v of corners(piece)) ends.add(cellKey(v));
+    if (piece.role === 'post' && piece.scale !== undefined && piece.scale !== 1) {
+      if (!piece.tags.has('gate')) continue;
+    }
+    const usable = !(RUN.has(piece.role) && piece.scale !== undefined && piece.scale !== 1);
+    if ((usable && TERMINATES.has(piece.role)) || piece.tags.has('gate'))
+      for (const v of corners(piece)) ends.add(cellKey(v));
   }
   return ends;
 }
@@ -72,7 +88,10 @@ export interface Segment {
 /** Grid segments drawn by pieces with a measured edge, for the given roles. */
 export function segments(pieces: readonly Piece[], roles: ReadonlySet<Role>): Segment[] {
   return pieces
-    .filter((piece) => piece.edge && roles.has(piece.role))
+    .filter(
+      (piece) =>
+        piece.edge && roles.has(piece.role) && !(RUN.has(piece.role) && piece.scale !== undefined && piece.scale !== 1),
+    )
     .map((piece) => ({ piece, ...segment(piece, piece.edge!) }));
 }
 

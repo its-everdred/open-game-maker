@@ -8,6 +8,23 @@ export interface StructuralImageBounds {
   facings: Readonly<Record<TileFacing, AlphaBounds>>;
 }
 
+/** A visually inspected post style and approximate placement, not a measured connection socket. */
+export const inspectedGatePost: Fact<{
+  asset: string;
+  facing: TileFacing;
+  scale: number;
+  placementOffset: { x: number; y: number };
+}> = {
+  value: {
+    asset: 't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01',
+    facing: 'E',
+    scale: 0.4,
+    placementOffset: { x: 1, y: 1 },
+  },
+  verified:
+    'Stone A14 alpha bounds scanned and its approximate scaled position inspected in a phone render; the fence connection is not verified (2026-11-26).',
+};
+
 /**
  * Pixel bounds only: these do not establish an origin, connection socket, or footprint.
  * The source images remain in the local pack and are not shipped with this data.

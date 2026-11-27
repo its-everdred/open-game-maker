@@ -97,13 +97,20 @@ function loaded(json: TiledIsoMap) {
 describe('isoMapToScene / sceneToIsoMap', () => {
   it('preserves sprite scale in a scene document and Tiled round trip', () => {
     const original = richMap();
-    original.tilesets[1]!.tiles![0]!.properties!.push({ name: 'scale', value: 0.4 });
+    original.tilesets[1]!.tiles![0]!.properties!.push({ name: 'scale', value: 0.4 }, { name: 'role', value: 'post' });
     const doc = isoMapToScene(original, ids);
-    expect(doc.layers.wall!.tiles!['1,1']!.props).toEqual({ scale: 0.4 });
+    expect(doc.layers.wall!.tiles!['1,1']!.props).toEqual({ scale: 0.4, role: 'post' });
     const roundtrip = sceneToIsoMap(doc);
     expect(loaded(roundtrip)).toEqual(loaded(original));
     expect(isoMapToScene(roundtrip, ids)).toEqual(doc);
   });
+
+  it('refuses to silently drop an unsupported floor scale on import', () => {
+    const map = richMap();
+    map.tilesets[0]!.tiles![0]!.properties!.push({ name: 'scale', value: 0.4 });
+    expect(() => isoMapToScene(map, ids)).toThrow('unsupported scale');
+  });
+
   it('preserves gate tags on just the annotated tile through a scene document', () => {
     const map = richMap();
     const tiles = map.tilesets[0]!.tiles!;

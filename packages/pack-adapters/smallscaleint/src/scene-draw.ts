@@ -23,6 +23,8 @@ export type SceneDrawPiece = {
   /** World position of the image anchor, in the map's own pixels (the same space `IsoMap` renders in). */
   center: IsoPoint;
   anchorY: number;
+  /** Uniform scale around the same ground anchor used by IsoMap. */
+  scale?: number;
   depth: number;
   floor: boolean;
 };
@@ -58,7 +60,7 @@ export function cellAt(doc: Pick<SceneDoc, 'bounds'>, point: IsoPoint): { x: num
 }
 
 /** The map's pixel size, so a viewer can fit it; images rise up to `IMAGE_ANCHOR_Y` above a tile centre. */
-export function sceneExtent(doc: Pick<SceneDoc, 'bounds'>): {
+export function sceneExtent(doc: Pick<SceneDoc, 'bounds'> & Partial<Pick<SceneDoc, 'layers'>>): {
   left: number;
   top: number;
   width: number;
@@ -67,11 +69,21 @@ export function sceneExtent(doc: Pick<SceneDoc, 'bounds'>): {
   const width = doc.bounds?.width ?? 0;
   const height = doc.bounds?.height ?? 0;
   const span = (width + height) * (TILE_WIDTH / 2);
+  let maxScale = 1;
+  for (const [id, layer] of Object.entries(doc.layers ?? {})) {
+    const base = baseLayer(id);
+    if (layer.kind !== 'tiles' || layer.visible === false || !base || base === 'floor') continue;
+    for (const tile of Object.values(layer.tiles ?? {})) {
+      const scale = tile.props?.scale;
+      if (typeof scale === 'number' && Number.isFinite(scale) && scale > maxScale) maxScale = scale;
+    }
+  }
+  const extra = maxScale - 1;
   return {
-    left: 0,
-    top: TILE_HEIGHT - IMAGE_ANCHOR_Y,
-    width: span,
-    height: (width + height) * (TILE_HEIGHT / 2) + IMAGE_ANCHOR_Y,
+    left: -128 * extra,
+    top: TILE_HEIGHT - IMAGE_ANCHOR_Y * maxScale,
+    width: span + 256 * extra,
+    height: (width + height) * (TILE_HEIGHT / 2) + IMAGE_ANCHOR_Y + 256 * extra,
   };
 }
 
@@ -98,6 +110,13 @@ export function sceneDrawList(doc: SceneDoc): SceneDrawPiece[] {
         facing: tile.facing ?? 'E',
         center: cellCenter(doc, x, y, tile.elevation ?? 0),
         anchorY: IMAGE_ANCHOR_Y,
+        scale:
+          base !== 'floor' &&
+          typeof tile.props?.scale === 'number' &&
+          Number.isFinite(tile.props.scale) &&
+          tile.props.scale > 0
+            ? tile.props.scale
+            : 1,
         depth: isoToWorld(x, y).y + LAYER_DEPTH[base],
         floor: base === 'floor',
       };
