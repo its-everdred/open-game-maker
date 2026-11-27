@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
+import { AgentConversationSchema, type AgentConversation, type AgentConversationStart } from './agent-conversation.js';
 import { AiurConfigError, AiurHttpError, AiurUnavailableError } from './errors.js';
 import {
   CancelResultSchema,
@@ -89,6 +90,7 @@ export type DecisionMediaFile = { mime: string; body: ReadableStream<Uint8Array>
 
 export interface AiurClient {
   readonly baseUrl: string;
+  startAgentConversation(request: AgentConversationStart, signal?: AbortSignal): Promise<AgentConversation>;
   state(signal?: AbortSignal): Promise<AiurState>;
   issue(id: string): Promise<IssueEntry>;
   usage(id: string): Promise<TicketUsage>;
@@ -219,6 +221,15 @@ export function createAiurClient(
 
   return {
     baseUrl,
+    async startAgentConversation(request, signal) {
+      const { text, owner, client_request_id, path, skills, complexity, title } = request;
+      const { body } = await fetchResponse('POST', '/api/v1/agent-conversations', {
+        body: { text, owner, client_request_id, path, skills, complexity, title },
+        write: true,
+        signal,
+      });
+      return parseContract(AgentConversationSchema, body);
+    },
     async state(signal) {
       const { body } = await fetchResponse('GET', '/api/v1/state', { signal });
       return parseContract(StateSchema, body);

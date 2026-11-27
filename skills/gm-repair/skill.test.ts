@@ -31,4 +31,11 @@ describe('gm-repair skill', () => {
   it('does not direct agents to install or download anything', () => {
     expect(skill).not.toMatch(/\b(?:curl|wget|npm install|pnpm add|download)\b/i);
   });
+
+  it('handles an unconfirmed report conversation without inventing a reproduction', () => {
+    expect(skill).toContain('Report a Bug conversation');
+    expect(skill).toContain('captured game state');
+    expect(skill).toContain('reproduce');
+    expect(skill).toContain('Do not claim a reproduction');
+  });
 });

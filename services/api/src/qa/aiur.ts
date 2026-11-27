@@ -23,6 +23,7 @@ export function createQaAiurClient(db: Db, blobStore: () => BlobStore): AiurClie
   };
   return {
     baseUrl: 'qa://aiur',
+    startAgentConversation: unsupported,
     async decisions() {
       return readQaState(db)?.decisions ?? [];
     },

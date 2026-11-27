@@ -48,6 +48,14 @@ async function session(internal: Awaited<ReturnType<typeof qaApp>>['internal'], 
 }
 
 describe('QA creator account (#859)', () => {
+  it('refuses on-demand worker starts at the QA boundary', async () => {
+    const deps = makeDeps();
+    const qa = createQaAiurClient(deps.db, () => deps.blobStore);
+    await expect(
+      qa.startAgentConversation({ text: 'test', owner: 'qa', client_request_id: 'qa-start' }),
+    ).rejects.toMatchObject({ status: 501, code: 'qa_unsupported' });
+  });
+
   it('is reachable only with the internal token', async () => {
     const { app } = await qaApp();
     const response = await app.request('/internal/qa/session', {
