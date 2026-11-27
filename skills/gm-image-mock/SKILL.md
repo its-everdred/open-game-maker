@@ -20,7 +20,9 @@ assets come in step 2, built toward the mock the creator picked.
 ## When
 
 - Always first for a new game's look, a restyle, a new screen, and character or aesthetic options.
-- Skip only when the creator asks to see the real assets directly, or the change is too small to need a picture.
+- For a screen covered by an approved design, follow the two paths in `gm-prototype`: prototype with its components,
+  or attach its artboards and component stills to each mock. Otherwise skip only when the creator asks to see real
+  assets directly, or the change is too small to need a picture.
 
 ## Make the options
 

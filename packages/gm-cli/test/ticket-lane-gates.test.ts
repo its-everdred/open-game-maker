@@ -138,6 +138,38 @@ describe('gm check ticket lanes', () => {
     expect(result.err.join('\n')).toContain('needs at least two assets-local/packs or assets-local/sets refs');
   });
 
+  it('requires an approved design reference on glass mocks and permits prototype work', async () => {
+    const { cwd, git } = repo();
+    mkdirSync(join(cwd, 'review/mocks'), { recursive: true });
+    writeFileSync(join(cwd, 'review/mocks/mock.png'), 'mock');
+    const record = {
+      kind: 'image',
+      out: 'review/mocks',
+      file: 'mock.png',
+      refs: ['assets-local/packs/kit/a.png', 'assets-local/packs/kit/b.png'],
+    };
+    writeFileSync(join(cwd, 'review/mocks/request.json'), JSON.stringify(record));
+    git('add', '-A');
+    git('commit', '-qm', 'add glass mock');
+    writeFileSync(join(cwd, 'pr.md'), 'Labels: lane:creative phase:mock design:ogm-glass');
+    const missing = await gm(['check', '--body', 'pr.md', '--base', 'origin/main'], { cwd });
+    expect(missing.err.join('\n')).toContain('needs an approved OGM glass design image reference');
+    mkdirSync(join(cwd, 'tests/design-baselines/ogm-glass'), { recursive: true });
+    writeFileSync(join(cwd, 'tests/design-baselines/ogm-glass/Account-780x1688.png'), 'design');
+    record.refs.push('tests/design-baselines/ogm-glass/Account-780x1688.png');
+    writeFileSync(join(cwd, 'review/mocks/request.json'), JSON.stringify(record));
+    const referenced = await gm(['check', '--body', 'pr.md', '--base', 'origin/main'], { cwd });
+    expect(referenced.err.join('\n')).not.toContain('needs an approved OGM glass design image reference');
+    writeFileSync(join(cwd, 'pr.md'), 'Labels: lane:creative phase:prototype design:ogm-glass');
+    const absentDesign = await gm(['check', '--body', 'pr.md', '--base', 'origin/main'], { cwd });
+    expect(absentDesign.err.join('\n')).toContain('phase:prototype needs an approved mock');
+    mkdirSync(join(cwd, 'docs/design/ogm-glass'), { recursive: true });
+    writeFileSync(join(cwd, 'docs/design/ogm-glass/README.md'), 'approved design');
+    writeFileSync(join(cwd, 'pr.md'), 'Labels: lane:creative phase:prototype design:ogm-glass');
+    const prototype = await gm(['check', '--body', 'pr.md', '--base', 'origin/main'], { cwd });
+    expect(prototype.err.join('\n')).not.toContain('phase:prototype needs an approved mock');
+  });
+
   it('accepts a creative mock with two pack or set references and a matching output record', async () => {
     const { cwd, git } = repo();
     mkdirSync(join(cwd, 'review/mocks'), { recursive: true });

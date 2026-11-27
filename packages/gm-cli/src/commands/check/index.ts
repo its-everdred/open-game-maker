@@ -19,7 +19,9 @@ import { recipeSchema } from '../../sprite-forge.js';
 
 function ticketLabels(body: string): Set<string> {
   return new Set(
-    [...body.matchAll(/(?:^|\s)(lane:[a-z-]+|phase:[a-z-]+)(?=\s|$)/gim)].map((match) => match[1]!.toLowerCase()),
+    [...body.matchAll(/(?:^|\s)(lane:[a-z-]+|phase:[a-z-]+|design:[a-z-]+)(?=\s|$)/gim)].map((match) =>
+      match[1]!.toLowerCase(),
+    ),
   );
 }
 
@@ -37,15 +39,17 @@ function mockRecord(path: string, cwd: string): MockRecord | null {
   }
 }
 
-function mockReferenceProblems(changed: string[], cwd: string): string[] {
+function mockReferenceProblems(changed: string[], cwd: string, ogmGlass: boolean): string[] {
   const records = changed.flatMap((path) => {
     const record = mockRecord(path, cwd);
     return record ? [{ path, record }] : [];
   });
   const images = changed.filter((path) => /\.(?:png|jpe?g|webp)$/i.test(path));
   const problems: string[] = [];
-  if (images.length > 0 && records.length === 0)
-    problems.push('phase:mock images need a changed request-mock image record with pack refs');
+  if ((images.length > 0 || ogmGlass) && records.length === 0)
+    problems.push(
+      `phase:mock images need a changed request-mock image record with ${ogmGlass ? 'design' : 'pack'} refs`,
+    );
 
   const recordedImages = new Set<string>();
   for (const { path, record } of records) {
@@ -56,7 +60,14 @@ function mockReferenceProblems(changed: string[], cwd: string): string[] {
     const logoRef = refs.some((ref) => /(?:^|\/)(?:logo\/|[^/]*logo[^/]*\.(?:png|jpe?g|webp)$)/i.test(ref));
     const logoScreen =
       typeof record.prompt === 'string' && /\b(title|loading|end(?: screen)?|thumbnail)\b/i.test(record.prompt);
-    if (packRefs.length < 2 && !(refs.length === 1 && logoRef && logoScreen))
+    const designRef = refs.some(
+      (ref) =>
+        /^(?:docs\/design\/ogm-glass|tests\/design-baselines\/ogm-glass)\/.+\.(?:png|jpe?g|webp)$/i.test(ref) &&
+        !ref.split('/').includes('..') &&
+        existsSync(join(cwd, ref)),
+    );
+    if (ogmGlass && !designRef) problems.push(`${path} needs an approved OGM glass design image reference`);
+    if (!ogmGlass && packRefs.length < 2 && !(refs.length === 1 && logoRef && logoScreen))
       problems.push(
         `${path} needs at least two assets-local/packs or assets-local/sets refs (or the game logo for a title/loading/end/thumbnail mock)`,
       );
@@ -92,7 +103,7 @@ function ticketGate(cwd: string, body: string, base: string, lane?: string, phas
   if (effectiveLabels.has('lane:creative') && effectiveLabels.has('phase:mock')) {
     const source = changed.filter((path) => /^(?:games\/[^/]+\/src|src)\//.test(path));
     if (source.length) problems.push(`phase:mock may not change game source: ${source.join(', ')}`);
-    problems.push(...mockReferenceProblems(changed, cwd));
+    problems.push(...mockReferenceProblems(changed, cwd, effectiveLabels.has('design:ogm-glass')));
   }
   if (
     effectiveLabels.has('lane:creative') &&
@@ -140,7 +151,14 @@ function ticketGate(cwd: string, body: string, base: string, lane?: string, phas
       }
     }
     const recorded = hasApprovedScreen || hasTicketDecision;
-    if (!recorded)
+    if (
+      !recorded &&
+      !(
+        effectiveLabels.has('phase:prototype') &&
+        effectiveLabels.has('design:ogm-glass') &&
+        existsSync(join(cwd, 'docs/design/ogm-glass/README.md'))
+      )
+    )
       problems.push(
         `lane:creative ${effectiveLabels.has('phase:build') ? 'phase:build needs an approved prototype' : 'phase:prototype needs an approved mock'} recorded in review/decisions.json or docs/<slug>/decisions.json`,
       );
