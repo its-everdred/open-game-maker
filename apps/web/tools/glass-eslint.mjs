@@ -12,7 +12,7 @@ function rawDesignValue(node) {
     if (node.expressions.length) return true;
     return rawDesignValue({ type: 'Literal', value: node.quasis[0].value.cooked });
   }
-  if (node.type !== 'Literal') return false;
+  if (node.type !== 'Literal') return true;
   const value = node.value;
   return (
     typeof value === 'number' ||

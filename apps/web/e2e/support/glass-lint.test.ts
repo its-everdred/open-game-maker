@@ -122,6 +122,19 @@ it('rejects raw design values passed to shared component style props', async () 
   expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(1);
 }, 30_000);
 
+it('rejects unresolved expressions in inline design properties', async () => {
+  const eslint = new ESLint({
+    overrideConfig: [
+      { plugins: { glass: { rules: { components: glassComponentsRule } } }, rules: { 'glass/components': 'error' } },
+    ],
+  });
+  const [result] = await eslint.lintText(
+    'const Screen = ({ colour, size }) => <div style={{ color: colour, borderRadius: Math.max(size, 2), top: size }} />;',
+    { filePath: 'src/Screen.tsx' },
+  );
+  expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(2);
+}, 30_000);
+
 it('rejects ad-hoc controls in conditional and template class names', async () => {
   const eslint = new ESLint({
     overrideConfig: [
