@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { Id } from './api.js';
+import { Id, IsoTime } from './api.js';
 
 export const ReportFrame = z.object({
   file: z.string().max(300),
@@ -27,6 +27,9 @@ export const CreateReportResponse = z.object({
   signature: z.string().length(64),
   route: ReportRoute,
   jobId: Id.optional(),
+  pendingBudget: z.literal(true).optional(),
+  budgetReason: z.literal('weekly_user').optional(),
+  resetsAt: IsoTime.optional(),
 });
 export interface IssueWriter {
   file(input: { title: string; body: string; labels: string[] }): Promise<{ ref: string }>;

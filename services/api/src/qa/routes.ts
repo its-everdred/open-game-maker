@@ -9,6 +9,7 @@ import { parseBody } from '../app/validate.js';
 import { parseEmailList } from '../auth/access.js';
 import { authContextFor } from '../auth/routes.js';
 import { ensureQaAccount, mintQaSession } from './account.js';
+import { activeEnergyProbe, beginEnergyProbe, endEnergyProbe } from './energy-probe.js';
 import { cardGames } from './cards.js';
 import { deleteTicketFixtures, seedTicketFixtures } from './tickets.js';
 import { deleteReviewFixtures, reviewFixtureReport, seedReviewFixtures } from './fixtures.js';
@@ -88,6 +89,22 @@ async function commitQa(
 }
 
 export default new Hono<ApiBindings>()
+  .get('/energy-budget', (c) => {
+    requireOperator(c);
+    c.header('cache-control', 'no-store');
+    return c.json({ active: activeEnergyProbe(c.get('deps').db) });
+  })
+  .post('/energy-budget/begin', (c) => {
+    requireOperator(c);
+    const active = beginEnergyProbe(c.get('deps').db);
+    return c.json({ id: active.id });
+  })
+  .post('/energy-budget/end', async (c) => {
+    requireOperator(c);
+    const body = await parseBody(c, z.object({ id: z.uuid() }).strict());
+    endEnergyProbe(c.get('deps').db, body.id);
+    return c.body(null, 204);
+  })
   .post('/create-fence/:id', async (c) => {
     requireOperator(c);
     const body = await parseBody(c, FenceBody);

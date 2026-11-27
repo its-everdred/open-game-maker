@@ -11,7 +11,7 @@ export function SettingsScreen() {
         <h1>Settings</h1>
         <nav>
           <Link className="tap-secondary" to="/settings/energy">
-            Energy
+            Minerals and Gas
           </Link>
           <Link className="tap-secondary" to="/settings/credits">
             Credits

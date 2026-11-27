@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0777554b-e776-4f23-b16e-7393922d22ec",
+  "id": "60a284f5-2fc0-4ef4-965a-93fe1d0268a9",
   "prevId": "82925755-b604-4efe-9058-d3d1b9273396",
   "tables": {
     "app_meta": {
@@ -6033,6 +6033,52 @@
         }
       }
     },
+    "weekly_job_budgets": {
+      "name": "weekly_job_budgets",
+      "columns": {
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "new_games": {
+          "name": "new_games",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "edits": {
+          "name": "edits",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "weekly_job_budgets_email_allowed_users_email_fk": {
+          "name": "weekly_job_budgets_email_allowed_users_email_fk",
+          "tableFrom": "weekly_job_budgets",
+          "tableTo": "allowed_users",
+          "columnsFrom": ["email"],
+          "columnsTo": ["email"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "weekly_job_budgets_values": {
+          "name": "weekly_job_budgets_values",
+          "value": "(\"weekly_job_budgets\".\"new_games\" IS NULL OR \"weekly_job_budgets\".\"new_games\" >= 0) AND (\"weekly_job_budgets\".\"edits\" IS NULL OR \"weekly_job_budgets\".\"edits\" >= 0)"
+        }
+      }
+    },
     "design_decisions": {
       "name": "design_decisions",
       "columns": {
@@ -7709,157 +7755,6 @@
           "name": "crash_groups_game_id_build_id_signature_pk"
         }
       },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "publish_checks": {
-      "name": "publish_checks",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "game_id": {
-          "name": "game_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "git_sha": {
-          "name": "git_sha",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "artifact_sha256": {
-          "name": "artifact_sha256",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "test_artifact_sha256": {
-          "name": "test_artifact_sha256",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "build_id": {
-          "name": "build_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "surface": {
-          "name": "surface",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sizes_json": {
-          "name": "sizes_json",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "checks_json": {
-          "name": "checks_json",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "result": {
-          "name": "result",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "publish_result": {
-          "name": "publish_result",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'pending'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "publish_checks_game_index": {
-          "name": "publish_checks_game_index",
-          "columns": ["game_id", "created_at"],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "publish_checks_game_id_games_id_fk": {
-          "name": "publish_checks_game_id_games_id_fk",
-          "tableFrom": "publish_checks",
-          "tableTo": "games",
-          "columnsFrom": ["game_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "release_tag_reservations": {
-      "name": "release_tag_reservations",
-      "columns": {
-        "game_id": {
-          "name": "game_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "number": {
-          "name": "number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "release_tag_reservations_game_number_unique": {
-          "name": "release_tag_reservations_game_number_unique",
-          "columns": ["game_id", "number"],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "release_tag_reservations_game_id_games_id_fk": {
-          "name": "release_tag_reservations_game_id_games_id_fk",
-          "tableFrom": "release_tag_reservations",
-          "tableTo": "games",
-          "columnsFrom": ["game_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
     }

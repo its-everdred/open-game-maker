@@ -136,5 +136,13 @@ export function loadApiEnv(source?: Record<string, string | undefined>) {
   if (env.OGM_BLOB_PUT_MAX_BYTES <= 0) {
     throw new ConfigError('api', [], [{ name: 'OGM_BLOB_PUT_MAX_BYTES', reason: 'must be a positive integer' }]);
   }
-  return env;
+  const configuredAllowance = loadEnv(
+    'api',
+    { OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD: { kind: 'int', required: false } },
+    source,
+  );
+  return {
+    ...env,
+    defaultDailyAllowanceConfigured: configuredAllowance.OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD !== undefined,
+  };
 }
