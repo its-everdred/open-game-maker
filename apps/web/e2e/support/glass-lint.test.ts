@@ -135,6 +135,19 @@ it('rejects unresolved expressions in inline design properties', async () => {
   expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(2);
 }, 30_000);
 
+it('rejects uninspectable style objects while checking conditional inline styles', async () => {
+  const eslint = new ESLint({
+    overrideConfig: [
+      { plugins: { glass: { rules: { components: glassComponentsRule } } }, rules: { 'glass/components': 'error' } },
+    ],
+  });
+  const [result] = await eslint.lintText(
+    'const Screen = ({ styles, key, active, x }) => <><div style={styles} /><div style={{ ...styles }} /><div style={{ [key]: "#fff" }} /><div style={active ? { color: "var(--ink)" } : { color: "#fff" }} /><div style={{ top: x }} /></>;',
+    { filePath: 'src/Screen.tsx' },
+  );
+  expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(4);
+}, 30_000);
+
 it('rejects ad-hoc controls in conditional and template class names', async () => {
   const eslint = new ESLint({
     overrideConfig: [
@@ -146,6 +159,21 @@ it('rejects ad-hoc controls in conditional and template class names', async () =
     { filePath: 'src/Screen.tsx' },
   );
   expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(2);
+}, 30_000);
+
+it('allows the shared Dialog primitive to declare its dialog role', async () => {
+  const eslint = new ESLint({
+    overrideConfig: [
+      { plugins: { glass: { rules: { components: glassComponentsRule } } }, rules: { 'glass/components': 'error' } },
+    ],
+  });
+  const code = 'const Panel = () => <><section role="dialog" /><div role="button" /></>;';
+  const [primitive] = await eslint.lintText(code, { filePath: 'src/components/Dialog.tsx' });
+  const [screen] = await eslint.lintText(code, { filePath: 'src/Screen.tsx' });
+  const [nested] = await eslint.lintText(code, { filePath: 'src/other/src/components/Dialog.tsx' });
+  expect(primitive!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(1);
+  expect(screen!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(2);
+  expect(nested!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(2);
 }, 30_000);
 
 it('rejects control roles selected conditionally', async () => {

@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 const intrinsicControls = new Set(['button', 'input', 'select', 'textarea', 'dialog', 'menu']);
 const controlRoles = new Set(['button', 'switch', 'slider', 'menu', 'menuitem', 'dialog']);
 const controlClasses = /(?:^|[\s_-])(?:panel|sheet|menu|chip|toggle|slider)(?:$|[\s_-])/i;
@@ -45,11 +46,25 @@ export const glassComponentsRule = {
     messages: {
       control: 'Use a shared Glass component for {{name}}.',
       style: 'Use a generated design token for {{name}}.',
+      dynamicStyle: 'Inline style properties must be statically inspectable.',
     },
   },
   create(context) {
     function checkStyleObject(expression) {
-      if (expression.type !== 'ObjectExpression') return;
+      if (expression.type === 'ConditionalExpression') {
+        checkStyleObject(expression.consequent);
+        checkStyleObject(expression.alternate);
+        return;
+      }
+      if (expression.type === 'LogicalExpression' && expression.operator === '&&') {
+        checkStyleObject(expression.right);
+        return;
+      }
+      if (expression.type === 'Literal' && (expression.value === null || expression.value === false)) return;
+      if (expression.type !== 'ObjectExpression') {
+        context.report({ node: expression, messageId: 'dynamicStyle' });
+        return;
+      }
       for (const property of expression.properties) {
         if (property.type === 'SpreadElement') {
           checkStyleObject(property.argument);
@@ -62,7 +77,11 @@ export const glassComponentsRule = {
             : !property.computed && property.key.type === 'Identifier'
               ? property.key.name
               : undefined;
-        if (typeof name !== 'string' || !designStyle.test(name)) continue;
+        if (typeof name !== 'string') {
+          context.report({ node: property, messageId: 'dynamicStyle' });
+          continue;
+        }
+        if (!designStyle.test(name)) continue;
         if (rawDesignValue(property.value)) context.report({ node: property, messageId: 'style', data: { name } });
       }
     }
@@ -77,6 +96,11 @@ export const glassComponentsRule = {
             attr.type === 'JSXAttribute' &&
             attr.name.name === 'role' &&
             attr.value &&
+            !(
+              context.filename === resolve(context.cwd, 'src/components/Dialog.tsx') &&
+              attr.value.type === 'Literal' &&
+              attr.value.value === 'dialog'
+            ) &&
             hasControlRole(attr.value.type === 'JSXExpressionContainer' ? attr.value.expression : attr.value)
           )
             context.report({ node: attr, messageId: 'control', data: { name: 'role' } });
