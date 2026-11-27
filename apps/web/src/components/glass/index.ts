@@ -8,6 +8,7 @@ export {
   GlassSheet,
   GlassStatus,
   GlassSwitch,
+  GlassTextarea,
 } from './Glass';
 export {
   GlassActivityBanner,

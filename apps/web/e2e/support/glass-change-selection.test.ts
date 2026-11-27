@@ -7,7 +7,10 @@ it('selects affected screens and fails closed on other visible routes', () => {
   ).toEqual(['GameSheet', 'Home', 'Settings', 'Unmapped']);
   expect(glassScreens(['apps/web/src/features/editor/EditorChrome.tsx'])).toEqual(['Editor']);
   expect(glassScreens(['apps/web/src/routes/signin/SignInScreen.tsx'])).toEqual(['SignIn']);
-  expect(glassScreens(['apps/web/src/routes/new/NewGameScreen.tsx'])).toEqual(['NewGame']);
+  expect(glassScreens(['apps/web/src/routes/new/NewGameScreen.tsx'])).toEqual(['NewGame', 'Unmapped']);
+  expect(glassScreens(['apps/web/src/routes/new/StyleStep.tsx'])).toEqual(['NewGame', 'Unmapped']);
+  expect(glassScreens(['apps/web/src/routes/login/route.tsx'])).toEqual(['SignIn', 'Unmapped']);
+  expect(glassScreens(['apps/web/src/icons.ts'])).toEqual(['Unmapped']);
   expect(glassScreens(['apps/web/src/routes/admin/Members.tsx'])).toEqual(['Admin']);
   expect(glassScreens(['apps/web/src/routes/admin/admin.css'])).toEqual(['Admin', 'Unmapped']);
   expect(glassScreens(['apps/web/src/features/worker-builds/BuildTracker.tsx'])).toEqual(['Activity', 'Unmapped']);
@@ -56,9 +59,15 @@ it('finds changed screen files from the repository root', async () => {
     expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual([]);
     await mkdir(join(root, 'apps/web/src/components/glass'), { recursive: true });
     await writeFile(join(root, 'apps/web/src/components/glass/Glass.tsx'), 'export {}');
+    await writeFile(join(root, 'apps/web/src/components/glass/index.ts'), 'export {}');
     git('add', '.');
     git('commit', '-qm', 'add library');
     expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual([]);
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    await writeFile(join(root, 'apps/web/src/components/glass/Another.tsx'), 'export {}');
+    git('add', '.');
+    git('commit', '-qm', 'add another shared component');
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Unmapped']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     await writeFile(join(root, 'apps/web/src/components/glass/Glass.tsx'), 'export const changed = true');
     git('add', '.');
@@ -78,7 +87,7 @@ it('finds changed screen files from the repository root', async () => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-}, 30_000);
+}, 90_000);
 
 it('runs covered screens and fails when a screen or real editor game is missing', async () => {
   const { runGlassScreens } = await import('../../tools/glass-change-selection.mjs');

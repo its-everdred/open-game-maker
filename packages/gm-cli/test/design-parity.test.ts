@@ -22,7 +22,7 @@ function fixture(): GmContext {
   const cwd = mkdtempSync(join(tmpdir(), 'gm-parity-'));
   mkdirSync(join(cwd, 'apps/web/e2e'), { recursive: true });
   writeFileSync(join(cwd, 'apps/web/e2e/glass-parity.spec.ts'), '');
-  return { cwd, env: {} } as GmContext;
+  return { cwd, env: {}, err: vi.fn() } as unknown as GmContext;
 }
 it('builds and runs the selected screen with isolated preview ports', async () => {
   expect(await command.run(fixture(), [], flags)).toBe(0);
@@ -40,7 +40,7 @@ it('fails closed on invalid selection and propagates a failing build or comparis
   const ctx = fixture();
   await expect(command.run(ctx, [], { ...flags, screen: 'Other' })).rejects.toThrow('invalid screen');
   await expect(command.run(ctx, [], { ...flags, screen: 'Editor' })).rejects.toThrow('real game build');
-  await expect(command.run(ctx, [], { ...flags, screen: 'all' })).rejects.toThrow('coverage is not yet available');
+  await expect(command.run(ctx, [], { ...flags, screen: 'all' })).rejects.toThrow('real game build');
   child.codes = [1];
   expect(await command.run(ctx, [], flags)).toBe(1);
   expect(child.calls).toHaveLength(1);
@@ -48,6 +48,16 @@ it('fails closed on invalid selection and propagates a failing build or comparis
   child.codes = [0, 1];
   expect(await command.run(ctx, [], flags)).toBe(1);
   expect(child.calls).toHaveLength(2);
+});
+
+it('runs available captures for all while failing on incomplete coverage', async () => {
+  const ctx = fixture();
+  mkdirSync(join(ctx.cwd, 'real-game/dist/design'), { recursive: true });
+  for (const file of ['index.html', 'manifest.json', 'design/design.json'])
+    writeFileSync(join(ctx.cwd, 'real-game/dist', file), '{}');
+  expect(await command.run(ctx, [], { ...flags, screen: 'all', dist: 'real-game/dist' })).toBe(1);
+  expect(child.calls[1]!.env.OGM_GLASS_PARITY_SCREEN).toBe('all');
+  expect(ctx.err).toHaveBeenCalledWith(expect.stringContaining('coverage is not yet available'));
 });
 
 it('passes an explicit real game build to editor capture', async () => {

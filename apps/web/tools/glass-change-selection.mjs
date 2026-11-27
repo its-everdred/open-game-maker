@@ -2,6 +2,18 @@ import { execFileSync } from 'node:child_process';
 import { glassDiffBase } from './glass-git-base.mjs';
 
 export function changedGlassFiles(root, base) {
+  const range = base ? `${base}...HEAD` : glassDiffBase(root);
+  const baseRef = range.split('..')[0];
+  let hasGlassLibrary = false;
+  try {
+    execFileSync('git', ['cat-file', '-e', `${baseRef}:apps/web/src/components/glass/index.ts`], {
+      cwd: root,
+      stdio: 'ignore',
+    });
+    hasGlassLibrary = true;
+  } catch {
+    // The initial library has no consumers in the base revision.
+  }
   const fields = execFileSync(
     'git',
     [
@@ -10,7 +22,7 @@ export function changedGlassFiles(root, base) {
       '-z',
       '--no-renames',
       '--diff-filter=ACMRD',
-      base ? `${base}...HEAD` : glassDiffBase(root),
+      range,
       '--',
       'apps/web/src',
       'apps/web/public',
@@ -32,7 +44,8 @@ export function changedGlassFiles(root, base) {
     // is itself selected; subsequent changes to shared code must fail closed.
     if (
       status === 'A' &&
-      (file === 'apps/web/src/glass-tokens.css' || file.startsWith('apps/web/src/components/glass/'))
+      (file === 'apps/web/src/glass-tokens.css' ||
+        (!hasGlassLibrary && file.startsWith('apps/web/src/components/glass/')))
     )
       continue;
     files.push(file);
@@ -55,9 +68,12 @@ export function glassScreens(files) {
       if (!file.endsWith('/Members.tsx')) screens.add('Unmapped');
     } else if (file.startsWith('apps/web/src/routes/new/')) {
       screens.add('NewGame');
-      if (/NewGameChat|scope-chat/.test(file)) screens.add('Unmapped');
-    } else if (file.startsWith('apps/web/src/routes/signin/') || file.startsWith('apps/web/src/routes/login/')) {
+      screens.add('Unmapped');
+    } else if (file.startsWith('apps/web/src/routes/signin/')) {
       screens.add('SignIn');
+    } else if (file.startsWith('apps/web/src/routes/login/')) {
+      screens.add('SignIn');
+      screens.add('Unmapped');
     } else if (file === 'apps/web/src/routes/auth.css') {
       screens.add('SignIn');
       screens.add('Unmapped');
@@ -79,7 +95,7 @@ export function glassScreens(files) {
     )
       screens.add('Unmapped');
     else if (file.startsWith('apps/web/public/')) screens.add('Unmapped');
-    else if (file.startsWith('apps/web/src/') && /\.(?:tsx|css)$/.test(file)) screens.add('Unmapped');
+    else if (file.startsWith('apps/web/src/') && /\.(?:ts|tsx|css)$/.test(file)) screens.add('Unmapped');
   }
   return [...screens].sort();
 }

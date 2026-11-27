@@ -26,7 +26,7 @@ export function Dialog({
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    dialog?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    (dialog?.querySelector<HTMLElement>(FOCUSABLE) ?? dialog)?.focus();
     return () => invokerRef.current?.focus();
   }, []);
 
@@ -38,7 +38,11 @@ export function Dialog({
     }
     if (event.key !== 'Tab') return;
     const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
-    if (focusable.length === 0) return;
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialogRef.current?.focus();
+      return;
+    }
     const first = focusable[0]!;
     const last = focusable.at(-1)!;
     if (event.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
@@ -61,6 +65,7 @@ export function Dialog({
         aria-modal="true"
         className={className}
         role="dialog"
+        tabIndex={-1}
         onKeyDown={onKeyDown}
       >
         <h2 id={titleId}>{title}</h2>

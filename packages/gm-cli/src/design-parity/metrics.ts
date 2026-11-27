@@ -43,9 +43,11 @@ export function glassMetrics(
           const i = (y * width + x) * 3;
           const a = [reference[i]!, reference[i + 1]!, reference[i + 2]!];
           const b = [actual[i]!, actual[i + 1]!, actual[i + 2]!];
-          const labA = lab(a),
-            labB = lab(b);
-          if (Math.hypot(labA[0]! - labB[0]!, labA[1]! - labB[1]!, labA[2]! - labB[2]!) > 3) changed++;
+          if (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2]) {
+            const labA = lab(a),
+              labB = lab(b);
+            if (Math.hypot(labA[0]! - labB[0]!, labA[1]! - labB[1]!, labA[2]! - labB[2]!) > 3) changed++;
+          }
           xs.push(0.2126 * a[0]! + 0.7152 * a[1]! + 0.0722 * a[2]!);
           ys.push(0.2126 * b[0]! + 0.7152 * b[1]! + 0.0722 * b[2]!);
         }

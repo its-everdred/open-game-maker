@@ -10,6 +10,8 @@ import { mockGamesRoutes } from './fixtures/games-routes';
 import { installNewRoutes } from './fixtures/new-routes';
 import { buildId, installGameApi } from './support/mock-game-api';
 import { captureBuildSuffix, captureUrlFile } from './support/shell-capture-files';
+import { parityBridgePort } from './support/parity-bridge';
+import { intersectsViewport } from './support/parity-viewport';
 import { gameHeaders } from '@ogm/contracts';
 import type { DesignDoc } from '@ogm/contracts/browser';
 
@@ -19,7 +21,7 @@ const selected = process.env.OGM_GLASS_PARITY_SCREEN;
 // eslint-disable-next-line no-restricted-properties
 const gameDist = process.env.OGM_GLASS_GAME_DIST;
 // eslint-disable-next-line no-restricted-properties
-const bridgePort = process.env.OGM_WEB_BRIDGE_PORT ?? '43176';
+const bridgePort = parityBridgePort(process.env);
 if (
   selected &&
   !['all', 'Title', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet', 'Admin', 'Activity'].includes(
@@ -400,6 +402,14 @@ for (const target of screens) {
             await expect(flow).toHaveAttribute('data-screen', next, { timeout: 30_000 });
           }
         }
+      }
+      for (const placeholder of await page.locator('[data-game-id^="showcase:"]:visible').all()) {
+        if (intersectsViewport(await placeholder.boundingBox(), target))
+          throw new Error('Glass parity cannot use a showcase fixture in the captured viewport');
+      }
+      for (const canvas of await page.locator('canvas.game-showcase-canvas:visible').all()) {
+        if (intersectsViewport(await canvas.boundingBox(), target))
+          await expect(canvas).toHaveAttribute('data-painted', 'true', { timeout: 30_000 });
       }
       await page.evaluate(async () => {
         const ready = Promise.all([

@@ -50,11 +50,7 @@ export const command: GmCommand = {
       bridge === port
     )
       throw new UsageError('invalid timeout or ports', 'gm help design parity');
-    if (screen === 'all')
-      throw new CommandError(
-        'full glass parity coverage is not yet available; select Title, Home, Editor, Settings, SignIn, NewGame, GameSheet, Admin, or Activity',
-      );
-    if (screen === 'Editor' && typeof flags.dist !== 'string')
+    if ((screen === 'Editor' || screen === 'all') && typeof flags.dist !== 'string')
       throw new UsageError('editor parity requires a real game build', 'pass --dist <game dist>');
     let dist: string | undefined;
     if (typeof flags.dist === 'string') {
@@ -86,12 +82,17 @@ export const command: GmCommand = {
     if (build !== EXIT.ok) return build;
     const remaining = deadline - Date.now();
     if (remaining <= 0) return EXIT.timeout;
-    return runChild(
+    const result = await runChild(
       web,
       ['exec', 'playwright', 'test', 'e2e/glass-parity.spec.ts', '--project', 'desktop', '--workers=1'],
       env,
       remaining,
       signal,
     );
+    if (screen === 'all') {
+      ctx.err('Full glass parity coverage is not yet available; uncovered artboards cannot pass.');
+      return result === EXIT.ok ? EXIT.failed : result;
+    }
+    return result;
   },
 };

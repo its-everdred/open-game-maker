@@ -1,4 +1,10 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  HTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  TextareaHTMLAttributes,
+} from 'react';
 
 import { glassActivation } from './activation';
 import './glass.css';
@@ -141,6 +147,10 @@ export function GlassSwitch({ checked, onCheckedChange, className, type = 'butto
 
 export function GlassInput({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={classes('ogm-glass-input', className)} />;
+}
+
+export function GlassTextarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={classes('ogm-glass-input', className)} />;
 }
 
 type ProgressProps = Omit<HTMLAttributes<HTMLDivElement>, 'children'> & {

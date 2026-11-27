@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { GlassField, GlassSegmented, GlassSlider } from './GlassForms';
-import { GlassInput } from './Glass';
+import { GlassInput, GlassTextarea } from './Glass';
 
 it('reports segmented choices and respects disabled options', () => {
   const change = vi.fn();
@@ -23,6 +23,15 @@ it('reports segmented choices and respects disabled options', () => {
   expect(change).toHaveBeenCalledExactlyOnceWith('small');
 }, 30_000);
 
+it('supports labeled multiline entry', () => {
+  render(
+    <GlassField id="notes" label="Notes">
+      <GlassTextarea id="notes" rows={3} />
+    </GlassField>,
+  );
+  expect(screen.getByRole('textbox', { name: 'Notes' })).toHaveAttribute('rows', '3');
+}, 30_000);
+
 it('keeps the range input accessible and clamps its displayed value', () => {
   const change = vi.fn();
   const { rerender } = render(<GlassSlider aria-label="Music" min={10} max={90} value={120} onChange={change} />);
@@ -32,6 +41,16 @@ it('keeps the range input accessible and clamps its displayed value', () => {
   expect(change).toHaveBeenCalledOnce();
   rerender(<GlassSlider aria-label="Music" min={10} max={90} value={Number.NaN} onChange={change} />);
   expect(slider).toHaveValue('10');
+}, 30_000);
+
+it('keeps the fill aligned with stepped and continuous range values', () => {
+  const { rerender } = render(<GlassSlider aria-label="Music" min={0} max={10} step={3} value={8} readOnly />);
+  const slider = screen.getByRole('slider', { name: 'Music' });
+  expect(slider).toHaveValue('9');
+  expect(slider).toHaveStyle('--ogm-slider-fill: 90%');
+  rerender(<GlassSlider aria-label="Music" min={0} max={10} step="any" value={8} readOnly />);
+  expect(slider).toHaveValue('8');
+  expect(slider).toHaveStyle('--ogm-slider-fill: 80%');
 }, 30_000);
 
 it('connects a field label to its control', () => {

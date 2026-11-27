@@ -41,7 +41,15 @@ type SliderProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' 
 export function GlassSlider({ value, min = 0, max = 100, className, style, ...props }: SliderProps) {
   const low = Number.isFinite(min) ? min : 0;
   const high = Number.isFinite(max) && max > low ? max : low + 1;
-  const current = Number.isFinite(value) ? Math.max(low, Math.min(high, value)) : low;
+  const bounded = Number.isFinite(value) ? Math.max(low, Math.min(high, value)) : low;
+  const requestedStep = Number(props.step);
+  const step = Number.isFinite(requestedStep) && requestedStep > 0 ? requestedStep : 1;
+  const current =
+    props.step === 'any'
+      ? bounded
+      : Number(
+          (low + Math.min(Math.round((bounded - low) / step), Math.floor((high - low) / step)) * step).toPrecision(15),
+        );
   const fill = `${((current - low) / (high - low)) * 100}%`;
   return (
     <input
