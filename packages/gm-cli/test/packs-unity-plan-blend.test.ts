@@ -388,6 +388,23 @@ it('resolves texture paths inside blended graph terms', async () => {
     expect(clipPlan[0]?.surfaces[0]?.alphaCutoff).toBe(0.5);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('alpha clipping approximated per texel');
+    docs[0]!.m_Edges.push(edge('a', 'emission', 0));
+    docs.push({
+      m_ObjectId: 'emission',
+      m_Type: 'UnityEditor.ShaderGraph.BlockNode',
+      m_SerializedDescriptor: 'SurfaceDescription.Emission',
+    } as (typeof docs)[number]);
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    await writeFile(
+      materialPath,
+      (await readFile(materialPath, 'utf8'))
+        .replace('_BlendMode: 0', '_BlendMode: 1')
+        .replace('_DstBlend: 10', '_DstBlend: 1'),
+    );
+    const emissionWarnings: string[] = [];
+    const emissionPlan = await planUnityAssembly(root, prefab, (warning) => emissionWarnings.push(warning));
+    expect(emissionPlan[0]?.surfaces[0]).toMatchObject({ additiveEmission: true, texturePaths: [join(root, 'a.png')] });
+    expect(emissionWarnings.some((warning) => warning.includes('additive emission approximated'))).toBe(true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

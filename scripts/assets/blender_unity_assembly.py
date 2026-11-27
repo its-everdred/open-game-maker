@@ -63,7 +63,19 @@ def build_material(surface, uv_names):
         material.surface_render_method = 'BLENDED'
         material.use_backface_culling = not surface.get("doubleSided", False)
     if surface.get("opacity") or surface.get("blends") or surface.get("products") or "scalarMask" in surface or surface.get("adjustment") or any(value > 1 for value in surface["color"]):
-        return build_blended_material(material, surface, uv_names)
+        material = build_blended_material(material, surface, uv_names)
+        if surface.get("additiveEmission"):
+            color_input = shader.inputs["Base Color"]
+            emission_input = shader.inputs["Emission Color"]
+            if color_input.is_linked:
+                link = color_input.links[0]
+                material.node_tree.links.new(link.from_socket, emission_input)
+                material.node_tree.links.remove(link)
+            else:
+                emission_input.default_value = color_input.default_value
+            color_input.default_value = (0, 0, 0, 1)
+            shader.inputs["Emission Strength"].default_value = 1
+        return material
     textures = surface["textures"]
     texture_paths = surface["texturePaths"]
     texture_srgb = surface["textureSrgb"]

@@ -47,6 +47,11 @@ Material:
   const clipped = material.replace('_AlphaClip: 0', '_AlphaClip: 1\n    - _AlphaCutoffEnable: 1');
   expect(parseUnitySurface(clipped, { textures: [], factors: [] }, parse(), 0.5)).toMatchObject({ alphaCutoff: 0.5 });
   expect(() => parseUnitySurface(clipped, { textures: [], factors: [] }, parse())).toThrow('alpha-clipped');
+  const additive = clipped.replace('_BlendMode: 0', '_BlendMode: 1').replace('_DstBlend: 10', '_DstBlend: 1');
+  expect(parseUnitySurface(additive, { textures: [], factors: [] }, parse(), 0.5)).toMatchObject({
+    additiveEmission: true,
+    alphaCutoff: 0.5,
+  });
   expect(() => parseUnitySurface(material.replace('_BlendMode: 0', '_BlendMode: 1'), undefined, parse())).toThrow(
     'unsupported transparent',
   );
@@ -70,7 +75,7 @@ it('reads only an unconnected constant alpha clip threshold', () => {
   expect(() => shaderGraphClipThreshold(source())).toThrow('unsupported Unity alpha clip threshold');
 });
 
-it('folds a sampled alpha multiplied by a unit opacity property', () => {
+it('resolves sampled opacity multiplied by a nonnegative property', () => {
   const edge = (from: string, to: string, input: number, output: number) => ({
     m_OutputSlot: { m_Node: { m_Id: from }, m_SlotId: output },
     m_InputSlot: { m_Node: { m_Id: to }, m_SlotId: input },
@@ -106,5 +111,8 @@ it('folds a sampled alpha multiplied by a unit opacity property', () => {
   expect(parse(1)).toMatchObject({
     scalarMask: { channel: 3, term: { textures: ['_SampleTexture2D_sample_Texture_1'] } },
   });
-  expect(() => parse(0.5)).toThrow('unsupported Unity opacity graph');
+  expect(parse(0.5).factors).toEqual([{ kind: 'constant', key: '', defaultValue: 0.5 }]);
+  docs[0]!.m_Edges![1]!.m_OutputSlot.m_SlotId = 0;
+  expect(parse(6)).toMatchObject({ factors: [{ defaultValue: 6 }], scalarMask: { channel: 0 } });
+  expect(() => parse(-1)).toThrow('unsupported Unity opacity graph');
 });

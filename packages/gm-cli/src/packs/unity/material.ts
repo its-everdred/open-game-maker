@@ -14,6 +14,7 @@ export type UnitySurface = {
   color: [number, number, number, number];
   opacity?: UnitySurface;
   alphaCutoff?: number;
+  additiveEmission?: boolean;
   doubleSided?: boolean;
   products?: UnitySurface[];
   scalarMask?: WeightExpression<UnitySurface>;
@@ -83,21 +84,29 @@ export function parseUnitySurface(
   const floats = properties(saved.m_Floats);
   const tags = object(materialData.stringTagMap ?? {});
   const transparent = tags.RenderType === 'Transparent';
+  const additive =
+    transparent &&
+    Number(floats.get('_BlendMode')) === 1 &&
+    Number(floats.get('_SrcBlend')) === 1 &&
+    Number(floats.get('_DstBlend')) === 1;
   const clipEnabled =
-    Number(floats.get('_AlphaClip') ?? 0) === 1 && Number(floats.get('_AlphaCutoffEnable') ?? 0) === 1;
+    Number(floats.get('_AlphaClip') ?? floats.get('_BUILTIN_AlphaClip') ?? 0) === 1 &&
+    Number(floats.get('_AlphaCutoffEnable') ?? 0) === 1;
   const clipSupported =
     transparent && clipEnabled && clip !== undefined && Number.isFinite(clip) && clip >= 0 && clip <= 1;
   const supportsTransparent =
     transparent &&
     alpha &&
     Number(floats.get('_SurfaceType')) === 1 &&
-    Number(floats.get('_BlendMode')) === 0 &&
+    (Number(floats.get('_BlendMode')) === 0 || additive) &&
     Number(floats.get('_SrcBlend')) === 1 &&
-    Number(floats.get('_DstBlend')) === 10 &&
+    (Number(floats.get('_DstBlend')) === 10 || additive) &&
     [0, 1].includes(Number(floats.get('_DoubleSidedEnable')));
   if (
     (transparent ? !supportsTransparent : tags.RenderType !== undefined && tags.RenderType !== 'Opaque') ||
-    (['_AlphaClip', '_AlphaCutoffEnable'].some((key) => floats.has(key) && Number(floats.get(key)) !== 0) &&
+    (['_AlphaClip', '_BUILTIN_AlphaClip', '_AlphaCutoffEnable'].some(
+      (key) => floats.has(key) && Number(floats.get(key)) !== 0,
+    ) &&
       !clipSupported) ||
     (!transparent && floats.has('_SurfaceType') && Number(floats.get('_SurfaceType')) !== 0)
   ) {
@@ -230,5 +239,6 @@ export function parseUnitySurface(
       ? { opacity: resolve(alpha), doubleSided: Number(floats.get('_DoubleSidedEnable')) === 1 }
       : {}),
     ...(clipSupported ? { alphaCutoff: clip } : {}),
+    ...(additive ? { additiveEmission: true } : {}),
   };
 }

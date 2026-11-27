@@ -36,7 +36,7 @@ export function shaderGraphClipThreshold(source: string): number {
   return value;
 }
 
-/** Resolve sampled texture alpha, optionally multiplied by an exact unit property. */
+/** Resolve a sampled scalar opacity, optionally multiplied by a nonnegative property. */
 export function shaderGraphAlpha(
   source: string,
   load: (guid: string) => string,
@@ -56,14 +56,24 @@ export function shaderGraphAlpha(
   const input = edges.filter((edge) => edge.m_InputSlot?.m_Node?.m_Id === alpha.m_ObjectId);
   let output = input[0]?.m_OutputSlot;
   const sourceNode = docs.find((doc) => doc.m_ObjectId === output?.m_Node?.m_Id);
+  let multiplier = 1;
   if (sourceNode?.m_Type === 'UnityEditor.ShaderGraph.MultiplyNode' && output?.m_SlotId === 2) {
     const factors = edges.filter((edge) => edge.m_InputSlot?.m_Node?.m_Id === sourceNode.m_ObjectId);
-    const sampleEdge = factors.find((edge) => edge.m_OutputSlot?.m_SlotId === 7);
+    const sampleEdge = factors.find(
+      (edge) =>
+        [0, 7].includes(edge.m_OutputSlot?.m_SlotId ?? -1) &&
+        docs.some(
+          (doc) =>
+            doc.m_ObjectId === edge.m_OutputSlot?.m_Node?.m_Id &&
+            doc.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode',
+        ),
+    );
     const propertyEdge = factors.find((edge) => edge !== sampleEdge);
     const propertyNode = docs.find((doc) => doc.m_ObjectId === propertyEdge?.m_OutputSlot?.m_Node?.m_Id);
     const propertyRef = propertyNode?.m_Property as { m_Id?: string } | undefined;
     const property = docs.find((doc) => doc.m_ObjectId === propertyRef?.m_Id);
     const key = property?.m_OverrideReferenceName || property?.m_DefaultReferenceName;
+    multiplier = Number(typeof key === 'string' ? (floats.get(key) ?? property?.m_Value) : NaN);
     if (
       factors.length !== 2 ||
       new Set(factors.map((edge) => edge.m_InputSlot?.m_SlotId)).size !== 2 ||
@@ -72,7 +82,8 @@ export function shaderGraphAlpha(
       propertyNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode' ||
       property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty' ||
       typeof key !== 'string' ||
-      Number(floats.get(key) ?? property.m_Value) !== 1 ||
+      !Number.isFinite(multiplier) ||
+      multiplier < 0 ||
       !sampleEdge?.m_OutputSlot
     )
       throw new Error('unsupported Unity opacity graph');
@@ -80,10 +91,17 @@ export function shaderGraphAlpha(
     input[0]!.m_OutputSlot = output;
   }
   const sample = docs.find((doc) => doc.m_ObjectId === output?.m_Node?.m_Id);
+  const channel =
+    output?.m_SlotId === 7
+      ? 3
+      : output?.m_SlotId === 0 && sourceNode?.m_Type === 'UnityEditor.ShaderGraph.MultiplyNode'
+        ? 0
+        : -1;
   if (
     input.length !== 1 ||
     input[0]?.m_InputSlot?.m_SlotId !== 0 ||
-    output?.m_SlotId !== 7 ||
+    !output ||
+    channel < 0 ||
     sample?.m_Type !== 'UnityEditor.ShaderGraph.SampleTexture2DNode'
   )
     throw new Error('unsupported Unity opacity graph');
@@ -92,5 +110,9 @@ export function shaderGraphAlpha(
   const selected = docs.filter((doc) => doc === alpha || doc.m_SerializedDescriptor !== 'SurfaceDescription.BaseColor');
   const graphSource = selected.map((doc) => JSON.stringify(doc)).join('\n');
   const term = shaderGraphBase(inlineUnitySubgraphs(graphSource, load), floats, colors, textures);
-  return { textures: [], factors: [], scalarMask: { term, channel: 3 } };
+  return {
+    textures: [],
+    factors: [{ kind: 'constant', key: '', defaultValue: multiplier }],
+    scalarMask: { term, channel },
+  };
 }

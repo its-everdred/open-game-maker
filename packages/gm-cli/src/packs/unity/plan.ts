@@ -14,6 +14,7 @@ import {
 } from './material.js';
 import { shaderGraphBase } from './shadergraph.js';
 import { shaderGraphAlpha, shaderGraphClipThreshold } from './shader-alpha.js';
+import { shaderGraphEmission } from './shader-emission.js';
 import { mapWeightExpression, type WeightExpression } from './weight-expression.js';
 import { inlineUnitySubgraphs } from './subgraphs.js';
 import { selectUnityBuilding, selectUnityPieces } from './select.js';
@@ -81,6 +82,7 @@ export async function planUnityAssembly(
       : nodes;
   const byId = new Map(selected.map((node) => [node.transformId, node]));
   const warnedClip = new Set<string>();
+  const warnedEmission = new Set<string>();
   const visible = (node: UnityMeshNode): boolean => {
     let current: UnityMeshNode | undefined = node;
     while (current) {
@@ -125,13 +127,21 @@ export async function planUnityAssembly(
           const floats = materialFloatProperties(contents);
           const colors = materialColorProperties(contents);
           const textures = materialTextureProperties(contents);
+          const additive =
+            Number(floats.get('_BlendMode')) === 1 &&
+            Number(floats.get('_SrcBlend')) === 1 &&
+            Number(floats.get('_DstBlend')) === 1;
           surface = parseUnitySurface(
             contents,
-            shaderGraphBase(inlineUnitySubgraphs(shaderSource, loadSubgraph), floats, colors, textures),
+            additive
+              ? shaderGraphEmission(shaderSource, loadSubgraph, floats, colors, textures)
+              : shaderGraphBase(inlineUnitySubgraphs(shaderSource, loadSubgraph), floats, colors, textures),
             materialIsTransparent(contents)
               ? shaderGraphAlpha(shaderSource, loadSubgraph, floats, colors, textures)
               : undefined,
-            Number(floats.get('_AlphaClip') ?? 0) === 1 ? shaderGraphClipThreshold(shaderSource) : undefined,
+            Number(floats.get('_AlphaClip') ?? floats.get('_BUILTIN_AlphaClip') ?? 0) === 1
+              ? shaderGraphClipThreshold(shaderSource)
+              : undefined,
           );
         } catch (error) {
           throw new Error(`material ${path}: ${error instanceof Error ? error.message : String(error)}`, {
@@ -172,15 +182,27 @@ export async function planUnityAssembly(
       };
       if (surface.opacity) {
         const mask = surface.opacity.scalarMask;
-        if (!mask || typeof mask === 'number' || 'op' in mask || mask.channel !== 3 || mask.term.textures.length !== 1)
+        if (
+          !mask ||
+          typeof mask === 'number' ||
+          'op' in mask ||
+          ![0, 3].includes(mask.channel as number) ||
+          mask.term.textures.length !== 1
+        )
           throw new Error(`material ${path}: unsupported Unity opacity graph`);
         const texturePath = file({ fileId: '0', guid: mask.term.textures[0]!.guid }, ['.png', '.tga', '.tif', '.tiff']);
-        if (!textureHasSourceAlpha(readFileSync(`${texturePath}.meta`, 'utf8')))
+        if (mask.channel === 3 && !textureHasSourceAlpha(readFileSync(`${texturePath}.meta`, 'utf8')))
           throw new Error(`material ${path}: unsupported Unity opacity texture alpha`);
       }
       if (surface.alphaCutoff !== undefined && !warnedClip.has(path)) {
         warnedClip.add(path);
         onWarning?.(`alpha clipping approximated per texel for ${path}; inspect filtered edges and alpha-to-coverage`);
+      }
+      if (surface.additiveEmission && !warnedEmission.has(path)) {
+        warnedEmission.add(path);
+        onWarning?.(
+          `additive emission approximated with alpha blending and clipped brightness for ${path}; inspect overlapping effects`,
+        );
       }
       return resolveSurface(surface);
     });

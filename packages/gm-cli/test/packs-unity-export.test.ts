@@ -458,6 +458,12 @@ it.skipIf(!available)(
       clippedNode.surfaces[0]!.path = 'clipped.mat';
       clippedNode.surfaces[0]!.alphaCutoff = 0.8;
       rgbPlan.push(clippedNode);
+      const flameNode = structuredClone(alphaNode);
+      flameNode.name = 'Flame';
+      flameNode.transformId = 'root/flame';
+      flameNode.surfaces[0]!.path = 'flame.mat';
+      flameNode.surfaces[0]!.additiveEmission = true;
+      rgbPlan.push(flameNode);
       const rgbOutput = join(root, 'rgb.glb');
       await exportUnityAssembly(rgbPlan, rgbOutput);
       const rgbDocument = await new NodeIO()
@@ -483,6 +489,13 @@ it.skipIf(!available)(
       expect(clipped.getAlphaMode()).toBe('BLEND');
       const clippedPixels = await sharp(clipped.getBaseColorTexture()!.getImage()!).ensureAlpha().raw().toBuffer();
       expect(clippedPixels[3]).toBe(0);
+      const flame = rgbDocument
+        .getRoot()
+        .listMaterials()
+        .find((entry) => entry.getName() === 'flame')!;
+      expect(flame.getAlphaMode()).toBe('BLEND');
+      expect(flame.getEmissiveTexture()).toBeTruthy();
+      expect(flame.getBaseColorFactor().slice(0, 3)).toEqual([0, 0, 0]);
       const rgbImage = rgbDocument
         .getRoot()
         .listMaterials()
