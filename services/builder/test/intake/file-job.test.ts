@@ -190,6 +190,43 @@ function close(input: Harness) {
 }
 
 describe('fileJob', () => {
+  it('does not make a ticket runnable if cancellation arrives while reading its labels', async () => {
+    const input = harness();
+    vi.mocked(input.issues.labels).mockImplementation(async () => {
+      input.db.update(schema.jobs).set({ state: 'cancelled' }).where(eq(schema.jobs.id, 'j_1')).run();
+      return [];
+    });
+
+    await input.intake.fileJob('j_1');
+    expect(input.calls).not.toContain('label:1:castle-run:todo');
+    close(input);
+  });
+
+  it('does not make a ticket runnable if cancellation arrives while setting its spend cap', async () => {
+    const input = harness();
+    vi.mocked(input.aiur.setSpendCap).mockImplementation(async (_id, amount) => {
+      input.db.update(schema.jobs).set({ state: 'cancelled' }).where(eq(schema.jobs.id, 'j_1')).run();
+      return { amount, currency: 'USD' };
+    });
+
+    await input.intake.fileJob('j_1');
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+    expect(input.calls).not.toContain('label:1:castle-run:todo');
+    close(input);
+  });
+
+  it('does not make a ticket runnable if the job was cancelled during issue creation', async () => {
+    const input = harness();
+    vi.mocked(input.issues.create).mockImplementation(async () => {
+      input.db.update(schema.jobs).set({ state: 'cancelled' }).where(eq(schema.jobs.id, 'j_1')).run();
+      return { number: 1, url: 'https://github.com/owner/game/issues/1' };
+    });
+
+    await input.intake.fileJob('j_1');
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+    expect(input.calls).not.toContain('label:1:castle-run:todo');
+    close(input);
+  });
   it('waits when the deployed skill pack has not been updated', async () => {
     const input = harness(false, 'feature', false);
     expect(await input.intake.fileJob('j_1')).toEqual({ deferred: 'aiur' });
@@ -506,6 +543,20 @@ describe('fileJob', () => {
     expect(input.alerts).toEqual([
       expect.objectContaining({ code: 'preflight_failed', reasons: ['config drift: tracker.github.allowed_users'] }),
     ]);
+    close(input);
+  });
+
+  it('retains the slot when preflight fails after a ticket was recorded', async () => {
+    const input = harness();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_1', key: 'T1', issueNumber: 1, repo: 'owner/game', sig: 'sig' })
+      .run();
+    input.fleet.ensureDaemon.mockResolvedValueOnce({ status: 'stopped', reasons: ['daemon unavailable'] });
+
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'aiur' });
+    expect(input.failJob).not.toHaveBeenCalled();
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('admitted');
     close(input);
   });
 

@@ -84,6 +84,32 @@ function insertJob(
 }
 
 describe('job projection directory', () => {
+  it('continues tracking a released job while a ticket is nonterminal', () => {
+    const deps = setup();
+    insertJob(deps, 'j_released_live', 144, 'paused_budget', '2026-11-01T01:00:00.000Z');
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_released_live', key: 'T1', issueNumber: 144, repo: 'owner/game', sig: 'sig' })
+      .run();
+    expect(activeJobs(deps.db, 'owner-game')).toEqual([{ jobId: 'j_released_live', ticket: '144' }]);
+    expect(activeJobsForSlug(deps.db, 'owner-game')).toEqual([{ kind: 'feature' }]);
+  });
+  it('lists every ticket of a live job for resynchronization', () => {
+    const deps = setup();
+    insertJob(deps, 'j_multi', 141, 'running');
+    deps.db
+      .insert(schema.jobTickets)
+      .values([
+        { jobId: 'j_multi', key: 'first', issueNumber: 141, repo: 'owner/game', sig: 'one' },
+        { jobId: 'j_multi', key: 'second', issueNumber: 142, repo: 'owner/game', sig: 'two' },
+      ])
+      .run();
+
+    expect(activeJobs(deps.db, 'owner-game')).toEqual([
+      { jobId: 'j_multi', ticket: '141' },
+      { jobId: 'j_multi', ticket: '142' },
+    ]);
+  });
   it('counts overdue reset jobs ahead of an immediate job but excludes future reset jobs', () => {
     const deps = setup();
     insertJob(deps, 'j_due', 1, 'queued');

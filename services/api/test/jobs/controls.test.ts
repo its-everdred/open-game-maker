@@ -121,6 +121,41 @@ const post = (app: ReturnType<typeof createApp>, path: string, userId = ids.owne
   });
 
 describe('job controls', () => {
+  it('does not release an admitted job while its ticket is being filed', async () => {
+    const deps = setup('queued');
+    deps.db.update(schema.jobs).set({ state: 'admitted' }).run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: ids.job, key: 'first', issueNumber: 142, repo: 'owner/game', sig: 'first' })
+      .run();
+    const { app } = appWith(deps);
+
+    expect((await post(app, 'cancel')).status).toBe(409);
+    expect(deps.db.select().from(schema.jobs).get()).toMatchObject({ state: 'admitted', releasedAt: null });
+  });
+  it('confirms every ticket before cancelling a multi-ticket job', async () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.jobTickets)
+      .values([
+        { jobId: ids.job, key: 'first', issueNumber: 142, repo: 'owner/game', sig: 'first' },
+        { jobId: ids.job, key: 'second', issueNumber: 143, repo: 'owner/game', sig: 'second' },
+      ])
+      .run();
+    const cancel = vi
+      .fn()
+      .mockResolvedValueOnce({ process: { status: 'exited' } })
+      .mockResolvedValue({ process: { status: 'still_running' } });
+    const { app } = appWith(deps, { client: { cancel } });
+
+    expect((await post(app, 'cancel')).status).toBe(503);
+    expect(cancel.mock.calls.map(([ticket]) => ticket)).toEqual(['142', '143', '143', '143']);
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('running');
+    cancel.mockReset().mockResolvedValue({ process: { status: 'exited' } });
+    expect((await post(app, 'cancel')).status).toBe(200);
+    expect(cancel.mock.calls.map(([ticket]) => ticket)).toEqual(['143']);
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+  });
   it('authorizes before making an aiur call', async () => {
     const deps = setup();
     const cancel = vi.fn();

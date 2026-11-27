@@ -188,10 +188,22 @@ export function createIntake(deps: IntakeDeps) {
           .get()!;
         rows.set(ticket.key, row);
       }
+      const state = deps.db
+        .select({ state: schema.jobs.state })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.id, jobId))
+        .get()?.state;
+      if (state !== 'admitted') return { skipped: `state:${state ?? 'missing'}` };
     }
 
     for (const ticket of tickets) {
       let row = rows.get(ticket.key)!;
+      const state = deps.db
+        .select({ state: schema.jobs.state })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.id, jobId))
+        .get()?.state;
+      if (state !== 'admitted') return { skipped: `state:${state ?? 'missing'}` };
       if (row.capSetAt === null) {
         try {
           await setSpendCap(aiur, row.issueNumber, spendCap, sleep);
@@ -224,12 +236,25 @@ export function createIntake(deps: IntakeDeps) {
         rows.set(ticket.key, row);
       }
 
+      const currentState = deps.db
+        .select({ state: schema.jobs.state })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.id, jobId))
+        .get()?.state;
+      if (currentState !== 'admitted') return { skipped: `state:${currentState ?? 'missing'}` };
+
       try {
         const labels = await deps.issues.labels(repo, row.issueNumber);
         for (const label of CREATOR_LANE_LABELS) {
           if (!labels.includes(label)) await deps.issues.addLabel(repo, row.issueNumber, label);
         }
         if (row.todoAt === null) {
+          const state = deps.db
+            .select({ state: schema.jobs.state })
+            .from(schema.jobs)
+            .where(eq(schema.jobs.id, jobId))
+            .get()?.state;
+          if (state !== 'admitted') return { skipped: `state:${state ?? 'missing'}` };
           if (!labels.includes(todo)) await deps.issues.addLabel(repo, row.issueNumber, todo);
         }
       } catch (error) {
@@ -256,7 +281,7 @@ export function createIntake(deps: IntakeDeps) {
     }
 
     const updatedAt = now().toISOString();
-    deps.db
+    const filed = deps.db
       .update(schema.jobs)
       .set({
         state: 'filed',
@@ -265,8 +290,9 @@ export function createIntake(deps: IntakeDeps) {
         aiurSpendCapMicroUsd: reservation.amountMicroUsd,
         updatedAt,
       })
-      .where(eq(schema.jobs.id, jobId))
+      .where(and(eq(schema.jobs.id, jobId), eq(schema.jobs.state, 'admitted')))
       .run();
+    if (filed.changes === 0) return { skipped: 'state:changed' };
     if (found.job.kind === 'scope') {
       deps.db
         .update(schema.scopeSessions)
@@ -353,13 +379,29 @@ export function createIntake(deps: IntakeDeps) {
     return { filed: true, issues: [row.issueNumber] };
   }
 
-  async function failPreflight(
-    job: typeof schema.jobs.$inferSelect,
-    reasons: string[],
-  ): Promise<{ failed: 'preflight'; reasons: string[] }> {
-    deps.failJob(job.id);
+  async function failPreflight(job: typeof schema.jobs.$inferSelect, reasons: string[]): Promise<FileResult> {
+    const result = deps.db.transaction(
+      (tx): FileResult => {
+        const current = tx
+          .select({ state: schema.jobs.state })
+          .from(schema.jobs)
+          .where(eq(schema.jobs.id, job.id))
+          .get();
+        if (current?.state !== 'admitted') return { skipped: `state:${current?.state ?? 'missing'}` };
+        const ticket = tx
+          .select({ key: schema.jobTickets.key })
+          .from(schema.jobTickets)
+          .where(eq(schema.jobTickets.jobId, job.id))
+          .get();
+        if (ticket) return { deferred: 'aiur' };
+        deps.failJob(job.id);
+        return { failed: 'preflight', reasons };
+      },
+      { behavior: 'immediate' },
+    );
+    if ('skipped' in result) return result;
     await notify({ code: 'preflight_failed', jobId: job.id, reasons });
-    return { failed: 'preflight', reasons };
+    return result;
   }
 
   async function sweep(): Promise<void> {

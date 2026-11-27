@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AiurHttpError } from '@ogm/aiur-client';
 
 import { startFeedConsumers } from '../../src/events/index.js';
 import { daemon, harness, SLUG } from './helpers.js';
@@ -13,6 +14,16 @@ afterEach(async () => {
 });
 
 describe('pollers', () => {
+  it('asks the tracker to recover a ticket missing from Aiur', async () => {
+    const h = harness();
+    const recover = vi.fn(async () => undefined);
+    h.deps.onMissingIssue = recover;
+    h.clientFor(SLUG).issue.mockRejectedValue(new AiurHttpError(404, 'issue_not_found', 'missing', 'http://127.0.0.1'));
+    const feed = startFeedConsumers(h.deps);
+    running.push(feed);
+    await feed.tick();
+    expect(recover).toHaveBeenCalledWith(SLUG, '142');
+  });
   it('reads progress and the issue for each active job of a running daemon', async () => {
     const h = harness();
     const feed = startFeedConsumers(h.deps);

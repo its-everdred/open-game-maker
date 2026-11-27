@@ -64,6 +64,22 @@ function queued(deps: ReturnType<typeof makeDeps>, id: string, createdAt: string
 }
 
 describe('job scheduler', () => {
+  it('retains the creator limit while a released job still has a nonterminal ticket', () => {
+    const { deps } = setup();
+    queued(deps, 'j_running', '2026-11-01T00:00:00.000Z');
+    deps.db
+      .update(schema.jobs)
+      .set({ state: 'paused_budget', releasedAt: RESET.toISOString() })
+      .where(eq(schema.jobs.id, 'j_running'))
+      .run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_running', key: 'T1', issueNumber: 42, repo: 'owner/game', sig: 'ticket' })
+      .run();
+    queued(deps, 'j_waiting', '2026-11-01T01:00:00.000Z');
+
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual([]);
+  });
   it('honors a creator limit above one', () => {
     const { deps } = setup();
     queued(deps, 'j_first', '2026-11-01T00:00:00.000Z');

@@ -31,6 +31,7 @@ import { createDaemonDirectory, daemonRowForGame } from './jobs/daemons.js';
 import { recordDaemonReadTokenStatus } from './job-commands/health.js';
 import { activeJobs, activeJobsForSlug, byTicket } from './jobs/repo.js';
 import { applyAiurEvent, applyIssueSnapshot, applyProgress } from './jobs/projection.js';
+import { createTicketRecovery, resetTicketSequences } from './jobs/ticket-recovery.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
 import { createDecisionWaitPoller } from './decision-waits/poller.js';
@@ -289,6 +290,8 @@ const feed = startFeedConsumers({
   fleet,
   db,
   activeJobs: (daemonSlug) => activeJobs(db, daemonSlug),
+  onMissingIssue: createTicketRecovery(projectionDeps, (repo, issueNumber) => issues.labels(repo, issueNumber)),
+  onFeedReset: (daemonSlug) => resetTicketSequences(db, daemonSlug),
   apply: {
     record: (daemonSlug, record) => void applyAiurEvent(projectionDeps, daemonSlug, record),
     issue: (daemonSlug, ticket, issue) => void applyIssueSnapshot(projectionDeps, daemonSlug, ticket, issue),

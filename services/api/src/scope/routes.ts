@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
+import { AiurHttpError } from '@ogm/aiur-client';
 import { ScopeChoices, ScopeRevisionRequest, type Principal, type ScopeSession } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { authorize } from '@ogm/policy';
@@ -21,6 +22,7 @@ import { insertChatRow } from '../build-chat/store.js';
 import { AdmissionRefused, admit } from '../jobs/admission.js';
 import { findJobRow } from '../jobs/repo.js';
 import { markTerminal } from '../jobs/spend-cap.js';
+import { cancelBeforeFiling } from '../jobs/unfiled-cancellation.js';
 import { scopeSessions } from './store.js';
 
 export const prefix = '/api/v1/games';
@@ -220,29 +222,64 @@ const routes = new Hono<ApiBindings>()
     const session = scopeSessions.get(deps.db, c.req.param('id'));
     if (session === null || session.game_id !== c.req.param('gameId'))
       throw new HttpError(404, 'scope_session_not_found');
-    requireOwner(deps, session, principal);
-    if (session.status !== 'open' && session.status !== 'revising') throw new HttpError(409, 'scope_session_not_open');
+    const game = requireOwner(deps, session, principal);
+    const before = findJobRow(deps.db, session.job_id);
+    const retrying = session.status === 'abandoned' && !['done', 'failed', 'cancelled'].includes(before.state);
+    if (session.status !== 'open' && session.status !== 'revising' && !retrying)
+      throw new HttpError(409, 'scope_session_not_open');
 
-    const abandoned = scopeSessions.abandon(deps.db, session.id);
+    if (
+      !['done', 'failed', 'cancelled'].includes(before.state) &&
+      (before.aiurRepo === null || before.aiurIssueNumber === null)
+    ) {
+      const result = cancelBeforeFiling(deps, before.id, (job) => {
+        const closed = retrying ? session : scopeSessions.abandon(deps.db, session.id);
+        if (!closed) throw new HttpError(409, 'scope_session_not_open');
+        markTerminal(
+          { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults: defaults(deps) },
+          job.id,
+          'cancelled',
+        );
+        return response(closed);
+      });
+      return c.json(result);
+    }
+
+    const abandoned = retrying ? session : scopeSessions.abandon(deps.db, session.id);
     if (abandoned === null) throw new HttpError(409, 'scope_session_not_open');
     const job = findJobRow(deps.db, session.job_id);
     if (!['done', 'failed', 'cancelled'].includes(job.state)) {
-      markTerminal(
-        { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults: defaults(deps) },
-        job.id,
-        'cancelled',
-      );
       if (job.aiurRepo !== null && job.aiurIssueNumber !== null) {
         try {
           const aiur = await deps.aiurClientForGame(job.gameId);
-          await aiur.cancel(String(job.aiurIssueNumber));
+          const result = await aiur.cancel(String(job.aiurIssueNumber));
+          if (result.process.status !== 'exited') throw new Error('upstream cancellation unconfirmed');
         } catch (error) {
-          deps.log({
-            event: 'scope-cancel-upstream-failed',
-            jobId: job.id,
-            error: error instanceof Error ? error.name : 'unknown',
-          });
+          if (error instanceof AiurHttpError && error.status === 409 && error.code === 'agent_not_running') {
+            try {
+              const writer = deps.registry.issueStateWriter;
+              if (!writer) throw new Error('issue state writer unavailable');
+              await writer.setStateLabel(job.aiurRepo, job.aiurIssueNumber, 'cancelled', game.slug ?? 'agent');
+            } catch {
+              throw new HttpError(503, 'scope_cancel_unconfirmed');
+            }
+          } else {
+            deps.log({
+              event: 'scope-cancel-upstream-failed',
+              jobId: job.id,
+              error: error instanceof Error ? error.name : 'unknown',
+            });
+            throw new HttpError(503, 'scope_cancel_unconfirmed');
+          }
         }
+      }
+      const current = findJobRow(deps.db, job.id);
+      if (!['done', 'failed', 'cancelled'].includes(current.state)) {
+        markTerminal(
+          { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults: defaults(deps) },
+          job.id,
+          'cancelled',
+        );
       }
     }
     return c.json(response(abandoned));

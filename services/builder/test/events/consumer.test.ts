@@ -1,5 +1,6 @@
-import { AiurEventFeedError } from '@ogm/aiur-client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { AiurEventFeedError, AiurHttpError } from '@ogm/aiur-client';
+import { schema } from '@ogm/db';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { readCursor, startFeedConsumers, writeCursor, FEED_PATTERNS } from '../../src/events/index.js';
 import { daemon, harness, SLUG } from './helpers.js';
@@ -97,6 +98,43 @@ describe('feed consumers', () => {
     expect(client.issue.mock.calls.map(([id]) => id)).toEqual(['142', '143']);
     expect(h.apply.issue).toHaveBeenCalledTimes(2);
     expect(h.apply.issue).toHaveBeenCalledWith(SLUG, '142', expect.objectContaining({ issue_identifier: '142' }));
+  });
+  it('recovers a missing ticket from the tracker after a feed reset', async () => {
+    const h = harness();
+    const recover = vi.fn(async () => undefined);
+    const reset = vi.fn();
+    h.deps.onMissingIssue = recover;
+    h.deps.onFeedReset = reset;
+    const feed = start(h);
+    await feed.tick();
+    h.clientFor(SLUG).issue.mockRejectedValue(new AiurHttpError(404, 'issue_not_found', 'missing', 'http://127.0.0.1'));
+    h.subscriptions[0]?.options.onReset({ oldest_seq: 400, head_seq: 900, epoch: 'epoch-2' });
+    await vi.waitFor(() => expect(recover).toHaveBeenCalledWith(SLUG, '142'));
+    expect(reset).toHaveBeenCalledWith(SLUG);
+  });
+  it('does not advance the reset cursor when resetting ticket fences fails', async () => {
+    const h = harness();
+    writeCursor(h.db, SLUG, 10, 'epoch-1', new Date());
+    h.deps.onFeedReset = () => {
+      writeCursor(h.db, 'other', 4, 'epoch-2', new Date());
+      throw new Error('reset failed');
+    };
+    const feed = start(h);
+    await feed.tick();
+
+    expect(() => h.subscriptions[0]?.options.onReset({ oldest_seq: 1, head_seq: 2, epoch: 'epoch-2' })).toThrow(
+      'reset failed',
+    );
+    expect(h.db.select().from(schema.aiurCursors).get()).toMatchObject({ lastSeq: 10, epoch: 'epoch-1' });
+    expect(h.db.select().from(schema.aiurCursors).all()).toHaveLength(1);
+  });
+  it('assigns a fresh local epoch when a reset does not provide one', async () => {
+    const h = harness();
+    const feed = start(h);
+    await feed.tick();
+    h.subscriptions[0]?.options.onReset({ oldest_seq: 1, head_seq: 2 });
+    const cursor = h.db.select().from(schema.aiurCursors).get();
+    expect(cursor?.epoch).toMatch(/^local-reset:/);
   });
 
   it('stops the consumer when listDaemons no longer lists the daemon', async () => {

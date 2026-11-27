@@ -1,12 +1,13 @@
 import { schema } from '@ogm/db';
-import type { AiurClient } from '@ogm/aiur-client';
+import { AiurHttpError, type AiurClient } from '@ogm/aiur-client';
 import { eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
 
 import { listSince } from '../../src/build-chat/store.js';
 import { getChatRuntime } from '../../src/build-chat/routes.js';
-import { CREATOR_IMAGES_PER_MINUTE, MAX_CREATOR_IMAGE_BYTES } from '../../src/scope/routes.js';
+import { createApp } from '../../src/app/app.js';
+import scopeRoutes, { CREATOR_IMAGES_PER_MINUTE, MAX_CREATOR_IMAGE_BYTES } from '../../src/scope/routes.js';
 import { asUser, installUsers, makeApp, makeDeps } from '../helpers.js';
 
 const ids = {
@@ -113,6 +114,25 @@ async function bytesOf(stream: NodeJS.ReadableStream): Promise<Buffer> {
 }
 
 describe('scope session routes', () => {
+  it('keeps an admitted scope session open while its ticket is being filed', async () => {
+    const deps = setup();
+    const app = createApp(deps);
+    app.route('/api/v1/games', scopeRoutes);
+    const created = (await (await create(app)).json()) as { sessionId: string; jobId: string };
+    deps.db.update(schema.jobs).set({ state: 'admitted' }).where(eq(schema.jobs.id, created.jobId)).run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: created.jobId, key: 'scope', issueNumber: 42, repo: 'owner/game', sig: 'scope' })
+      .run();
+
+    const result = await app.request(`/api/v1/games/${ids.game}/scope/sessions/${created.sessionId}/abandon`, {
+      method: 'POST',
+      headers: asUser(ids.creator),
+    });
+    expect(result.status).toBe(409);
+    expect(deps.db.select().from(schema.jobs).get()).toMatchObject({ state: 'admitted', releasedAt: null });
+    expect(deps.db.select().from(schema.scopeSessions).get()?.status).toBe('open');
+  });
   it('admits one small scope job and returns the existing open session on retry', async () => {
     const deps = setup();
     const { app } = await makeApp(deps);
@@ -166,7 +186,8 @@ describe('scope session routes', () => {
 
   it('claims a filed session before cancelling its upstream ticket', async () => {
     const deps = setup();
-    const { app } = await makeApp(deps);
+    const app = createApp(deps);
+    app.route('/api/v1/games', scopeRoutes);
     const created = (await (await create(app)).json()) as { sessionId: string; jobId: string };
     deps.db
       .update(schema.jobs)
@@ -175,7 +196,8 @@ describe('scope session routes', () => {
       .run();
     const cancel = vi.fn(async () => {
       expect(deps.db.select().from(schema.scopeSessions).get()?.status).toBe('abandoned');
-      expect(deps.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+      expect(deps.db.select().from(schema.jobs).get()?.state).toBe('filed');
+      return { process: { status: 'exited' } };
     });
     deps.aiurClientForGame = async () => ({ cancel }) as unknown as AiurClient;
 
@@ -186,6 +208,50 @@ describe('scope session routes', () => {
 
     expect(abandoned.status).toBe(200);
     expect(cancel).toHaveBeenCalledWith('42');
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+  });
+
+  it('retains the job slot when stopping the abandoned session fails and permits a retry', async () => {
+    const deps = setup();
+    const app = createApp(deps);
+    app.route('/api/v1/games', scopeRoutes);
+    const created = (await (await create(app)).json()) as { sessionId: string; jobId: string };
+    deps.db.update(schema.jobs).set({ state: 'filed', aiurRepo: 'owner/game', aiurIssueNumber: 42 }).run();
+    const cancel = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('unavailable'))
+      .mockResolvedValue({ process: { status: 'exited' } });
+    deps.aiurClientForGame = async () => ({ cancel }) as unknown as AiurClient;
+    const abandon = () =>
+      app.request(`/api/v1/games/${ids.game}/scope/sessions/${created.sessionId}/abandon`, {
+        method: 'POST',
+        headers: asUser(ids.creator),
+      });
+
+    expect((await abandon()).status).toBe(503);
+    expect(deps.db.select().from(schema.jobs).get()).toMatchObject({ state: 'filed', releasedAt: null });
+    expect((await abandon()).status).toBe(200);
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+  });
+
+  it('cancels the tracker ticket when the scope worker is not running', async () => {
+    const deps = setup();
+    const app = createApp(deps);
+    app.route('/api/v1/games', scopeRoutes);
+    const created = (await (await create(app)).json()) as { sessionId: string; jobId: string };
+    deps.db.update(schema.jobs).set({ state: 'filed', aiurRepo: 'owner/game', aiurIssueNumber: 42 }).run();
+    const cancel = vi.fn().mockRejectedValue(new AiurHttpError(409, 'agent_not_running', 'idle', 'http://127.0.0.1'));
+    const setStateLabel = vi.fn().mockResolvedValue(undefined);
+    deps.aiurClientForGame = async () => ({ cancel }) as unknown as AiurClient;
+    deps.registry.issueStateWriter = { setStateLabel };
+
+    const result = await app.request(`/api/v1/games/${ids.game}/scope/sessions/${created.sessionId}/abandon`, {
+      method: 'POST',
+      headers: asUser(ids.creator),
+    });
+    expect(result.status).toBe(200);
+    expect(setStateLabel).toHaveBeenCalledWith('owner/game', 42, 'cancelled', 'agent');
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
   });
 
   it('starts one revision from the latest agreement and rejects stale or mismatched versions', async () => {
