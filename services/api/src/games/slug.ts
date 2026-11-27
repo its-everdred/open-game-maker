@@ -1,7 +1,7 @@
 import { isReservedGameSlug } from '@ogm/contracts';
 import type { Db } from '@ogm/db';
 import { schema } from '@ogm/db';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import type { GameRow } from './games.js';
 
@@ -25,16 +25,21 @@ export function slugify(title: string): string {
 
 // A slug is free when no app route answers to it (#591) and neither a live game nor a retired one holds it. `gameId` is
 // the game being (re)named, so reusing a slug that is already its own never blocks the rename.
-function isSlugAvailable(db: Db, slug: string, gameId?: string): boolean {
+export function isSlugAvailable(db: Db, slug: string, gameId?: string): boolean {
+  const compact = slug.replaceAll('-', '');
   if (isReservedGameSlug(slug)) return false;
-  const live = db.select({ id: schema.games.id }).from(schema.games).where(eq(schema.games.slug, slug)).get();
-  if (live && live.id !== gameId) return false;
+  const live = db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(sql`replace(${schema.games.slug}, '-', '') = ${compact}`)
+    .all();
+  if (live.some((game) => game.id !== gameId)) return false;
   const retired = db
     .select({ gameId: schema.gameSlugs.gameId })
     .from(schema.gameSlugs)
-    .where(eq(schema.gameSlugs.slug, slug))
-    .get();
-  return retired === undefined || retired.gameId === gameId;
+    .where(sql`replace(${schema.gameSlugs.slug}, '-', '') = ${compact}`)
+    .all();
+  return retired.every((game) => game.gameId === gameId);
 }
 
 // Picks the game's next slug from its title and retires the previous one, so a link shared before a rename still opens
@@ -73,6 +78,27 @@ export function findGameBySlugOrId(db: Db, ref: string): GameRow | null {
     .from(schema.gameSlugs)
     .where(eq(schema.gameSlugs.slug, ref))
     .get();
-  if (!retired) return null;
-  return db.select().from(schema.games).where(eq(schema.games.id, retired.gameId)).get() ?? null;
+  if (retired) return db.select().from(schema.games).where(eq(schema.games.id, retired.gameId)).get() ?? null;
+
+  // Older databases can already contain colliding spellings. Never guess which game an alias means.
+  const compact = ref.replaceAll('-', '');
+  const live = db
+    .select()
+    .from(schema.games)
+    .where(sql`replace(${schema.games.slug}, '-', '') = ${compact}`)
+    .all();
+  const aliases = db
+    .select({ gameId: schema.gameSlugs.gameId })
+    .from(schema.gameSlugs)
+    .where(sql`replace(${schema.gameSlugs.slug}, '-', '') = ${compact}`)
+    .all();
+  const ids = new Set([...live.map((game) => game.id), ...aliases.map((alias) => alias.gameId)]);
+  if (ids.size !== 1) return null;
+  return (
+    db
+      .select()
+      .from(schema.games)
+      .where(eq(schema.games.id, [...ids][0]!))
+      .get() ?? null
+  );
 }
