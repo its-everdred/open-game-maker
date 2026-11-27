@@ -38,6 +38,7 @@ let wrongServeSha: string;
 let mutatingSmokeSha: string;
 let mutationSha: string;
 let sourceMutationSha: string;
+let untrackedMutationSha: string;
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -153,6 +154,13 @@ beforeAll(async () => {
   );
   git(origin, 'commit', '-qam', 'mutating source fixture');
   sourceMutationSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'untracked-source', 'main');
+  writeFileSync(
+    join(origin, 'games', 'blobs', 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"printf generated > generated.ts"}}\n',
+  );
+  git(origin, 'commit', '-qam', 'untracked source fixture');
+  untrackedMutationSha = git(origin, 'rev-parse', 'HEAD');
   git(origin, 'switch', '-q', 'main');
 
   // pnpm stand-in: the scratch repository has nothing to install, and its build is one shell script.
@@ -622,6 +630,19 @@ describe('gm publish', () => {
     expect(checkRecords).toContainEqual(
       expect.objectContaining({
         gitSha: sourceMutationSha,
+        checks: expect.arrayContaining([{ name: 'source integrity', result: 'failed' }]),
+      }),
+    );
+    expect(requests.map((request) => request.method)).toEqual(['GET']);
+  });
+
+  it('does not publish if checks add untracked source', async () => {
+    const run = await publish(['blobs', '--sha', untrackedMutationSha, '--api', api]);
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain('game checks changed the source commit or tracked files');
+    expect(checkRecords).toContainEqual(
+      expect.objectContaining({
+        gitSha: untrackedMutationSha,
         checks: expect.arrayContaining([{ name: 'source integrity', result: 'failed' }]),
       }),
     );

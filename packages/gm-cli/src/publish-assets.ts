@@ -109,7 +109,9 @@ export async function stagePublishAssets(
   if (plan.missing.length) throw new Error(`cannot stage assets: ${plan.missing.join('; ')}`);
   // Do not copy other assets' cards from a shared pack. Write only locked cards and their collection metadata.
   const writeCard = async (target: string, card: ResolvedCard) => {
-    const { resolved: _resolved, library_root: _root, ...raw } = card;
+    const raw = Object.fromEntries(
+      Object.entries(card).filter(([key]) => key !== 'resolved' && key !== 'library_root'),
+    );
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, JSON.stringify(raw));
   };

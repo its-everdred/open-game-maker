@@ -57,6 +57,7 @@ describe('command rename migration', () => {
       '20261123020745_energy_admin.sql',
       '20261123185739_scene_store.sql',
       '20261124030313_client_telemetry.sql',
+      '20261127103951_publish_checks.sql',
     ]);
 
     expect(sqlite.prepare('SELECT decision_id, version, status FROM commands').all()).toEqual([

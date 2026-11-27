@@ -263,7 +263,7 @@ export const command: GmCommand = {
     // The build never sees the token; a fetch that wants credentials fails instead of prompting.
     const childEnv: Record<string, string | undefined> = { ...ctx.env, GIT_TERMINAL_PROMPT: '0' };
     delete childEnv.OGM_INTERNAL_TOKEN;
-    let sandboxProfile: string | undefined;
+    const sandbox = { profile: '' };
     const exec = (
       cmd: string,
       cmdArgs: string[],
@@ -272,7 +272,7 @@ export const command: GmCommand = {
       timeout = 300_000,
     ) => {
       const sandboxed = cmd === 'pnpm';
-      if (sandboxed && !sandboxProfile) throw new CommandError('game check sandbox is not configured');
+      if (sandboxed && !sandbox.profile) throw new CommandError('game check sandbox is not configured');
       const sandboxTmp = sandboxed ? mkdtempSync(join(cwd, '.gm-publish-tmp-')) : '';
       const result = spawnSync(
         sandboxed ? 'codex' : cmd,
@@ -284,7 +284,7 @@ export const command: GmCommand = {
           env: sandboxed
             ? publishSandboxEnv(
                 { ...childEnv, HOME: home, TMPDIR: sandboxTmp, XDG_RUNTIME_DIR: sandboxTmp, ...extraEnv },
-                sandboxProfile!,
+                sandbox.profile,
               )
             : { ...childEnv, ...extraEnv },
           encoding: 'utf8',
@@ -331,15 +331,15 @@ export const command: GmCommand = {
     // git refuses a worktree path that already exists, so the scratch directory names a child git creates.
     const scratch = mkdtempSync(join(workRoot, `${facts.slug}.`));
     const work = join(scratch, facts.slug);
-    sandboxProfile = join(scratch, 'sandbox-profile');
-    mkdirSync(sandboxProfile, { mode: 0o700 });
+    sandbox.profile = join(scratch, 'sandbox-profile');
+    mkdirSync(sandbox.profile, { mode: 0o700 });
     const assetsRoot = ctx.env?.OGM_ASSETS_ROOT ? ctx.assetsRoot : (env.OGM_ASSETS_ROOT ?? ctx.assetsRoot);
     const blobRoot = ctx.env?.OGM_BLOB_ROOT ? ctx.blobRoot : (env.OGM_BLOB_ROOT ?? ctx.blobRoot);
     const protectedRoots = [assetsRoot, blobRoot]
       .filter((root): root is string => !!root)
       .flatMap((root) => (existsSync(root) ? [root, realpathSync(root)] : [root]));
     const stagedAssets = join(scratch, 'assets');
-    writePublishSandbox(sandboxProfile, home, workRoot, work, protectedRoots, [stagedAssets]);
+    writePublishSandbox(sandbox.profile, home, workRoot, work, protectedRoots, [stagedAssets]);
     const archive = join(workRoot, `${facts.slug}-${commit}.tgz`);
     let stage: string | null = null;
     let testArtifactSha256: string | undefined;
@@ -526,7 +526,25 @@ export const command: GmCommand = {
       }
       const currentHead = exec('git', ['rev-parse', 'HEAD'], work);
       const sourceDiff = exec('git', ['diff', '--quiet', 'HEAD', '--'], work);
-      if (!currentHead.ok || currentHead.out.trim() !== commit || !sourceDiff.ok) {
+      const sourceStatus = exec(
+        'git',
+        [
+          'status',
+          '--porcelain',
+          '--untracked-files=all',
+          '--',
+          '.',
+          `:(exclude)${basename(buildEnv.GM_ASSET_CACHE_DIR)}`,
+        ],
+        work,
+      );
+      if (
+        !currentHead.ok ||
+        currentHead.out.trim() !== commit ||
+        !sourceDiff.ok ||
+        !sourceStatus.ok ||
+        sourceStatus.out
+      ) {
         await failCheck('source integrity');
         throw new CommandError('the game checks changed the source commit or tracked files');
       }

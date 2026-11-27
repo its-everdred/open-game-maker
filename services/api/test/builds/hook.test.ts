@@ -101,9 +101,15 @@ async function serveApi(app: ReturnType<typeof world>['app']) {
   };
 }
 
+function hookWorld() {
+  const fixture = world();
+  fixture.deps.sqlite.prepare('UPDATE games SET github_path = ? WHERE id = ?').run('', ids.game);
+  return fixture;
+}
+
 describe('before_remove hook to a playable build', () => {
   it('does not automatically release when its job is cancelled during release preparation', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     deps.sqlite.prepare("UPDATE games SET visibility = 'listed' WHERE id = ?").run(ids.game);
     const runtime = releaseRuntimeFor(deps);
     runtime.source = new FsBaseDocSource(deps.config.gamesRoot);
@@ -125,7 +131,7 @@ describe('before_remove hook to a playable build', () => {
     }
   });
   it('publishes a listed game after its checks and records the candidate SHA', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     deps.sqlite.prepare("UPDATE games SET visibility = 'listed' WHERE id = ?").run(ids.game);
     releaseRuntimeFor(deps).source = new FsBaseDocSource(deps.config.gamesRoot);
     const api = await serveApi(app);
@@ -155,7 +161,7 @@ describe('before_remove hook to a playable build', () => {
     }
   });
   it('uploads the merged workspace build, which the API publishes and the games host serves', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     const { dir, sha } = workspace();
     try {
@@ -195,7 +201,7 @@ describe('before_remove hook to a playable build', () => {
   });
 
   it('never uploads a dist that is a link out of the workspace', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     const outside = builtFiles();
     const { dir } = workspace(
@@ -213,7 +219,8 @@ describe('before_remove hook to a playable build', () => {
   });
 
   it('builds the registered game within a shared repository', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
+    deps.sqlite.prepare('UPDATE games SET github_path = ? WHERE id = ?').run('games/castle-game', ids.game);
     const api = await serveApi(app);
     const { dir } = workspace();
     const game = join(dir, 'games/castle-game');
@@ -233,8 +240,24 @@ describe('before_remove hook to a playable build', () => {
     }
   });
 
+  it('does not publish the root game when the registered nested game is missing', async () => {
+    const { deps, app } = hookWorld();
+    deps.sqlite.prepare('UPDATE games SET github_path = ? WHERE id = ?').run('games/missing', ids.game);
+    const api = await serveApi(app);
+    const { dir } = workspace();
+    try {
+      const hook = await runHook(dir, api.base);
+      expect(hook.stderr).toContain('game publish context unavailable');
+      completeRun(deps);
+      expect(await publishStaged(deps, ids.job)).toBeNull();
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('does not publish uncommitted source as the recorded commit', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     const { dir, sha } = workspace();
     writeFileSync(join(dir, 'build.mjs'), COPY_WEB + '\n// uncommitted\n');
@@ -254,7 +277,7 @@ describe('before_remove hook to a playable build', () => {
   });
 
   it('uploads nothing when the build fails, even with an earlier dist/ in the workspace', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     // The build writes part of dist/ before failing; neither that nor the earlier dist/ may leave.
     const { dir } = workspace(
@@ -276,7 +299,7 @@ describe('before_remove hook to a playable build', () => {
   });
 
   it('uploads nothing when the game tests fail', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     const { dir, sha } = workspace(COPY_WEB, 'node -e "process.exit(1)"');
     try {
@@ -295,7 +318,7 @@ describe('before_remove hook to a playable build', () => {
   });
 
   it.each(['gm test --serve old-dist', 'gm test --help'])('rejects invalid smoke script %s', async (script) => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     const { dir, sha } = workspace(COPY_WEB, script);
     try {
@@ -315,7 +338,7 @@ describe('before_remove hook to a playable build', () => {
   });
 
   it('does not upload when tests mutate the production build', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     const { dir } = workspace(COPY_WEB, "node -e \"require('fs').writeFileSync('dist/index.html', 'changed')\"");
     try {
@@ -330,7 +353,7 @@ describe('before_remove hook to a playable build', () => {
   });
 
   it('does not publish when tests modify tracked source', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     const { dir } = workspace(COPY_WEB, "node -e \"require('fs').writeFileSync('manifest.json', '{}')\"");
     try {
@@ -345,7 +368,7 @@ describe('before_remove hook to a playable build', () => {
   });
 
   it('accepts skills installed by the preceding run hook', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     const { dir } = workspace();
     mkdirSync(join(dir, '.gm/context'), { recursive: true });
@@ -363,8 +386,28 @@ describe('before_remove hook to a playable build', () => {
     }
   });
 
+  it('does not publish when a build adds source inside an injected skill directory', async () => {
+    const { deps, app } = hookWorld();
+    const api = await serveApi(app);
+    const { dir } = workspace(
+      "import { mkdirSync, writeFileSync } from 'node:fs';\n" +
+        "mkdirSync('.claude/skills/gm-evil', { recursive: true });\n" +
+        "writeFileSync('.claude/skills/gm-evil/generated.js', 'changed');\n" +
+        COPY_WEB,
+    );
+    try {
+      const hook = await runHook(dir, api.base);
+      expect(hook.stderr).toContain('game source changed during checks');
+      completeRun(deps);
+      expect(await publishStaged(deps, ids.job)).toBeNull();
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('does not pass daemon credentials into game build and test processes', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     const guard = `if (process.env.GITHUB_TOKEN || process.env.OGM_HOOK_SECRET_FILE) process.exit(1);\n`;
     const { dir } = workspace(
@@ -383,7 +426,7 @@ describe('before_remove hook to a playable build', () => {
   });
 
   it('leaves out a manifest that links outside the workspace, so the build fails instead of leaking the file', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     const { dir } = workspace();
     rmSync(join(dir, 'manifest.json'));
@@ -403,7 +446,7 @@ describe('before_remove hook to a playable build', () => {
   });
 
   it('sends nothing without the daemon hook secret', async () => {
-    const { deps, app } = world();
+    const { deps, app } = hookWorld();
     const api = await serveApi(app);
     const { dir } = workspace();
     try {

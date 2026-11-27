@@ -32,6 +32,7 @@ it('preserves historical aggregate play counts when upgrading', () => {
       '20261123020745_energy_admin.sql',
       '20261123185739_scene_store.sql',
       '20261124030313_client_telemetry.sql',
+      '20261127103951_publish_checks.sql',
     ]);
     expect(sqlite.prepare('SELECT game_id, plays FROM game_play_totals').all()).toEqual([{ game_id: 'g', plays: 7 }]);
     expect(migrate({ sqlite }).applied).toEqual([]);

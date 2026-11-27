@@ -209,6 +209,26 @@ before_remove: |
       [ -z "$(git -C "$workspace_root" status --porcelain --untracked-files=all -- . \
         ':(exclude).claude/skills/gm-*' ':(exclude).codex/skills/gm-*' ':(exclude).agents/skills/gm-*')" ]
   }
+  skill_fingerprint() {
+    node -e '
+      const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+      const hash = crypto.createHash("sha256");
+      function visit(file) {
+        const stat = fs.lstatSync(file);
+        hash.update(JSON.stringify([file, stat.mode, stat.size]));
+        if (stat.isSymbolicLink()) hash.update(fs.readlinkSync(file));
+        else if (stat.isDirectory()) for (const name of fs.readdirSync(file).sort()) visit(path.join(file, name));
+        else if (stat.isFile()) hash.update(fs.readFileSync(file));
+        else throw new Error("unsupported skill file");
+      }
+      for (const dir of [".claude/skills", ".codex/skills", ".agents/skills"]) {
+        if (!fs.existsSync(dir)) continue;
+        if (!fs.lstatSync(dir).isDirectory() || fs.lstatSync(path.dirname(dir)).isSymbolicLink()) throw new Error("unsafe skill directory");
+        for (const name of fs.readdirSync(dir).filter((n) => n.startsWith("gm-")).sort()) visit(path.join(dir, name));
+      }
+      process.stdout.write(hash.digest("hex"));
+    '
+  }
   if [ -n "${OGM_HOOK_SECRET_FILE:-}" ]; then
     OGM_PREVIEW_GRANTS="$(dirname "$OGM_HOOK_SECRET_FILE")/preview-grants" node -e '
       const fs = require("node:fs"), crypto = require("node:crypto");
@@ -239,12 +259,15 @@ before_remove: |
     sha="$(git rev-parse HEAD)"
     context="$(curl -fsS --max-time 20 -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $sha" \
       "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/publish-context")" || context=''
-    game_path="$(printf '%s' "$context" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const p=JSON.parse(s).path;if(typeof p==="string" && !p.startsWith("/") && !p.split("/").includes(".."))process.stdout.write(p)}catch{}})')"
+    game_path="$(printf '%s' "$context" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const p=JSON.parse(s).path;if(p===null || p==="")return;if(typeof p==="string" && !p.startsWith("/") && !p.split("/").includes("..")){process.stdout.write(p);return}}catch{}process.stdout.write("__INVALID__")})')"
     visibility="$(printf '%s' "$context" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const v=JSON.parse(s).visibility;if(v==="public" || v==="private")process.stdout.write(v)}catch{}})')"
     game_root="$root"
-    if [ -n "$game_path" ] && [ -f "$root/$game_path/package.json" ]; then
-      candidate="$(realpath "$root/$game_path")"
-      case "$candidate" in "$root"|"$root"/*) game_root="$candidate" ;; *) game_root='' ;; esac
+    if [ -n "$game_path" ]; then
+      game_root=''
+      if [ "$game_path" != '__INVALID__' ] && [ -f "$root/$game_path/package.json" ]; then
+        candidate="$(realpath "$root/$game_path")"
+        case "$candidate" in "$root"|"$root"/*) game_root="$candidate" ;; esac
+      fi
     elif [ ! -f "$root/manifest.json" ] && [ ! -f "$root/gm.manifest.json" ]; then
       game_root=''
     fi
@@ -259,6 +282,7 @@ before_remove: |
       source_result=failed
       echo "game source is not clean at the recorded commit: nothing uploaded" >&2
     fi
+    skill_hash="$(cd "$workspace_root" && skill_fingerprint)" || source_result=failed
     rm -rf dist
     mkdir -p "$root/.gm"
     if [ "$(realpath "$root/.gm")" != "$root/.gm" ]; then
@@ -349,7 +373,7 @@ before_remove: |
       rm -rf dist
       if [ "$build_result" = failed ]; then echo "build failed: nothing uploaded" >&2; fi
     fi
-    if [ "$source_result" = passed ] && ! source_clean; then
+    if [ "$source_result" = passed ] && { ! source_clean || [ "$(cd "$workspace_root" && skill_fingerprint)" != "$skill_hash" ]; }; then
       source_result=failed
       echo "game source changed during checks: nothing uploaded" >&2
     fi
