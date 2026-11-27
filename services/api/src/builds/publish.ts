@@ -21,13 +21,14 @@ import { releaseRuntimeFor } from '../releases/routes.js';
 import { publish, registerBuild, ReleaseError, updateBuild } from '../releases/service.js';
 import { withArtifactMutation } from './artifact-lock.js';
 import { BuildCacheError, completeBuildCache, sharedBuildFileUrls, storeDisplayImageBlobs } from './cache-plan.js';
-import { untarGz } from './untar.js';
+import { BadArchive, untarGz } from './untar.js';
 import { makeDisplayImages, type DisplayImage } from './display-images.js';
 
 // Jobs whose merged PR must become a playable build before the job is done; a scope job ships no build.
 export const BUILD_KINDS = ['new_game', 'feature', 'repair'] as const;
 
 const SYSTEM_ACTOR = 'system:builder';
+const SYSTEM_PUBLISH_ACTOR = 'u_00000000000000000000000000';
 const SWITCH_ATTEMPTS = 3;
 
 // `.staging` never matches the games-host id pattern, so nothing under it is ever served.
@@ -36,6 +37,23 @@ const stagedDir = (deps: AppDeps, jobId: string) => join(stagingRoot(deps), jobI
 const completedRoot = (deps: AppDeps) => join(deps.config.gamesRoot, '.completed');
 const displayQueue = (deps: AppDeps) => join(deps.config.gamesRoot, '.display-pending');
 const displayMarker = (deps: AppDeps, buildId: string) => join(displayQueue(deps), buildId);
+const jobLocks = new Map<string, Promise<void>>();
+
+async function withJobLock<T>(jobId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = jobLocks.get(jobId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  jobLocks.set(jobId, current);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    if (jobLocks.get(jobId) === current) jobLocks.delete(jobId);
+    release();
+  }
+}
 
 function jobRow(deps: AppDeps, jobId: string) {
   return deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).get();
@@ -64,6 +82,17 @@ export async function stageArtifact(
   archive: Buffer,
   checkId?: string,
 ): Promise<void> {
+  return withJobLock(jobId, () => stageArtifactLocked(deps, jobId, gitSha, archive, checkId));
+}
+
+async function stageArtifactLocked(
+  deps: AppDeps,
+  jobId: string,
+  gitSha: string,
+  archive: Buffer,
+  checkId?: string,
+): Promise<void> {
+  if (!awaitsBuild(deps, jobId)) throw new BadArchive('job_not_awaiting_build');
   const temporary = join(stagingRoot(deps), `.${jobId}.${randomUUID()}`);
   try {
     await mkdir(join(temporary, 'build'), { recursive: true });
@@ -87,6 +116,10 @@ export const isPublishing = (jobId: string) => publishing.has(jobId);
 // the job's branch to it, mark it tested, then finish the job. A failure before the switch removes the build and fails
 // the job; once the switch has committed, the branch points at the build, so it is kept and only the failure is logged.
 export async function publishStaged(deps: AppDeps, jobId: string): Promise<PublishOutcome> {
+  return withJobLock(jobId, () => publishStagedLocked(deps, jobId));
+}
+
+async function publishStagedLocked(deps: AppDeps, jobId: string): Promise<PublishOutcome> {
   if (publishing.has(jobId) || !awaitsBuild(deps, jobId) || !existsSync(stagedDir(deps, jobId))) return null;
   let release: ReturnType<typeof releaseRuntimeFor>;
   let design: ReturnType<typeof getDesignRuntime>;
@@ -101,6 +134,7 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
   let buildId: string | undefined;
   let target: string | undefined;
   let switched = false;
+  const checkId = await readFile(join(stagedDir(deps, jobId), 'check-id'), 'utf8').catch(() => '');
   try {
     const staged = stagedDir(deps, jobId);
     const files = join(staged, 'build');
@@ -168,7 +202,6 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
       switched = true;
       return { branchId: branch.id, buildId: build.id, switchTx };
     });
-    const checkId = await readFile(join(staged, 'check-id'), 'utf8').catch(() => '');
     if (checkId)
       deps.db
         .update(schema.publishChecks)
@@ -181,7 +214,8 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
       deps.log({ event: 'build_precompress_failed', buildId: published.buildId, reason: errorName(error) }),
     );
     design.stream.publish(published.branchId, published.switchTx.transaction);
-    await updateBuild(deps, release, published.buildId, 'tested');
+    // Legacy hooks can preserve the editor's build, but cannot make it eligible for a manual release either.
+    await updateBuild(deps, release, published.buildId, checkId ? 'tested' : 'failed');
 
     const game = deps.db
       .select({ visibility: schema.games.visibility })
@@ -194,17 +228,30 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
       .where(eq(schema.branches.id, published.branchId))
       .get();
     let publishResult: 'published' | 'skipped' | 'failed' = 'skipped';
-    if (game?.visibility === 'listed' && branch?.name === 'main') {
+    if (!checkId && game?.visibility === 'listed' && branch?.name === 'main') {
+      deps.log({
+        event: 'build_auto_publish_skipped',
+        jobId,
+        gameId: job.gameId,
+        buildId: published.buildId,
+        reason: 'legacy_hook',
+      });
+    }
+    if (checkId && game?.visibility === 'listed' && branch?.name === 'main') {
       try {
         await publish(deps, release, {
           gameId: job.gameId,
           buildId: published.buildId,
-          actor: SYSTEM_ACTOR,
+          actor: SYSTEM_PUBLISH_ACTOR,
           requireListed: true,
+          activeJobId: jobId,
         });
         publishResult = 'published';
       } catch (error) {
-        publishResult = error instanceof ReleaseError && error.code === 'game_unpublished' ? 'skipped' : 'failed';
+        publishResult =
+          error instanceof ReleaseError && ['game_unpublished', 'job_not_active'].includes(error.code)
+            ? 'skipped'
+            : 'failed';
         deps.log({
           event: 'build_auto_publish_failed',
           jobId,
@@ -228,6 +275,12 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
   } catch (error) {
     const reason =
       error instanceof PublishFailure || error instanceof BuildCacheError ? error.message : errorName(error);
+    if (checkId)
+      deps.db
+        .update(schema.publishChecks)
+        .set({ publishResult: 'failed' })
+        .where(eq(schema.publishChecks.id, checkId))
+        .run();
     if (switched && buildId) {
       settle(deps, jobId, 'done');
       deps.log({ event: 'build_publish_incomplete', jobId, gameId: job.gameId, buildId, reason });

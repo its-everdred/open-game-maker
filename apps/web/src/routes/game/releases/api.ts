@@ -15,6 +15,8 @@ export type RollbackPreview = { affectedSaves: number | null };
 export type PublishCheckRecord = {
   id: string;
   gitSha: string;
+  artifactSha256: string | null;
+  testArtifactSha256: string | null;
   buildId: string | null;
   surface: 'game' | 'app';
   sizes: string[];

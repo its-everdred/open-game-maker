@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
 import { PUBLISH_ACTOR } from '../../src/operator/publish.js';
+import { listCheckRecords } from '../../src/builds/check-records.js';
 import operatorRoutes, { prefix as operatorPrefix } from '../../src/operator/routes.js';
 import { builtFiles, CHECK_ID, ids, SHA, world } from '../builds/fixtures.js';
 import { INTERNAL_TOKEN } from '../helpers.js';
@@ -24,19 +26,37 @@ function operator() {
   return fixture;
 }
 
-function publish(
+async function publish(
   app: ReturnType<typeof operator>['app'],
   slug: string,
   sha: string,
   body: Buffer | string,
   headers: Record<string, string> = {},
 ) {
+  let checkId = sha === NEWER_SHA ? 'pc_newer' : CHECK_ID;
+  if (/^[0-9a-f]{40}$/.test(sha)) {
+    const record = await app.request(`${operatorPrefix}/games/${slug}/publish-checks`, {
+      method: 'POST',
+      headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        gitSha: sha,
+        artifactSha256: createHash('sha256').update(body).digest('hex'),
+        surface: 'game',
+        sizes: [],
+        checks: [
+          { name: 'pnpm run build', result: 'passed' },
+          { name: 'pnpm run test', result: 'passed' },
+        ],
+      }),
+    });
+    if (record.ok) checkId = ((await record.json()) as { id: string }).id;
+  }
   return app.request(`${operatorPrefix}/games/${slug}/builds`, {
     method: 'POST',
     headers: {
       'x-ogm-internal': INTERNAL_TOKEN,
       'x-gm-sha': sha,
-      'x-gm-check-id': sha === NEWER_SHA ? 'pc_newer' : CHECK_ID,
+      'x-gm-check-id': checkId,
       'content-type': 'application/gzip',
       ...headers,
     },
@@ -396,4 +416,78 @@ describe('operator publish', () => {
     expect(deps.db.select().from(schema.builds).all()).toEqual([]);
     expect(branchRow(deps).latestBuildId).toBeNull();
   });
+});
+
+it('records app checks separately from game checks and requires the operator credential', async () => {
+  const { app, deps } = operator();
+  const body = JSON.stringify({
+    gitSha: SHA,
+    artifactSha256: 'a'.repeat(64),
+    surface: 'app',
+    recordId: '6d9d5954-835c-45a3-bf61-352313e209e3',
+    attemptedAt: '2026-11-27T00:00:00.000Z',
+    sizes: ['390x844'],
+    checks: [{ name: 'app load', result: 'passed' }],
+    publishResult: 'published',
+  });
+  expect(
+    (
+      await app.request(`${operatorPrefix}/app/publish-checks`, {
+        method: 'POST',
+        body,
+        headers: { 'content-type': 'application/json' },
+      })
+    ).status,
+  ).toBe(401);
+  const response = await app.request(`${operatorPrefix}/app/publish-checks`, {
+    method: 'POST',
+    body,
+    headers: { 'content-type': 'application/json', 'x-ogm-internal': INTERNAL_TOKEN },
+  });
+  expect(response.status).toBe(201);
+  const { id } = (await response.json()) as { id: string };
+  const retry = await app.request(`${operatorPrefix}/app/publish-checks`, {
+    method: 'POST',
+    body,
+    headers: { 'content-type': 'application/json', 'x-ogm-internal': INTERNAL_TOKEN },
+  });
+  expect(await retry.json()).toMatchObject({ id });
+  const conflict = await app.request(`${operatorPrefix}/app/publish-checks`, {
+    method: 'POST',
+    body: JSON.stringify({ ...JSON.parse(body), gitSha: 'f'.repeat(40) }),
+    headers: { 'content-type': 'application/json', 'x-ogm-internal': INTERNAL_TOKEN },
+  });
+  expect(conflict.status).toBe(409);
+  expect(deps.db.select().from(schema.publishChecks).where(eq(schema.publishChecks.id, id)).all()).toHaveLength(1);
+  const row = deps.db.select().from(schema.publishChecks).where(eq(schema.publishChecks.id, id)).get();
+  expect(row).toMatchObject({ gameId: null, surface: 'app', publishResult: 'published', sizesJson: '["390x844"]' });
+  expect(listCheckRecords(deps, ids.game)).toContainEqual(expect.objectContaining({ id, surface: 'app' }));
+});
+
+it('recovers queued app checks independently and orders them by attempt time', async () => {
+  const { drainAppCheckQueue } = await import('../../src/builds/app-check-queue.js');
+  const { deps } = operator();
+  const dir = mkdtempSync(join(tmpdir(), 'app-check-recovery-'));
+  const base = {
+    gitSha: SHA,
+    artifactSha256: 'a'.repeat(64),
+    surface: 'app',
+    sizes: [],
+    checks: [{ name: 'load', result: 'passed' }],
+    publishResult: 'published',
+  };
+  try {
+    for (const [recordId, attemptedAt] of [
+      ['6d9d5954-835c-45a3-bf61-352313e209e3', '2026-11-27T00:00:00.000Z'],
+      ['0d9d5954-835c-45a3-bf61-352313e209e3', '2026-11-28T00:00:00.000Z'],
+    ]) {
+      writeFileSync(join(dir, `${recordId}.json`), JSON.stringify({ ...base, recordId, attemptedAt }));
+    }
+    await Promise.all([drainAppCheckQueue(deps, dir), drainAppCheckQueue(deps, dir)]);
+    const records = listCheckRecords(deps, ids.game).filter((record) => record.surface === 'app');
+    expect(records.map((record) => record.createdAt)).toEqual(['2026-11-28T00:00:00.000Z', '2026-11-27T00:00:00.000Z']);
+    expect((await import('node:fs')).readdirSync(dir)).toEqual([]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

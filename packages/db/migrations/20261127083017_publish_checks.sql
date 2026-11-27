@@ -1,7 +1,9 @@
 CREATE TABLE `publish_checks` (
 	`id` text PRIMARY KEY NOT NULL,
-	`game_id` text NOT NULL,
+	`game_id` text,
 	`git_sha` text NOT NULL,
+	`artifact_sha256` text,
+	`test_artifact_sha256` text,
 	`build_id` text,
 	`surface` text NOT NULL,
 	`sizes_json` text NOT NULL,

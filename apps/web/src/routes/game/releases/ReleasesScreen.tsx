@@ -122,6 +122,8 @@ export function ReleasesScreen() {
                 </p>
                 <p>Publish: {record.publishResult}</p>
                 {record.buildId ? <p>Build {record.buildId}</p> : null}
+                {record.artifactSha256 ? <p>Artifact SHA-256: {record.artifactSha256}</p> : null}
+                {record.testArtifactSha256 ? <p>Test build SHA-256: {record.testArtifactSha256}</p> : null}
                 {record.sizes.length > 0 ? <p>Sizes: {record.sizes.join(', ')}</p> : null}
                 <ul>
                   {record.checks.map((check) => (

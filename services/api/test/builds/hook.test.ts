@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +7,8 @@ import { env } from 'node:process';
 
 import { serve } from '@hono/node-server';
 import { renderDaemonFiles } from '@ogm/game-repo-template';
+import { StableIdSchema } from '@ogm/contracts';
+import { schema } from '@ogm/db';
 import { describe, expect, it } from 'vitest';
 
 import { publishStaged } from '../../src/builds/publish.js';
@@ -54,10 +56,14 @@ function workspace(build = COPY_WEB, test = "node -e \"require('fs').accessSync(
 async function runHook(cwd: string, api: string, extra: Record<string, string> = {}) {
   const secretFile = join(mkdtempSync(join(tmpdir(), 'ogm-hook-secret-')), 'hook-secret');
   writeFileSync(secretFile, SECRET);
+  const bin = join(cwd, '.test-bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'codex'), '#!/usr/bin/env bash\nwhile [[ "$1" != -- ]]; do shift; done\nshift\nexec "$@"\n');
+  chmodSync(join(bin, 'codex'), 0o755);
   const child = spawn('bash', ['-c', beforeRemove()], {
     cwd,
     env: {
-      PATH: HOOK_PATH,
+      PATH: `${bin}:${HOOK_PATH}`,
       HOME: cwd,
       // The hook runs `pnpm run build`; reuse corepack's cache rather than downloading pnpm into the fake HOME.
       COREPACK_HOME: env.COREPACK_HOME ?? join(homedir(), '.cache', 'node', 'corepack'),
@@ -83,6 +89,28 @@ async function serveApi(app: ReturnType<typeof world>['app']) {
 }
 
 describe('before_remove hook to a playable build', () => {
+  it('does not automatically release when its job is cancelled during release preparation', async () => {
+    const { deps, app } = world();
+    deps.sqlite.prepare("UPDATE games SET visibility = 'listed' WHERE id = ?").run(ids.game);
+    const runtime = releaseRuntimeFor(deps);
+    runtime.source = new FsBaseDocSource(deps.config.gamesRoot);
+    runtime.commit.execute = async (op) => {
+      if (op.kind === 'release') deps.sqlite.prepare("UPDATE jobs SET state = 'cancelled' WHERE id = ?").run(ids.job);
+      return { ok: true, sha: 'c'.repeat(40) };
+    };
+    const api = await serveApi(app);
+    const { dir } = workspace();
+    try {
+      await runHook(dir, api.base);
+      completeRun(deps);
+      await publishStaged(deps, ids.job);
+      expect(jobState(deps)).toBe('cancelled');
+      expect(deps.db.select().from(schema.releases).all()).toEqual([]);
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it('publishes a listed game after its checks and records the candidate SHA', async () => {
     const { deps, app } = world();
     deps.sqlite.prepare("UPDATE games SET visibility = 'listed' WHERE id = ?").run(ids.game);
@@ -98,6 +126,7 @@ describe('before_remove hook to a playable build', () => {
         published_release_id: string | null;
       };
       expect(game.published_release_id).not.toBeNull();
+      expect(StableIdSchema.safeParse(deps.db.select().from(schema.releases).get()!.publishedBy).success).toBe(true);
       const record = deps.sqlite
         .prepare('SELECT git_sha, result, publish_result, build_id FROM publish_checks WHERE git_sha = ?')
         .get(sha);
@@ -205,6 +234,54 @@ describe('before_remove hook to a playable build', () => {
         .prepare('SELECT result, publish_result FROM publish_checks WHERE git_sha = ?')
         .get(sha);
       expect(record).toEqual({ result: 'failed', publish_result: 'skipped' });
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not upload when tests mutate the production build', async () => {
+    const { deps, app } = world();
+    const api = await serveApi(app);
+    const { dir } = workspace(COPY_WEB, "node -e \"require('fs').writeFileSync('dist/index.html', 'changed')\"");
+    try {
+      const hook = await runHook(dir, api.base);
+      expect(hook.stderr).toContain('game checks failed: nothing uploaded');
+      completeRun(deps);
+      expect(await publishStaged(deps, ids.job)).toBeNull();
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('publishes the manifest captured before tests modify their workspace', async () => {
+    const { deps, app } = world();
+    const api = await serveApi(app);
+    const { dir } = workspace(COPY_WEB, "node -e \"require('fs').writeFileSync('manifest.json', '{}')\"");
+    try {
+      await runHook(dir, api.base);
+      completeRun(deps);
+      expect(await publishStaged(deps, ids.job)).toMatchObject({ state: 'done' });
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not pass daemon credentials into game build and test processes', async () => {
+    const { deps, app } = world();
+    const api = await serveApi(app);
+    const guard = `if (process.env.GITHUB_TOKEN || process.env.OGM_HOOK_SECRET_FILE) process.exit(1);\n`;
+    const { dir } = workspace(
+      guard + COPY_WEB,
+      'node -e "if(process.env.GITHUB_TOKEN || process.env.OGM_HOOK_SECRET_FILE) process.exit(1)"',
+    );
+    try {
+      const hook = await runHook(dir, api.base, { GITHUB_TOKEN: 'private-token' });
+      expect(hook.stderr).not.toContain('game checks failed');
+      completeRun(deps);
+      expect(await publishStaged(deps, ids.job)).toMatchObject({ state: 'done' });
     } finally {
       await api.close();
       rmSync(dir, { recursive: true, force: true });

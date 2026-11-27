@@ -24,6 +24,22 @@ async function mode(path: string): Promise<number> {
 }
 
 describe('ensureDaemon', () => {
+  it('refreshes live managed hooks while leaving registered daemon hooks untouched', async () => {
+    const home = await tempHome();
+    const { fleet, store } = buildFleet(home, { preflight: okPreflight });
+    await fleet.ensureDaemon({ slug, repo }, 'feature');
+    const managed = join(home, '.local/share/ogm/daemons', slug, '.aiur/hooks');
+    await writeFile(managed, 'old hooks');
+    const checkout = join(home, 'external');
+    await mkdir(join(checkout, '.aiur'), { recursive: true });
+    await writeFile(join(checkout, '.aiur/hooks'), 'custom hooks');
+    await store.insert(liveRow(2, 'running', { slug: 'external', checkoutPath: checkout }));
+
+    await fleet.refreshManagedHooks();
+
+    expect(await readFile(managed, 'utf8')).toBe(renderDaemonFiles({ gameSlug: slug }).hooks);
+    expect(await readFile(join(checkout, '.aiur/hooks'), 'utf8')).toBe('custom hooks');
+  });
   it('renders the directory, writes 0600 secrets, mints two tokens, starts the unit and polls health to running', async () => {
     const home = await tempHome();
     const preflight = vi.fn(async () => ({ ok: true as const }));

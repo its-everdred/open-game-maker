@@ -14,7 +14,15 @@ export const DEFAULT_DENY_READ_ROOTS = [
   '~/.config/ogm',
   '~/.config/netlify',
   '~/.ssh',
+  '~/.aws',
+  '~/.npmrc',
+  '~/.git-credentials',
   '~/.aiur/.env',
+  '~/.aiur/accounts',
+  '~/.aiur/repo',
+  '~/.aiur/w',
+  '~/.aiur/workspaces',
+  '~/.cache/ogm/assets',
 ] as const;
 
 const profileTemplate = readFileSync(new URL('../../sandbox/profile.toml', import.meta.url), 'utf8');

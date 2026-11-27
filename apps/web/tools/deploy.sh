@@ -21,7 +21,27 @@ DEPLOY_DIR="$(mktemp -d)"
 PREVIEW_PID=''
 PROTO_PID=''
 PROTO_LOG=''
+CHECKS_FILE="$DEPLOY_DIR.checks.jsonl"
+CHECKS_SHA=''
+CHECKS_SIZES=''
+PUBLISH_RESULT=skipped
+record_check() {
+  printf '{"name":"%s","result":"%s"}\n' "$1" "$2" >>"$CHECKS_FILE"
+}
 cleanup() {
+  local deploy_status=$?
+  if ((deploy_status != 0)) && ! grep -q '"result":"failed"' "$CHECKS_FILE" 2>/dev/null; then record_check preparation failed; fi
+  if [[ ! -s "$CHECKS_FILE" ]]; then record_check preparation failed; fi
+  # This metadata file is outside the staged output and never uploaded.
+  CHECKS_SHA="$CHECKS_SHA" CHECKS_SIZES="$CHECKS_SIZES" PUBLISH_RESULT="$PUBLISH_RESULT" DEPLOY_STARTED="$DEPLOY_STARTED" \
+    node -e 'const fs=require("node:fs"), cp=require("node:child_process"); const dir=process.argv[1];
+      const checks=fs.readFileSync(dir+".checks.jsonl","utf8").trim().split("\n").map(JSON.parse);
+      const gitSha=cp.execFileSync("git",["-C",process.argv[2],"rev-parse","HEAD"],{encoding:"utf8"}).trim();
+      fs.writeFileSync(dir+".record.json",JSON.stringify({gitSha,surface:"app",attemptedAt:new Date(Number(process.env.DEPLOY_STARTED)*1000).toISOString(),sizes:process.env.CHECKS_SIZES ? [process.env.CHECKS_SIZES] : [],checks,publishResult:process.env.PUBLISH_RESULT,...(process.env.CHECKS_SHA ? {artifactSha256:process.env.CHECKS_SHA} : {})}));' "$DEPLOY_DIR" "$ROOT" &&
+    node "$ROOT/apps/web/tools/record-publish-checks.mjs" "$DEPLOY_DIR.record.json" ||
+    printf '%s\n' 'deploy: could not record app publish checks' >&2
+  rm -f -- "$DEPLOY_DIR.record.json" "$CHECKS_FILE"
+
   # Let a background prototype build finish so a retry never runs two builds over the same trees.
   if [[ -n "$PROTO_PID" ]]; then
     wait "$PROTO_PID" 2>/dev/null || true
@@ -34,6 +54,7 @@ cleanup() {
     wait "$PREVIEW_PID" 2>/dev/null || true
   fi
   rm -rf -- "$DEPLOY_DIR"
+  return "$deploy_status"
 }
 trap cleanup EXIT
 
@@ -104,25 +125,43 @@ TOWN_KEY="$(inputs_key "${ASSET_FILTER_ARGS[@]}" "$ROOT/apps/web/tools/town.sh" 
 cached "$CACHE" town "$TOWN_KEY" "$ROOT/apps/web/public/town" "$ROOT/apps/web/public/art" -- \
   bash "$ROOT/apps/web/tools/town.sh" "${ASSET_FILTER_ARGS[@]}"
 
-timed web-deps pnpm --dir "$ROOT/apps/web" run build:deps
+if timed web-deps pnpm --dir "$ROOT/apps/web" run build:deps; then
+  record_check web-deps passed
+else
+  record_check web-deps failed
+  exit 1
+fi
 if ci_typechecked "$ROOT"; then
   printf '%s\n' 'deploy step: typecheck skipped, CI typechecked this commit'
+  record_check 'CI typecheck' passed
 else
   mkdir -p "$CACHE"
-  timed typecheck pnpm --dir "$ROOT/apps/web" exec tsc --noEmit --incremental --tsBuildInfoFile "$CACHE/web.tsbuildinfo"
+  if timed typecheck pnpm --dir "$ROOT/apps/web" exec tsc --noEmit --incremental --tsBuildInfoFile "$CACHE/web.tsbuildinfo"; then
+    record_check typecheck passed
+  else
+    record_check typecheck failed
+    exit 1
+  fi
 fi
 # VITE_APP_VERSION tags every telemetry event with the commit that is live (#1318).
-timed web-build env VITE_GAMES_ORIGIN="$GAMES_ORIGIN" VITE_INSTANCE_LOGO_URL="$INSTANCE_LOGO_URL" \
+if timed web-build env VITE_GAMES_ORIGIN="$GAMES_ORIGIN" VITE_INSTANCE_LOGO_URL="$INSTANCE_LOGO_URL" \
   VITE_APP_VERSION="$(git -C "$ROOT" rev-parse --short HEAD)" \
-  pnpm --dir "$ROOT/apps/web" exec vite build
+  pnpm --dir "$ROOT/apps/web" exec vite build; then
+  record_check web-build passed
+else
+  record_check web-build failed
+  exit 1
+fi
 
 PROTO_STATUS=0
 wait "$PROTO_PID" || PROTO_STATUS=$?
 PROTO_PID=''
 cat "$PROTO_LOG"
 if ((PROTO_STATUS != 0)); then
+  record_check prototype-build failed
   exit "$PROTO_STATUS"
 fi
+record_check prototype-build passed
 
 STAGE_STARTED="$(date +%s)"
 cp -R "$ROOT/apps/web/dist/." "$DEPLOY_DIR/"
@@ -149,6 +188,8 @@ if [[ "$DRY_RUN" == true ]]; then
   printf '%s\n' 'prototype payload:'
   find "$DEPLOY_DIR/proto" -type f -printf 'proto/%P\n' | LC_ALL=C sort
 fi
+# Hash the exact staged payload, excluding the private in-progress check log.
+CHECKS_SHA="$(tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --exclude='./.publish-checks.jsonl' -cf - -C "$DEPLOY_DIR" . | sha256sum | cut -d ' ' -f 1)"
 printf 'deploy step: stage %ds\n' $(($(date +%s) - STAGE_STARTED))
 
 # Serve the staged payload and record a throttled phone visit until the title town reports ready. Runs with errexit
@@ -205,9 +246,12 @@ total() {
 
 if [[ "$DRY_RUN" == true ]]; then
   if ! timed load-check load_check; then
+    record_check load-check failed
     printf '%s\n' 'deploy: load check failed; refusing to deploy' >&2
     exit 1
   fi
+  record_check load-check passed
+  CHECKS_SIZES=390x844
   total done
   exit 0
 fi
@@ -217,17 +261,32 @@ fi
 DEPLOY_LOG="${OGM_NETLIFY_DEPLOY_LOG:-$HOME/.local/share/ogm/netlify-deploys.log}"
 mkdir -p "$(dirname "$DEPLOY_LOG")"
 
-timed upload netlify deploy --prod --no-build --filter @ogm/web --dir "$DEPLOY_DIR" \
-  --site "$(<"$ROOT/apps/web/.netlify-site-id")"
+PUBLISH_RESULT=failed
+if timed upload netlify deploy --prod --no-build --filter @ogm/web --dir "$DEPLOY_DIR" \
+  --site "$(<"$ROOT/apps/web/.netlify-site-id")"; then
+  PUBLISH_RESULT=published
+else
+  exit 1
+fi
 
 date -u +%Y-%m-%dT%H:%M:%SZ >>"$DEPLOY_LOG" ||
   printf 'deploy: succeeded, but could not record it in %s\n' "$DEPLOY_LOG" >&2
 total uploaded
 # Post-deploy QA: the payload is live, so a failed load check wakes the Executor instead of holding the upload back.
-timed load-check load_check || report_attention 'the load check on the uploaded payload failed (see the deploy log)'
+if timed load-check load_check; then
+  record_check load-check passed
+  CHECKS_SIZES=390x844
+else
+  record_check load-check failed
+  report_attention 'the load check on the uploaded payload failed (see the deploy log)'
+fi
 # Every app domain must frame a game in WebKit, as on an iPhone (#1297): an alias whose 301 is missing, or a games
 # host whose frame-ancestors lacks the app, shows Try again in every game.
 # Its own attention line is suppressed: report_attention writes the one line for this deploy.
-timed frame-check env OGM_QA_ATTENTION= "$ROOT/ops/bin/ogm-qa-game-play" --frames-only --repo "$ROOT" ||
+if timed frame-check env OGM_QA_ATTENTION= "$ROOT/ops/bin/ogm-qa-game-play" --frames-only --repo "$ROOT"; then
+  record_check frame-check passed
+else
+  record_check frame-check failed
   report_attention 'the frame check on the app domains failed (see the deploy log)'
+fi
 total done

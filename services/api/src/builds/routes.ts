@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 
 import { Hono, type Context } from 'hono';
@@ -103,12 +104,21 @@ export function buildRoutes(opts: {
           .where(eq(schema.jobs.id, jobId))
           .get();
         const checkId = c.req.header('x-gm-check-id') ?? '';
-        if (!job || !passedChecks(deps, checkId, job.gameId, gitSha))
+        const archive = Buffer.from(await c.req.arrayBuffer());
+        const hash = createHash('sha256').update(archive).digest('hex');
+        // Older daemon hooks still deliver editor builds during rollout. Only a build with a
+        // passing record may advance the public release pointer in publishStaged.
+        if (!job || (checkId !== '' && !passedChecks(deps, checkId, job.gameId, gitSha, hash)))
           return c.json({ error: { code: 'checks_required' } }, 422);
         try {
-          await stageArtifact(deps, jobId, gitSha, Buffer.from(await c.req.arrayBuffer()), checkId);
+          await stageArtifact(deps, jobId, gitSha, archive, checkId);
         } catch (error) {
           if (error instanceof BadArchive) {
+            deps.db
+              .update(schema.publishChecks)
+              .set({ publishResult: 'failed' })
+              .where(eq(schema.publishChecks.id, checkId))
+              .run();
             // The job keeps waiting: a later good upload can still land, else the sweep fails it after the grace.
             deps.log({ event: 'build_upload_refused', jobId, reason: error.message });
             return c.json({ error: { code: error.message } }, 422);

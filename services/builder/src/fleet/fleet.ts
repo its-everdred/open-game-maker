@@ -16,7 +16,7 @@ import {
 } from './daemon-dir.js';
 import { createMissCounter, passes, realSleep, waitHealthy, type Sleep } from './health.js';
 import { writeRegistry } from './registry.js';
-import { daemonPaths, parseEnv, readIfPresent, writeDaemonSecrets } from './secrets.js';
+import { daemonPaths, parseEnv, readIfPresent, writeAtomic, writeDaemonSecrets } from './secrets.js';
 import { createSystemctl, mintTokens, nodeRunner, unitName, type Runner, type Systemctl } from './systemctl.js';
 import {
   LIVE_STATUSES,
@@ -212,6 +212,13 @@ export function createFleet(deps: FleetDeps) {
     return rendered;
   }
 
+  async function refreshManagedHook(row: DaemonRow, rows: DaemonRow[]): Promise<void> {
+    if (isRegistered(row)) return;
+    const paths = daemonPaths(env.home, row.slug);
+    await materializeCodexHome(renderInputFor(row, paths, env, 'feature', rows), codexAuthFor(env));
+    await writeAtomic(join(paths.dir, '.aiur/hooks'), (await files(row)).hooks, 0o600);
+  }
+
   async function toDaemon(row: DaemonRow): Promise<GameDaemon> {
     const clientToken = (await readIfPresent(daemonPaths(env.home, row.slug).clientToken))?.trim() ?? '';
     return {
@@ -293,6 +300,7 @@ export function createFleet(deps: FleetDeps) {
       if (LIVE_STATUSES.includes(row.status)) await prepare(row, shape.kind);
     }
     if (row.status === 'running' || row.status === 'idle') {
+      await refreshManagedHook(row, await store.list());
       row = await setStatus(row, 'running', { idleSince: null });
       return { done: { status: 'running', daemon: await toDaemon(row) } };
     }
@@ -321,6 +329,15 @@ export function createFleet(deps: FleetDeps) {
   }
 
   return {
+    /** Refresh running fleet-owned hooks after upgrading the API, leaving registered daemons untouched. */
+    refreshManagedHooks(): Promise<void> {
+      return locked(async () => {
+        const rows = await store.list();
+        for (const row of rows) {
+          if (LIVE_STATUSES.includes(row.status)) await refreshManagedHook(row, rows);
+        }
+      });
+    },
     // Concurrent calls for one game share a single start.
     ensureDaemon(key: DaemonKey, kind: JobKind): Promise<EnsureResult> {
       const slug = key.slug.trim().toLowerCase();

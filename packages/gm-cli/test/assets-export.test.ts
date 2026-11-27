@@ -736,3 +736,77 @@ describe('gm assets import refusals', () => {
     expect(result.err[0]).toContain('the zip holds blobs but OGM_BLOB_ROOT is unset');
   });
 });
+
+it('stages only the rights-checked files pinned by this game for publish', async () => {
+  const { stagePublishAssets } = await import('../src/publish-assets.js');
+  const world = await instance();
+  const staged = join(tempDir('publish-assets-'), 'library');
+  const { readLock } = await import('../src/lock.js');
+  const { loadIndex, cardById } = await import('@ogm/asset-cards');
+  const { rightsForCard } = await import('../src/rules.js');
+  const lock = (await readLock(world.gameB))!;
+  const index = await loadIndex(world.assetsRoot);
+  const card = cardById(world.assetsRoot, index, LOOP)!;
+  lock.assets[0]!.rights = rightsForCard(card, index.collections);
+  lock.assets[0]!.license = card.resolved.license;
+  await writeLock(world.gameB, lock);
+  await stagePublishAssets(world.gameB, staged, world.assetsRoot, world.blobRoot);
+  expect(readFileSync(join(staged, LOOP_FILE), 'utf8')).toBe('loop-bytes');
+  const stagedIndex = await loadIndex(staged);
+  expect(cardById(staged, stagedIndex, LOOP)?.id).toBe(LOOP);
+  expect(stagedIndex.cards.some((item) => item.id === ORC)).toBe(false);
+  expect(existsSync(join(staged, 'packs/kenney-mini-dungeon/2.0/extracted/Models/GLB format/character-orc.glb'))).toBe(
+    false,
+  );
+  expect(existsSync(join(staged, 'blobs', world.unpinned))).toBe(false);
+  const privateLock = (await readLock(world.gameA))!;
+  privateLock.assets = privateLock.assets.filter((item) => item.id === SYNTY);
+  const privateCard = cardById(world.assetsRoot, index, SYNTY)!;
+  privateLock.assets[0]!.rights = rightsForCard(privateCard, index.collections);
+  privateLock.assets[0]!.license = privateCard.resolved.license;
+  await writeLock(world.gameA, privateLock);
+  await expect(
+    stagePublishAssets(world.gameA, join(staged, 'public'), world.assetsRoot, world.blobRoot),
+  ).rejects.toThrow('private-in-public');
+  await stagePublishAssets(world.gameA, join(staged, 'private'), world.assetsRoot, world.blobRoot, 'private');
+  const blobLock = (await readLock(world.gameA))!;
+  blobLock.assets = [entry('t3:game-a/hero-edit', 'made-bytes')];
+  await writeLock(world.gameA, blobLock);
+  await expect(
+    stagePublishAssets(world.gameA, join(staged, 'blob-game'), world.assetsRoot, world.blobRoot, 'private'),
+  ).rejects.toThrow('has no trusted per-game authorization');
+  const allowedStage = join(staged, 'allowed-blob');
+  const grant = { license: blobLock.assets[0]!.license, rights: blobLock.assets[0]!.rights };
+  const authorized = new Map([[world.made, grant]]);
+  await stagePublishAssets(world.gameA, allowedStage, world.assetsRoot, world.blobRoot, 'private', authorized);
+  const stagedBlobs = new FsBlobStore({
+    root: join(allowedStage, 'blob-store'),
+    signingKey: 'unused',
+    publicOrigin: 'http://127.0.0.1',
+  });
+  expect(await stagedBlobs.head(`sha256:${world.made}`)).toMatchObject({ mime: 'image/png', bytes: 10 });
+  expect(await stagedBlobs.head(`sha256:${world.unpinned}`)).toBeNull();
+  blobLock.assets[0]!.files = [{ path: 'image/other.webp', sha256: world.unpinned }];
+  await writeLock(world.gameA, blobLock);
+  await expect(
+    stagePublishAssets(
+      world.gameA,
+      join(staged, 'companion-denied'),
+      world.assetsRoot,
+      world.blobRoot,
+      'private',
+      authorized,
+    ),
+  ).rejects.toThrow('has no trusted per-game authorization');
+});
+
+it('refuses a symlinked game lock before reading host files', async () => {
+  const { stagePublishAssets } = await import('../src/publish-assets.js');
+  const gameDir = tempDir('publish-lock-');
+  const outside = join(tempDir('publish-lock-outside-'), 'assets.lock.json');
+  writeFileSync(outside, '{}');
+  symlinkSync(outside, join(gameDir, 'assets.lock.json'));
+  await expect(stagePublishAssets(gameDir, join(gameDir, 'stage'), null, null)).rejects.toThrow(
+    'assets.lock.json must be a regular file',
+  );
+});

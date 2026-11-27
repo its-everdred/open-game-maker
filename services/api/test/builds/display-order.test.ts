@@ -6,7 +6,7 @@ import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
 
 import { sweepBuilds } from '../../src/builds/publish.js';
-import { builtFiles, CHECK_ID, completeRun, ids, SECRET, SHA, TICKET, world } from './fixtures.js';
+import { allowArchive, builtFiles, CHECK_ID, completeRun, ids, SECRET, SHA, TICKET, world } from './fixtures.js';
 
 // The second encoder pass (loading screens) waits on `gate`, standing in for the minutes it takes on a busy host.
 const encoder = vi.hoisted(() => ({ gate: null as Promise<void> | null }));
@@ -41,6 +41,8 @@ async function publishWithLoadingScreens() {
       loading: { portrait: 'media/p.png', landscape: 'media/l.png' },
     }),
   );
+  const archive = archiveOf(dir);
+  allowArchive(deps, archive);
   const response = await app.request(`http://127.0.0.1:4000/internal/jobs/by-ticket/${TICKET}/build`, {
     method: 'POST',
     headers: {
@@ -49,7 +51,7 @@ async function publishWithLoadingScreens() {
       'x-gm-check-id': CHECK_ID,
       'content-type': 'application/gzip',
     },
-    body: archiveOf(dir),
+    body: archive,
   });
   expect(response.status).toBe(201);
   const { buildId } = (await response.json()) as { buildId: string };

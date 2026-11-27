@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4e39596b-c3f4-4f14-9be8-bd641df39713",
+  "id": "8ceda7da-4afe-4a34-abbe-0f4088a496ca",
   "prevId": "82925755-b604-4efe-9058-d3d1b9273396",
   "tables": {
     "app_meta": {
@@ -7726,7 +7726,7 @@
           "name": "game_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "git_sha": {
@@ -7734,6 +7734,20 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "artifact_sha256": {
+          "name": "artifact_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "test_artifact_sha256": {
+          "name": "test_artifact_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "build_id": {

@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,6 +19,12 @@ export const REPO = 'everdred-games/gm-g2';
 export const TICKET = '12';
 export const SHA = 'e'.repeat(40);
 export const CHECK_ID = 'pc_fixture';
+
+export function allowArchive(deps: ReturnType<typeof world>['deps'], body: Buffer) {
+  deps.sqlite
+    .prepare('UPDATE publish_checks SET artifact_sha256 = ? WHERE id = ?')
+    .run(createHash('sha256').update(body).digest('hex'), CHECK_ID);
+}
 
 export function manifest(): GameManifest {
   return {

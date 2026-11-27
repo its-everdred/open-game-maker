@@ -7,10 +7,10 @@ export const publishChecks = sqliteTable(
   'publish_checks',
   {
     id: text('id').primaryKey(),
-    gameId: text('game_id')
-      .notNull()
-      .references(() => games.id, { onDelete: 'cascade' }),
+    gameId: text('game_id').references(() => games.id, { onDelete: 'cascade' }),
     gitSha: text('git_sha').notNull(),
+    artifactSha256: text('artifact_sha256'),
+    testArtifactSha256: text('test_artifact_sha256'),
     buildId: text('build_id'),
     surface: text('surface', { enum: ['game', 'app'] }).notNull(),
     sizesJson: text('sizes_json').notNull(),

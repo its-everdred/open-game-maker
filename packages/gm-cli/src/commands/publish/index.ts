@@ -1,6 +1,16 @@
 import { spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,10 +20,12 @@ import { ConfigError, loadEnv } from '@ogm/config';
 import { checkPublishDist } from '../../dist-validation.js';
 import { CommandError, EXIT, UsageError, type GmCommand, type GmContext } from '../../command.js';
 import { printJson } from '../../context.js';
-import { readLock } from '../../lock.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
 import { scanReferences, unlisted } from '../../references.js';
 import { mergePrototypeReviews, parsePrototypeReview } from '../../prototype-review.js';
+import { publishSandboxEnv, writePublishSandbox } from '../../publish-sandbox.js';
+import { publishBuildHash } from '../../publish-build-hash.js';
+import { readPublishLock, stagePublishAssets } from '../../publish-assets.js';
 
 /*
  * The operator's publish for a game registered against a repository whose own tickets are not Game Maker jobs: no
@@ -28,6 +40,7 @@ const ENV = {
   OGM_APP_ORIGIN: { kind: 'url', required: false },
   OGM_GAMES_ORIGIN: { kind: 'url', required: false },
   OGM_ASSETS_ROOT: { kind: 'path', required: false },
+  OGM_BLOB_ROOT: { kind: 'path', required: false },
   OGM_PUBLISH_BUILD_TIMEOUT_MS: { kind: 'int', default: '1800000' },
 } as const;
 
@@ -39,6 +52,7 @@ type Facts = {
   gameId: string;
   slug: string;
   repoPath: string;
+  repoVisibility: 'public' | 'private';
   checkout: string;
   repo: { owner: string; name: string };
   lastReviewedSha: string | null;
@@ -171,6 +185,7 @@ async function readFacts(api: string, token: string, slug: string): Promise<Fact
     game?: {
       id?: string;
       slug?: string | null;
+      repoVisibility?: 'public' | 'private' | null;
       repo?: { path?: string | null; owner?: string | null; name?: string | null };
     };
     daemon?: { checkoutPath?: string | null } | null;
@@ -190,6 +205,7 @@ async function readFacts(api: string, token: string, slug: string): Promise<Fact
     gameId,
     slug: answer.game?.slug || slug,
     repoPath,
+    repoVisibility: answer.game?.repoVisibility === 'private' ? 'private' : 'public',
     checkout: answer.daemon?.checkoutPath ?? '',
     repo: { owner: answer.game?.repo?.owner ?? '', name: answer.game?.repo?.name ?? '' },
     lastReviewedSha: answer.latestPrototypeReview?.sha ?? null,
@@ -246,6 +262,7 @@ export const command: GmCommand = {
     // The build never sees the token; a fetch that wants credentials fails instead of prompting.
     const childEnv: Record<string, string | undefined> = { ...ctx.env, GIT_TERMINAL_PROMPT: '0' };
     delete childEnv.OGM_INTERNAL_TOKEN;
+    let sandboxProfile: string | undefined;
     const exec = (
       cmd: string,
       cmdArgs: string[],
@@ -253,13 +270,28 @@ export const command: GmCommand = {
       extraEnv: Record<string, string> = {},
       timeout = 300_000,
     ) => {
-      const result = spawnSync(cmd, cmdArgs, {
-        cwd,
-        env: { ...childEnv, ...extraEnv },
-        encoding: 'utf8',
-        maxBuffer: OUTPUT_BYTES,
-        timeout,
-      });
+      const sandboxed = cmd === 'pnpm';
+      if (sandboxed && !sandboxProfile) throw new CommandError('game check sandbox is not configured');
+      const sandboxTmp = sandboxed ? mkdtempSync(join(cwd, '.gm-publish-tmp-')) : '';
+      const result = spawnSync(
+        sandboxed ? 'codex' : cmd,
+        sandboxed
+          ? ['sandbox', '-P', 'gamebuilder', '--sandbox-state-disable-network', '-C', cwd, '--', cmd, ...cmdArgs]
+          : cmdArgs,
+        {
+          cwd,
+          env: sandboxed
+            ? publishSandboxEnv(
+                { ...childEnv, HOME: home, TMPDIR: sandboxTmp, XDG_RUNTIME_DIR: sandboxTmp, ...extraEnv },
+                sandboxProfile!,
+              )
+            : { ...childEnv, ...extraEnv },
+          encoding: 'utf8',
+          maxBuffer: OUTPUT_BYTES,
+          timeout,
+        },
+      );
+      if (sandboxTmp) rmSync(sandboxTmp, { recursive: true, force: true });
       return {
         ok: result.status === 0,
         timedOut: (result.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT',
@@ -298,13 +330,23 @@ export const command: GmCommand = {
     // git refuses a worktree path that already exists, so the scratch directory names a child git creates.
     const scratch = mkdtempSync(join(workRoot, `${facts.slug}.`));
     const work = join(scratch, facts.slug);
+    sandboxProfile = join(scratch, 'sandbox-profile');
+    mkdirSync(sandboxProfile, { mode: 0o700 });
+    const assetsRoot = ctx.env?.OGM_ASSETS_ROOT ? ctx.assetsRoot : (env.OGM_ASSETS_ROOT ?? ctx.assetsRoot);
+    const blobRoot = ctx.env?.OGM_BLOB_ROOT ? ctx.blobRoot : (env.OGM_BLOB_ROOT ?? ctx.blobRoot);
+    const protectedRoots = [assetsRoot, blobRoot]
+      .filter((root): root is string => !!root)
+      .flatMap((root) => (existsSync(root) ? [root, realpathSync(root)] : [root]));
+    const stagedAssets = join(scratch, 'assets');
+    writePublishSandbox(sandboxProfile, home, workRoot, work, protectedRoots, [stagedAssets]);
     const archive = join(workRoot, `${facts.slug}-${commit}.tgz`);
     let stage: string | null = null;
+    let testArtifactSha256: string | undefined;
+    let checkedSizes: string[] = [];
     try {
       const added = git(['worktree', 'add', '--quiet', '--detach', work, commit]);
       if (!added.ok) throw new CommandError(`cannot check ${commit} out of ${checkout}: ${tail(added.err, 3)}`);
       const game = join(work, facts.repoPath);
-      seedAssetCache(join(checkout, facts.repoPath), game);
       if (!existsSync(join(game, 'package.json'))) {
         throw new CommandError(`${facts.repoPath} has no package.json in ${checkout} at ${commit}`);
       }
@@ -313,13 +355,20 @@ export const command: GmCommand = {
       // The game's own build script is its production build; a script that already names a base or a mode keeps it.
       // The base stays relative because the games host serves every build under /g/<gameId>/<buildId>/.
       // The asset list is what ships: refuse before building when the code names an asset the list lacks.
-      const record = async (checks: { name: string; result: 'passed' | 'failed' }[]) => {
+      const record = async (checks: { name: string; result: 'passed' | 'failed' }[], artifactSha256?: string) => {
         const response = await request(
           `${api}/internal/operator/games/${encodeURIComponent(facts.slug)}/publish-checks`,
           {
             method: 'POST',
             headers: { 'x-ogm-internal': token, 'content-type': 'application/json' },
-            body: JSON.stringify({ gitSha: commit, surface: 'game', sizes: [], checks }),
+            body: JSON.stringify({
+              gitSha: commit,
+              surface: 'game',
+              sizes: checkedSizes,
+              checks,
+              ...(artifactSha256 ? { artifactSha256 } : {}),
+              ...(testArtifactSha256 ? { testArtifactSha256 } : {}),
+            }),
             signal: AbortSignal.timeout(20_000),
           },
         );
@@ -328,26 +377,40 @@ export const command: GmCommand = {
         if (typeof value.id !== 'string') throw new CommandError('game check record has no id');
         return value.id;
       };
-      const listed = (await readLock(game))?.assets.map((entry) => entry.id) ?? [];
+      const checks: { name: string; result: 'passed' | 'failed' }[] = [];
+      const failCheck = async (name: string) => {
+        checks.push({ name, result: 'failed' });
+        await record(checks);
+      };
+      let listed: string[];
+      try {
+        listed = (await readPublishLock(game))?.assets.map((entry) => entry.id) ?? [];
+      } catch (error) {
+        await failCheck('asset lock');
+        throw new CommandError(
+          `cannot read game asset lock: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       const missingAssets = unlisted(listed, await scanReferences(game));
       if (missingAssets.length > 0) {
-        await record([{ name: 'asset references', result: 'failed' }]);
+        await failCheck('asset references');
         const lines = missingAssets.map(({ id, file }) => `${id} (${file})`).join('\n');
         throw new CommandError(
           `assets.lock.json does not list assets the code uses:\n${lines}\nTry: gm assets use <id>`,
         );
       }
+      checks.push({ name: 'asset references', result: 'passed' });
 
       const pkg = JSON.parse(readFileSync(join(game, 'package.json'), 'utf8')) as {
         scripts?: { build?: string; test?: string };
       };
       const script = pkg.scripts?.build ?? '';
       if (!script) {
-        await record([{ name: 'pnpm run build', result: 'failed' }]);
+        await failCheck('build script present');
         throw new CommandError(`${facts.repoPath} has no build script`);
       }
       if (!pkg.scripts?.test) {
-        await record([{ name: 'pnpm run test', result: 'failed' }]);
+        await failCheck('test script present');
         throw new CommandError(`${facts.repoPath} has no game test script`);
       }
       const extra = [
@@ -355,12 +418,20 @@ export const command: GmCommand = {
         ...(script.includes('--mode') ? [] : ['--mode=published']),
       ];
       const buildEnv: Record<string, string> = { NODE_ENV: 'production' };
-      const assetsRoot = ctx.env?.OGM_ASSETS_ROOT ? ctx.assetsRoot : (env.OGM_ASSETS_ROOT ?? ctx.assetsRoot);
-      if (assetsRoot) buildEnv.OGM_ASSETS_ROOT = assetsRoot;
+      try {
+        await stagePublishAssets(game, stagedAssets, assetsRoot ?? null, blobRoot ?? null, facts.repoVisibility);
+        checks.push({ name: 'asset rights and files', result: 'passed' });
+      } catch (error) {
+        await failCheck('asset rights and files');
+        throw new CommandError(`cannot stage game assets: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      buildEnv.OGM_ASSETS_ROOT = stagedAssets;
+      buildEnv.OGM_BLOB_ROOT = join(stagedAssets, 'blob-store');
+      buildEnv.GM_ASSET_CACHE_DIR = mkdtempSync(join(work, '.gm-assets-cache-'));
 
-      const install = exec('pnpm', ['install', '--frozen-lockfile', '--prefer-offline'], work, buildEnv);
+      const install = exec('pnpm', ['install', '--frozen-lockfile', '--offline'], work, buildEnv);
       if (!install.ok) {
-        await record([{ name: 'pnpm install --frozen-lockfile', result: 'failed' }]);
+        await failCheck('dependency install');
         throw new CommandError(`pnpm install failed in the worktree:\n${tail(install.err || install.out)}`);
       }
       const buildTimeout = env.OGM_PUBLISH_BUILD_TIMEOUT_MS;
@@ -371,13 +442,23 @@ export const command: GmCommand = {
         buildEnv,
         buildTimeout,
       );
-      if (!build.ok) await record([{ name: 'pnpm run build', result: 'failed' }]);
+      if (!build.ok) await failCheck('pnpm run build');
       if (build.timedOut)
         throw new CommandError(`the game's build timed out after ${Math.ceil(buildTimeout / 1000)} s`);
       if (!build.ok) throw new CommandError(`the game's build failed:\n${tail(`${build.out}\n${build.err}`)}`);
+      checks.push({ name: 'pnpm run build', result: 'passed' });
+      const dist = join(game, 'dist');
+      const productionHash = publishBuildHash(dist);
+      const productionSnapshot = join(scratch, 'production-dist');
+      cpSync(dist, productionSnapshot, { recursive: true, verbatimSymlinks: true });
+      for (const file of FROM_REPO) {
+        if (!existsSync(join(game, file))) continue;
+        mkdirSync(dirname(join(productionSnapshot, file)), { recursive: true });
+        cpSync(join(game, file), join(productionSnapshot, file), { verbatimSymlinks: true });
+      }
 
       // The SDK strips its test hooks from published builds. A gm test script needs a test-mode build,
-      // followed by a fresh production build so test hooks never ship.
+      // while the immutable production snapshot remains outside the game sandbox.
       const needsTestBuild = /^\s*gm\s+test(?:\s|$)/u.test(pkg.scripts.test);
       if (needsTestBuild) {
         const testBuild = exec(
@@ -388,58 +469,43 @@ export const command: GmCommand = {
           buildTimeout,
         );
         if (!testBuild.ok) {
-          await record([{ name: 'test-mode build', result: 'failed' }]);
+          await failCheck('test-mode build');
           throw new CommandError(`the game's test-mode build failed:\n${tail(`${testBuild.out}\n${testBuild.err}`)}`);
         }
+        checks.push({ name: 'test-mode build', result: 'passed' });
+        const testArchive = join(scratch, 'test-build.tgz');
+        const packed = exec('tar', ['--format=ustar', '-czf', testArchive, '-C', join(game, 'dist'), '.'], workRoot);
+        if (!packed.ok) {
+          await failCheck('test-mode archive');
+          throw new CommandError(`cannot identify the test build: ${tail(packed.err, 3)}`);
+        }
+        testArtifactSha256 = createHash('sha256').update(readFileSync(testArchive)).digest('hex');
       }
       const test = exec('pnpm', ['run', 'test'], game, buildEnv, buildTimeout);
-      if (!test.ok)
-        await record([
-          { name: 'pnpm run build', result: 'passed' },
-          { name: 'pnpm run test', result: 'failed' },
-        ]);
+      if (!test.ok) await failCheck('pnpm run test');
       if (test.timedOut) throw new CommandError(`the game's tests timed out after ${Math.ceil(buildTimeout / 1000)} s`);
       if (!test.ok) throw new CommandError(`the game's tests failed:\n${tail(`${test.out}\n${test.err}`)}`);
-      if (needsTestBuild) {
-        const production = exec(
-          'pnpm',
-          ['run', 'build', ...(extra.length ? ['--', ...extra] : [])],
-          game,
-          buildEnv,
-          buildTimeout,
-        );
-        if (!production.ok) {
-          await record([
-            { name: 'pnpm run test', result: 'passed' },
-            { name: 'production rebuild', result: 'failed' },
-          ]);
-          throw new CommandError(
-            `the game's production rebuild failed:\n${tail(`${production.out}\n${production.err}`)}`,
-          );
-        }
+      checks.push({ name: 'pnpm run test', result: 'passed' });
+      if (needsTestBuild) checkedSizes = ['390x844', '1180x820'];
+      if (!needsTestBuild && publishBuildHash(dist) !== productionHash) {
+        await failCheck('production build integrity');
+        throw new CommandError('the game checks changed the production build');
       }
-
-      const dist = join(game, 'dist');
-      const problems = checkPublishDist(dist);
-      const checkId = await record([
-        { name: 'pnpm run build', result: 'passed' },
-        ...(needsTestBuild ? [{ name: 'test-mode build', result: 'passed' as const }] : []),
-        { name: 'pnpm run test', result: 'passed' },
-        ...(needsTestBuild ? [{ name: 'production rebuild', result: 'passed' as const }] : []),
-        { name: 'publish artifact', result: problems.length ? 'failed' : 'passed' },
-      ]);
-      if (problems.length) throw new CommandError(problems[0]!);
+      const problems = checkPublishDist(productionSnapshot);
+      checks.push({ name: 'production snapshot', result: 'passed' });
+      if (!needsTestBuild) checks.push({ name: 'production build integrity', result: 'passed' });
+      checks.push({ name: 'publish artifact', result: problems.length ? 'failed' : 'passed' });
+      if (problems.length) {
+        await record(checks);
+        throw new CommandError(problems[0]!);
+      }
 
       stage = mkdtempSync(join(workRoot, `${facts.slug}-stage.`));
-      cpSync(dist, stage, { recursive: true, verbatimSymlinks: true });
-      for (const file of FROM_REPO) {
-        if (!existsSync(join(game, file))) continue;
-        mkdirSync(dirname(join(stage, file)), { recursive: true });
-        cpSync(join(game, file), join(stage, file));
-      }
+      cpSync(productionSnapshot, stage, { recursive: true, verbatimSymlinks: true });
       // The API's unpacker reads ustar only.
       const tar = exec('tar', ['--format=ustar', '-czf', archive, '-C', stage, '.'], workRoot);
       if (!tar.ok) throw new CommandError(`cannot archive the build: ${tail(tar.err, 3)}`);
+      const checkId = await record(checks, createHash('sha256').update(readFileSync(archive)).digest('hex'));
 
       const requestId = `j_${randomUUID()}`;
       const uploadUrl = `${api}/internal/operator/games/${encodeURIComponent(facts.slug)}/builds`;
@@ -453,9 +519,20 @@ export const command: GmCommand = {
           }).catch(() => null);
           if (check?.status === 200) {
             try {
-              const result = JSON.parse(check.body) as { state?: string; buildId?: string | null };
+              const result = JSON.parse(check.body) as {
+                state?: string;
+                buildId?: string | null;
+                publishResult?: string;
+              };
               if (result.state === 'done' && result.buildId)
-                return { status: 201, body: JSON.stringify({ buildId: result.buildId, jobId: requestId }) };
+                return {
+                  status: 201,
+                  body: JSON.stringify({
+                    buildId: result.buildId,
+                    jobId: requestId,
+                    publishResult: result.publishResult,
+                  }),
+                };
               if (!result.state || result.state === 'failed' || result.state === 'cancelled') return null;
             } catch {
               return null;
@@ -497,6 +574,22 @@ export const command: GmCommand = {
       if (upload.status === 201) {
         const buildId = String(answer.buildId ?? '');
         const play = `${env.OGM_GAMES_ORIGIN?.replace(/\/+$/, '') ?? ''}/g/${encodeURIComponent(facts.gameId)}/${encodeURIComponent(buildId)}/`;
+        if (answer.publishResult !== 'published') {
+          const outcome = answer.publishResult === 'skipped' ? 'skipped' : 'unknown';
+          if (ctx.json)
+            printJson(ctx, {
+              state: 'done',
+              slug: facts.slug,
+              gameId: facts.gameId,
+              sha: commit,
+              buildId,
+              jobId: answer.jobId,
+              publishResult: outcome,
+              play,
+            });
+          else ctx.out(`built ${facts.repoPath} at ${commit}: build ${buildId}; automatic release ${outcome}`);
+          return EXIT.ok;
+        }
         let reviewState: 'posted' | 'existing' | 'failed' | 'skipped' = 'skipped';
         let reviewRoundId: string | undefined;
         let publishAttention = '';

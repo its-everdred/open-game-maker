@@ -194,6 +194,7 @@ before_run: |
   # The game's approved work this ticket should build on, inlined with gm-core in the first prompt (#1311).
   case "$ticket" in ''|*[!0-9]*) ;; *) [ ! -x node_modules/.bin/gm ] || timeout 300 node_modules/.bin/gm context "$ticket" --limit 5 --inject .claude/skills >&2 || true ;; esac
 before_remove: |
+  set -o pipefail
   git status --short
   ticket="${AIUR_HOOK_TICKET_IDENTIFIER:-}"
   secret="$(cat "${OGM_HOOK_SECRET_FILE:-/nonexistent}" 2>/dev/null || true)"
@@ -205,32 +206,78 @@ before_remove: |
       fs.rmSync(process.env.OGM_PREVIEW_GRANTS + "/" + workspace + ".json", { force: true });
     ' || true
   fi
+  # Only the host wrapper sees daemon credentials; game commands run with the fleet's network-off profile.
+  game_pnpm() {
+    local runtime result denied
+    local -a sandbox_args=()
+    if [ -n "${stage:-}" ]; then
+      denied="$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$stage")"
+      sandbox_args=(-c "permissions.gamebuilder.filesystem.${denied}=\"deny\"")
+    fi
+    runtime="$(mktemp -d "$root/.gm-publish-tmp.XXXXXXXX")" || return 1
+    result=0
+    env -i PATH="$PATH" HOME="$HOME" CODEX_HOME="${CODEX_HOME:-}" \
+      TMPDIR="$runtime" XDG_RUNTIME_DIR="$runtime" COREPACK_HOME="${COREPACK_HOME:-}" \
+      OGM_ASSETS_ROOT="${OGM_ASSETS_ROOT:-}" GM_VERIFY_SOFTWARE_GL="${GM_VERIFY_SOFTWARE_GL:-}" \
+      codex sandbox "${sandbox_args[@]}" -P gamebuilder --sandbox-state-disable-network -C "$root" -- pnpm "$@" || result=$?
+    rm -rf "$runtime"
+    return "$result"
+  }
   # Build what the workspace holds now; a stale dist/ from an earlier run never leaves it.
   if [ -n "$ticket" ] && [ -n "$secret" ]; then
     rm -rf dist
     sha="$(git rev-parse HEAD)"
     test_result=not-run
     test_mode_result=not-run
-    rebuild_result=not-run
+    test_artifact_hash=''
+    stage=''
+    snapshot_result=not-run
+    integrity_result=not-run
+    production_hash=''
     build_result=failed
-    if pnpm run build >&2; then
+    if game_pnpm run build >&2; then
       build_result=passed
+      snapshot_result=failed
+      if [ -d dist ] && [ "$(realpath dist)" = "$root/dist" ]; then
+        stage="$(mktemp -d)"
+        if cp -PR dist/. "$stage/"; then
+          snapshot_result=passed
+          for file in manifest.json design/design.json achievements.json; do
+            if [ -f "$file" ] && [ "$(realpath "$file")" = "$root/$file" ]; then
+              mkdir -p "$stage/$(dirname "$file")" && cp -P "$file" "$stage/$file" || snapshot_result=failed
+            fi
+          done
+        fi
+      fi
+      if [ "$snapshot_result" = passed ]; then
+        if ! production_hash="$(tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C dist . | sha256sum | cut -d ' ' -f 1)"; then snapshot_result=failed; fi
+      fi
       test_script="$(node -e 'try{process.stdout.write(require("./package.json").scripts?.test || "")}catch{}')"
       needs_test_build=0
       case "$test_script" in 'gm test'|'gm test '*) needs_test_build=1 ;; esac
-      if [ "$needs_test_build" = 1 ]; then
+      if [ "$snapshot_result" = passed ] && [ "$needs_test_build" = 1 ]; then
         test_mode_result=failed
-        if pnpm exec vite build --mode test --base=./ >&2; then test_mode_result=passed; fi
+        if game_pnpm exec vite build --mode test --base=./ >&2; then
+          test_archive="$(mktemp)"
+          if tar --format=ustar -czf "$test_archive" -C dist .; then
+            test_artifact_hash="$(sha256sum "$test_archive" | cut -d ' ' -f 1)"
+            test_mode_result=passed
+          fi
+          rm -f "$test_archive"
+        fi
       fi
-      if [ "$test_mode_result" != failed ]; then
+      if [ "$snapshot_result" = passed ] && [ "$test_mode_result" != failed ]; then
         test_result=failed
-        if pnpm run test >&2; then test_result=passed; fi
+        if game_pnpm run test >&2; then test_result=passed; fi
       fi
-      if [ "$test_result" = passed ] && [ "$needs_test_build" = 1 ]; then
-        rebuild_result=failed
-        if pnpm run build >&2; then rebuild_result=passed; fi
+      if [ "$test_result" = passed ]; then
+        integrity_result=passed
+        if [ "$needs_test_build" = 0 ]; then
+          if ! after_hash="$(tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C dist . | sha256sum | cut -d ' ' -f 1)"; then integrity_result=failed; fi
+          if [ -z "$production_hash" ] || [ "$after_hash" != "$production_hash" ]; then integrity_result=failed; fi
+        fi
       fi
-      if [ "$test_result" != passed ] || [ "$rebuild_result" = failed ]; then
+      if [ "$test_result" != passed ] || [ "$snapshot_result" != passed ] || [ "$integrity_result" = failed ]; then
         rm -rf dist
         echo "game checks failed: nothing uploaded" >&2
       fi
@@ -238,25 +285,22 @@ before_remove: |
       rm -rf dist
       echo "build failed: nothing uploaded" >&2
     fi
-    checks="$(node -e 'const [gitSha,build,mode,test,rebuild]=process.argv.slice(1);const checks=[{name:"pnpm run build",result:build}];for(const [name,result] of [["test-mode build",mode],["pnpm run test",test],["production rebuild",rebuild]])if(result!=="not-run")checks.push({name,result});console.log(JSON.stringify({gitSha,surface:"game",sizes:[],checks}))' "$sha" "$build_result" "$test_mode_result" "$test_result" "$rebuild_result")"
+    artifact_hash=''
+    if [ "$test_result" = passed ] && [ "$snapshot_result" = passed ] && [ "$integrity_result" = passed ]; then
+      if tar --format=ustar -czf "$stage.tgz" -C "$stage" .; then
+        artifact_hash="$(sha256sum "$stage.tgz" | cut -d ' ' -f 1)"
+      fi
+    fi
+    checks="$(node -e 'const [gitSha,build,mode,test,snapshot,integrity,hash,testHash,needsTestBuild]=process.argv.slice(1);const checks=[{name:"pnpm run build",result:build}];for(const [name,result] of [["test-mode build",mode],["pnpm run test",test],["production snapshot",snapshot],["production build integrity",integrity]])if(result!=="not-run")checks.push({name,result});console.log(JSON.stringify({gitSha,surface:"game",sizes:test==="passed" && needsTestBuild==="1"?["390x844","1180x820"]:[],checks,...(hash?{artifactSha256:hash}:{}),...(testHash?{testArtifactSha256:testHash}:{})}))' "$sha" "$build_result" "$test_mode_result" "$test_result" "$snapshot_result" "$integrity_result" "$artifact_hash" "$test_artifact_hash" "${needs_test_build:-0}")"
     answer="$(curl -fsS --max-time 20 -X POST -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $sha" -H "content-type: application/json" --data-binary "$checks" "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/publish-checks")" || answer=''
     check_id="$(printf '%s' "$answer" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const r=JSON.parse(s);if(r.result==="passed" && typeof r.id==="string")process.stdout.write(r.id)}catch{}})')"
-    if [ -z "$check_id" ]; then rm -rf dist; echo "game checks not recorded: nothing uploaded" >&2; fi
-  fi
-  # Only paths that resolve inside the workspace leave it; links inside dist/ are kept as links and refused upstream.
-  if [ -n "$ticket" ] && [ -n "$secret" ] && [ -d dist ] && [ "$(realpath dist)" = "$root/dist" ]; then
-    stage="$(mktemp -d)"
-    cp -PR dist/. "$stage/"
-    for file in manifest.json design/design.json achievements.json; do
-      if [ -f "$file" ] && [ "$(realpath "$file")" = "$root/$file" ]; then
-        mkdir -p "$stage/$(dirname "$file")" && cp "$file" "$stage/$file"
-      fi
-    done
-    if tar --format=ustar -czf "$stage.tgz" -C "$stage" .; then
+    if [ -n "$check_id" ] && [ -n "$artifact_hash" ]; then
       status="$(curl -sS --max-time 120 --retry 3 --retry-connrefused -o /dev/null -w '%{http_code}' -X POST \
         -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $sha" -H "x-gm-check-id: $check_id" -H "content-type: application/gzip" \
         --data-binary @"$stage.tgz" "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/build")"
       echo "build upload: HTTP ${status:-000}" >&2
+    else
+      echo "game checks not recorded: nothing uploaded" >&2
     fi
-    rm -rf "$stage" "$stage.tgz"
+    if [ -n "$stage" ]; then rm -rf "$stage" "$stage.tgz"; fi
   fi

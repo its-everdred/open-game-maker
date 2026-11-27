@@ -83,6 +83,12 @@ export async function publishArchive(
   try {
     await stageArtifact(deps, jobId, gitSha, archive, checkId);
   } catch (error) {
+    if (checkId)
+      deps.db
+        .update(schema.publishChecks)
+        .set({ publishResult: 'failed' })
+        .where(eq(schema.publishChecks.id, checkId))
+        .run();
     settle(deps, jobId);
     if (error instanceof BadArchive) return { state: 'refused', jobId, reason: error.message };
     throw error;

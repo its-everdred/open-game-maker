@@ -40,6 +40,28 @@ describe('release safeguards', () => {
     });
     expect(deps.db.select().from(schema.releases).all()).toEqual([]);
   });
+
+  it('does not release a build superseded while its automatic release is prepared', async () => {
+    const { deps, source, runtime } = setup();
+    insertBuild(deps, source);
+    insertBuild(deps, source, { id: ids.build2 });
+    deps.db.update(schema.games).set({ visibility: 'listed' }).run();
+    deps.sqlite.prepare('UPDATE branches SET latest_build_id = ? WHERE id = ?').run(ids.build, ids.main);
+    runtime.commit.execute = async (op) => {
+      if (op.kind === 'release')
+        deps.sqlite.prepare('UPDATE branches SET latest_build_id = ? WHERE id = ?').run(ids.build2, ids.main);
+      return { ok: true, sha: 'c'.repeat(40) };
+    };
+    await expect(
+      publishAutomatically(deps, runtime, {
+        gameId: ids.game,
+        buildId: ids.build,
+        actor: ids.user,
+        requireListed: true,
+      }),
+    ).rejects.toMatchObject({ code: 'build_superseded' });
+    expect(deps.db.select().from(schema.releases).all()).toEqual([]);
+  });
   // A gate refusal at fold time must not leave a fold SHA that a later publish would trust.
   it('records no fold and no release when the gate refuses fold_design', async () => {
     const commit = vi.fn(async (): Promise<CommitResult> => ({ ok: false, verdict: refusal }));

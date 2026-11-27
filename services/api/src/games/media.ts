@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { schema } from '@ogm/db';
 import { ImageSlots, type SlotId, type ViewportId } from '@ogm/contracts';
 import { buildDir } from '@ogm/games-host/layout';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { AppDeps } from '../app/types.js';
 import type { DisplayImage } from '../builds/display-images.js';
 
@@ -110,12 +110,21 @@ async function manifestMedia(directory: string): Promise<{
   }
 }
 
-/** Media belongs to the current main build; display variants have their own content address. */
+/** Published games keep their release media until a later release advances the pointer. */
 export async function gameMedia(deps: AppDeps, gameIds: string[]) {
   if (!gameIds.length) return new Map();
   const branches = deps.db
-    .select({ gameId: schema.branches.gameId, buildId: schema.branches.latestBuildId })
+    .select({
+      gameId: schema.branches.gameId,
+      buildId: sql<
+        string | null
+      >`CASE WHEN ${schema.games.visibility} = 'listed' AND ${schema.games.publishedReleaseId} IS NOT NULL THEN ${schema.releases.buildId}
+        WHEN ${schema.games.visibility} = 'listed' THEN NULL
+        ELSE ${schema.branches.latestBuildId} END`,
+    })
     .from(schema.branches)
+    .innerJoin(schema.games, eq(schema.games.id, schema.branches.gameId))
+    .leftJoin(schema.releases, eq(schema.releases.id, schema.games.publishedReleaseId))
     .where(and(inArray(schema.branches.gameId, gameIds), eq(schema.branches.name, 'main')))
     .all();
   const entries: Array<

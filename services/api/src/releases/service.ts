@@ -228,6 +228,8 @@ function appendRelease(
     // The game's folder name under games/, so tags read `<slug>/v<version>` and never collide across games.
     slug: string;
     requireListed?: boolean;
+    requireLatestBuild?: boolean;
+    activeJobId?: string;
   },
 ): ReleaseRow {
   return deps.sqlite
@@ -239,6 +241,20 @@ function appendRelease(
         .get(input.gameId);
       if (!current || current.published_release_id !== input.expected) throw new ReleaseError('pointer_moved', 409);
       if (input.requireListed && current.visibility !== 'listed') throw new ReleaseError('game_unpublished', 409);
+      if (input.requireLatestBuild) {
+        const branch = deps.sqlite
+          .prepare<[string], { latest_build_id: string | null }>(
+            "SELECT latest_build_id FROM branches WHERE game_id = ? AND name = 'main'",
+          )
+          .get(input.gameId);
+        if (branch?.latest_build_id !== input.buildId) throw new ReleaseError('build_superseded', 409);
+      }
+      if (input.activeJobId) {
+        const job = deps.sqlite
+          .prepare<[string, string], { state: string }>('SELECT state FROM jobs WHERE id = ? AND game_id = ?')
+          .get(input.activeJobId, input.gameId);
+        if (!job || ['done', 'failed', 'cancelled'].includes(job.state)) throw new ReleaseError('job_not_active', 409);
+      }
       const seq =
         (deps.sqlite
           .prepare<[string], { seq: number | null }>('SELECT MAX(seq) AS seq FROM releases WHERE game_id = ?')
@@ -296,7 +312,14 @@ async function requireGameplayCompliant(deps: AppDeps, artifactPath: string): Pr
 export async function publish(
   deps: AppDeps,
   runtime: ReleaseRuntime,
-  input: { gameId: string; buildId: string; actor: string; changelog?: Changelog; requireListed?: boolean },
+  input: {
+    gameId: string;
+    buildId: string;
+    actor: string;
+    changelog?: Changelog;
+    requireListed?: boolean;
+    activeJobId?: string;
+  },
 ): Promise<Release> {
   const { build, game } = requireMainBuild(deps, input.gameId, input.buildId);
   if (input.requireListed && game.visibility !== 'listed') throw new ReleaseError('game_unpublished', 409);
@@ -335,6 +358,8 @@ export async function publish(
         actor: input.actor,
         slug: releaseSlug(game),
         ...(input.requireListed ? { requireListed: true } : {}),
+        ...(input.requireListed ? { requireLatestBuild: true } : {}),
+        ...(input.activeJobId ? { activeJobId: input.activeJobId } : {}),
       }),
     );
   });
