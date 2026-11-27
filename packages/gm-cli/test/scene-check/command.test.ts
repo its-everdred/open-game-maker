@@ -39,11 +39,20 @@ describe('gm verify scene', () => {
     const report = JSON.parse(readFileSync(`${out}.json`, 'utf8')) as { findings: { id: string; rank: number }[] };
     expect(report.findings[0]).toMatchObject({ id: 'no-overlap/actor-in-solid', rank: 1 });
     expect(readFileSync(`${out}.md`, 'utf8')).toContain('### Scene structure: yard — FAIL');
-    const allow = ['--allow', 'no-overlap/actor-in-solid', '--allow', 'facing', '--allow', 'facts/unmeasured-edge'];
+    const allow = [
+      '--allow',
+      'no-overlap/actor-in-solid',
+      '--allow',
+      'facing',
+      '--allow',
+      'facts/unmeasured-edge',
+      '--allow',
+      'facts/unsupported-layer',
+    ];
     const known = await gm(['verify', 'scene', dir, 'yard', ...frame, ...allow], {
       cwd: dir,
     });
-    expect(known.code).toBe(0);
+    expect(known.code, known.out.join('\n')).toBe(0);
     expect(known.out.join('\n')).toContain('high (known limitation)');
     expect(known.out.join('\n')).toContain('facing/unshipped');
   }, 60_000);
