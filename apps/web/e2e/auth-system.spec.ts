@@ -250,11 +250,18 @@ for (const viewport of [
       await expect.poll(() => Boolean(gameFrame()), { timeout: 30_000 }).toBe(true);
       const frame = gameFrame()!;
       await frame.waitForFunction(() => typeof (window as TestWindow).advanceTime === 'function');
+      const snapshot = () =>
+        frame.evaluate(
+          () => JSON.parse((window as TestWindow).render_game_to_text!()) as { tick: number; mode: string },
+        );
+      await expect.poll(async () => (await snapshot()).mode).toBe('edit');
+      const beforePlay = (await snapshot()).tick;
       await page.getByRole('button', { name: 'Play', exact: true }).tap();
-      const tick = () => frame.evaluate(() => JSON.parse((window as TestWindow).render_game_to_text!()).tick as number);
+      await expect.poll(async () => (await snapshot()).mode).toBe('play');
+      const tick = async () => (await snapshot()).tick;
       await frame.evaluate(() => (window as TestWindow).advanceTime!(500));
       const playingTick = await tick();
-      expect(playingTick).toBeGreaterThan(0);
+      expect(playingTick).toBeGreaterThan(beforePlay);
       await page.getByRole('button', { name: 'Menu', exact: true }).tap();
       const paused = page.getByRole('dialog', { name: 'Paused' });
       await expect(paused).toBeVisible();
