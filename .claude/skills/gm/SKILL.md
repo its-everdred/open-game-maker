@@ -23,7 +23,7 @@ description: Run Open Game Maker's agent fleet as its Executor. The OGM layer ov
 
 - Run `aiur-main` from the matching checkout.
 - Never touch Kevin's 5c1b32aea9.
-- **Route new scope the moment it arrives** (Kevin 11-27: "you are my source of truth … delegating to PC any time new scope arrives that it should own"). PC lanes: pack renders, GIFs and trailers (cards to `assets-local/review/pack-renders/`), pack capture, all aiur work, Khala, and spare core tickets on its `pc:*` daemon. Send over Khala AND tmux in the same turn, then tell Kevin.
+- **Route new scope the moment it arrives** (Kevin 11-27: "you are my source of truth … delegating to PC any time new scope arrives that it should own"). PC lanes: pack renders, GIFs and trailers (cards to `assets-local/review/pack-renders/`), pack capture, all aiur work, Khala, and spare core tickets on its `pc:*` daemon. The PC merges what it owns (visual and UX looks carded first). Send over Khala AND tmux in the same turn, then tell Kevin.
 - aiur repo work belongs to the PC aiur session (tmux `pc-aiur` on everdred@100.89.62.105). Deliver to it over Khala AND by `tmux send-keys … Enter`, then press Enter again if the text was pasted, and read the pane to confirm it was sent.
 
 ## aiur upgrades
