@@ -1,0 +1,21 @@
+.activity-ring {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  pointer-events: none;
+  transform: rotate(-90deg);
+}
+
+.activity-ring circle {
+  fill: none;
+  stroke-width: 2;
+}
+
+.activity-ring-track {
+  stroke: color-mix(in srgb, var(--purple-b) 25%, transparent);
+}
+
+.activity-ring-fill {
+  stroke: var(--purple-b);
+}
