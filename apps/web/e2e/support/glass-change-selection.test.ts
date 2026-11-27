@@ -81,6 +81,14 @@ it('finds changed screen files from the repository root', async () => {
     git('commit', '-qm', 'change tokens');
     expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Unmapped']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('rm', 'apps/web/src/glass-tokens.css');
+    git('commit', '-qm', 'remove tokens');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    await writeFile(join(root, 'apps/web/src/glass-tokens.css'), ':root {}');
+    git('add', '.');
+    git('commit', '-qm', 'restore tokens');
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Unmapped']);
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     await mkdir(join(root, 'apps/web/title-town'), { recursive: true });
     await writeFile(join(root, 'apps/web/title-town/city.js'), 'export {}');
     git('add', '.');

@@ -44,8 +44,8 @@ export function changedGlassFiles(root, base) {
     // is itself selected; subsequent changes to shared code must fail closed.
     if (
       status === 'A' &&
-      (file === 'apps/web/src/glass-tokens.css' ||
-        (!hasGlassLibrary && file.startsWith('apps/web/src/components/glass/')))
+      !hasGlassLibrary &&
+      (file === 'apps/web/src/glass-tokens.css' || file.startsWith('apps/web/src/components/glass/'))
     )
       continue;
     files.push(file);
