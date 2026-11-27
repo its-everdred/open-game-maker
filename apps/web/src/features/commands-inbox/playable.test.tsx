@@ -55,6 +55,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes('/artifacts/grant')) return Response.json({ grant: 'grant' });
       // The deck loads and saves its vote drafts beside the game's design (#631).
       if (url.includes('/review-drafts')) {
         return new Response(JSON.stringify({ drafts: [] }), { headers: { 'content-type': 'application/json' } });

@@ -28,6 +28,15 @@ describe('games-host environment', () => {
     );
   });
 
+  it('accepts only a loopback API origin for artifact authorization', () => {
+    expect(
+      loadGamesHostEnv({ ...validEnvironment, OGM_API_INTERNAL_URL: 'http://127.0.0.1:4300' }).apiInternalUrl,
+    ).toBe('http://127.0.0.1:4300');
+    expect(() => loadGamesHostEnv({ ...validEnvironment, OGM_API_INTERNAL_URL: 'https://example.test' })).toThrow(
+      'OGM_API_INTERNAL_URL must be a loopback HTTP origin',
+    );
+  });
+
   it('accepts multiple explicit frame ancestors', () => {
     expect(
       loadGamesHostEnv({

@@ -19,6 +19,42 @@ test.describe('games origin browser boundary', () => {
   let outsideServer: TestServer;
   let root: string;
 
+  test('loads nested legacy imports and runtime assets without exposing the draft grant', async ({ page }) => {
+    const build = join(root, 'nested', 'b2');
+    await mkdir(join(build, 'assets'), { recursive: true });
+    await writeFile(
+      join(build, 'index.html'),
+      '<body><script type=module src=/g/nested/b2/assets/main.js></script></body>',
+    );
+    await writeFile(
+      join(build, 'assets/main.js'),
+      "import { value } from '/g/nested/b2/module.js'; fetch('/g/nested/b2/data.json').then(r => r.text()).then(data => { document.body.dataset.result = value + data; });",
+    );
+    await writeFile(join(build, 'module.js'), "export const value = 'module:';");
+    await writeFile(join(build, 'data.json'), 'asset');
+    const phases = () => ({
+      boot: { bytes: 0, files: 0 },
+      ready: { bytes: 0, files: 0 },
+      stream: { bytes: 0, files: 0 },
+    });
+    await writeFile(
+      join(build, 'assets/cache-plan.json'),
+      JSON.stringify({
+        version: 1,
+        gameId: 'nested',
+        buildId: 'b2',
+        built: '2026-11-01T00:00:00.000Z',
+        sdkVersion: '1',
+        tiers: ['desktop'],
+        entries: [],
+        totals: { desktop: phases(), mobile: phases(), low: phases() },
+      }),
+    );
+    await markComplete(build);
+    await page.goto(`${gamesOrigin}/d/nested/b2/${'a'.repeat(43)}/`);
+    await expect(page.locator('body')).toHaveAttribute('data-result', 'module:asset');
+  });
+
   test.beforeAll(async () => {
     root = await mkdtemp(join(tmpdir(), 'ogm-games-browser-'));
     const build = join(root, 'demo', 'b1');
@@ -61,6 +97,8 @@ test.describe('games origin browser boundary', () => {
       appOrigin: allowedParent.origin,
       version: 'browser-test',
       workerScript: fileURLToPath(new URL('./fixtures/game-cache.js', import.meta.url)),
+      authorize: async () => true,
+      resolvePreview: async (_game, accessId) => accessId,
     });
     gamesServer = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 });
     if (!gamesServer.listening) {

@@ -304,12 +304,16 @@ describe('games routes', () => {
         ),
       }),
     );
+    const draftPath = (path: string) =>
+      expect.stringMatching(
+        new RegExp(`^https://games\\.example\\.test/d/${id}/build1/[A-Za-z0-9_-]{43}/${path.replace('.', '\\.')}$`),
+      );
     const pendingMedia = await list();
-    expect(pendingMedia.logoUrl).toBe('https://games.example.test/a/' + `${'1'.repeat(64)}.png`);
-    expect(pendingMedia.coverUrl).toBe('https://games.example.test/a/' + `${'2'.repeat(64)}.png`);
+    expect(pendingMedia.logoUrl).toEqual(draftPath(`a/${'1'.repeat(64)}.png`));
+    expect(pendingMedia.coverUrl).toEqual(draftPath(`a/${'2'.repeat(64)}.png`));
     expect(pendingMedia.loadingUrls).toMatchObject({
-      portrait: `https://games.example.test/a/${'3'.repeat(64)}.png`,
-      landscape: `https://games.example.test/a/${'4'.repeat(64)}.png`,
+      portrait: draftPath(`a/${'3'.repeat(64)}.png`),
+      landscape: draftPath(`a/${'4'.repeat(64)}.png`),
     });
     expect(await list()).toMatchObject({
       tagline: 'Published description',
@@ -352,9 +356,7 @@ describe('games routes', () => {
       coverImage: {
         width: 640,
         sources: {
-          avif: [
-            { width: 320, path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` },
-          ],
+          avif: [{ width: 320, path: draftPath(`media/ogm-variants/${'a'.repeat(64)}.avif`) }],
         },
       },
       logoImage: { height: 360 },
@@ -362,7 +364,7 @@ describe('games routes', () => {
         tile: {
           'phone-portrait': {
             sources: {
-              avif: [{ path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` }],
+              avif: [{ path: draftPath(`media/ogm-variants/${'a'.repeat(64)}.avif`) }],
             },
           },
         },
@@ -370,11 +372,11 @@ describe('games routes', () => {
     });
     const detail = await (await app.request(`/api/v1/games/${id}`, { headers: asUser(creator.userId) })).json();
     expect(detail).toMatchObject({
-      loadingUrls: { portrait: `https://games.example.test/a/${'3'.repeat(64)}.png` },
+      loadingUrls: { portrait: draftPath(`a/${'3'.repeat(64)}.png`) },
       loadingImages: {
         portrait: {
           sources: {
-            avif: [{ path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` }],
+            avif: [{ path: draftPath(`media/ogm-variants/${'a'.repeat(64)}.avif`) }],
           },
         },
       },
@@ -385,16 +387,16 @@ describe('games routes', () => {
       tagline: 'Match colour blobs and drop blocks in a forest duel.',
       tags: ['Versus', 'Cozy'],
       loadingUrls: {
-        portrait: `https://games.example.test/a/${'3'.repeat(64)}.png`,
-        landscape: `https://games.example.test/a/${'4'.repeat(64)}.png`,
+        portrait: draftPath(`a/${'3'.repeat(64)}.png`),
+        landscape: draftPath(`a/${'4'.repeat(64)}.png`),
       },
-      trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
+      trailerUrl: draftPath(`media/trailer-landscape.mp4`),
     });
     // The web renders tile art only when logoUrl/coverUrl are set (Cover.tsx, Tile.tsx): the image objects add
     // srcsets on top, so dropping the URLs blanked every tile on prod (2026-11-21).
     expect(await list()).toMatchObject({
-      logoUrl: `https://games.example.test/a/${'1'.repeat(64)}.png`,
-      coverUrl: `https://games.example.test/a/${'2'.repeat(64)}.png`,
+      logoUrl: draftPath(`a/${'1'.repeat(64)}.png`),
+      coverUrl: draftPath(`a/${'2'.repeat(64)}.png`),
     });
     // An older build's portrait cut is never offered: every game shows its one 16:9 trailer.
     expect(await list()).not.toHaveProperty('portraitTrailerUrl');
@@ -414,7 +416,7 @@ describe('games routes', () => {
       );
       const game = await list();
       expect(game).not.toHaveProperty('coverImage');
-      expect(game.coverUrl).toBe(`https://games.example.test/a/${'2'.repeat(64)}.png`);
+      expect(game.coverUrl).toEqual(draftPath(`a/${'2'.repeat(64)}.png`));
     }
   });
 

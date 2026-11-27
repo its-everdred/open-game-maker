@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { RegisterGameBody } from '../admin/shapes.js';
 import { HttpError } from '../app/errors.js';
+import { invalidateArtifactGrants } from '../artifacts/session-grants.js';
 import type { AppDeps } from '../app/types.js';
 import { findGame } from '../games/games.js';
 import { registeredSlug, registerExistingGame } from '../games/register.js';
@@ -82,6 +83,11 @@ export function registerOperatorGame(deps: AppDeps, body: Input) {
         })
         .where(eq(schema.games.id, existing.id))
         .run();
+      if (
+        existing.ownerId !== member.userId ||
+        (body.visibility !== undefined && body.visibility !== existing.visibility)
+      )
+        invalidateArtifactGrants(tx, 'game', existing.id);
     });
     return { game: findGame(db, existing.id), created: false };
   }

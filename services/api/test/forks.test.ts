@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { registerCatalog } from '../src/achievements/catalog.js';
 import { CommitUnavailable } from '../src/releases/commit-client.js';
+import { publish } from '../src/releases/service.js';
 import { asUser, installUsers, makeApp, type TestUser } from './helpers.js';
 import { designDoc, ids, insertBuild, insertManualTransaction, now, setup } from './release-fixtures.js';
 
@@ -169,6 +170,20 @@ function seedRuntimeRows(context: Awaited<ReturnType<typeof world>>): void {
 }
 
 describe('game forks', () => {
+  it('publishes the complete tested build of a fork', async () => {
+    const context = await world();
+    await writeFile(join(context.artifactPath, 'index.html'), '<h1>Fork</h1>');
+    const response = await fork(context.app);
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { game: { id: string }; build: { id: string } };
+    context.source.set(body.game.id, body.build.id, context.doc);
+    const release = await publish(context.deps, context.runtime, {
+      gameId: body.game.id,
+      buildId: body.build.id,
+      actor: ids.user,
+    });
+    expect(release.buildId).toBe(body.build.id);
+  });
   it('forks the exact release and copies no runtime or working data', async () => {
     const context = await world();
     seedRuntimeRows(context);

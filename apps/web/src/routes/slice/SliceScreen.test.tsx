@@ -24,6 +24,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       requests.push(String(input));
+      if (String(input).includes('/artifacts/grant')) return Response.json({ grant: 'grant' });
       return new Response(JSON.stringify({ rev: 3, buildId: 'build_reviewed', doc: { entities: [] } }), {
         headers: { 'content-type': 'application/json' },
       });
@@ -60,6 +61,7 @@ describe('SliceScreen', () => {
     expect(mounts[0]).toMatchObject({
       gameId: 'g_blobs',
       buildId: 'build_reviewed',
+      draftGrant: 'grant',
       mode: 'play',
       params: { scenario: 'endless/wave-3', seed: '7' },
     });

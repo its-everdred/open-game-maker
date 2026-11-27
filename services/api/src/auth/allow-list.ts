@@ -1,7 +1,8 @@
 import { schema, type Db } from '@ogm/db';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { normalizeEmail } from './access.js';
+import { invalidateArtifactGrants } from '../artifacts/session-grants.js';
 
 // Platform roles, weakest first. A maker may create and edit games; an admin also manages the
 // instance and this list. Players only play. Every role is a signed-in user.
@@ -116,7 +117,20 @@ export function addAllowedUser(
 export function setAllowedRole(db: Db, email: string, role: AllowedRole): boolean {
   const address = normalizeEmail(email);
   if (roleForEmail(db, address) === null) return false;
-  db.update(schema.allowedUsers).set({ role }).where(eq(schema.allowedUsers.email, address)).run();
+  db.transaction((tx) => {
+    const result = tx
+      .update(schema.allowedUsers)
+      .set({ role })
+      .where(and(eq(schema.allowedUsers.email, address), ne(schema.allowedUsers.role, role)))
+      .run();
+    if (!result.changes) return;
+    for (const user of tx
+      .select({ id: schema.user.id })
+      .from(schema.user)
+      .where(sql`lower(${schema.user.email}) = ${address}`)
+      .all())
+      invalidateArtifactGrants(tx, 'user', user.id);
+  });
   return true;
 }
 
