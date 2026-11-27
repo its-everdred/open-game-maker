@@ -237,11 +237,10 @@ for (const viewport of [
         .toEqual([
           expect.objectContaining({
             game_id: game.gameId,
-            build_hash: expect.any(String),
+            build_hash: game.buildId,
             text: expect.stringContaining('The lantern vanished'),
           }),
         ]);
-      expect(system.reports()[0]?.build_hash).toMatch(/^[0-9a-f]{64}$/);
       await expect(bug.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
     });
 
