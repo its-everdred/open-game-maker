@@ -17,6 +17,7 @@ export const SECRET = 'hook-secret-for-build-tests';
 export const REPO = 'everdred-games/gm-g2';
 export const TICKET = '12';
 export const SHA = 'e'.repeat(40);
+export const CHECK_ID = 'pc_fixture';
 
 export function manifest(): GameManifest {
   return {
@@ -62,6 +63,27 @@ type JobKind = (typeof schema.jobs.$inferInsert)['kind'];
 // A game with its main branch, a running job for ticket 12 and the build route mounted with a fixed hook secret.
 export function world(kind: JobKind = 'feature') {
   const { deps } = setupRelease();
+  for (const [id, sha] of [
+    [CHECK_ID, SHA],
+    ['pc_newer', 'f'.repeat(40)],
+  ] as const) {
+    deps.db
+      .insert(schema.publishChecks)
+      .values({
+        id,
+        gameId: ids.game,
+        gitSha: sha,
+        surface: 'game',
+        sizesJson: '[]',
+        checksJson: JSON.stringify([
+          { name: 'pnpm run test', result: 'passed' },
+          { name: 'pnpm run build', result: 'passed' },
+        ]),
+        result: 'passed',
+        createdAt: now,
+      })
+      .run();
+  }
   setupDesign(deps);
   deps.db
     .insert(schema.jobs)

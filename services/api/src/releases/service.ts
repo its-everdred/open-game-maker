@@ -227,16 +227,18 @@ function appendRelease(
     noteIds?: string[];
     // The game's folder name under games/, so tags read `<slug>/v<version>` and never collide across games.
     slug: string;
+    requireListed?: boolean;
   },
 ): ReleaseRow {
   return deps.sqlite
     .transaction(() => {
       const current = deps.sqlite
-        .prepare<[string], { published_release_id: string | null }>(
-          'SELECT published_release_id FROM games WHERE id = ?',
+        .prepare<[string], { published_release_id: string | null; visibility: string }>(
+          'SELECT published_release_id, visibility FROM games WHERE id = ?',
         )
         .get(input.gameId);
       if (!current || current.published_release_id !== input.expected) throw new ReleaseError('pointer_moved', 409);
+      if (input.requireListed && current.visibility !== 'listed') throw new ReleaseError('game_unpublished', 409);
       const seq =
         (deps.sqlite
           .prepare<[string], { seq: number | null }>('SELECT MAX(seq) AS seq FROM releases WHERE game_id = ?')
@@ -294,9 +296,10 @@ async function requireGameplayCompliant(deps: AppDeps, artifactPath: string): Pr
 export async function publish(
   deps: AppDeps,
   runtime: ReleaseRuntime,
-  input: { gameId: string; buildId: string; actor: string; changelog?: Changelog },
+  input: { gameId: string; buildId: string; actor: string; changelog?: Changelog; requireListed?: boolean },
 ): Promise<Release> {
   const { build, game } = requireMainBuild(deps, input.gameId, input.buildId);
+  if (input.requireListed && game.visibility !== 'listed') throw new ReleaseError('game_unpublished', 409);
   const expected = game.publishedReleaseId;
   await requireGameplayCompliant(deps, build.artifactPath);
   const rights = await runtime.checkRights(build.artifactPath, game.repoVisibility);
@@ -331,6 +334,7 @@ export async function publish(
         noteIds: prepared.noteIds,
         actor: input.actor,
         slug: releaseSlug(game),
+        ...(input.requireListed ? { requireListed: true } : {}),
       }),
     );
   });

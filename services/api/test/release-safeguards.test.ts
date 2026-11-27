@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ids, insertBuild, insertManualTransaction, publish, setup } from './release-fixtures.js';
 import { asUser, makeApp } from './helpers.js';
+import { publish as publishAutomatically } from '../src/releases/service.js';
 
 const refusal = { allowed: false, reasons: [{ code: 'pii' as const, detail: 'these words will be public' }] };
 
@@ -16,6 +17,29 @@ async function rollback(app: Awaited<ReturnType<typeof makeApp>>['app'], release
 }
 
 describe('release safeguards', () => {
+  it('does not republish when the owner makes a game private during an automatic release', async () => {
+    const { deps, source, runtime } = setup();
+    insertBuild(deps, source);
+    deps.db.update(schema.games).set({ visibility: 'listed' }).run();
+    runtime.commit.execute = async (op) => {
+      if (op.kind === 'release') deps.db.update(schema.games).set({ visibility: 'private' }).run();
+      return { ok: true, sha: 'c'.repeat(40) };
+    };
+
+    await expect(
+      publishAutomatically(deps, runtime, {
+        gameId: ids.game,
+        buildId: ids.build,
+        actor: 'system:builder',
+        requireListed: true,
+      }),
+    ).rejects.toMatchObject({ code: 'game_unpublished' });
+    expect(deps.db.select().from(schema.games).get()).toMatchObject({
+      visibility: 'private',
+      publishedReleaseId: null,
+    });
+    expect(deps.db.select().from(schema.releases).all()).toEqual([]);
+  });
   // A gate refusal at fold time must not leave a fold SHA that a later publish would trust.
   it('records no fold and no release when the gate refuses fold_design', async () => {
     const commit = vi.fn(async (): Promise<CommitResult> => ({ ok: false, verdict: refusal }));

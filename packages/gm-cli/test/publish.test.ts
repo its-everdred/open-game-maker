@@ -16,6 +16,7 @@ type Logged = { method: string; url: string; token: string; sha: string; body: B
 let server: Server;
 let api: string;
 let requests: Logged[] = [];
+let checkRecords: unknown[] = [];
 let uploadAnswer: { status: number; body: string } = { status: 201, body: '' };
 // Uploads still to drop by closing the connection without an answer, as a reset keep-alive socket does.
 let dropUploads = 0;
@@ -30,6 +31,8 @@ let remoteSha: string;
 let brokenSha: string;
 let unlistedSha: string;
 let slowSha: string;
+let failingTestSha: string;
+let smokeTestSha: string;
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -55,7 +58,10 @@ function writeGame(repo: string, marker: string): void {
       '',
     ].join('\n'),
   );
-  writeFileSync(join(game, 'package.json'), '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh"}}\n');
+  writeFileSync(
+    join(game, 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"test -f dist/index.html"}}\n',
+  );
   writeFileSync(join(game, 'gm.manifest.json'), '{"id":"blobs","capabilities":[]}\n');
   writeFileSync(join(game, 'manifest.json'), '{"id":"blobs","sdk":"1.0.0"}\n');
   writeFileSync(join(game, 'design', 'design.json'), '{"schemaVersion":1,"globals":{},"entities":{}}\n');
@@ -102,6 +108,20 @@ beforeAll(async () => {
   writeFileSync(join(origin, 'games', 'blobs', 'build.sh'), 'sleep 2\n');
   git(origin, 'commit', '-qam', 'slow build fixture');
   slowSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'failing-test', 'main');
+  writeFileSync(
+    join(origin, 'games', 'blobs', 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"exit 7"}}\n',
+  );
+  git(origin, 'commit', '-qam', 'failing test fixture');
+  failingTestSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'smoke-test', 'main');
+  writeFileSync(
+    join(origin, 'games', 'blobs', 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"gm test"}}\n',
+  );
+  git(origin, 'commit', '-qam', 'smoke test fixture');
+  smokeTestSha = git(origin, 'rev-parse', 'HEAD');
   git(origin, 'switch', '-q', 'main');
 
   // pnpm stand-in: the scratch repository has nothing to install, and its build is one shell script.
@@ -114,7 +134,10 @@ beforeAll(async () => {
       'set -eu',
       'printf "%s\\n" "$*" >> "$PNPM_LOG"',
       '[[ ${1:-} == install ]] && exit 0',
+      'if [[ ${1:-} == exec ]]; then touch .test-mode; exit 0; fi',
       '[[ ${1:-} == run ]] && shift',
+      'if [[ ${1:-} == test ]] && [[ "$(node -p \'require("./package.json").scripts.test\')" == "gm test" ]]; then test -f .test-mode; exit; fi',
+      'if [[ ${1:-} == test ]]; then exec sh -c "$(node -p \'require("./package.json").scripts.test\')"; fi',
       '[[ ${1:-} == build ]] && shift',
       '[[ ${1:-} == -- ]] && shift',
       'exec sh -c "$(node -p \'require("./package.json").scripts.build\') $*"',
@@ -132,6 +155,12 @@ beforeAll(async () => {
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
+      if (request.method === 'POST' && request.url === '/internal/operator/games/blobs/publish-checks') {
+        checkRecords.push(JSON.parse(Buffer.concat(chunks).toString()));
+        response.writeHead(201, { 'content-type': 'application/json' });
+        response.end('{"id":"pc_test","result":"passed"}');
+        return;
+      }
       requests.push({
         method: request.method ?? '',
         url: request.url ?? '',
@@ -222,6 +251,7 @@ async function publish(argv: string[], options: { home?: string; cwd?: string; e
     ...options.env,
   };
   requests = [];
+  checkRecords = [];
   const result = await gm(['publish', ...argv], { home, env, ...(options.cwd ? { cwd: options.cwd } : {}) });
   const read = (name: string) => (existsSync(join(logs, name)) ? readFileSync(join(logs, name), 'utf8') : '');
   return { ...result, home, pnpm: read('pnpm'), args: read('args'), buildEnv: read('env') };
@@ -257,6 +287,17 @@ describe('gm publish', () => {
     expect(ReviewSubmission.safeParse(JSON.parse(review.body.toString())).success).toBe(true);
     // The production build: relative base, published mode, the asset library, and never the operator's token.
     expect(run.pnpm).toContain('install --frozen-lockfile');
+    expect(run.pnpm).toContain('run test');
+    expect(checkRecords).toContainEqual({
+      gitSha: remoteSha,
+      surface: 'game',
+      sizes: [],
+      checks: [
+        { name: 'pnpm run build', result: 'passed' },
+        { name: 'pnpm run test', result: 'passed' },
+        { name: 'publish artifact', result: 'passed' },
+      ],
+    });
     expect(run.args.trim()).toBe('--base=./ --mode=published');
     expect(run.buildEnv.trim()).toBe(`token= mode=production assets=${join(root, 'assets-local')}`);
     const archive = join(tempDir('gm-publish-archive-'), 'upload.tgz');
@@ -421,7 +462,7 @@ describe('gm publish', () => {
     const real = globalThis.fetch;
     let uploads = 0;
     const spy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
-      if (init?.method !== 'POST') return real(input, init);
+      if (init?.method !== 'POST' || !String(input).endsWith('/builds')) return real(input, init);
       uploads += 1;
       return Promise.reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
     });
@@ -447,6 +488,39 @@ describe('gm publish', () => {
     expect(requests.map((r) => r.method)).toEqual(['GET']);
     expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
+  });
+
+  it('does not upload when the game tests fail', async () => {
+    const run = await publish(['blobs', '--sha', failingTestSha, '--api', api]);
+
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain("the game's tests failed");
+    expect(checkRecords).toContainEqual({
+      gitSha: failingTestSha,
+      surface: 'game',
+      sizes: [],
+      checks: [
+        { name: 'pnpm run build', result: 'passed' },
+        { name: 'pnpm run test', result: 'failed' },
+      ],
+    });
+    expect(requests.map((request) => request.method)).toEqual(['GET']);
+  });
+
+  it('tests a gm smoke build and rebuilds production before upload', async () => {
+    uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_smoke","buildId":"build_smoke"}' };
+    const run = await publish(['blobs', '--sha', smokeTestSha, '--api', api]);
+    expect(run.code).toBe(0);
+    expect(run.pnpm).toContain('exec vite build --mode test --base=./');
+    expect(run.pnpm.match(/run build/g)).toHaveLength(2);
+    expect(checkRecords).toContainEqual(
+      expect.objectContaining({
+        checks: expect.arrayContaining([
+          { name: 'test-mode build', result: 'passed' },
+          { name: 'production rebuild', result: 'passed' },
+        ]),
+      }),
+    );
   });
 
   it('reports a timed out build with the configured duration instead of missing dist output', async () => {
@@ -510,7 +584,9 @@ it('confirms a newly landed build after the upload times out', async () => {
   const originalFetch = globalThis.fetch;
   let factsReads = 0;
   const mock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-    if (init?.method === 'POST') throw new DOMException('timed out', 'TimeoutError');
+    if (String(input).endsWith('/publish-checks')) return originalFetch(input, init);
+    if (init?.method === 'POST' && String(input).endsWith('/builds'))
+      throw new DOMException('timed out', 'TimeoutError');
     factsReads += 1;
     if (factsReads === 2) return new Response('', { status: 404 });
     if (factsReads === 3) return new Response(JSON.stringify({ state: 'filed', buildId: null }), { status: 200 });

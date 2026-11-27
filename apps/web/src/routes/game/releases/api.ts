@@ -12,6 +12,17 @@ export type PublishPreview = {
 };
 
 export type RollbackPreview = { affectedSaves: number | null };
+export type PublishCheckRecord = {
+  id: string;
+  gitSha: string;
+  buildId: string | null;
+  surface: 'game' | 'app';
+  sizes: string[];
+  checks: { name: string; result: 'passed' | 'failed' }[];
+  result: 'passed' | 'failed';
+  publishResult: 'pending' | 'published' | 'skipped' | 'failed';
+  createdAt: string;
+};
 
 export const releaseKeys = {
   releases: (gameId: string) => ['game', gameId, 'releases'] as const,
@@ -24,6 +35,15 @@ export function useReleases(gameId: string) {
   return useQuery({
     queryKey: releaseKeys.releases(gameId),
     queryFn: () => listReleases(gameId),
+    enabled: gameId !== '',
+  });
+}
+
+export function usePublishChecks(gameId: string) {
+  return useQuery({
+    queryKey: ['game', gameId, 'publish-checks'],
+    queryFn: async () =>
+      (await api<{ records: PublishCheckRecord[] }>(`/games/${segment(gameId)}/publish-checks`)).records,
     enabled: gameId !== '',
   });
 }

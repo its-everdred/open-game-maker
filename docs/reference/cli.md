@@ -86,6 +86,11 @@ the target and work side by side.
 gm publish <slug> [--sha <ref>] [--checkout <path>] [--api <url>]
 ```
 
+The game must provide a `test` script. The publisher runs it against the candidate build in the game's checkout;
+a failed check prevents the upload. It records the source commit and check results for the Releases screen. Listed
+games are automatically released after a passing build; private games remain private.
+For `gm test`, the publisher builds in test mode for the smoke run and then rebuilds the production artifact.
+
 After a successful publish, `gm publish` checks merged PRs since the last reviewed build and posts one prototype review
 for creator-visible changes. It captures the hosted build with `gm qa playtest --all-modes`; when capture fails, it
 posts any stills that were produced and marks the clip unchecked. A missing `## Prototype review` section posts the

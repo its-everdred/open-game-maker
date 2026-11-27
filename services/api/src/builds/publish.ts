@@ -18,7 +18,7 @@ import { resolveBranch, StaleBaseRev } from '../design/store.js';
 import { isTerminal } from '../jobs/state.js';
 import { markTerminal } from '../jobs/spend-cap.js';
 import { releaseRuntimeFor } from '../releases/routes.js';
-import { registerBuild, updateBuild } from '../releases/service.js';
+import { publish, registerBuild, ReleaseError, updateBuild } from '../releases/service.js';
 import { withArtifactMutation } from './artifact-lock.js';
 import { BuildCacheError, completeBuildCache, sharedBuildFileUrls, storeDisplayImageBlobs } from './cache-plan.js';
 import { untarGz } from './untar.js';
@@ -57,12 +57,19 @@ export function runCompleted(deps: AppDeps, jobId: string): boolean {
 }
 
 // Unpacks the hook's archive beside the games root and swaps it in whole, replacing an earlier upload.
-export async function stageArtifact(deps: AppDeps, jobId: string, gitSha: string, archive: Buffer): Promise<void> {
+export async function stageArtifact(
+  deps: AppDeps,
+  jobId: string,
+  gitSha: string,
+  archive: Buffer,
+  checkId?: string,
+): Promise<void> {
   const temporary = join(stagingRoot(deps), `.${jobId}.${randomUUID()}`);
   try {
     await mkdir(join(temporary, 'build'), { recursive: true });
     await untarGz(archive, join(temporary, 'build'));
     await writeFile(join(temporary, 'git-sha'), gitSha);
+    if (checkId) await writeFile(join(temporary, 'check-id'), checkId);
     await rm(stagedDir(deps, jobId), { recursive: true, force: true });
     await rename(temporary, stagedDir(deps, jobId));
   } finally {
@@ -161,6 +168,13 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
       switched = true;
       return { branchId: branch.id, buildId: build.id, switchTx };
     });
+    const checkId = await readFile(join(staged, 'check-id'), 'utf8').catch(() => '');
+    if (checkId)
+      deps.db
+        .update(schema.publishChecks)
+        .set({ buildId: published.buildId })
+        .where(eq(schema.publishChecks.id, checkId))
+        .run();
     const displayTarget = buildDir(deps.config.gamesRoot, job.gameId, published.buildId);
     scheduleDisplayImages(deps, displayTarget, displayMarker(deps, published.buildId), manifest.data);
     void precompressBuild(deps.config.gamesRoot, displayTarget).catch((error: unknown) =>
@@ -168,6 +182,45 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
     );
     design.stream.publish(published.branchId, published.switchTx.transaction);
     await updateBuild(deps, release, published.buildId, 'tested');
+
+    const game = deps.db
+      .select({ visibility: schema.games.visibility })
+      .from(schema.games)
+      .where(eq(schema.games.id, job.gameId))
+      .get();
+    const branch = deps.db
+      .select({ name: schema.branches.name })
+      .from(schema.branches)
+      .where(eq(schema.branches.id, published.branchId))
+      .get();
+    let publishResult: 'published' | 'skipped' | 'failed' = 'skipped';
+    if (game?.visibility === 'listed' && branch?.name === 'main') {
+      try {
+        await publish(deps, release, {
+          gameId: job.gameId,
+          buildId: published.buildId,
+          actor: SYSTEM_ACTOR,
+          requireListed: true,
+        });
+        publishResult = 'published';
+      } catch (error) {
+        publishResult = error instanceof ReleaseError && error.code === 'game_unpublished' ? 'skipped' : 'failed';
+        deps.log({
+          event: 'build_auto_publish_failed',
+          jobId,
+          gameId: job.gameId,
+          buildId: published.buildId,
+          reason: errorName(error),
+        });
+      }
+    }
+    if (checkId)
+      deps.db.update(schema.publishChecks).set({ publishResult }).where(eq(schema.publishChecks.id, checkId)).run();
+
+    if (publishResult === 'failed') {
+      settle(deps, jobId, 'failed');
+      return { state: 'failed', reason: 'auto_publish_failed' };
+    }
 
     settle(deps, jobId, 'done');
     deps.log({ event: 'build_published', jobId, gameId: job.gameId, buildId: published.buildId });

@@ -8,7 +8,7 @@ import { getGame } from '../../../features/editor/api';
 import { useBuilds, useVersionBranches } from '../versions/api';
 import { publishableBuild } from '../versions/rules';
 import { PublishDialog } from './PublishDialog';
-import { useReleases } from './api';
+import { usePublishChecks, useReleases } from './api';
 import { RollbackDialog } from './RollbackDialog';
 import '../versions/versioning.css';
 import './releases.css';
@@ -20,6 +20,7 @@ export function ReleasesScreen() {
   const branches = useVersionBranches(gameId);
   const builds = useBuilds(gameId);
   const releases = useReleases(gameId);
+  const checks = usePublishChecks(gameId);
   const game = useQuery({ queryKey: ['game', gameId], queryFn: () => getGame(gameId), enabled: gameId !== '' });
   const [publishingBuildId, setPublishingBuildId] = useState<string>();
   const [rollback, setRollback] = useState<Release>();
@@ -105,6 +106,33 @@ export function ReleasesScreen() {
               </article>
             ))}
           </div>
+        ) : null}
+        {checks.isError ? (
+          <p className="versioning-state" role="alert">
+            Publish checks unavailable.
+          </p>
+        ) : null}
+        {checks.data && checks.data.length > 0 ? (
+          <section aria-label="Publish checks">
+            <h2>Publish checks</h2>
+            {checks.data.map((record) => (
+              <article key={record.id}>
+                <p>
+                  {record.result} · {record.surface} · {record.gitSha} · {new Date(record.createdAt).toLocaleString()}
+                </p>
+                <p>Publish: {record.publishResult}</p>
+                {record.buildId ? <p>Build {record.buildId}</p> : null}
+                {record.sizes.length > 0 ? <p>Sizes: {record.sizes.join(', ')}</p> : null}
+                <ul>
+                  {record.checks.map((check) => (
+                    <li key={check.name}>
+                      {check.name}: {check.result}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </section>
         ) : null}
       </div>
 

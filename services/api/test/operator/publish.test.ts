@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import { PUBLISH_ACTOR } from '../../src/operator/publish.js';
 import operatorRoutes, { prefix as operatorPrefix } from '../../src/operator/routes.js';
-import { builtFiles, ids, SHA, world } from '../builds/fixtures.js';
+import { builtFiles, CHECK_ID, ids, SHA, world } from '../builds/fixtures.js';
 import { INTERNAL_TOKEN } from '../helpers.js';
 import { answerRound, postRound } from '../../src/review-rounds/store.js';
 
@@ -33,7 +33,13 @@ function publish(
 ) {
   return app.request(`${operatorPrefix}/games/${slug}/builds`, {
     method: 'POST',
-    headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'x-gm-sha': sha, 'content-type': 'application/gzip', ...headers },
+    headers: {
+      'x-ogm-internal': INTERNAL_TOKEN,
+      'x-gm-sha': sha,
+      'x-gm-check-id': sha === NEWER_SHA ? 'pc_newer' : CHECK_ID,
+      'content-type': 'application/gzip',
+      ...headers,
+    },
     body,
   });
 }

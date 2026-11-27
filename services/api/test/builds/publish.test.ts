@@ -13,14 +13,20 @@ import { getDesignRuntime } from '../../src/design/routes.js';
 import { appendTransaction, resolveBranch } from '../../src/design/store.js';
 import { BadArchive, untarGz } from '../../src/builds/untar.js';
 import { tarGz } from '../../src/internal/tarball.js';
-import { builtFiles, completeRun, gamesHost, ids, jobState, SECRET, SHA, TICKET, world } from './fixtures.js';
+import { builtFiles, CHECK_ID, completeRun, gamesHost, ids, jobState, SECRET, SHA, TICKET, world } from './fixtures.js';
 
 const archiveOf = (dir: string) => execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', dir, '.']);
 
 function upload(app: ReturnType<typeof world>['app'], body: Buffer, headers: Record<string, string> = {}) {
   return app.request(`http://127.0.0.1:4000/internal/jobs/by-ticket/${TICKET}/build`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${SECRET}`, 'x-gm-sha': SHA, 'content-type': 'application/gzip', ...headers },
+    headers: {
+      authorization: `Bearer ${SECRET}`,
+      'x-gm-sha': SHA,
+      'x-gm-check-id': CHECK_ID,
+      'content-type': 'application/gzip',
+      ...headers,
+    },
     body,
   });
 }
@@ -36,6 +42,15 @@ function latestBuildId(deps: ReturnType<typeof world>['deps']) {
 }
 
 describe('publishing a merged build', () => {
+  it('refuses an upload without a passing check record for the same game and SHA', async () => {
+    const { deps, app } = world();
+    completeRun(deps);
+    const response = await upload(app, archiveOf(builtFiles()), { 'x-gm-check-id': '' });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: { code: 'checks_required' } });
+    expect(builds(deps)).toEqual([]);
+    expect(latestBuildId(deps)).toBeNull();
+  });
   it('serves the build, marks it tested and points the branch at it when the upload follows the merge', async () => {
     const { deps, app } = world();
     completeRun(deps);
@@ -247,7 +262,9 @@ describe('re-uploads', () => {
     const second = builtFiles();
     writeFileSync(join(second, 'index.html'), '<!doctype html><title>Second</title>\n');
     expect((await upload(app, archiveOf(first))).status).toBe(202);
-    expect((await upload(app, archiveOf(second), { 'x-gm-sha': 'f'.repeat(40) })).status).toBe(202);
+    expect(
+      (await upload(app, archiveOf(second), { 'x-gm-sha': 'f'.repeat(40), 'x-gm-check-id': 'pc_newer' })).status,
+    ).toBe(202);
 
     completeRun(deps);
     const outcome = await publishStaged(deps, ids.job);

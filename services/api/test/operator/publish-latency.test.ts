@@ -18,7 +18,7 @@ const pass = async (index: number) => {
 import { sweepBuilds } from '../../src/builds/publish.js';
 import { gameMedia } from '../../src/games/media.js';
 import operatorRoutes, { prefix } from '../../src/operator/routes.js';
-import { builtFiles, ids, SHA, world } from '../builds/fixtures.js';
+import { builtFiles, CHECK_ID, ids, SHA, world } from '../builds/fixtures.js';
 import { INTERNAL_TOKEN } from '../helpers.js';
 
 it('publishes three display images within the budget while derivation is still running', async () => {
@@ -39,7 +39,7 @@ it('publishes three display images within the budget while derivation is still r
   const started = performance.now();
   const response = await app.request(`${prefix}/games/castle-game/builds`, {
     method: 'POST',
-    headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'x-gm-sha': SHA },
+    headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'x-gm-sha': SHA, 'x-gm-check-id': CHECK_ID },
     body: archive,
   });
   expect(response.status).toBe(201);
@@ -90,7 +90,7 @@ it('continues with other pending builds after an encoder failure', async () => {
   const publish = () =>
     app.request(`${prefix}/games/castle-game/builds`, {
       method: 'POST',
-      headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'x-gm-sha': SHA },
+      headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'x-gm-sha': SHA, 'x-gm-check-id': CHECK_ID },
       body: archive,
     });
   const start = passes.length;

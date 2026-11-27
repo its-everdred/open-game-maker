@@ -10,6 +10,8 @@ import { renderDaemonFiles } from '@ogm/game-repo-template';
 import { describe, expect, it } from 'vitest';
 
 import { publishStaged } from '../../src/builds/publish.js';
+import { FsBaseDocSource } from '../../src/design/base-doc.js';
+import { releaseRuntimeFor } from '../../src/releases/routes.js';
 import { builtFiles, completeRun, gamesHost, ids, jobState, SECRET, TICKET, world } from './fixtures.js';
 
 // aiur daemons run hooks with plain git; drop an agent workspace's git guard from PATH.
@@ -27,7 +29,7 @@ function beforeRemove(): string {
 const COPY_WEB = "import { cpSync } from 'node:fs';\ncpSync('web', 'dist', { recursive: true });\n";
 
 // A workspace as the agent leaves it: a committed game repo whose `pnpm run build` (here `node build.mjs`) writes dist/.
-function workspace(build = COPY_WEB) {
+function workspace(build = COPY_WEB, test = "node -e \"require('fs').accessSync('dist/index.html')\"") {
   const dir = mkdtempSync(join(tmpdir(), 'ogm-hook-build-ws-'));
   const built = builtFiles();
   mkdirSync(join(dir, 'web'));
@@ -39,7 +41,7 @@ function workspace(build = COPY_WEB) {
   writeFileSync(join(dir, 'build.mjs'), build);
   writeFileSync(
     join(dir, 'package.json'),
-    JSON.stringify({ name: 'fixture', private: true, scripts: { build: 'node build.mjs' } }),
+    JSON.stringify({ name: 'fixture', private: true, scripts: { build: 'node build.mjs', test } }),
   );
   writeFileSync(join(dir, '.gitignore'), 'dist/\n');
   const git = (...args: string[]) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
@@ -81,6 +83,35 @@ async function serveApi(app: ReturnType<typeof world>['app']) {
 }
 
 describe('before_remove hook to a playable build', () => {
+  it('publishes a listed game after its checks and records the candidate SHA', async () => {
+    const { deps, app } = world();
+    deps.sqlite.prepare("UPDATE games SET visibility = 'listed' WHERE id = ?").run(ids.game);
+    releaseRuntimeFor(deps).source = new FsBaseDocSource(deps.config.gamesRoot);
+    const api = await serveApi(app);
+    const { dir, sha } = workspace();
+    try {
+      await runHook(dir, api.base);
+      completeRun(deps);
+      const outcome = await publishStaged(deps, ids.job);
+      expect(outcome?.state).toBe('done');
+      const game = deps.sqlite.prepare('SELECT published_release_id FROM games WHERE id = ?').get(ids.game) as {
+        published_release_id: string | null;
+      };
+      expect(game.published_release_id).not.toBeNull();
+      const record = deps.sqlite
+        .prepare('SELECT git_sha, result, publish_result, build_id FROM publish_checks WHERE git_sha = ?')
+        .get(sha);
+      expect(record).toEqual({
+        git_sha: sha,
+        result: 'passed',
+        publish_result: 'published',
+        build_id: outcome?.state === 'done' ? outcome.buildId : '',
+      });
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it('uploads the merged workspace build, which the API publishes and the games host serves', async () => {
     const { deps, app } = world();
     const api = await serveApi(app);
@@ -100,6 +131,12 @@ describe('before_remove hook to a playable build', () => {
         .prepare<[string], { git_sha: string; status: string }>('SELECT git_sha, status FROM builds WHERE id = ?')
         .get(buildId);
       expect(row).toEqual({ git_sha: sha, status: 'tested' });
+      const game = deps.sqlite.prepare('SELECT visibility, published_release_id FROM games WHERE id = ?').get(ids.game);
+      expect(game).toEqual({ visibility: 'private', published_release_id: null });
+      const record = deps.sqlite
+        .prepare('SELECT result, publish_result, build_id FROM publish_checks WHERE git_sha = ?')
+        .get(sha);
+      expect(record).toEqual({ result: 'passed', publish_result: 'skipped', build_id: buildId });
 
       const host = await gamesHost(deps.config.gamesRoot);
       try {
@@ -149,6 +186,25 @@ describe('before_remove hook to a playable build', () => {
       completeRun(deps);
       expect(await publishStaged(deps, ids.job)).toBeNull();
       expect(jobState(deps)).toBe('running');
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('uploads nothing when the game tests fail', async () => {
+    const { deps, app } = world();
+    const api = await serveApi(app);
+    const { dir, sha } = workspace(COPY_WEB, 'node -e "process.exit(1)"');
+    try {
+      const hook = await runHook(dir, api.base);
+      expect(hook.stderr).toContain('game checks failed: nothing uploaded');
+      completeRun(deps);
+      expect(await publishStaged(deps, ids.job)).toBeNull();
+      const record = deps.sqlite
+        .prepare('SELECT result, publish_result FROM publish_checks WHERE git_sha = ?')
+        .get(sha);
+      expect(record).toEqual({ result: 'failed', publish_result: 'skipped' });
     } finally {
       await api.close();
       rmSync(dir, { recursive: true, force: true });

@@ -77,10 +77,11 @@ export async function publishArchive(
   gitSha: string,
   archive: Buffer,
   requestId?: string,
+  checkId?: string,
 ): Promise<PublishResult> {
   const jobId = createPublishJob(deps, game, gitSha, requestId);
   try {
-    await stageArtifact(deps, jobId, gitSha, archive);
+    await stageArtifact(deps, jobId, gitSha, archive, checkId);
   } catch (error) {
     settle(deps, jobId);
     if (error instanceof BadArchive) return { state: 'refused', jobId, reason: error.message };

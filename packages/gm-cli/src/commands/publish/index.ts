@@ -313,18 +313,43 @@ export const command: GmCommand = {
       // The game's own build script is its production build; a script that already names a base or a mode keeps it.
       // The base stays relative because the games host serves every build under /g/<gameId>/<buildId>/.
       // The asset list is what ships: refuse before building when the code names an asset the list lacks.
+      const record = async (checks: { name: string; result: 'passed' | 'failed' }[]) => {
+        const response = await request(
+          `${api}/internal/operator/games/${encodeURIComponent(facts.slug)}/publish-checks`,
+          {
+            method: 'POST',
+            headers: { 'x-ogm-internal': token, 'content-type': 'application/json' },
+            body: JSON.stringify({ gitSha: commit, surface: 'game', sizes: [], checks }),
+            signal: AbortSignal.timeout(20_000),
+          },
+        );
+        if (response.status !== 201) throw new CommandError(`cannot record game checks (HTTP ${response.status})`);
+        const value = JSON.parse(response.body) as { id?: unknown };
+        if (typeof value.id !== 'string') throw new CommandError('game check record has no id');
+        return value.id;
+      };
       const listed = (await readLock(game))?.assets.map((entry) => entry.id) ?? [];
       const missingAssets = unlisted(listed, await scanReferences(game));
       if (missingAssets.length > 0) {
+        await record([{ name: 'asset references', result: 'failed' }]);
         const lines = missingAssets.map(({ id, file }) => `${id} (${file})`).join('\n');
         throw new CommandError(
           `assets.lock.json does not list assets the code uses:\n${lines}\nTry: gm assets use <id>`,
         );
       }
 
-      const pkg = JSON.parse(readFileSync(join(game, 'package.json'), 'utf8')) as { scripts?: { build?: string } };
+      const pkg = JSON.parse(readFileSync(join(game, 'package.json'), 'utf8')) as {
+        scripts?: { build?: string; test?: string };
+      };
       const script = pkg.scripts?.build ?? '';
-      if (!script) throw new CommandError(`${facts.repoPath} has no build script`);
+      if (!script) {
+        await record([{ name: 'pnpm run build', result: 'failed' }]);
+        throw new CommandError(`${facts.repoPath} has no build script`);
+      }
+      if (!pkg.scripts?.test) {
+        await record([{ name: 'pnpm run test', result: 'failed' }]);
+        throw new CommandError(`${facts.repoPath} has no game test script`);
+      }
       const extra = [
         ...(script.includes('--base') ? [] : ['--base=./']),
         ...(script.includes('--mode') ? [] : ['--mode=published']),
@@ -334,8 +359,10 @@ export const command: GmCommand = {
       if (assetsRoot) buildEnv.OGM_ASSETS_ROOT = assetsRoot;
 
       const install = exec('pnpm', ['install', '--frozen-lockfile', '--prefer-offline'], work, buildEnv);
-      if (!install.ok)
+      if (!install.ok) {
+        await record([{ name: 'pnpm install --frozen-lockfile', result: 'failed' }]);
         throw new CommandError(`pnpm install failed in the worktree:\n${tail(install.err || install.out)}`);
+      }
       const buildTimeout = env.OGM_PUBLISH_BUILD_TIMEOUT_MS;
       const build = exec(
         'pnpm',
@@ -344,12 +371,63 @@ export const command: GmCommand = {
         buildEnv,
         buildTimeout,
       );
+      if (!build.ok) await record([{ name: 'pnpm run build', result: 'failed' }]);
       if (build.timedOut)
         throw new CommandError(`the game's build timed out after ${Math.ceil(buildTimeout / 1000)} s`);
       if (!build.ok) throw new CommandError(`the game's build failed:\n${tail(`${build.out}\n${build.err}`)}`);
 
+      // The SDK strips its test hooks from published builds. A gm test script needs a test-mode build,
+      // followed by a fresh production build so test hooks never ship.
+      const needsTestBuild = /^\s*gm\s+test(?:\s|$)/u.test(pkg.scripts.test);
+      if (needsTestBuild) {
+        const testBuild = exec(
+          'pnpm',
+          ['exec', 'vite', 'build', '--mode', 'test', '--base=./'],
+          game,
+          buildEnv,
+          buildTimeout,
+        );
+        if (!testBuild.ok) {
+          await record([{ name: 'test-mode build', result: 'failed' }]);
+          throw new CommandError(`the game's test-mode build failed:\n${tail(`${testBuild.out}\n${testBuild.err}`)}`);
+        }
+      }
+      const test = exec('pnpm', ['run', 'test'], game, buildEnv, buildTimeout);
+      if (!test.ok)
+        await record([
+          { name: 'pnpm run build', result: 'passed' },
+          { name: 'pnpm run test', result: 'failed' },
+        ]);
+      if (test.timedOut) throw new CommandError(`the game's tests timed out after ${Math.ceil(buildTimeout / 1000)} s`);
+      if (!test.ok) throw new CommandError(`the game's tests failed:\n${tail(`${test.out}\n${test.err}`)}`);
+      if (needsTestBuild) {
+        const production = exec(
+          'pnpm',
+          ['run', 'build', ...(extra.length ? ['--', ...extra] : [])],
+          game,
+          buildEnv,
+          buildTimeout,
+        );
+        if (!production.ok) {
+          await record([
+            { name: 'pnpm run test', result: 'passed' },
+            { name: 'production rebuild', result: 'failed' },
+          ]);
+          throw new CommandError(
+            `the game's production rebuild failed:\n${tail(`${production.out}\n${production.err}`)}`,
+          );
+        }
+      }
+
       const dist = join(game, 'dist');
       const problems = checkPublishDist(dist);
+      const checkId = await record([
+        { name: 'pnpm run build', result: 'passed' },
+        ...(needsTestBuild ? [{ name: 'test-mode build', result: 'passed' as const }] : []),
+        { name: 'pnpm run test', result: 'passed' },
+        ...(needsTestBuild ? [{ name: 'production rebuild', result: 'passed' as const }] : []),
+        { name: 'publish artifact', result: problems.length ? 'failed' : 'passed' },
+      ]);
       if (problems.length) throw new CommandError(problems[0]!);
 
       stage = mkdtempSync(join(workRoot, `${facts.slug}-stage.`));
@@ -395,6 +473,7 @@ export const command: GmCommand = {
           headers: {
             'x-ogm-internal': token,
             'x-gm-sha': commit,
+            'x-gm-check-id': checkId,
             'x-gm-request-id': requestId,
             'content-type': 'application/gzip',
           },

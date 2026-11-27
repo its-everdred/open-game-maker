@@ -208,7 +208,40 @@ before_remove: |
   # Build what the workspace holds now; a stale dist/ from an earlier run never leaves it.
   if [ -n "$ticket" ] && [ -n "$secret" ]; then
     rm -rf dist
-    pnpm run build >&2 || { rm -rf dist; echo "build failed: nothing uploaded" >&2; }
+    sha="$(git rev-parse HEAD)"
+    test_result=not-run
+    test_mode_result=not-run
+    rebuild_result=not-run
+    build_result=failed
+    if pnpm run build >&2; then
+      build_result=passed
+      test_script="$(node -e 'try{process.stdout.write(require("./package.json").scripts?.test || "")}catch{}')"
+      needs_test_build=0
+      case "$test_script" in 'gm test'|'gm test '*) needs_test_build=1 ;; esac
+      if [ "$needs_test_build" = 1 ]; then
+        test_mode_result=failed
+        if pnpm exec vite build --mode test --base=./ >&2; then test_mode_result=passed; fi
+      fi
+      if [ "$test_mode_result" != failed ]; then
+        test_result=failed
+        if pnpm run test >&2; then test_result=passed; fi
+      fi
+      if [ "$test_result" = passed ] && [ "$needs_test_build" = 1 ]; then
+        rebuild_result=failed
+        if pnpm run build >&2; then rebuild_result=passed; fi
+      fi
+      if [ "$test_result" != passed ] || [ "$rebuild_result" = failed ]; then
+        rm -rf dist
+        echo "game checks failed: nothing uploaded" >&2
+      fi
+    else
+      rm -rf dist
+      echo "build failed: nothing uploaded" >&2
+    fi
+    checks="$(node -e 'const [gitSha,build,mode,test,rebuild]=process.argv.slice(1);const checks=[{name:"pnpm run build",result:build}];for(const [name,result] of [["test-mode build",mode],["pnpm run test",test],["production rebuild",rebuild]])if(result!=="not-run")checks.push({name,result});console.log(JSON.stringify({gitSha,surface:"game",sizes:[],checks}))' "$sha" "$build_result" "$test_mode_result" "$test_result" "$rebuild_result")"
+    answer="$(curl -fsS --max-time 20 -X POST -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $sha" -H "content-type: application/json" --data-binary "$checks" "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/publish-checks")" || answer=''
+    check_id="$(printf '%s' "$answer" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const r=JSON.parse(s);if(r.result==="passed" && typeof r.id==="string")process.stdout.write(r.id)}catch{}})')"
+    if [ -z "$check_id" ]; then rm -rf dist; echo "game checks not recorded: nothing uploaded" >&2; fi
   fi
   # Only paths that resolve inside the workspace leave it; links inside dist/ are kept as links and refused upstream.
   if [ -n "$ticket" ] && [ -n "$secret" ] && [ -d dist ] && [ "$(realpath dist)" = "$root/dist" ]; then
@@ -221,7 +254,7 @@ before_remove: |
     done
     if tar --format=ustar -czf "$stage.tgz" -C "$stage" .; then
       status="$(curl -sS --max-time 120 --retry 3 --retry-connrefused -o /dev/null -w '%{http_code}' -X POST \
-        -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $(git rev-parse HEAD)" -H "content-type: application/gzip" \
+        -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $sha" -H "x-gm-check-id: $check_id" -H "content-type: application/gzip" \
         --data-binary @"$stage.tgz" "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/build")"
       echo "build upload: HTTP ${status:-000}" >&2
     fi
