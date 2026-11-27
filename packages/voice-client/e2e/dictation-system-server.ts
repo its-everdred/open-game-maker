@@ -49,12 +49,31 @@ export async function startDictationSystemServer() {
       socket.close(4401, 'unauthorized');
       return;
     }
+    let committed = false;
     socket.on('message', (data) => {
-      const frame = JSON.parse(data.toString()) as { type?: string; data_b64?: string };
-      if (frame.type === 'audio' && frame.data_b64) audioFrames += 1;
-      if (frame.type === 'commit') {
+      let frame: { v?: unknown; type?: unknown; data_b64?: unknown };
+      try {
+        frame = JSON.parse(data.toString()) as typeof frame;
+      } catch {
+        socket.send(JSON.stringify({ v: 1, type: 'error', code: 'invalid_frame' }));
+        return;
+      }
+      const audio = frame?.data_b64;
+      const encoded =
+        typeof audio === 'string' && /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(audio);
+      const bytes = encoded ? Buffer.from(audio, 'base64').length : 0;
+      if (frame?.v === 1 && frame.type === 'audio' && !committed && bytes > 0 && bytes <= 64_000) {
+        audioFrames += 1;
+      } else if (frame?.v === 1 && frame.type === 'commit' && !committed) {
+        committed = true;
         commits += 1;
         socket.send(JSON.stringify({ v: 1, type: 'transcript', kind: 'final', text: 'Make the lantern glow blue' }));
+      } else if (frame?.v === 1 && frame.type === 'commit' && committed) {
+        return;
+      } else if (frame?.v === 1 && frame.type === 'stop') {
+        socket.send(JSON.stringify({ v: 1, type: 'ended' }));
+      } else {
+        socket.send(JSON.stringify({ v: 1, type: 'error', code: 'invalid_frame' }));
       }
     });
   });

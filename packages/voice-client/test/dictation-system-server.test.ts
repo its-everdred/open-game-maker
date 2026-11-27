@@ -26,17 +26,46 @@ function signed(payload: object, key = secret): string {
   return `${body}.${createHmac('sha256', key).update(body).digest('base64url')}`;
 }
 
+async function nextMessage(socket: WebSocket) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return (await Promise.race([
+      once(socket, 'message'),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('expected socket response')), 3_000);
+      }),
+    ])) as [Buffer];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 it('accepts a matching dictate token and rejects forged, expired, wrong-scope and wrong-target tokens', async () => {
   const server = await startDictationSystemServer();
   try {
     const connect = (token: string) => new WebSocket(`${server.url}?mode=dictate&token=${token}`);
     const valid = connect(signed(claims));
     await once(valid, 'open');
-    const transcript = once(valid, 'message');
-    valid.send(JSON.stringify({ type: 'audio', data_b64: 'AA==' }));
-    valid.send(JSON.stringify({ type: 'commit' }));
+    for (const frame of [
+      { v: 2, type: 'audio', data_b64: 'AA==' },
+      { v: 1, type: 'audio', data_b64: 'not base64' },
+      { v: 2, type: 'commit' },
+    ]) {
+      const response = nextMessage(valid);
+      valid.send(JSON.stringify(frame));
+      const [error] = await response;
+      expect(JSON.parse(error.toString())).toMatchObject({ type: 'error', code: 'invalid_frame' });
+    }
+    const transcript = nextMessage(valid);
+    valid.send(JSON.stringify({ v: 1, type: 'audio', data_b64: 'AA==' }));
+    valid.send(JSON.stringify({ v: 1, type: 'commit' }));
     const [message] = await transcript;
     expect(JSON.parse(message.toString())).toMatchObject({ type: 'transcript', kind: 'final' });
+    const afterDuplicate = nextMessage(valid);
+    valid.send(JSON.stringify({ v: 1, type: 'commit' }));
+    valid.send(JSON.stringify({ v: 2, type: 'commit' }));
+    const [error] = await afterDuplicate;
+    expect(JSON.parse(error.toString())).toMatchObject({ type: 'error', code: 'invalid_frame' });
     expect(server.stats()).toEqual({ audioFrames: 1, commits: 1 });
     valid.close();
 
