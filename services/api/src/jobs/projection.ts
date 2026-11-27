@@ -1,9 +1,14 @@
 import { JOB_STAGE_WORDS, JOB_WAITING_FOR_ANSWER, type JobStage, type JobState } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import type { AppEvents } from '../app/events.js';
-import { recordTerminalSnapshot, recordTicketLifecycle, type TicketTerminal } from './ticket-lifecycle.js';
+import {
+  recordedTicketAggregate,
+  recordTerminalSnapshot,
+  recordTicketLifecycle,
+  type TicketTerminal,
+} from './ticket-lifecycle.js';
 
 const { aiurCursors, aiurEvents, jobProjections } = schema;
 
@@ -147,9 +152,10 @@ export function applyAiurEvent(
   record: FeedRecord,
 ): { applied: boolean; stage?: JobStage } {
   const now = (deps.now ?? (() => new Date()))().toISOString();
-  const epoch =
+  const cursorEpoch =
     deps.db.select({ epoch: aiurCursors.epoch }).from(aiurCursors).where(eq(aiurCursors.daemonSlug, daemonSlug)).get()
       ?.epoch ?? '';
+  const epoch = `live:${cursorEpoch}`;
   let ticketAggregate: ReturnType<typeof recordTicketLifecycle> = 'legacy';
   if (record.type === 'event') {
     const existing = deps.db
@@ -164,17 +170,20 @@ export function applyAiurEvent(
 
     const match = TICKET_TOPIC.exec(record.topic);
     const ticket = match?.[1];
-    const job = ticket === undefined ? null : deps.jobs.byTicket(daemonSlug, ticket);
+    let job = ticket === undefined ? null : deps.jobs.byTicket(daemonSlug, ticket);
     const current =
       job === null ? undefined : deps.db.select().from(jobProjections).where(eq(jobProjections.jobId, job.id)).get();
-    if (job !== null && ticket !== undefined && !['done', 'failed', 'cancelled'].includes(job.state)) {
+    if (job !== null && ticket !== undefined) {
       const kind = match?.[2] ?? '';
       const lifecycle = record.payload.lifecycle;
       ticketAggregate =
         kind === 'lifecycle.changed' && typeof lifecycle === 'string'
           ? recordTicketLifecycle(deps.db, job.id, Number(ticket), record.seq, lifecycle)
           : 'legacy';
+      job = deps.jobs.byTicket(daemonSlug, ticket);
       if (
+        job !== null &&
+        !['admitted', 'queued', 'done', 'failed', 'cancelled'].includes(job.state) &&
         ticketAggregate !== 'stale' &&
         (ticketAggregate !== 'legacy' || current?.lastEventSeq == null || record.seq >= current.lastEventSeq)
       ) {
@@ -220,7 +229,7 @@ export function applyAiurEvent(
     const patch = older ? {} : eventPatch(kind, record.payload);
     if (
       kind === 'lifecycle.changed' &&
-      ticketAggregate === 'waiting' &&
+      (ticketAggregate === 'waiting' || job.state === 'admitted') &&
       ['completed', 'cancelled'].includes(String(record.payload.lifecycle))
     ) {
       patch.lifecycle = 'waiting';
@@ -244,6 +253,16 @@ export function applyAiurEvent(
   emitChange(deps, outcome.change);
   if (outcome.usageJob !== undefined) deps.events.emit('job.usage.changed', { jobId: outcome.usageJob });
   return { applied: outcome.applied, ...(outcome.stage === undefined ? {} : { stage: outcome.stage }) };
+}
+
+// Intake can observe terminal events before its final filed checkpoint.
+export function reconcileFiledTickets(deps: ProjectionDeps, daemonSlug: string, ticket: string): void {
+  const job = deps.jobs.byTicket(daemonSlug, ticket);
+  if (!job || !deps.lifecycle || ['queued', 'admitted', 'done', 'failed', 'cancelled'].includes(job.state)) return;
+  const aggregate = recordedTicketAggregate(deps.db, job.id);
+  if (aggregate !== 'done' && aggregate !== 'cancelled') return;
+  deps.lifecycle.markTerminal(job.id, aggregate);
+  applyPatch(deps, daemonSlug, ticket, { lifecycle: aggregate === 'done' ? 'completed' : 'cancelled' });
 }
 
 function applyLifecycle(
@@ -284,7 +303,22 @@ export function applyIssueSnapshot(
   ticket: string,
   issue: IssueSnapshot,
 ): JobStage | null {
-  return applyPatch(deps, daemonSlug, ticket, issuePatch(issue));
+  const patch = issuePatch(issue);
+  if (patch.trackerState === 'done' || patch.trackerState === 'cancelled' || patch.trackerState === 'canceled') {
+    const job = deps.jobs.byTicket(daemonSlug, ticket);
+    const pending =
+      job &&
+      deps.db
+        .select({ key: schema.jobTickets.key })
+        .from(schema.jobTickets)
+        .where(and(eq(schema.jobTickets.jobId, job.id), isNull(schema.jobTickets.terminalState)))
+        .get();
+    if (pending) {
+      patch.trackerState = 'in-progress';
+      patch.lifecycle = 'waiting';
+    }
+  }
+  return applyPatch(deps, daemonSlug, ticket, patch);
 }
 
 // Called only after the tracker has confirmed the ticket's terminal state.
@@ -296,8 +330,9 @@ export function applyTerminalSnapshot(
   fence?: number,
 ): void {
   const job = deps.jobs.byTicket(daemonSlug, ticket);
-  if (!job || !deps.lifecycle || ['done', 'failed', 'cancelled'].includes(job.state)) return;
+  if (!job || !deps.lifecycle) return;
   const aggregate = recordTerminalSnapshot(deps.db, job.id, Number(ticket), state, fence);
+  if (['queued', 'admitted', 'done', 'failed', 'cancelled'].includes(job.state)) return;
   const terminal = aggregate === 'legacy' ? state : aggregate;
   if (terminal !== 'done' && terminal !== 'cancelled') return;
   deps.lifecycle.markTerminal(job.id, terminal);

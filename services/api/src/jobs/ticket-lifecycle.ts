@@ -15,6 +15,10 @@ function aggregateTickets(db: Db, jobId: string): TicketAggregate {
   return all.some((row) => row.terminalState === 'cancelled') ? 'cancelled' : 'done';
 }
 
+export function recordedTicketAggregate(db: Db, jobId: string): TicketAggregate {
+  return aggregateTickets(db, jobId);
+}
+
 // A verified tracker snapshot can recover a terminal event lost from the feed.
 export function recordTerminalSnapshot(
   db: Db,

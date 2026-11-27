@@ -112,6 +112,16 @@ describe('feed consumers', () => {
     await vi.waitFor(() => expect(recover).toHaveBeenCalledWith(SLUG, '142'));
     expect(reset).toHaveBeenCalledWith(SLUG);
   });
+  it('verifies a terminal ticket snapshot after a feed reset', async () => {
+    const h = harness();
+    const recover = vi.fn(async () => undefined);
+    h.deps.onMissingIssue = recover;
+    const feed = start(h);
+    await feed.tick();
+    h.clientFor(SLUG).issue.mockResolvedValue({ issue_identifier: '142', running: { state: 'agent:done' } });
+    h.subscriptions[0]?.options.onReset({ oldest_seq: 1, head_seq: 2, epoch: 'epoch-2' });
+    await vi.waitFor(() => expect(recover).toHaveBeenCalledWith(SLUG, '142'));
+  });
   it('does not advance the reset cursor when resetting ticket fences fails', async () => {
     const h = harness();
     writeCursor(h.db, SLUG, 10, 'epoch-1', new Date());

@@ -2,7 +2,13 @@ import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
-import { applyAiurEvent, applyTerminalSnapshot, type FeedRecord } from '../../src/jobs/projection.js';
+import {
+  applyAiurEvent,
+  applyIssueSnapshot,
+  applyTerminalSnapshot,
+  reconcileFiledTickets,
+  type FeedRecord,
+} from '../../src/jobs/projection.js';
 import { byTicket } from '../../src/jobs/repo.js';
 import { createTicketRecovery, resetTicketSequences } from '../../src/jobs/ticket-recovery.js';
 import { makeDeps } from '../helpers.js';
@@ -105,6 +111,65 @@ function completed(seq: number, ticket: number): FeedRecord {
 }
 
 describe('multi-ticket job lifecycle', () => {
+  it('records completions that arrive during filing and finalizes after filing', () => {
+    const { deps, projection, transitions } = setup();
+    deps.db
+      .update(schema.jobs)
+      .set({ state: 'admitted', aiurIssueNumber: null })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    applyAiurEvent(projection, 'game', completed(1, 10));
+    applyAiurEvent(projection, 'game', completed(2, 11));
+    expect(transitions).toEqual([]);
+    expect(deps.db.select().from(schema.jobProjections).get()?.lifecycle).toBe('waiting');
+    expect(
+      deps.db
+        .select()
+        .from(schema.jobTickets)
+        .all()
+        .map((row) => row.terminalState),
+    ).toEqual(['done', 'done']);
+    deps.db.update(schema.jobs).set({ state: 'filed', aiurIssueNumber: 10 }).where(eq(schema.jobs.id, 'j_1')).run();
+    reconcileFiledTickets(projection, 'game', '10');
+    expect(transitions).toEqual(['done']);
+  });
+  it('does not show the job as done when a single child snapshot is done', () => {
+    const { deps, projection } = setup();
+    applyIssueSnapshot(projection, 'game', '10', { idle: { state: 'done', labels: [] } });
+    expect(deps.db.select().from(schema.jobProjections).get()?.stage).not.toBe('done');
+  });
+  it('records ticket termination after the job was already cancelled', () => {
+    const { deps, projection, transitions } = setup();
+    deps.db.update(schema.jobs).set({ state: 'cancelled' }).where(eq(schema.jobs.id, 'j_1')).run();
+    applyAiurEvent(projection, 'game', { ...completed(1, 10), payload: { lifecycle: 'cancelled' } });
+    expect(
+      deps.db.select().from(schema.jobTickets).where(eq(schema.jobTickets.issueNumber, 10)).get()?.terminalState,
+    ).toBe('cancelled');
+    expect(transitions).toEqual([]);
+  });
+  it('does not confuse migrated history with a live epoch named legacy', () => {
+    const { deps, projection } = setup();
+    deps.db
+      .insert(schema.aiurCursors)
+      .values({ daemonSlug: 'game', lastSeq: 0, epoch: 'legacy', updatedAt: 'now' })
+      .run();
+    deps.db
+      .insert(schema.aiurEvents)
+      .values({
+        daemonSlug: 'game',
+        epoch: 'legacy',
+        seq: 1,
+        topic: 'ticket.10.lifecycle.changed',
+        ticket: '10',
+        jobId: 'j_1',
+        payload: '{}',
+        observedAt: 'now',
+      })
+      .run();
+
+    expect(applyAiurEvent(projection, 'game', completed(1, 11)).applied).toBe(true);
+    expect(deps.db.select().from(schema.aiurEvents).all()).toHaveLength(2);
+  });
   it('holds the job until every ticket is terminal', () => {
     const { deps, projection, transitions } = setup();
     expect(byTicket(deps.db, 'game', '11')).toEqual({ id: 'j_1', state: 'running' });

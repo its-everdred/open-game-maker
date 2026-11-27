@@ -1,12 +1,13 @@
 import { schema, type Db } from '@ogm/db';
-import { and, eq, exists, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, exists, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 
 import { SLOT_STATES } from './state.js';
 
 // A budget release does not prove every ticket in a job has stopped.
-export function jobHasOutstandingWork(db: Db) {
-  return or(
-    isNull(schema.jobs.releasedAt),
+export function hasUnfinishedTickets(db: Db) {
+  // New Game parent issues are handed to the Executor and do not run a worker.
+  return and(
+    ne(schema.jobs.kind, 'new_game'),
     exists(
       db
         .select({ key: schema.jobTickets.key })
@@ -16,6 +17,10 @@ export function jobHasOutstandingWork(db: Db) {
   );
 }
 
+export function jobHasOutstandingWork(db: Db) {
+  return or(and(inArray(schema.jobs.state, SLOT_STATES), isNull(schema.jobs.releasedAt)), hasUnfinishedTickets(db));
+}
+
 // Called inside the admission transaction, so concurrent requests cannot both claim a creator's slot.
 export function creatorHoldsSlot(db: Db, creatorId: string, limit: number): boolean {
   if (limit === 0) return false;
@@ -23,9 +28,7 @@ export function creatorHoldsSlot(db: Db, creatorId: string, limit: number): bool
     db
       .select({ count: sql<number>`count(*)` })
       .from(schema.jobs)
-      .where(
-        and(eq(schema.jobs.creatorId, creatorId), inArray(schema.jobs.state, SLOT_STATES), jobHasOutstandingWork(db)),
-      )
+      .where(and(eq(schema.jobs.creatorId, creatorId), jobHasOutstandingWork(db)))
       .get()!.count >= limit
   );
 }

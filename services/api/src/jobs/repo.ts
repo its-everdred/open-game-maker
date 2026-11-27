@@ -1,11 +1,10 @@
 import { JobPlan, Reservation, type CreateJobAccepted, type Job, type JobState } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
-import { and, asc, eq, inArray, isNotNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 
 import { HttpError } from '../app/errors.js';
 import { daemonRowForGame } from './daemons.js';
-import { jobHasOutstandingWork } from './creator-slot.js';
-import { SLOT_STATES } from './state.js';
+import { hasUnfinishedTickets, jobHasOutstandingWork } from './creator-slot.js';
 
 export type JobRow = typeof schema.jobs.$inferSelect;
 
@@ -132,7 +131,7 @@ export function byTicket(db: Db, daemonSlug: string, ticket: string): { id: stri
     .select({ id: schema.jobs.id, state: schema.jobs.state, gameId: schema.jobs.gameId })
     .from(schema.jobTickets)
     .innerJoin(schema.jobs, eq(schema.jobTickets.jobId, schema.jobs.id))
-    .where(and(eq(schema.jobTickets.issueNumber, issueNumber), isNotNull(schema.jobs.aiurIssueNumber)))
+    .where(eq(schema.jobTickets.issueNumber, issueNumber))
     .all()
     .find((job) => daemonRowForGame(db, job.gameId)?.slug === daemonSlug);
   if (linked) return { id: linked.id, state: linked.state };
@@ -151,7 +150,12 @@ export function activeJobs(db: Db, daemonSlug: string): { jobId: string; ticket:
   return db
     .select({ jobId: schema.jobs.id, gameId: schema.jobs.gameId, issueNumber: schema.jobs.aiurIssueNumber })
     .from(schema.jobs)
-    .where(and(inArray(schema.jobs.state, NON_TERMINAL_STATES), jobHasOutstandingWork(db)))
+    .where(
+      or(
+        and(inArray(schema.jobs.state, NON_TERMINAL_STATES), isNull(schema.jobs.releasedAt)),
+        hasUnfinishedTickets(db),
+      ),
+    )
     .orderBy(asc(schema.jobs.aiurIssueNumber), asc(schema.jobs.id))
     .all()
     .filter((row): row is { jobId: string; gameId: string; issueNumber: number } => row.issueNumber !== null)
@@ -176,13 +180,7 @@ export function activeJobsForSlug(db: Db, gameSlug: string): { kind: 'new_game' 
     .select({ kind: schema.jobs.kind })
     .from(schema.jobs)
     .innerJoin(schema.games, eq(schema.jobs.gameId, schema.games.id))
-    .where(
-      and(
-        eq(schema.games.slug, gameSlug.toLowerCase()),
-        inArray(schema.jobs.state, SLOT_STATES),
-        jobHasOutstandingWork(db),
-      ),
-    )
+    .where(and(eq(schema.games.slug, gameSlug.toLowerCase()), jobHasOutstandingWork(db)))
     .all()
     .map(({ kind }) => ({ kind: kind === 'scope' ? ('feature' as const) : kind }));
 }

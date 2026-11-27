@@ -6,7 +6,7 @@ import { expect, it } from 'vitest';
 import { migrate, MIGRATIONS_DIR } from '../src/migrate.js';
 import { openDb } from '../src/open.js';
 
-it('preserves existing events and their feed epoch when upgrading ticket lifecycle storage', () => {
+it('isolates existing events from live feed epochs when upgrading ticket lifecycle storage', () => {
   const directory = mkdtempSync(join(tmpdir(), 'ogm-ticket-migration-'));
   const { sqlite } = openDb(':memory:');
   try {
@@ -27,11 +27,11 @@ it('preserves existing events and their feed epoch when upgrading ticket lifecyc
       .run();
     migrate({ sqlite });
     expect(sqlite.prepare('SELECT daemon_slug, epoch, seq, topic FROM aiur_events').all()).toEqual([
-      { daemon_slug: 'game', epoch: 'old-epoch', seq: 7, topic: 'ticket.10.lifecycle.changed' },
+      { daemon_slug: 'game', epoch: 'legacy', seq: 7, topic: 'ticket.10.lifecycle.changed' },
     ]);
     sqlite
       .prepare(
-        "INSERT INTO aiur_events (daemon_slug, epoch, seq, topic, payload, observed_at) VALUES ('game', 'new-epoch', 7, 'ticket.11.lifecycle.changed', '{}', 'now')",
+        "INSERT INTO aiur_events (daemon_slug, epoch, seq, topic, payload, observed_at) VALUES ('game', 'live:old-epoch', 7, 'ticket.11.lifecycle.changed', '{}', 'now')",
       )
       .run();
     expect(sqlite.prepare('SELECT count(*) AS count FROM aiur_events').get()).toEqual({ count: 2 });

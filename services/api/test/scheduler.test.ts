@@ -64,6 +64,27 @@ function queued(deps: ReturnType<typeof makeDeps>, id: string, createdAt: string
 }
 
 describe('job scheduler', () => {
+  it('keeps the creator slot for a cancelled job with an outstanding ticket', () => {
+    const { deps } = setup();
+    queued(deps, 'j_cancelled', '2026-11-01T00:00:00.000Z');
+    deps.db
+      .update(schema.jobs)
+      .set({ state: 'cancelled', releasedAt: RESET.toISOString() })
+      .where(eq(schema.jobs.id, 'j_cancelled'))
+      .run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_cancelled', key: 'T1', issueNumber: 42, repo: 'owner/game', sig: 'ticket' })
+      .run();
+    queued(deps, 'j_waiting', '2026-11-01T01:00:00.000Z');
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual([]);
+    deps.db
+      .update(schema.jobTickets)
+      .set({ terminalState: 'cancelled' })
+      .where(eq(schema.jobTickets.jobId, 'j_cancelled'))
+      .run();
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual(['j_waiting']);
+  });
   it('retains the creator limit while a released job still has a nonterminal ticket', () => {
     const { deps } = setup();
     queued(deps, 'j_running', '2026-11-01T00:00:00.000Z');

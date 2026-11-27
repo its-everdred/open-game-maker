@@ -33,8 +33,8 @@ import { startDraftCleanup } from './game-drafts/cleanup.js';
 import { finishRun, startBuildSweep } from './builds/publish.js';
 import { createDaemonDirectory, daemonRowForGame } from './jobs/daemons.js';
 import { recordDaemonReadTokenStatus } from './job-commands/health.js';
-import { activeJobs, activeJobsForSlug, byTicket } from './jobs/repo.js';
-import { applyAiurEvent, applyIssueSnapshot, applyProgress } from './jobs/projection.js';
+import { activeJobs, activeJobsForSlug, byTicket, findJobRow } from './jobs/repo.js';
+import { applyAiurEvent, applyIssueSnapshot, applyProgress, reconcileFiledTickets } from './jobs/projection.js';
 import { createTicketRecovery, resetTicketSequences } from './jobs/ticket-recovery.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
@@ -237,7 +237,15 @@ const intake = createIntake({
       if (state === 'admitted') listener(jobId);
     });
   },
-  onJobChanged: (event) => deps.events.emit('job.changed', event),
+  onJobChanged: (event) => {
+    deps.events.emit('job.changed', event);
+    if (event.state === 'filed') {
+      const daemon = daemonRowForGame(db, event.gameId);
+      const job = findJobRow(db, event.jobId);
+      if (daemon && job.aiurIssueNumber !== null)
+        reconcileFiledTickets(projectionDeps, daemon.slug, String(job.aiurIssueNumber));
+    }
+  },
   alert: (event) => log({ event: 'job_intake_alert', ...event }),
   sweepMs: env.OGM_INTAKE_SWEEP_SECONDS * 1000,
 });

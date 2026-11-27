@@ -14,6 +14,16 @@ afterEach(async () => {
 });
 
 describe('pollers', () => {
+  it('verifies a terminal ticket snapshot against the tracker', async () => {
+    const h = harness();
+    const recover = vi.fn(async () => undefined);
+    h.deps.onMissingIssue = recover;
+    h.clientFor(SLUG).issue.mockResolvedValue({ issue_identifier: '142', running: { state: 'agent:done' } });
+    const feed = startFeedConsumers(h.deps);
+    running.push(feed);
+    await feed.tick();
+    expect(recover).toHaveBeenCalledWith(SLUG, '142');
+  });
   it('asks the tracker to recover a ticket missing from Aiur', async () => {
     const h = harness();
     const recover = vi.fn(async () => undefined);

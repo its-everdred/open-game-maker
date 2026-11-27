@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
 import { acceptedFor, activeJobs, activeJobsForSlug, byTicket, findJob, findJobRow } from '../src/jobs/repo.js';
+import { creatorHoldsSlot } from '../src/jobs/creator-slot.js';
 import { makeDeps } from './helpers.js';
 
 function setup() {
@@ -48,7 +49,7 @@ function insertJob(
   deps: ReturnType<typeof makeDeps>,
   id: string,
   issueNumber: number,
-  state: 'queued' | 'admitted' | 'running' | 'done',
+  state: 'queued' | 'admitted' | 'running' | 'paused_budget' | 'cancelled' | 'done',
   releasedAt: string | null = null,
   gameId = 'g_1',
 ) {
@@ -84,6 +85,28 @@ function insertJob(
 }
 
 describe('job projection directory', () => {
+  it('does not keep a completed New Game parent in the active directory', () => {
+    const deps = setup();
+    insertJob(deps, 'j_parent', 143, 'done', '2026-11-01T01:00:00.000Z');
+    deps.db.update(schema.jobs).set({ kind: 'new_game' }).where(eq(schema.jobs.id, 'j_parent')).run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_parent', key: 'new-game', issueNumber: 143, repo: 'owner/game', sig: 'sig' })
+      .run();
+    expect(activeJobs(deps.db, 'owner-game')).toEqual([]);
+    expect(activeJobsForSlug(deps.db, 'owner-game')).toEqual([]);
+    expect(creatorHoldsSlot(deps.db, 'u_1', 1)).toBe(false);
+  });
+  it('continues tracking a cancelled job until its ticket is terminal', () => {
+    const deps = setup();
+    insertJob(deps, 'j_cancelled', 144, 'cancelled', '2026-11-01T01:00:00.000Z');
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_cancelled', key: 'T1', issueNumber: 144, repo: 'owner/game', sig: 'sig' })
+      .run();
+    expect(activeJobs(deps.db, 'owner-game')).toEqual([{ jobId: 'j_cancelled', ticket: '144' }]);
+    expect(activeJobsForSlug(deps.db, 'owner-game')).toEqual([{ kind: 'feature' }]);
+  });
   it('continues tracking a released job while a ticket is nonterminal', () => {
     const deps = setup();
     insertJob(deps, 'j_released_live', 144, 'paused_budget', '2026-11-01T01:00:00.000Z');

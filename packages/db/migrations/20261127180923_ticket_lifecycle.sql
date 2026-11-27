@@ -11,7 +11,7 @@ CREATE TABLE `__new_aiur_events` (
 	PRIMARY KEY(`daemon_slug`, `epoch`, `seq`)
 );
 --> statement-breakpoint
-INSERT INTO `__new_aiur_events`("daemon_slug", "epoch", "seq", "topic", "ticket", "job_id", "payload", "observed_at") SELECT "daemon_slug", COALESCE((SELECT "epoch" FROM "aiur_cursors" WHERE "aiur_cursors"."daemon_slug" = "aiur_events"."daemon_slug"), ''), "seq", "topic", "ticket", "job_id", "payload", "observed_at" FROM `aiur_events`;--> statement-breakpoint
+INSERT INTO `__new_aiur_events`("daemon_slug", "epoch", "seq", "topic", "ticket", "job_id", "payload", "observed_at") SELECT "daemon_slug", 'legacy', "seq", "topic", "ticket", "job_id", "payload", "observed_at" FROM `aiur_events`;--> statement-breakpoint
 DROP TABLE `aiur_events`;--> statement-breakpoint
 ALTER TABLE `__new_aiur_events` RENAME TO `aiur_events`;--> statement-breakpoint
 PRAGMA foreign_keys=ON;--> statement-breakpoint

@@ -21,6 +21,7 @@ const allowed = new Map<string, JobState>([
   ['running:fail', 'failed'],
   ['running:cancel', 'cancelled'],
   ['paused_budget:resume', 'running'],
+  ['paused_budget:finish', 'done'],
   ['paused_budget:fail', 'failed'],
   ['paused_budget:cancel', 'cancelled'],
 ]);
