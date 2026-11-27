@@ -173,6 +173,7 @@ it('keeps an unconfirmed dictation from being sent or passed to voice until edit
   const composer = container.querySelector('aiur-composer') as ComposerElement;
   await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
   const session = await composer.adapters.dictation!.start({ onPartial: vi.fn(), onLevel: vi.fn() });
+  fake.listeners.get('transcript')!({ kind: 'partial', text: 'partial words' });
   fake.listeners.get('error')!({ code: 'incomplete_transcript', message: 'Final words missing' });
   await expect(session.stop()).rejects.toThrow('Final words missing');
   await expect(composer.onSend!('partial words', [])).rejects.toThrow('Review the dictation');
@@ -183,6 +184,18 @@ it('keeps an unconfirmed dictation from being sent or passed to voice until edit
   composer.shadowRoot!.querySelector('textarea')!.dispatchEvent(new Event('input', { bubbles: true }));
   await composer.onSend!('corrected words', []);
   expect(postText).toHaveBeenCalledWith('job-1', 'corrected words', undefined);
+});
+
+it('allows a voice attempt after microphone denial without a transcript', async () => {
+  const { container } = render(<AiurComposer jobId="job-1" voiceTarget={voiceTarget} postText={vi.fn()} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
+  const session = await composer.adapters.dictation!.start({ onPartial: vi.fn(), onLevel: vi.fn() });
+  fake.listeners.get('error')!({ code: 'mic_denied', message: 'Microphone denied' });
+  await expect(session.stop()).rejects.toThrow('Microphone denied');
+  await waitFor(async () =>
+    expect(await composer.adapters.voice!.start({ onEnd: vi.fn(), initialText: '' })).toBeDefined(),
+  );
 });
 
 it('carries opening text into voice and keeps the session when the job refreshes', async () => {

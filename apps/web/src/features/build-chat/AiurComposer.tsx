@@ -159,6 +159,7 @@ export function AiurComposer({
             dictation: {
               start: async ({ onPartial }) => {
                 dictationFailed = false;
+                let hadDictationText = false;
                 let resolveCancelled: () => void = () => {};
                 let cleanup: () => void = () => {};
                 const result = new Promise<string>((resolve, reject) => {
@@ -168,6 +169,7 @@ export function AiurComposer({
                   };
                   const offTranscript = dictation.on('transcript', (value) => {
                     if (value.kind !== 'final') {
+                      hadDictationText = Boolean(value.text.trim());
                       onPartial(value.text);
                       return;
                     }
@@ -175,7 +177,7 @@ export function AiurComposer({
                     resolve(value.text);
                   });
                   const offError = dictation.on('error', (value) => {
-                    dictationFailed = true;
+                    dictationFailed = hadDictationText;
                     cleanup();
                     reject(codedError(value.code, value.message));
                   });
