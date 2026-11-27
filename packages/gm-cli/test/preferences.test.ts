@@ -128,6 +128,19 @@ it('keeps worker-injected preferences current', () => {
   expect(checkPreferenceSection(entries, fallbackSkill)).toEqual([]);
 });
 
+it('records the approved app design parity preference until its gate is available', () => {
+  const preference = readPreferences(preferencesDirectory).find((item) => item.id === 'approved-design-parity');
+  expect(preference).toMatchObject({
+    date: '2026-11-26',
+    quote: 'i care about replicating even the smallest details',
+    owner_ticket: 1449,
+    check: { kind: 'review-only' },
+  });
+  expect(preference?.check.kind === 'review-only' && preference.check.reason).toContain(
+    'approved Claude Design canvas',
+  );
+});
+
 it('refreshes only the marked worker section', () => {
   const input = 'before\n<!-- preferences:start -->stale<!-- preferences:end -->\nafter';
   const output = updatePreferenceSection(input, [entry('one', '2026-01-01', 'icons')]);
