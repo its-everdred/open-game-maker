@@ -326,19 +326,36 @@ describe('match pause', () => {
     const boundary = await prepare;
     owner.send('net.pause.ack', boundary);
     peer.send('net.pause.ack', boundary);
-    owner.send('match.resume.request', {});
-    await waitFor(() => room.state.matchResumeAt > Date.now(), 'countdown');
+    const wallClock = vi.spyOn(Date, 'now').mockReturnValue(Date.now());
     const originalTimeout = room.clock.setTimeout.bind(room.clock);
-    const delayJoinMessages = vi
-      .spyOn(room.clock, 'setTimeout')
-      .mockImplementation((callback, delay, ...args) => originalTimeout(callback, delay === 0 ? 50 : delay, ...args));
-    const late = await connect(harness.testServer, room, 'p2', 'player');
-    const starts = vi.fn();
-    late.onMessage('net.start', starts);
-    await waitFor(() => starts.mock.calls.length > 0, 'late seat start');
-    delayJoinMessages.mockRestore();
-    const startAt = starts.mock.calls[0]?.[0].startAt as number;
-    expect(Math.floor(((room.state.matchResumeAt - startAt) * 60) / 1000)).toBe(boundary.tick);
+    const pendingJoinCallbacks: Array<() => void> = [];
+    const heldTimers: Array<{ clear(): void }> = [];
+    const delayJoinMessages = vi.spyOn(room.clock, 'setTimeout').mockImplementation((callback, delay, ...args) => {
+      if (delay !== 0 && delay !== 3_000) return originalTimeout(callback, delay, ...args);
+      const timer = originalTimeout(() => undefined, 30_000);
+      heldTimers.push(timer);
+      if (delay === 0)
+        pendingJoinCallbacks.push(() => {
+          timer.clear();
+          callback(...args);
+        });
+      return timer;
+    });
+    try {
+      owner.send('match.resume.request', {});
+      await waitFor(() => room.state.matchResumeAt > Date.now(), 'countdown');
+      const late = await connect(harness.testServer, room, 'p2', 'player');
+      const starts = vi.fn();
+      late.onMessage('net.start', starts);
+      pendingJoinCallbacks.forEach((callback) => callback());
+      await waitFor(() => starts.mock.calls.length > 0, 'late seat start');
+      const startAt = starts.mock.calls[0]?.[0].startAt as number;
+      expect(Math.floor(((room.state.matchResumeAt - startAt) * 60) / 1000)).toBe(boundary.tick);
+    } finally {
+      heldTimers.forEach((timer) => timer.clear());
+      delayJoinMessages.mockRestore();
+      wallClock.mockRestore();
+    }
   });
 
   it('starts the countdown once the forfeited pauser leaves every other seat connected', async () => {
@@ -425,7 +442,13 @@ describe('match pause', () => {
   });
 
   it('cancels a prepared pause when the room leaves play mode', async () => {
-    const room = await newRoom(harness.testServer, { protocol: 2, mode: 'per-seat', maxPlayers: 2, startLeadMs: 500 });
+    const room = await newRoom(harness.testServer, {
+      protocol: 2,
+      mode: 'per-seat',
+      maxPlayers: 2,
+      startLeadMs: 500,
+      timings: { seatReconnectSec: 30 },
+    });
     const owner = await connect(harness.testServer, room, 'owner', 'owner');
     const peer = await connect(harness.testServer, room, 'p1', 'player');
     owner.send('net.start.request', { force: true });
