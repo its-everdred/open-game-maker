@@ -310,10 +310,13 @@ const routes = new Hono<ApiBindings>()
         return {
           ...gameResponse(game),
           ...(canPlay ? {} : { repo: null, familyId: '', ownerId: '' }),
-          canManageRelease: authorize(actorFromPrincipal(principal), 'game.delist', {
-            familyId: game.familyId,
-            ownerId: game.ownerId,
-          }).ok,
+          canManageRelease:
+            (game.releaseState === 'coming_soon' &&
+              (principal.platformRole === 'admin' || principal.platformRole === 'maintainer')) ||
+            authorize(actorFromPrincipal(principal), 'game.delist', {
+              familyId: game.familyId,
+              ownerId: game.ownerId,
+            }).ok,
           canPlay,
           ...(game.releaseState === 'coming_soon' ? publicCardMedia(game.id, media.get(game.id)) : media.get(game.id)),
           stats: stats.get(game.id),
@@ -425,7 +428,6 @@ const routes = new Hono<ApiBindings>()
   })
   .patch('/games/:id', async (c) => {
     const principal = requirePrincipal(c, ['user']);
-    const game = findGameForFamily(c.get('deps').db, c.req.param('id'), principal.familyId);
     const body = await parseBody(c, patchBody);
     const stateOnly =
       body.releaseState !== undefined &&
@@ -433,12 +435,18 @@ const routes = new Hono<ApiBindings>()
       body.visibility === undefined &&
       body.allowAiGeneratedAssets === undefined &&
       body.preserveSlug === undefined;
-    requireAuthorization(
-      authorize(actorFromPrincipal(principal), stateOnly ? 'game.delist' : 'game.edit', {
-        familyId: game.familyId,
-        ownerId: game.ownerId,
-      }),
-    );
+    const globalAdmin = principal.platformRole === 'admin' || principal.platformRole === 'maintainer';
+    const game =
+      stateOnly && globalAdmin
+        ? findGame(c.get('deps').db, c.req.param('id'))
+        : findGameForFamily(c.get('deps').db, c.req.param('id'), principal.familyId);
+    if (!(stateOnly && globalAdmin))
+      requireAuthorization(
+        authorize(actorFromPrincipal(principal), stateOnly ? 'game.delist' : 'game.edit', {
+          familyId: game.familyId,
+          ownerId: game.ownerId,
+        }),
+      );
     const db = c.get('deps').db;
     const { preserveSlug, ...requestedChanges } = body;
     const changes =

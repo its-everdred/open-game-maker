@@ -214,9 +214,9 @@ const routes = new Hono<ApiBindings>()
     return c.json({ games: games.map(gameResponse) });
   })
   .get('/games/:id/early-access', (c) => {
-    const actor = admin(c, 'admin.members.manage');
+    admin(c, 'admin.members.manage');
     const db = c.get('deps').db;
-    const game = findGameForFamily(db, c.req.param('id'), actor.familyId);
+    const game = findGame(db, c.req.param('id'));
     return c.json({
       userIds: db
         .select({ userId: schema.gameEarlyAccess.userId })
@@ -227,9 +227,9 @@ const routes = new Hono<ApiBindings>()
     });
   })
   .post('/games/:id/early-access', async (c) => {
-    const actor = admin(c, 'admin.members.manage');
+    admin(c, 'admin.members.manage');
     const deps = c.get('deps');
-    const game = findGameForFamily(deps.db, c.req.param('id'), actor.familyId);
+    const game = findGame(deps.db, c.req.param('id'));
     const body = await parseBody(c, z.object({ email: z.email() }).strict());
     const userId = await deps.registry.userDirectory?.userIdForEmail(body.email);
     if (
@@ -245,9 +245,9 @@ const routes = new Hono<ApiBindings>()
     return c.body(null, 204);
   })
   .put('/games/:id/early-access/:userId', async (c) => {
-    const actor = admin(c, 'admin.members.manage');
+    admin(c, 'admin.members.manage');
     const deps = c.get('deps');
-    const game = findGameForFamily(deps.db, c.req.param('id'), actor.familyId);
+    const game = findGame(deps.db, c.req.param('id'));
     const userId = c.req.param('userId');
     const email = await deps.registry.userDirectory?.emailForUser(userId);
     if (
@@ -263,9 +263,9 @@ const routes = new Hono<ApiBindings>()
     return c.body(null, 204);
   })
   .delete('/games/:id/early-access/:userId', (c) => {
-    const actor = admin(c, 'admin.members.manage');
+    admin(c, 'admin.members.manage');
     const deps = c.get('deps');
-    const game = findGameForFamily(deps.db, c.req.param('id'), actor.familyId);
+    const game = findGame(deps.db, c.req.param('id'));
     deps.db
       .delete(schema.gameEarlyAccess)
       .where(and(eq(schema.gameEarlyAccess.gameId, game.id), eq(schema.gameEarlyAccess.userId, c.req.param('userId'))))

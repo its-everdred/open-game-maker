@@ -149,7 +149,13 @@ describe('games routes', () => {
       })
       .run();
     const outsider: TestUser = { ...player, userId: 'u-outside', email: 'outside@example.com', familyId: 'f-outside' };
-    installUsers(deps, [creator, admin, player, outsider]);
+    const outsideAdmin: TestUser = {
+      ...admin,
+      userId: 'u-admin-outside',
+      email: 'other-admin@example.com',
+      familyId: 'f-outside',
+    };
+    installUsers(deps, [creator, admin, player, outsider, outsideAdmin]);
     deps.db
       .insert(schema.families)
       .values({ id: 'f-outside', name: 'Other', ownerUserId: outsider.userId, createdAt: now })
@@ -159,6 +165,12 @@ describe('games routes', () => {
       .values({ familyId: 'f-outside', userId: outsider.userId, role: 'owner', capability: 'player', joinedAt: now })
       .run();
     const { app } = await makeApp(deps);
+    expect(await (await app.request('/api/v1/games', { headers: asUser(outsideAdmin.userId) })).json()).toMatchObject({
+      games: [{ id: 'g-soon', canPlay: true, canManageRelease: true }],
+    });
+    expect(
+      (await app.request('/api/v1/admin/games/g-soon/early-access', { headers: asUser(outsideAdmin.userId) })).status,
+    ).toBe(200);
     expect(await (await app.request('/api/v1/games', { headers: asUser(outsider.userId) })).json()).toMatchObject({
       games: [{ id: 'g-soon', canPlay: false, repo: null }],
     });
@@ -174,7 +186,7 @@ describe('games routes', () => {
       (
         await app.request('/api/v1/admin/games/g-soon/early-access', {
           method: 'POST',
-          headers: { ...asUser(admin.userId), 'content-type': 'application/json' },
+          headers: { ...asUser(outsideAdmin.userId), 'content-type': 'application/json' },
           body: JSON.stringify({ email: outsider.email }),
         })
       ).status,
@@ -339,7 +351,7 @@ describe('games routes', () => {
     ).toBe(403);
     const release = await app.request('/api/v1/games/g-soon', {
       method: 'PATCH',
-      headers: { ...asUser(admin.userId), 'content-type': 'application/json' },
+      headers: { ...asUser(outsideAdmin.userId), 'content-type': 'application/json' },
       body: JSON.stringify({ releaseState: 'released' }),
     });
     expect(release.status).toBe(200);
