@@ -15,8 +15,14 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { requireAuthorization } from '../accounts/families.js';
 import { allowanceRemaining, familyDayTotal, platformRemaining } from '../budget/allowance.js';
 import { reserve } from '../budget/ledger.js';
+import { weeklyJobs } from '../budget/weekly-jobs.js';
 import { dayKey, nextReset } from '../budget/reset.js';
-import { getBudgetSettings, type BudgetDefaults } from '../budget/settings.js';
+import {
+  getBudgetSettings,
+  hasExplicitAllowance,
+  hasExplicitPlatformCap,
+  type BudgetDefaults,
+} from '../budget/settings.js';
 import { HttpError } from '../app/errors.js';
 import { insertChatRow } from '../build-chat/store.js';
 import { energySource } from '../energy/source.js';
@@ -38,6 +44,7 @@ export type AdmissionDeps = {
   events: AppEvents;
   defaults: BudgetDefaults;
   now?: () => Date;
+  qaEnergyProbe?: boolean;
 };
 
 const SIZE_BY_COMPLEXITY: Record<number, SizeClass> = { 1: 'small', 2: 'medium', 3: 'large', 4: 'huge', 5: 'huge' };
@@ -70,6 +77,7 @@ function refusal(
   resetsAt: string,
   offers: AllowanceExceeded['offers'] = ['trim', 'split', 'queue', 'ask_admin'],
   window?: AllowanceExceeded['window'],
+  reason?: AllowanceExceeded['reason'],
 ): never {
   throw new AdmissionRefused({
     error,
@@ -77,6 +85,7 @@ function refusal(
     resetsAt,
     offers,
     ...(window ? { window } : {}),
+    ...(reason ? { reason } : {}),
   });
 }
 
@@ -110,6 +119,17 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
       const resetAt = nextReset(now, settings.resetZone);
       const resetsAt = resetAt.toISOString();
       const targetAt = request.start === 'at_reset' ? resetAt : now;
+      {
+        for (const at of [now, targetAt]) {
+          const weekly = weeklyJobs(deps.db, actor.userId, at, deps.defaults.resetZone);
+          const remaining =
+            request.kind === 'new_game' || request.kind === 'scope'
+              ? weekly.remaining.newGames
+              : weekly.remaining.edits;
+          if (remaining === 0)
+            refusal('energy_limit_reached', 0, weekly.resetsAt, ['ask_admin'], 'week', 'weekly_user');
+        }
+      }
       const allowance = allowanceRemaining({
         db: deps.db,
         familyId: game.familyId,
@@ -117,7 +137,10 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
         now: targetAt,
         defaults: deps.defaults,
       });
-      if (reservation.amountMicroUsd > allowance.remainingMicroUsd) {
+      if (
+        (deps.defaults.defaultAllowanceConfigured || hasExplicitAllowance(deps.db, game.familyId, actor.userId)) &&
+        reservation.amountMicroUsd > allowance.remainingMicroUsd
+      ) {
         refusal(
           'allowance_exceeded',
           allowance.remainingMicroUsd,
@@ -127,8 +150,9 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
       }
       const platformLeft = platformRemaining(deps.db, game.familyId, targetAt, deps.defaults);
       if (
+        (deps.defaults.defaultAllowanceConfigured || hasExplicitPlatformCap(deps.db, game.familyId)) &&
         familyDayTotal(deps.db, game.familyId, targetAt, deps.defaults) + reservation.amountMicroUsd >
-        settings.platformCapMicroUsd
+          settings.platformCapMicroUsd
       ) {
         refusal('platform_cap_reached', platformLeft, resetsAt);
       }
@@ -148,6 +172,8 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
           block.window,
         );
       }
+
+      if (deps.qaEnergyProbe) throw new HttpError(409, 'qa_energy_probe_fenced');
 
       const slot = request.kind === 'new_game' ? 'new_game' : 'edit';
       const held = deps.db

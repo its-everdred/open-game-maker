@@ -49,6 +49,7 @@ export interface AppDeps {
     voiceInternalSecret?: string;
     narrationConcurrency: number;
     defaultDailyAllowanceMicroUsd: number;
+    defaultDailyAllowanceConfigured?: boolean;
     resetZoneDefault: string;
     intakeDir?: string;
     reportBundleMaxBytes: number;

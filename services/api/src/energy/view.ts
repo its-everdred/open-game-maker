@@ -17,13 +17,9 @@ function usedPercent(used: number | null, limit: number | null): number | null {
 // The tightest known limit decides the status, provider readings included (an unknown or stale reading has no
 // share and decides nothing); with no known limit it is unknown, not healthy.
 export function energyLevel(snapshot: EnergySnapshot): EnergyLevel {
-  const left = [...WINDOWS, ...SERVICES].flatMap((name) => {
-    const used = snapshot.usage[name];
-    const limit = snapshot.limits[name];
-    if (used === null || limit === null) return [];
-    return [limit === 0 ? 0 : 1 - used / limit];
-  });
-  for (const { usedPercent } of snapshot.readings) if (usedPercent !== null) left.push(1 - usedPercent / 100);
+  const left = snapshot.readings
+    .filter(({ id }) => /^(claude|codex):/.test(id) || id === 'fal')
+    .flatMap(({ usedPercent }) => (usedPercent === null ? [] : [1 - usedPercent / 100]));
   if (left.length === 0) return 'unknown';
   const tightest = Math.min(...left);
   if (tightest <= 0) return 'critical';

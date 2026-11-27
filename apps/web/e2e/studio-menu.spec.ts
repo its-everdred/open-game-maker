@@ -435,14 +435,14 @@ test('rings Energy in the menu and opens its windows, then its settings', async 
   await page.goto('/all');
 
   await page.locator('.studio-library-volume button').click({ button: 'right' });
-  await page.getByRole('button', { name: 'Energy: Limited' }).click();
-  const detail = page.getByRole('link', { name: 'Energy settings' });
+  await page.getByRole('button', { name: 'Minerals and Gas: Limited' }).click();
+  const detail = page.getByRole('link', { name: 'Minerals and Gas settings' });
   await expect(detail).toContainText('20% left');
   await capturePhone(page, testInfo, 'games-menu-energy');
 
   await detail.click();
   await expect(page).toHaveURL(/\/settings\/energy$/);
-  await expect(page.getByRole('heading', { name: 'Energy: Limited' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Minerals and Gas: Limited' })).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Balanced' })).toBeChecked();
   await capturePhone(page, testInfo, 'settings-energy');
 });
