@@ -56,3 +56,16 @@ it('rejects literal inline design values while accepting tokens', async () => {
   );
   expect(results[0]!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(2);
 }, 30_000);
+
+it('rejects raw inline values hidden in conditional and mixed-token expressions', async () => {
+  const eslint = new ESLint({
+    overrideConfig: [
+      { plugins: { glass: { rules: { components: glassComponentsRule } } }, rules: { 'glass/components': 'error' } },
+    ],
+  });
+  const [result] = await eslint.lintText(
+    "const Screen = ({ active }) => <div style={{ color: active ? 'var(--ink)' : '#fff', boxShadow: 'var(--shadow) 2px red', opacity: active && 0.5 }} />;",
+    { filePath: 'src/Screen.tsx' },
+  );
+  expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(3);
+}, 30_000);

@@ -4,6 +4,17 @@ const controlClasses = /(?:^|[\s_-])(?:panel|sheet|menu|chip|toggle|slider)(?:$|
 const designStyle =
   /^(?:color|background(?:Color)?|border(?:.*Color|.*Radius)?|boxShadow|textShadow|backdropFilter|opacity|font(?:Size|Weight)?|lineHeight|letterSpacing|transition(?:Duration|TimingFunction)?|animation(?:Duration|TimingFunction)?)$/;
 
+function rawDesignValue(node) {
+  if (node.type === 'ConditionalExpression') return rawDesignValue(node.consequent) || rawDesignValue(node.alternate);
+  if (node.type === 'LogicalExpression') return rawDesignValue(node.left) || rawDesignValue(node.right);
+  if (node.type !== 'Literal') return false;
+  const value = node.value;
+  return (
+    typeof value === 'number' ||
+    (typeof value === 'string' && !/^(?:var\(--[\w-]+\)|inherit|none|normal|0)$/.test(value.trim()))
+  );
+}
+
 // Native controls belong inside the shared library so every screen gets the
 // same semantics and states. Test fixtures are excluded by the caller.
 export const glassComponentsRule = {
@@ -48,13 +59,8 @@ export const glassComponentsRule = {
           for (const property of expression.properties) {
             if (property.type !== 'Property' || property.computed) continue;
             const name = property.key.type === 'Identifier' ? property.key.name : property.key.value;
-            if (typeof name !== 'string' || !designStyle.test(name) || property.value.type !== 'Literal') continue;
-            const value = property.value.value;
-            if (
-              typeof value === 'number' ||
-              (typeof value === 'string' && !/^(?:var\(|inherit$|none$|normal$|0$)/.test(value.trim()))
-            )
-              context.report({ node: property, messageId: 'style', data: { name } });
+            if (typeof name !== 'string' || !designStyle.test(name)) continue;
+            if (rawDesignValue(property.value)) context.report({ node: property, messageId: 'style', data: { name } });
           }
         }
       },
