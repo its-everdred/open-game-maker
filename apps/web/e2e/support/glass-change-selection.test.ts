@@ -12,7 +12,7 @@ it('selects affected screens and fails closed on other visible routes', () => {
   expect(glassScreens(['apps/web/src/routes/admin/admin.css'])).toEqual(['Admin', 'Unmapped']);
   expect(glassScreens(['apps/web/src/features/worker-builds/BuildTracker.tsx'])).toEqual(['Activity', 'Unmapped']);
   expect(glassScreens(['apps/web/src/routes/auth.css'])).toEqual(['SignIn', 'Unmapped']);
-  expect(glassScreens(['apps/web/src/routes/title/TitleScreen.tsx'])).toEqual(['Unmapped']);
+  expect(glassScreens(['apps/web/src/routes/title/TitleScreen.tsx'])).toEqual(['Title']);
   expect(glassScreens(['apps/web/src/routes/games/GameDetail.tsx'])).toEqual(['GameSheet', 'Home']);
   expect(glassScreens(['apps/web/src/components/GlassButton.tsx'])).toEqual(['Unmapped']);
   expect(glassScreens(['apps/web/public/new-image.png'])).toEqual(['Unmapped']);
@@ -79,7 +79,7 @@ it('runs covered screens and fails when a screen or real editor game is missing'
   const log = vi.fn();
   const error = vi.fn();
   expect(
-    runGlassScreens(['apps/web/src/routes/games/GamesScreen.tsx', 'apps/web/src/routes/title/TitleScreen.tsx'], {
+    runGlassScreens(['apps/web/src/routes/games/GamesScreen.tsx', 'apps/web/src/routes/unmapped/View.tsx'], {
       run,
       log,
       error,

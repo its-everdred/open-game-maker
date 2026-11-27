@@ -22,7 +22,9 @@ const gameDist = process.env.OGM_GLASS_GAME_DIST;
 const bridgePort = process.env.OGM_WEB_BRIDGE_PORT ?? '43176';
 if (
   selected &&
-  !['all', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet', 'Admin', 'Activity'].includes(selected)
+  !['all', 'Title', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet', 'Admin', 'Activity'].includes(
+    selected,
+  )
 ) {
   throw new Error(`Unknown glass parity screen: ${selected}`);
 }
@@ -32,6 +34,7 @@ const runId = randomUUID();
 test.use({ trace: 'off' });
 test.setTimeout(300_000);
 const screens = [
+  { screen: 'Title', name: 'Title-780x1688', width: 390, height: 844, scale: 2, route: '/?test' },
   { screen: 'SignIn', name: 'SignIn-780x1688', width: 390, height: 844, scale: 2, route: '/signin?test' },
   { screen: 'NewGame', name: 'NewGame-780x1688', width: 390, height: 844, scale: 2, route: '/new?test&step=genre' },
   { screen: 'GameSheet', name: 'GameSheet-780x1688', width: 390, height: 844, scale: 2, route: '/all?test' },
@@ -330,21 +333,23 @@ for (const target of screens) {
       }
       await page.goto(target.route, { waitUntil: 'domcontentloaded' });
       const selector =
-        target.screen === 'Activity'
-          ? '.worker-tracker-button'
-          : target.screen === 'Admin'
-            ? '.admin-table'
-            : target.screen === 'GameSheet'
-              ? '[data-game-id="blobs"] .game-tile'
-              : target.screen === 'NewGame'
-                ? '.new-game-head'
-                : target.screen === 'SignIn'
-                  ? '.signin-screen'
-                  : target.screen === 'Editor'
-                    ? '.edit-workspace'
-                    : target.screen === 'Home'
-                      ? '[data-game-id]'
-                      : '.settings-screen';
+        target.screen === 'Title'
+          ? '.title-screen'
+          : target.screen === 'Activity'
+            ? '.worker-tracker-button'
+            : target.screen === 'Admin'
+              ? '.admin-table'
+              : target.screen === 'GameSheet'
+                ? '[data-game-id="blobs"] .game-tile'
+                : target.screen === 'NewGame'
+                  ? '.new-game-head'
+                  : target.screen === 'SignIn'
+                    ? '.signin-screen'
+                    : target.screen === 'Editor'
+                      ? '.edit-workspace'
+                      : target.screen === 'Home'
+                        ? '[data-game-id]'
+                        : '.settings-screen';
       await expect(page.locator(selector).first()).toBeVisible({ timeout: 30_000 });
       if (target.screen === 'Activity') {
         await page.locator(selector).first().click();
