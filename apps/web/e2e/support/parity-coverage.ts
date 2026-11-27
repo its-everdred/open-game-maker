@@ -95,3 +95,23 @@ export function missingParityCoverage(
     missingCaptures: [...expected].filter((name) => !captured.has(name)).sort(),
   };
 }
+
+/** Apply the same reference and capture requirements to each selected screen. */
+export function missingSelectedParityCoverage(
+  references: readonly string[],
+  captures: readonly Capture[],
+  selectedScreens: ReadonlySet<string>,
+) {
+  const required = requiredParityArtboards.filter((name) =>
+    [...selectedScreens].some((screen) =>
+      [screen, `${screen}Landscape`, `${screen}Desktop`].some((artboard) => name.startsWith(`${artboard}-`)),
+    ),
+  );
+  const requiredSet = new Set<string>(required);
+  return missingParityCoverage(
+    required,
+    references.filter((file) => requiredSet.has(file.replace(/\.png$/, ''))),
+    captures,
+    selectedScreens,
+  );
+}
