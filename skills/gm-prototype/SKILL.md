@@ -22,6 +22,17 @@ prototype needs the creator's approved mock, a build needs the approved prototyp
 | `phase:polish` | high | Rounds on the live build until the creator approves | Re-asking for a build he already judged |
 
 ## Every turn
+Before a new round or implementation, inspect the system's related work: its decisions, open and recent tickets and
+PRs, branches, merged code, tools, pipelines and approved assets. Run `gm work search <feature or topic>` and read the
+Aiur overlap review on the ticket, including their limitations; inspect anything they cannot resolve. Record a verdict
+in the workpad: **build** (and why
+this is new ground), **extend** the named existing module or PR, or **fold into #<ticket>**. Do not start a parallel
+implementation of an existing capability. If streams overlap, identify one owner, carry useful files and assets to
+that owner and move the remaining scope there; pause the redundant work. Keep continuation tickets under the same
+system epic and feature lane. This is a review practice, not a hard block on opening a mock round.
+Before handing off a PR, save the search's `--json` output and pass it to `gm check --body <pr-body> --work-bundle
+<file> --pr <number>`; name any overlapping PR that this work extends or supersedes in `## Related work`.
+
 1. **Read your rung** from the `phase:*` label and the review ledger. Build only what that rung delivers. Your
    effort is set by the `model:<effort>` label. Never change it, never ask for more, and never pretend to have more.
    On the first turn, raise the ticket's `open` inventory decisions (the ids under `## Creator decisions`; when the

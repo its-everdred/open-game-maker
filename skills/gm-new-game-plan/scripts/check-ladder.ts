@@ -96,6 +96,22 @@ export function checkLadder(markdown: string): string[] {
     problems.push('Features: each ticket needs consistent game and all ladder role labels');
   if (new Set(features).size !== features.length) problems.push('Features: a feature is listed twice');
 
+  const systems = all.find((section) => section.heading === 'Systems');
+  const systemRows = systems ? rows(systems) : [];
+  if (!systemRows.length) problems.push('Systems: add a system with an epic, feature, lanes and convergence ticket');
+  for (const row of systemRows) {
+    for (const column of ['System', 'GitHub epic', 'Aiur feature', 'Stream lanes', 'Convergence prototype', 'Streams'])
+      if (!row[column] || isPlaceholder(row[column])) problems.push(`Systems: fill in ${column}`);
+  }
+  const assigned = systemRows.flatMap((row) => (row.Streams ?? '').split(',').map((value) => value.trim()).filter(Boolean));
+  for (const feature of features)
+    if (assigned.filter((stream) => stream === feature).length !== 1)
+      problems.push(`Systems: assign "${feature}" to exactly one system`);
+  for (const stream of assigned)
+    if (!features.includes(stream)) problems.push(`Systems: "${stream}" is not in Features`);
+  const systemNames = systemRows.map((row) => row.System).filter(Boolean);
+  if (new Set(systemNames).size !== systemNames.length) problems.push('Systems: a system is listed twice');
+
   const media = all.find((section) => section.heading === 'Game media');
   const mediaRows = media ? rows(media) : [];
   for (const [asset, roles] of [

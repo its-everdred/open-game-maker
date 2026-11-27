@@ -56,7 +56,13 @@ or revising tickets so the answer changes the plan.
    count: as many as the game needs, each completable by one agent in a few hours.
 5. **Shallow dependencies.** Aim for depth 2–3: skeleton → parallel systems and content → integration and polish.
    Depend on interfaces, not on finished features. Avoid two tickets editing the same file.
-6. **One ticket per feature.** Each creator-request ticket climbs `phase:mock` (`model:low`),
+6. **Systems and streams.** Group work into systems (combat, world, UI, audio, and others the game needs). Each system
+   has a GitHub epic with native sub-issues and a matching aiur feature under the game epic, with a lane for each
+   stream. Name the one system prototype child that will integrate the streams before filing them. Stream tickets own
+   their distinct components; the convergence child owns cross-stream wiring and integration, not those components.
+   Before dispatch and at every new round, compare planned work with in-flight and built work and
+   record a build, extend, or fold verdict. If work overlaps, name one owner and carry useful files, assets and
+   remaining scope into it. Each stream's creator-request ticket climbs `phase:mock` (`model:low`),
    `phase:prototype` (`model:medium`), `phase:build` (`model:xhigh`) and `phase:polish` (`model:high`)
    on the same issue. Approval changes the phase and effort labels in place; rejection stays on that rung.
    Never file Review, Continue or Verify follow-ups. The five activities in `references/prototype-ladder.md`
@@ -117,8 +123,10 @@ A ticket changing art direction, logo, board or scene look, core gameplay, or ad
   checks, skills to load, assets chosen, the decisions it relies on (by id) and its flow node or loop. No raw player text: summaries only.
   Each body has a `## Creator decisions` section listing the inventory ids the ticket builds (or `none`), and each
   listed entry's `ticket` names it; an inventory entry no ticket lists is a missing ticket or a missing line.
-- `aiur-main feature create` for the game (once) and `aiur-main epic set` per lane; GitHub native blocked-by edges for
-  dependencies; priority labels (prototype tickets `priority:1`).
+- Create a GitHub epic per system and attach its stream and convergence tickets as native sub-issues. Create the
+  matching aiur feature under the game's epic and assign each stream to its lane. Continuations stay in that same
+  epic and feature lane. Use GitHub native blocked-by edges for dependencies and priority labels (prototype tickets
+  `priority:1`).
 - **Roles on every ticket.** Each child carries `game:<slug>` and one or more `role:*` labels chosen by its work type
   from `../gm-core/references/roles.md` (a HUD ticket `role:visual`, a combat ticket `role:gameplay`, a ticket that
   does both gets both). aiur inlines each label's mandatory skills when the ticket starts, so a ticket without a role

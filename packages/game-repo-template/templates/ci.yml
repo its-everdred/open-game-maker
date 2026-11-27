@@ -3,11 +3,14 @@ name: ci
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   push:
     branches: [main]
 
 permissions:
   contents: read
+  issues: read
+  pull-requests: read
 
 env:
   GM_VERIFY_SOFTWARE_GL: '1'
@@ -26,5 +29,14 @@ jobs:
           node-version: 24
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      - name: Check related work
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          node -e 'const fs = require("node:fs"); const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")); fs.writeFileSync(process.env.RUNNER_TEMP + "/pr-body.md", event.pull_request.body || "");'
+          pnpm exec gm work pr-check --body "$RUNNER_TEMP/pr-body.md" --base "$PR_BASE" --pr "$PR_NUMBER"
       - run: pnpm run check
       - run: pnpm run test

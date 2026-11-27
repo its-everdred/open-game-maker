@@ -3,6 +3,12 @@
 A falling-blob versus puzzle: pairs of coloured blobs fall into a well, four of a colour clear, a clear that drops blobs
 into a new clear chains, and chains send garbage to the opponent. A worked example of `../build-order-template.md`.
 
+## Systems
+
+| System | GitHub epic | Aiur feature | Stream lanes | Convergence prototype | Streams |
+|---|---|---|---|---|---|
+| Blobs play | Example epic | blobs-play | gameplay, UI | Example play prototype | play screen, chains, character select, round end |
+
 ## Features
 
 | Feature | Flow node | Labels |

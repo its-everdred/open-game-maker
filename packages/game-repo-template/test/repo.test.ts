@@ -49,6 +49,7 @@ describe('renderRepoTemplate', () => {
     expect(workflow.env.GM_VERIFY_SOFTWARE_GL).toBe('1');
     const runs = workflow.jobs.required.steps.flatMap((step: { run?: string }) => (step.run ? [step.run] : []));
     expect(runs).toEqual(expect.arrayContaining(['pnpm install --frozen-lockfile', 'pnpm run check', 'pnpm run test']));
+    expect(runs.some((run: string) => run.includes('pnpm exec gm work pr-check'))).toBe(true);
     const agents = files.find((f) => f.path === 'AGENTS.md')!.content;
     for (const command of ['pnpm install --frozen-lockfile', 'pnpm run check', 'pnpm run test']) {
       expect(agents).toContain(`\`${command}\``);

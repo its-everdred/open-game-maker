@@ -4,8 +4,9 @@ import { resolve } from 'node:path';
 
 import { inventoryPath, markdownSection, readInventory, ticketDecisionIds } from './decision-inventory.js';
 import { playScenario, waivesPrototypeReview } from './prototype-review.js';
+import { overlapProblems, relatedWorkProblems } from './related-work-check.js';
 
-export function checkPrReview(cwd: string, bodyFile: string, base: string): string[] {
+export function checkPrReview(cwd: string, bodyFile: string, base: string, workBundle?: string, pr?: number): string[] {
   let body: string;
   try {
     body = readFileSync(resolve(cwd, bodyFile), 'utf8');
@@ -16,11 +17,40 @@ export function checkPrReview(cwd: string, bodyFile: string, base: string): stri
   const problems: string[] = [];
   let changed: string[] = [];
   try {
-    changed = execFileSync('git', ['diff', '--name-only', `${base}...HEAD`], { cwd, encoding: 'utf8' })
-      .split('\n')
+    changed = execFileSync('git', ['diff', '--name-only', '-z', `${base}...HEAD`], { cwd, encoding: 'utf8' })
+      .split('\0')
       .filter(Boolean);
   } catch {
     problems.push(`cannot compare PR changes with base ${base}`);
+  }
+  problems.push(...relatedWorkProblems(body, changed));
+  if (workBundle) {
+    try {
+      const bundle: unknown = JSON.parse(readFileSync(resolve(cwd, workBundle), 'utf8'));
+      if (!bundle || typeof bundle !== 'object' || !Array.isArray((bundle as { pulls?: unknown }).pulls))
+        throw new Error('missing pulls array');
+      const pulls: unknown[] = (bundle as { pulls: unknown[] }).pulls;
+      if (
+        !pulls.every((pull) => {
+          if (!pull || typeof pull !== 'object') return false;
+          const item = pull as { number?: unknown; state?: unknown; files?: unknown };
+          return (
+            typeof item.number === 'number' &&
+            typeof item.state === 'string' &&
+            Array.isArray(item.files) &&
+            item.files.every((file: unknown) => typeof file === 'string')
+          );
+        })
+      )
+        throw new Error('invalid pull entries');
+      problems.push(
+        ...overlapProblems(body, changed, pulls as { number: number; state: string; files: string[] }[], pr),
+      );
+    } catch (error) {
+      problems.push(
+        `cannot read related-work bundle ${workBundle}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
   let file: string;
   try {

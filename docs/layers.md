@@ -2,6 +2,18 @@
 
 Vendored on-demand sets include AnyMachine (`skills/vendor/anymachine/`), for custom Blender props and rigged machines, and AnyKit (`skills/vendor/anykit/`), for fal Tripo/Meshy prop kits. fal runs only on the NUC host through the `skills/gm-sprite-forge/scripts/fal3d.py` ledger.
 
+## System planning and related work
+
+`gm-new-game-plan` groups a game's streams under system epics and features, and names the prototype where they converge.
+`gm-prototype` asks workers to inspect in-flight and built work before each round and record whether to build, extend,
+or fold into an owner. Aiur's overlap reviewer supplies advisory dispatch and round verdicts and periodic feature
+scans. `gm work search <feature>` uses the local aiur feature registry, GitHub, the asset catalog and
+local decision inventories to collect context. Its limitations are part of the output: a missing match is not proof
+that no related work exists. PR checks with `gm check --body <file>` require a `## Related work` section with
+`Reused:`, `Overlap:` and `Verdict:` lines, except for documentation-only changes.
+The hourly meta pass can summarize per-feature consolidation proposals and reviewed weekly duplicate metrics with
+[`scripts/meta/overlap-report.ts`](../scripts/meta/overlap-report.md); missing reviewer coverage remains unknown.
+
 ## App domains
 
 `OGM_PUBLIC_APP_ORIGIN` in `~/.config/ogm/env/web.env` is the one app origin. Any other domain the Netlify site
