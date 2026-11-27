@@ -107,7 +107,7 @@ export function compileWeightExpression(
     const types: Record<
       string,
       {
-        op: 'add' | 'subtract' | 'multiply' | 'divide' | 'clamp' | 'contrast' | 'invert';
+        op: 'add' | 'subtract' | 'multiply' | 'divide' | 'clamp' | 'contrast' | 'invert' | 'lerp';
         output: number;
         inputs: number[];
       }
@@ -119,6 +119,7 @@ export function compileWeightExpression(
       'UnityEditor.ShaderGraph.ClampNode': { op: 'clamp', output: 3, inputs: [0, 1, 2] },
       'UnityEditor.ShaderGraph.ContrastNode': { op: 'contrast', output: 2, inputs: [0, 1] },
       'UnityEditor.ShaderGraph.OneMinusNode': { op: 'invert', output: 1, inputs: [0] },
+      'UnityEditor.ShaderGraph.LerpNode': { op: 'lerp', output: 3, inputs: [0, 1, 2] },
     };
     const spec = typeof node.m_Type === 'string' ? types[node.m_Type] : undefined;
     if (
@@ -128,22 +129,24 @@ export function compileWeightExpression(
       new Set(linked.map((entry) => entry.inputSlot)).size !== linked.length
     )
       throw new Error(`unsupported Unity scalar node ${String(node.m_Type)}`);
-    return {
-      op: spec.op,
-      args: spec.inputs.map((slot) => {
-        const input = linked.find((entry) => entry.inputSlot === slot);
-        const descriptor = Array.isArray(node.m_Slots)
-          ? node.m_Slots
-              .map((entry) => byId.get(ref(entry)))
-              .find((entry) => entry?.m_Id === slot && entry.m_SlotType === 0)
-          : undefined;
-        const allowsRgb =
-          vectorAllowed &&
-          descriptor?.m_Type !== 'UnityEditor.ShaderGraph.Vector1MaterialSlot' &&
-          descriptor?.m_Type !== 'UnityEditor.ShaderGraph.Vector2MaterialSlot';
-        return input ? resolve(input, next, narrow, allowsRgb) : slotDefault(node, slot);
-      }),
-    };
+    const args = spec.inputs.map((slot) => {
+      const input = linked.find((entry) => entry.inputSlot === slot);
+      const descriptor = Array.isArray(node.m_Slots)
+        ? node.m_Slots
+            .map((entry) => byId.get(ref(entry)))
+            .find((entry) => entry?.m_Id === slot && entry.m_SlotType === 0)
+        : undefined;
+      const allowsRgb =
+        vectorAllowed &&
+        descriptor?.m_Type !== 'UnityEditor.ShaderGraph.Vector1MaterialSlot' &&
+        descriptor?.m_Type !== 'UnityEditor.ShaderGraph.Vector2MaterialSlot';
+      return input ? resolve(input, next, narrow, allowsRgb) : slotDefault(node, slot);
+    });
+    if (spec.op === 'lerp') {
+      const [a, b, amount] = args;
+      return { op: 'add', args: [a!, { op: 'multiply', args: [{ op: 'subtract', args: [b!, a!] }, amount!] }] };
+    }
+    return { op: spec.op, args };
   };
   return resolve(start, ancestors, false, allowRgb);
 }
