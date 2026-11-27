@@ -36,3 +36,10 @@ test('slider track resolves the control fill', async ({ page }) => {
   expect(track).toContain('gradient');
   expect(track).toContain('40%');
 });
+
+test('display typography retains the approved fallback order', async ({ page }) => {
+  await page.setContent('<p style="font-family: var(--ogm-font-display)">Title</p>');
+  await page.addStyleTag({ content: tokens });
+  const family = await page.locator('p').evaluate((element) => getComputedStyle(element).fontFamily);
+  expect(family).toMatch(/Fredoka.*Nunito.*system-ui.*sans-serif/i);
+});

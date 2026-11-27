@@ -30,8 +30,13 @@ for (const [name, value] of Object.entries(tokens.radius)) emit(`radius-${name}`
 for (const [name, value] of Object.entries(tokens.size.orb)) emit(`orb-${name}`, value);
 for (const [name, value] of Object.entries(tokens.size.pill)) emit(`pill-${name}`, value);
 tokens.space.forEach((value, i) => emit(`space-${i + 1}`, value));
-emit('font-display', `'${tokens.type.display.family}', sans-serif`);
-emit('font-body', `'${tokens.type.body.family}', sans-serif`);
+function fontStack(type) {
+  return [type.family, ...type.fallback]
+    .map((family) => (family === 'system-ui' || family === 'sans-serif' ? family : `'${family}'`))
+    .join(', ');
+}
+emit('font-display', fontStack(tokens.type.display));
+emit('font-body', fontStack(tokens.type.body));
 for (const name of ['ease', 'spring']) {
   emit(`motion-${name}`, tokens.motion[name].$value);
   emit(`motion-${name}-duration`, tokens.motion[name].duration);
