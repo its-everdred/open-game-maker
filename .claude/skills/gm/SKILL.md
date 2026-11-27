@@ -53,7 +53,7 @@ Only aiur main runs on the NUC: fixes reach us by ticket → branch → PR → m
 
 ## Kevin's review loop (the product)
 - Every Kevin-facing round becomes a card on the review page `J677BXMrKJq59bngg11n2i`. The relay agent delivers his picks within 15 minutes; never stop its timer.
-- End every reply with the page link and the open count when questions are open.
+- End EVERY reply to Kevin (short status lines too) with the page link and the open count while any card is unreviewed, not only when a new card was added (Kevin 11-27).
 - Titles are plain words, never bare ticket numbers.
 
 ## Host steps and protection
