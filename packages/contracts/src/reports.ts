@@ -16,7 +16,7 @@ export const ReportError = z.object({
 export const CreateReport = z.object({
   gameId: Id,
   releaseId: Id.optional(),
-  buildHash: z.string().regex(/^[0-9a-f]{64}$/),
+  buildHash: z.string().regex(/^[A-Za-z0-9:_-]{1,200}$/),
   text: z.string().max(2000).optional(),
   error: ReportError.optional(),
   bundleKey: z.string().max(200).optional(),
@@ -100,7 +100,7 @@ export const TriageClaim = z.strictObject({
   reportId: Id,
   gameId: Id,
   releaseId: Id.optional(),
-  buildHash: z.string().regex(/^[0-9a-f]{64}$/),
+  buildHash: z.string().regex(/^[A-Za-z0-9:_-]{1,200}$/),
   route: z.enum(['game_repair', 'editor_hint']),
   jobId: Id.optional(),
   text: z.string().max(2000).optional(),
