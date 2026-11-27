@@ -26,7 +26,7 @@ description: Run Open Game Maker's agent fleet as its Executor. The OGM layer ov
 - aiur repo work belongs to the PC aiur session (tmux `pc-aiur` on everdred@100.89.62.105). Deliver to it over Khala AND by `tmux send-keys … Enter`, then press Enter again if the text was pasted, and read the pane to confirm it was sent.
 
 ## aiur upgrades
-Only aiur main runs on the NUC: fixes reach us by ticket → branch → PR → merge queue → upgrade. Never cherry-pick onto the release, run a local branch, or pin unmerged code (11-27: 78 off-main commits). Any `ALARM` from `aiur-keep-current.sh` is P0.
+Only aiur main runs on the NUC: fixes reach us by ticket → branch → PR → merge queue → upgrade. Never cherry-pick onto the release, run a local branch, or pin unmerged code (11-27: 78 off-main commits). An `ALARM` from `aiur-keep-current.sh` (printed once per off-main build) is P0.
 
 ## Ordering work: build queues, never slot juggling
 - **Priorities live in aiur build queues** (`aiur queue …`, `build_queue.set_order: ranked`). Labels alone don't order work. Pausing or parking running tickets to free a slot for a P0 is a fallback that needs a logged reason.
