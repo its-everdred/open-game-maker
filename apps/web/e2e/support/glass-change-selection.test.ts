@@ -7,6 +7,7 @@ it('selects affected screens and fails closed on other visible routes', () => {
   ).toEqual(['Home', 'Settings']);
   expect(glassScreens(['apps/web/src/features/editor/EditorChrome.tsx'])).toEqual(['Editor']);
   expect(glassScreens(['apps/web/src/routes/signin/SignInScreen.tsx'])).toEqual(['SignIn']);
+  expect(glassScreens(['apps/web/src/routes/new/NewGameScreen.tsx'])).toEqual(['NewGame']);
   expect(glassScreens(['apps/web/src/routes/auth.css'])).toEqual(['SignIn', 'Unmapped']);
   expect(glassScreens(['apps/web/src/routes/title/TitleScreen.tsx'])).toEqual(['Unmapped']);
   expect(glassScreens(['apps/web/src/routes/games/GameDetail.tsx'])).toEqual(['Home', 'Unmapped']);

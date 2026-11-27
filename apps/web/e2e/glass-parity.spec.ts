@@ -7,6 +7,7 @@ import { compareGlassScreen } from '../../../packages/gm-cli/src/design-parity/c
 import { verifyGlassReference } from '../../../packages/gm-cli/src/design-parity/reference';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { mockGamesRoutes } from './fixtures/games-routes';
+import { installNewRoutes } from './fixtures/new-routes';
 import { buildId, installGameApi } from './support/mock-game-api';
 import { captureUrlFile } from './support/shell-capture-files';
 import { gameHeaders } from '@ogm/contracts';
@@ -19,7 +20,7 @@ const selected = process.env.OGM_GLASS_PARITY_SCREEN;
 const gameDist = process.env.OGM_GLASS_GAME_DIST;
 // eslint-disable-next-line no-restricted-properties
 const bridgePort = process.env.OGM_WEB_BRIDGE_PORT ?? '43176';
-if (selected && !['all', 'Home', 'Editor', 'Settings', 'SignIn'].includes(selected)) {
+if (selected && !['all', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame'].includes(selected)) {
   throw new Error(`Unknown glass parity screen: ${selected}`);
 }
 const root = resolve(process.cwd(), '../..');
@@ -29,6 +30,7 @@ test.use({ trace: 'off' });
 test.setTimeout(180_000);
 const screens = [
   { screen: 'SignIn', name: 'SignIn-780x1688', width: 390, height: 844, scale: 2, route: '/signin?test' },
+  { screen: 'NewGame', name: 'NewGame-780x1688', width: 390, height: 844, scale: 2, route: '/new?test&step=genre' },
   { screen: 'Home', name: 'Home-780x1688', width: 390, height: 844, scale: 2, route: '/all?test' },
   { screen: 'Home', name: 'HomeLandscape-844x390', width: 844, height: 390, scale: 1, route: '/all?test' },
   { screen: 'Home', name: 'HomeDesktop-1440x900', width: 1440, height: 900, scale: 1, route: '/all?test' },
@@ -88,6 +90,7 @@ for (const target of screens) {
         });
       } else {
         await mockGamesRoutes(page);
+        if (target.screen === 'NewGame') await installNewRoutes(page);
         await page.route('**/api/v1/jobs?gameId=*', (route) => route.fulfill({ json: { jobs: [] } }));
         await page.route('**/api/v1/me/commands*', (route) => route.fulfill({ json: { commands: [], sessions: [] } }));
         await page.route('**/api/v1/me/core-commands*', (route) =>
@@ -175,14 +178,23 @@ for (const target of screens) {
       }
       await page.goto(target.route, { waitUntil: 'domcontentloaded' });
       const selector =
-        target.screen === 'SignIn'
-          ? '.signin-screen'
-          : target.screen === 'Editor'
-            ? '.edit-workspace'
-            : target.screen === 'Home'
-              ? '[data-game-id]'
-              : '.settings-screen';
+        target.screen === 'NewGame'
+          ? '.new-game-head'
+          : target.screen === 'SignIn'
+            ? '.signin-screen'
+            : target.screen === 'Editor'
+              ? '.edit-workspace'
+              : target.screen === 'Home'
+                ? '[data-game-id]'
+                : '.settings-screen';
       await expect(page.locator(selector).first()).toBeVisible({ timeout: 30_000 });
+      if (target.screen === 'NewGame') {
+        for (const name of ['Adventure', 'RPG']) {
+          const option = page.getByRole('button', { name });
+          await option.click();
+          await expect(option).toHaveAttribute('aria-pressed', 'true');
+        }
+      }
       if (target.screen === 'Editor') {
         await expect(page.locator('.game-frame iframe')).toBeVisible();
         await page.waitForFunction(
