@@ -6,25 +6,28 @@ import { meshNameFromMeta } from './model-meta.js';
 import {
   materialColorProperties,
   materialFloatProperties,
+  materialIsTransparent,
   materialTextureProperties,
   materialShaderGuid,
   parseUnitySurface,
   type UnitySurface,
 } from './material.js';
 import { shaderGraphBase } from './shadergraph.js';
+import { shaderGraphAlpha } from './shader-alpha.js';
 import { mapWeightExpression, type WeightExpression } from './weight-expression.js';
 import { inlineUnitySubgraphs } from './subgraphs.js';
 import { selectUnityBuilding, selectUnityPieces } from './select.js';
-import { textureIsSrgb } from './texture-meta.js';
+import { textureHasSourceAlpha, textureIsSrgb } from './texture-meta.js';
 import { readUnityRecords } from './read.js';
 import type { UnityMeshNode, UnityReference } from './hierarchy.js';
 
-export type PlannedUnitySurface = Omit<UnitySurface, 'blends' | 'products' | 'scalarMask'> & {
+export type PlannedUnitySurface = Omit<UnitySurface, 'blends' | 'products' | 'scalarMask' | 'opacity'> & {
   path: string;
   texturePaths: string[];
   textureSrgb: boolean[];
   products?: PlannedUnitySurface[];
   scalarMask?: WeightExpression<PlannedUnitySurface>;
+  opacity?: PlannedUnitySurface;
   blends?: Array<{
     a: PlannedUnitySurface;
     b: PlannedUnitySurface;
@@ -116,16 +119,17 @@ export async function planUnityAssembly(
       if (shaderPath && extname(shaderPath).toLowerCase() === '.shadergraph') {
         const shader = file({ fileId: '0', guid: shaderGuid! }, '.shadergraph');
         try {
+          const shaderSource = readFileSync(shader, 'utf8');
+          const loadSubgraph = (guid: string) => readFileSync(file({ fileId: '0', guid }, '.shadersubgraph'), 'utf8');
+          const floats = materialFloatProperties(contents);
+          const colors = materialColorProperties(contents);
+          const textures = materialTextureProperties(contents);
           surface = parseUnitySurface(
             contents,
-            shaderGraphBase(
-              inlineUnitySubgraphs(readFileSync(shader, 'utf8'), (guid) =>
-                readFileSync(file({ fileId: '0', guid }, '.shadersubgraph'), 'utf8'),
-              ),
-              materialFloatProperties(contents),
-              materialColorProperties(contents),
-              materialTextureProperties(contents),
-            ),
+            shaderGraphBase(inlineUnitySubgraphs(shaderSource, loadSubgraph), floats, colors, textures),
+            materialIsTransparent(contents)
+              ? shaderGraphAlpha(shaderSource, loadSubgraph, floats, colors, textures)
+              : undefined,
           );
         } catch (error) {
           throw new Error(`material ${path}: ${error instanceof Error ? error.message : String(error)}`, {
@@ -144,12 +148,13 @@ export async function planUnityAssembly(
         const textureSrgb = texturePaths.map((texturePath) =>
           textureIsSrgb(readFileSync(`${texturePath}.meta`, 'utf8')),
         );
-        const { blends, products, scalarMask, ...base } = term;
+        const { blends, products, scalarMask, opacity, ...base } = term;
         return {
           ...base,
           path,
           texturePaths,
           textureSrgb,
+          ...(opacity ? { opacity: resolveSurface(opacity) } : {}),
           ...(products ? { products: products.map(resolveSurface) } : {}),
           ...(scalarMask !== undefined ? { scalarMask: mapWeightExpression(scalarMask, resolveSurface) } : {}),
           ...(blends
@@ -163,6 +168,14 @@ export async function planUnityAssembly(
             : {}),
         };
       };
+      if (surface.opacity) {
+        const mask = surface.opacity.scalarMask;
+        if (!mask || typeof mask === 'number' || 'op' in mask || mask.channel !== 3 || mask.term.textures.length !== 1)
+          throw new Error(`material ${path}: unsupported Unity opacity graph`);
+        const texturePath = file({ fileId: '0', guid: mask.term.textures[0]!.guid }, ['.png', '.tga', '.tif', '.tiff']);
+        if (!textureHasSourceAlpha(readFileSync(`${texturePath}.meta`, 'utf8')))
+          throw new Error(`material ${path}: unsupported Unity opacity texture alpha`);
+      }
       return resolveSurface(surface);
     });
     return { ...node, ...(model ? { model } : {}), surfaces };

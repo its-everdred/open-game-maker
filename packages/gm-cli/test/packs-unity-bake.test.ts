@@ -55,6 +55,13 @@ surface={'path':'test.mat','textures':[{'uv':0,'scale':[1,1],'offset':[0,0]},{'u
 surface['textures'][1]['uvTransform']=[0,1,0,-1,0,1]
 constant=lambda value: {'path':'test.mat','textures':[],'texturePaths':[],'textureSrgb':[],'color':[value,value,value,1]}
 mask={'path':'test.mat','textures':[surface['textures'][1]],'texturePaths':[paths[1]],'textureSrgb':[False],'color':[1,1,1,1]}
+transparent={'path':'test.mat','textures':[surface['textures'][0]],'texturePaths':[paths[0]],'textureSrgb':[False],'color':[1,1,1,1], 'opacity':{'path':'test.mat','textures':[],'texturePaths':[],'textureSrgb':[],'color':[1,1,1,1],'scalarMask':{'term':mask,'channel':3}}}
+assert requires_mesh_bake([transparent])
+try:
+ bake_mesh(obj,[transparent])
+ raise AssertionError('expected mixed-UV transparency refusal')
+except ValueError as error:
+ assert 'transparent Unity material' in str(error)
 surface['blends']=[{'a':constant(1),'b':constant(.5),'weight':{'term':mask,'channel':'rgb'}}]
 surface['scalarMask']={'op':'add','args':[1,{'op':'multiply','args':[{'op':'subtract','args':[{'term':mask,'channel':1},1]},2]}]}
 assert requires_mesh_bake([surface]); bake_mesh(obj,[surface])

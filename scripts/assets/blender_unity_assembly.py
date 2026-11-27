@@ -59,7 +59,10 @@ def build_material(surface, uv_names):
     nodes = material.node_tree.nodes
     shader = nodes.get("Principled BSDF")
     shader.inputs["Base Color"].default_value = surface["color"]
-    if surface.get("blends") or surface.get("products") or "scalarMask" in surface or surface.get("adjustment") or any(value > 1 for value in surface["color"]):
+    if surface.get("opacity"):
+        material.surface_render_method = 'BLENDED'
+        material.use_backface_culling = not surface.get("doubleSided", False)
+    if surface.get("opacity") or surface.get("blends") or surface.get("products") or "scalarMask" in surface or surface.get("adjustment") or any(value > 1 for value in surface["color"]):
         return build_blended_material(material, surface, uv_names)
     textures = surface["textures"]
     texture_paths = surface["texturePaths"]
@@ -163,6 +166,8 @@ def build_blended_material(material, surface, uv_names):
             collect_weight(weight)
 
     collect(surface)
+    if surface.get("opacity"):
+        collect(surface["opacity"])
     def adjust(value, adjustment):
         if not adjustment:
             return value
@@ -254,6 +259,8 @@ def build_blended_material(material, surface, uv_names):
         return adjust(value, term.get("adjustment"))
 
     pixels = evaluate(surface)
+    if surface.get("opacity"):
+        pixels[:, 3] = np.clip(evaluate(surface["opacity"])[:, 0], 0, 1)
     if not np.all(np.isfinite(pixels)):
         raise ValueError("non-finite shader blend result")
     rgb = np.clip(pixels[:, :3], 0, 1)
@@ -267,6 +274,8 @@ def build_blended_material(material, surface, uv_names):
     image_node.image = baked
     image_node.extension = "REPEAT"
     connect_texture_uv(material, image_node, first, uv_names)
+    if surface.get("opacity"):
+        material.node_tree.links.new(image_node.outputs["Alpha"], nodes.get("Principled BSDF").inputs["Alpha"])
     return material
 
 

@@ -334,6 +334,32 @@ it('resolves texture paths inside blended graph terms', async () => {
         },
       ],
     });
+    docs[0]!.m_Edges = [edge('a', 'base', 0), edge('b', 'alpha', 0, 7)];
+    docs.push({
+      m_ObjectId: 'alpha',
+      m_Type: 'UnityEditor.ShaderGraph.BlockNode',
+      m_SerializedDescriptor: 'SurfaceDescription.Alpha',
+    } as (typeof docs)[number]);
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const opaqueMaterial = await readFile(materialPath, 'utf8');
+    await writeFile(
+      materialPath,
+      opaqueMaterial
+        .replace('Material:\n', 'Material:\n  stringTagMap: {RenderType: Transparent}\n')
+        .replace(
+          '    m_Floats:\n',
+          '    m_Floats:\n    - _SurfaceType: 1\n    - _BlendMode: 0\n    - _SrcBlend: 1\n    - _DstBlend: 10\n    - _DoubleSidedEnable: 1\n',
+        ),
+    );
+    const metaPath = join(root, 'b.png.meta');
+    const originalMeta = await readFile(metaPath, 'utf8');
+    await expect(planUnityAssembly(root, prefab)).rejects.toThrow('unsupported Unity opacity texture alpha');
+    await writeFile(metaPath, `${originalMeta}  alphaUsage: 1\n`);
+    const alphaPlan = await planUnityAssembly(root, prefab);
+    expect(alphaPlan[0]?.surfaces[0]).toMatchObject({
+      doubleSided: true,
+      opacity: { scalarMask: { channel: 3, term: { texturePaths: [join(root, 'b.png')] } } },
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

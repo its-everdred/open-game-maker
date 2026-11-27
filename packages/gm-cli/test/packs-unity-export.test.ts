@@ -39,6 +39,7 @@ it.skipIf(!available)(
       const texture = join(root, 'color.png');
       const mask = join(root, 'mask.png');
       const rgbMask = join(root, 'rgb-mask.png');
+      const alphaTexture = join(root, 'alpha.png');
       await sharp({ create: { width: 2, height: 2, channels: 4, background: { r: 120, g: 160, b: 200, alpha: 1 } } })
         .png()
         .toFile(texture);
@@ -50,6 +51,9 @@ it.skipIf(!available)(
       await sharp({ create: { width: 2, height: 2, channels: 4, background: { r: 0, g: 128, b: 255, alpha: 1 } } })
         .png()
         .toFile(rgbMask);
+      await sharp({ create: { width: 2, height: 2, channels: 4, background: { r: 120, g: 160, b: 200, alpha: 0.6 } } })
+        .png()
+        .toFile(alphaTexture);
       const create = `import bpy\nbpy.ops.wm.read_factory_settings(use_empty=True)\nbpy.ops.mesh.primitive_cube_add()\nbpy.context.object.name='Roof'\nbpy.context.object.data.name='RoofGeometry'\nbpy.context.object.data.uv_layers.new(name='Secondary')\nbpy.context.object.data.uv_layers.new(name='Tertiary')\nbpy.context.object.data.materials.append(bpy.data.materials.new('Base'))\nbpy.ops.export_scene.fbx(filepath=${JSON.stringify(fbx)})`;
       const result = spawnSync(
         'blender',
@@ -418,11 +422,54 @@ it.skipIf(!available)(
         scalarMask: 0,
       };
       rgbPlan.push(zeroNode);
+      const alphaNode = structuredClone(plan[3]!);
+      alphaNode.name = 'Transparent';
+      alphaNode.transformId = 'root/transparent';
+      alphaNode.parentId = null;
+      alphaNode.surfaces[0] = {
+        path: 'transparent.mat',
+        textures: [{ guid: 'alpha', scale: [1, 1], offset: [0, 0] }],
+        texturePaths: [alphaTexture],
+        textureSrgb: [true],
+        color: [1, 1, 1, 1],
+        doubleSided: true,
+        opacity: {
+          path: 'transparent.mat',
+          textures: [],
+          texturePaths: [],
+          textureSrgb: [],
+          color: [1, 1, 1, 1],
+          scalarMask: {
+            channel: 3,
+            term: {
+              path: 'transparent.mat',
+              textures: [{ guid: 'alpha', scale: [1, 1], offset: [0, 0] }],
+              texturePaths: [alphaTexture],
+              textureSrgb: [true],
+              color: [1, 1, 1, 1],
+            },
+          },
+        },
+      };
+      rgbPlan.push(alphaNode);
       const rgbOutput = join(root, 'rgb.glb');
       await exportUnityAssembly(rgbPlan, rgbOutput);
       const rgbDocument = await new NodeIO()
         .registerExtensions([KHRTextureTransform])
         .readBinary(await readFile(rgbOutput));
+      const transparent = rgbDocument
+        .getRoot()
+        .listMaterials()
+        .find((entry) => entry.getName() === 'transparent')!;
+      expect(transparent.getAlphaMode()).toBe('BLEND');
+      expect(transparent.getDoubleSided()).toBe(true);
+      const alphaPixels = await sharp(transparent.getBaseColorTexture()!.getImage()!).ensureAlpha().raw().toBuffer();
+      for (const [channel, expected] of [120, 160, 200].entries()) {
+        expect(alphaPixels[channel]).toBeGreaterThan(expected - 3);
+        expect(alphaPixels[channel]).toBeLessThan(expected + 3);
+      }
+      expect(alphaPixels[3]).toBeGreaterThan(150);
+      expect(alphaPixels[3]).toBeLessThan(156);
       const rgbImage = rgbDocument
         .getRoot()
         .listMaterials()

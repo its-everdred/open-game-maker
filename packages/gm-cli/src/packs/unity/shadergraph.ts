@@ -198,6 +198,29 @@ export function shaderGraphBase(
       };
     }
     if (type === 'UnityEditor.ShaderGraph.LerpNode') {
+      if (!inputs.some((input) => input.inputSlot === 2)) {
+        const slots = Array.isArray(node?.m_Slots) ? node.m_Slots.map((entry) => byId.get(nodeId(entry))) : [];
+        const amountSlot = slots.find((slot) => slot?.m_Id === 2 && slot.m_SlotType === 0);
+        const value = amountSlot?.m_Value;
+        if (
+          amountSlot?.m_Type === 'UnityEditor.ShaderGraph.DynamicVectorMaterialSlot' &&
+          value &&
+          typeof value === 'object' &&
+          !Array.isArray(value)
+        ) {
+          const components = object(value);
+          const amount = components.x;
+          if ((amount === 0 || amount === 1) && ['y', 'z', 'w'].every((key) => components[key] === amount)) {
+            const selected = inputs.filter((input) => input.inputSlot === amount);
+            if (
+              selected.length === 1 &&
+              new Set(inputs.map((input) => input.inputSlot)).size === inputs.length &&
+              inputs.every((input) => [0, 1].includes(input.inputSlot))
+            )
+              return resolveSource(selected[0]!);
+          }
+        }
+      }
       if (
         !inputs.some((input) => input.inputSlot === 2) ||
         new Set(inputs.map((input) => input.inputSlot)).size !== inputs.length ||

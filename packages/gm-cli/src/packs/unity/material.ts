@@ -12,6 +12,8 @@ export type UnityTexture = {
 export type UnitySurface = {
   textures: UnityTexture[];
   color: [number, number, number, number];
+  opacity?: UnitySurface;
+  doubleSided?: boolean;
   products?: UnitySurface[];
   scalarMask?: WeightExpression<UnitySurface>;
   adjustment?: { op: 'power' | 'saturation'; amount: number };
@@ -48,6 +50,11 @@ export function materialShaderGuid(source: string): string | undefined {
   return typeof shader.guid === 'string' ? shader.guid : undefined;
 }
 
+/** Report whether a material explicitly requests transparent rendering. */
+export function materialIsTransparent(source: string): boolean {
+  return object(material(source).stringTagMap ?? {}).RenderType === 'Transparent';
+}
+
 /** Return saved float properties for resolving material-specific graph switches. */
 export function materialFloatProperties(source: string): Map<string, unknown> {
   return properties(object(material(source).m_SavedProperties).m_Floats);
@@ -64,14 +71,24 @@ export function materialTextureProperties(source: string): Map<string, unknown> 
 }
 
 /** Interpret standard base-color properties or explicit graph-resolved texture slots. */
-export function parseUnitySurface(source: string, graph?: ShaderGraphBase): UnitySurface {
+export function parseUnitySurface(source: string, graph?: ShaderGraphBase, alpha?: ShaderGraphBase): UnitySurface {
   const materialData = material(source);
   const saved = object(materialData.m_SavedProperties);
   const floats = properties(saved.m_Floats);
   const tags = object(materialData.stringTagMap ?? {});
+  const transparent = tags.RenderType === 'Transparent';
+  const supportsTransparent =
+    transparent &&
+    alpha &&
+    Number(floats.get('_SurfaceType')) === 1 &&
+    Number(floats.get('_BlendMode')) === 0 &&
+    Number(floats.get('_SrcBlend')) === 1 &&
+    Number(floats.get('_DstBlend')) === 10 &&
+    [0, 1].includes(Number(floats.get('_DoubleSidedEnable')));
   if (
-    (tags.RenderType !== undefined && tags.RenderType !== 'Opaque') ||
-    ['_AlphaClip', '_AlphaCutoffEnable', '_SurfaceType'].some((key) => floats.has(key) && Number(floats.get(key)) !== 0)
+    (transparent ? !supportsTransparent : tags.RenderType !== undefined && tags.RenderType !== 'Opaque') ||
+    ['_AlphaClip', '_AlphaCutoffEnable'].some((key) => floats.has(key) && Number(floats.get(key)) !== 0) ||
+    (!transparent && floats.has('_SurfaceType') && Number(floats.get('_SurfaceType')) !== 0)
   ) {
     throw new Error('unsupported transparent or alpha-clipped Unity material');
   }
@@ -196,5 +213,10 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
         : {}),
     };
   };
-  return resolve(graph);
+  return {
+    ...resolve(graph),
+    ...(transparent && alpha
+      ? { opacity: resolve(alpha), doubleSided: Number(floats.get('_DoubleSidedEnable')) === 1 }
+      : {}),
+  };
 }

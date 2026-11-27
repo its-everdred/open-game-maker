@@ -1,5 +1,13 @@
 import { parseDocument } from 'yaml';
 
+/** Require the imported texture's alpha channel to be sourced from the image. */
+export function textureHasSourceAlpha(source: string): boolean {
+  const document = parseDocument(source);
+  if (document.errors.length) throw new Error('invalid Unity texture metadata');
+  const data = document.toJS({ maxAliasCount: 0 }) as { TextureImporter?: { alphaUsage?: unknown } };
+  return data?.TextureImporter?.alphaUsage === 1;
+}
+
 /** Honor the Unity importer's color space and reject unsupported sampling modes. */
 export function textureIsSrgb(source: string): boolean {
   const document = parseDocument(source);

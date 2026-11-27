@@ -174,6 +174,8 @@ def requires_mesh_bake(surfaces):
 
     for surface in surfaces:
         textures = layers(surface)
+        if surface.get('opacity'):
+            textures.extend(layers(surface['opacity']))
         if textures:
             if any(texture.get('uvTransform') is not None for texture in textures):
                 return True
@@ -190,6 +192,8 @@ def requires_mesh_bake(surfaces):
 
 def bake_mesh(obj, surfaces):
     """Bake all slots to a new non-overlapping UV layer, unique to this mesh."""
+    if any(surface.get('opacity') for surface in surfaces):
+        raise ValueError('unsupported transparent Unity material with mixed UV mappings')
     mesh = obj.data
     uv_names = [layer.name for layer in mesh.uv_layers]
     if not uv_names:
