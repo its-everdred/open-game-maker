@@ -1,5 +1,5 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { env, execPath } from 'node:process';
@@ -51,7 +51,33 @@ test('real local API and web reach New Game onboarding', async ({ browser }) => 
   let web: ChildProcess | undefined;
   try {
     instance = createLocalInstance();
-    api = await startLocalApi(root, { repoProvisioner: localProvisioner(instance.checkout) });
+    let draftId = '';
+    const agreed = JSON.parse(
+      readFileSync(new URL('../../../packages/contracts/fixtures/scope/agreed.json', import.meta.url), 'utf8'),
+    ) as Record<string, unknown>;
+    api = await startLocalApi(root, {
+      repoProvisioner: localProvisioner(instance.checkout),
+      draftScopeAssistant: {
+        async create(input) {
+          draftId = input.draftId;
+          return { repo: 'instance/games', ticket: '42' };
+        },
+        async close() {},
+        async transcript() {
+          const count = api!.deps.sqlite
+            .prepare("SELECT count(*) AS n FROM build_chat_messages WHERE job_id = ? AND actor = 'creator'")
+            .get(`draft:${draftId}`) as { n: number };
+          return [
+            {
+              body: count.n
+                ? `Agreed.\n\`\`\`ogm-scope\n${JSON.stringify({ ...agreed, session_id: draftId })}\n\`\`\``
+                : 'Tell me about the game.',
+              turn_id: count.n ? 'agreed' : 'initial',
+            },
+          ];
+        },
+      },
+    });
     web = await startWeb(api.origin);
     const context = await browser.newContext({
       viewport: { width: 390, height: 844 },
@@ -66,7 +92,53 @@ test('real local API and web reach New Game onboarding', async ({ browser }) => 
       );
       await page.goto(`${webOrigin}/new`, { waitUntil: 'domcontentloaded' });
       expect((await catalog).status()).toBe(200);
-      await expect(page.getByRole('button', { name: 'Adventure', exact: true })).toBeVisible({ timeout: 90_000 });
+      const tap = async (name: string) => {
+        const button = page.getByRole('button', { name, exact: true });
+        await expect(button).toBeVisible({ timeout: 90_000 });
+        await button.scrollIntoViewIfNeeded();
+        await button.tap();
+      };
+      await tap('Adventure');
+      await tap('Next');
+      await tap('Cozy');
+      await tap('Next');
+      await tap('Pixel art');
+      await tap('SmallScaleInt');
+      await tap('Select SmallScaleInt');
+      await tap('Next');
+      await expect(page.getByRole('heading', { name: 'World' })).toBeVisible();
+      await tap('Forest');
+      await tap('Next');
+      await tap('Solo');
+      await tap('Next');
+      const message = page.getByRole('textbox', { name: 'Message the builder' });
+      await expect(message).toBeVisible({ timeout: 90_000 });
+      await message.fill('A small forest game with a helpful owl.');
+      const sent = page.waitForResponse(
+        (response) => response.url().includes('/chat') && response.request().method() === 'POST',
+      );
+      await tap('Send');
+      expect((await sent).status()).toBe(201);
+      await expect(page.getByText('A small forest game with a helpful owl.')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Finish', exact: true })).toBeEnabled({ timeout: 90_000 });
+      const admission = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === '/api/v1/jobs' && response.request().method() === 'POST',
+      );
+      await tap('Finish');
+      const admitted = await admission;
+      expect(admitted.status()).toBe(202);
+      const { jobId } = (await admitted.json()) as { jobId: string };
+      const job = api.deps.sqlite.prepare('SELECT game_id, kind FROM jobs WHERE id = ?').get(jobId) as {
+        game_id: string;
+        kind: string;
+      };
+      expect(job.kind).toBe('new_game');
+      const game = api.deps.sqlite.prepare('SELECT slug FROM games WHERE id = ?').get(job.game_id) as { slug: string };
+      expect(
+        execFileSync('git', ['--git-dir', instance.bare, 'show', `main:games/${game.slug}/package.json`], {
+          encoding: 'utf8',
+        }),
+      ).toContain('name');
     } finally {
       await context.close();
     }

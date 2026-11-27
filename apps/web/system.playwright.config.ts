@@ -18,6 +18,6 @@ export default defineConfig({
   testDir: './e2e',
   testMatch: 'local-stack.case.ts',
   workers: 1,
-  timeout: 180_000,
+  timeout: 300_000,
   use: { viewport: { width: 390, height: 844 }, hasTouch: true, launchOptions: { args: launchArgs() } },
 });

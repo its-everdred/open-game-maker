@@ -53,7 +53,7 @@ export async function startLocalApi(
         vapidSubject: 'mailto:operator@example.test',
         designDefaultMs: 300_000,
         analyticsRetentionDays: 90,
-        defaultDailyAllowanceMicroUsd: 5_000_000,
+        defaultDailyAllowanceMicroUsd: 100_000_000,
         resetZoneDefault: 'America/Los_Angeles',
         reportBundleMaxBytes: 2 * 1024 * 1024,
         blobPutMaxBytes: 1024,
