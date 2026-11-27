@@ -21,6 +21,31 @@ function journey(dir: string, name: string, body: object): string {
 }
 
 describe('gm qa usage', () => {
+  it('requires an app for a storage state and a session for an app run', async () => {
+    const dir = tempDir();
+    expect((await gm(['qa', 'drive', '--storage', 'state.json'], { cwd: dir })).err[0]).toContain(
+      '--storage requires --app',
+    );
+    expect(
+      (await gm(['qa', 'drive', '--app', 'https://app.example/play/game', '--storage', 'missing.json'], { cwd: dir }))
+        .err[0],
+    ).toContain('no signed-in storage state');
+  });
+
+  it('accepts landscape phone journeys', async () => {
+    const result = await gm([
+      'qa',
+      'drive',
+      '--url',
+      BUILD,
+      '--viewport',
+      'phone-landscape',
+      '--journey',
+      'missing.json',
+    ]);
+    expect(result.err[0]).toContain('cannot read journey');
+  });
+
   it('refuses to run without a build URL or with one that is not http(s)', async () => {
     expect((await gm(['qa', 'open'])).err).toEqual([
       '--url is required. Try: gm qa open --url https://<games-host>:10000/g/<game>/<build>/',

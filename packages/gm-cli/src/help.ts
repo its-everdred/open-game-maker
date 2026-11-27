@@ -12,6 +12,17 @@ export function listHelp(registry: Registry): string[] {
   ];
 }
 
+export function groupHelp(registry: Registry, group: string): string[] {
+  const commands = [...registry.values()]
+    .filter((command) => !command.hidden && command.name.startsWith(`${group} `))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const width = Math.max(...commands.map((command) => command.name.length));
+  return [
+    `usage: gm ${group} <command> [args]`,
+    ...commands.map((command) => `  ${command.name.padEnd(width)}  ${command.summary}`),
+  ];
+}
+
 /** At most 15 lines: usage, summary, the command's flags, the shared flags, one example. */
 export function commandHelp(command: GmCommand): string[] {
   const flags = Object.entries(command.flags).map(([flag, def]) => {

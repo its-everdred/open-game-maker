@@ -1,8 +1,12 @@
 import type { AssetCard, Audience, Genre, Mood, Redistribution, Use } from '@ogm/contracts';
 
+import type { SoundSetCard } from './sound-set.js';
+
 export type Rights = { uses: Use[]; audience: Audience; redistribution: Redistribution };
 
 export type ResolvedCard = AssetCard & {
+  /** Collection directory relative to the library root, when loaded from disk. */
+  library_root?: string;
   resolved: {
     license: string;
     rights: Rights;
@@ -18,11 +22,12 @@ export type ResolvedCard = AssetCard & {
 export type IndexError = { path: string; errors: string[] };
 
 export type CardIndex = {
-  version: 3;
+  version: 4;
   built: string;
   vocab: string;
   cards: ResolvedCard[];
   collections: Record<string, ResolvedCard>;
+  soundSets: SoundSetCard[];
   errors: IndexError[];
 };
 

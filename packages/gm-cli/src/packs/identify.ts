@@ -19,6 +19,8 @@ export type IdentifyResult = {
   items: Item[];
   dropped: string[];
   hashManifest: string;
+  sceneSources: string[];
+  prefabSources: string[];
 };
 
 const EXECUTABLE = new Set([
@@ -42,7 +44,7 @@ const EXECUTABLE = new Set([
   'scr',
   'vbs',
 ]);
-const ENGINE_ONLY = new Set(['meta', 'uasset', 'umap', 'prefab', 'unity', 'cs', 'asmdef']);
+const ENGINE_ONLY = new Set(['meta', 'uasset', 'cs', 'asmdef']);
 const MODEL = new Set(['glb', 'gltf', 'fbx', 'obj', 'blend', 'dae', '3ds', 'stl', 'ply', 'usd', 'usdz', 'vox']);
 const IMAGE = new Set([
   'png',
@@ -218,9 +220,12 @@ async function hasExecutableMagic(file: string): Promise<boolean> {
 
 export async function identify(root: string): Promise<IdentifyResult> {
   const dropped: string[] = [];
-  for (const file of await filesUnder(root)) {
+  const initial = await filesUnder(root);
+  const hasUnitySource = initial.some((file) => /\.(unity|prefab)$/i.test(file));
+  for (const file of initial) {
     const extension = extname(file).slice(1).toLowerCase();
-    if (!EXECUTABLE.has(extension) && !ENGINE_ONLY.has(extension) && !(await hasExecutableMagic(file))) continue;
+    const engineOnly = ENGINE_ONLY.has(extension) && !(extension === 'meta' && hasUnitySource);
+    if (!EXECUTABLE.has(extension) && !engineOnly && !(await hasExecutableMagic(file))) continue;
     dropped.push(relativePosix(root, file));
     await rm(file, { force: true });
   }
@@ -260,5 +265,22 @@ export async function identify(root: string): Promise<IdentifyResult> {
     const { sha, bytes } = await digest(file);
     lines.push(`${sha}  ${bytes}  ${relativePosix(root, file)}`);
   }
-  return { vendor, items, dropped: dropped.sort(), hashManifest: `${lines.sort().join('\n')}\n` };
+  if (paths.some((path) => /[\p{Cc}\p{Cf}]/u.test(path))) {
+    throw new Error('extracted paths may not contain control or formatting characters');
+  }
+  return {
+    vendor,
+    items,
+    dropped: dropped.sort(),
+    hashManifest: `${lines.sort().join('\n')}\n`,
+    sceneSources: paths.filter((path) => {
+      if (/\.(unity|umap)$/i.test(path)) return true;
+      const name = pathPosix.basename(path).toLowerCase();
+      return (
+        /\.glb$/i.test(path) &&
+        (name === 'scene.glb' || name === 'demo.glb' || path.split('/').some((part) => part.toLowerCase() === 'scenes'))
+      );
+    }),
+    prefabSources: paths.filter((path) => /\.prefab$/i.test(path)),
+  };
 }

@@ -62,4 +62,29 @@ describe('command registry', () => {
     expect(bad.err).toHaveLength(1);
     expect(bad.err[0]).toMatch(/--colour.*\. Try: gm help assets search$/);
   });
+
+  it('lists group commands for bare groups, help, and unknown subcommands', async () => {
+    const dir = tempDir();
+    for (const [namespace, names] of Object.entries({ look: ['shell', 'scope add'], decisions: ['list', 'sync'] })) {
+      mkdirSync(join(dir, namespace));
+      for (const [index, name] of names.entries())
+        writeFileSync(join(dir, namespace, `${index}.js`), ping(`${namespace} ${name}`));
+    }
+    for (const [args, code, expected] of [
+      [['look'], 2, 'look shell'],
+      [['look', '--help'], 0, 'look shell'],
+      [['decisions'], 2, 'decisions list'],
+      [['decisions', 'nope'], 2, 'decisions sync'],
+      [['look', 'scope', '--help'], 0, 'look scope add'],
+      [['look', 'scope', 'nope'], 2, 'look scope add'],
+    ] as const) {
+      const result = await gm([...args], { commandsDir: dir });
+      expect(result.code).toBe(code);
+      const text = [...result.out, ...result.err].join('\n');
+      expect(text).toContain(expected);
+      expect(text).toContain('reply pong');
+      expect(text).not.toContain('Try: gm help');
+      if (args[1] === 'scope') expect(text).not.toContain('look shell');
+    }
+  });
 });

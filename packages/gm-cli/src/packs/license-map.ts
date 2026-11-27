@@ -91,18 +91,28 @@ function contained(root: string, local: string): string {
   return path;
 }
 
-export async function filterLicensedItems(extracted: string, items: Item[], map: LicenseMap): Promise<string[]> {
+export async function filterLicensedItems(
+  extracted: string,
+  items: Item[],
+  map: LicenseMap,
+  sourcePaths: string[] = [],
+): Promise<string[]> {
   const dropped: string[] = [];
   for (const [path, entry] of Object.entries(map)) {
     if (!entry.dropped) continue;
     await rm(contained(extracted, path), { force: true });
     dropped.push(`${path}: ${entry.dropped}`);
   }
-  for (const item of items) {
-    const entry = map[item.path];
+  // Scene sources do not carry per-file rights; a mixed-license map cannot safely publish them.
+  for (const path of sourcePaths) {
+    await rm(contained(extracted, path), { force: true });
+    dropped.push(`${path}: scene source needs per-file rights`);
+  }
+  for (const path of items.map((item) => item.path)) {
+    const entry = map[path];
     if (entry && !entry.dropped) continue;
-    await rm(contained(extracted, item.path), { force: true });
-    if (!entry) dropped.push(`${item.path}: missing machine-readable license`);
+    await rm(contained(extracted, path), { force: true });
+    if (!entry) dropped.push(`${path}: missing machine-readable license`);
   }
   return dropped.sort();
 }

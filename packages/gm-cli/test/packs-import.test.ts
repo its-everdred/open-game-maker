@@ -1,8 +1,10 @@
 import { mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 import AdmZip from 'adm-zip';
 import sharp from 'sharp';
+import * as tar from 'tar';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { validateCard } from '@ogm/contracts';
@@ -32,6 +34,66 @@ async function unknownFixture(): Promise<string> {
 }
 
 describe('gm packs import', () => {
+  it('imports a model from a Unity package wrapped in another Unity package and zip', async () => {
+    const root = fresh('gm-pack-unity-wrapper-');
+    const assets = fresh('gm-pack-unity-assets-');
+    const inner = join(root, 'inner');
+    const outer = join(root, 'outer');
+    await mkdir(join(inner, 'guid'), { recursive: true });
+    await writeFile(join(inner, 'guid', 'pathname'), 'Assets/Models/wall.fbx');
+    await writeFile(join(inner, 'guid', 'asset'), 'fixture mesh');
+    const innerArchive = join(root, 'inner.unitypackage');
+    await tar.c({ gzip: true, file: innerArchive, cwd: inner }, ['guid']);
+    await mkdir(join(outer, 'guid'), { recursive: true });
+    await writeFile(join(outer, 'guid', 'pathname'), 'Leartes/Pack/inner.unitypackage');
+    await writeFile(join(outer, 'guid', 'asset'), await readFile(innerArchive));
+    const outerArchive = join(root, 'outer.unitypackage');
+    await tar.c({ gzip: true, file: outerArchive, cwd: outer }, ['guid']);
+    const zip = new AdmZip();
+    zip.addFile('outer.unitypackage', await readFile(outerArchive));
+    const input = join(root, 'pack.zip');
+    zip.writeZip(input);
+
+    const result = await gm(['packs', 'import', input, '--id', 'wrapped', '--version', '1', '--json'], {
+      env: { OGM_ASSETS_ROOT: assets },
+    });
+    expect(result.code, result.err.join('\n')).toBe(0);
+    expect(JSON.parse(result.out[0])).toMatchObject({ cards: 1, counts: { model: 1 } });
+  });
+
+  it('accepts an identical legacy source but rejects changed scene content', async () => {
+    const assets = fresh('gm-pack-legacy-assets-');
+    const input = await unknownFixture();
+    await writeFile(join(input, 'scene.unity'), 'original scene');
+    await writeFile(join(input, 'prop.prefab'), 'original prefab');
+    const env = { OGM_ASSETS_ROOT: assets };
+    const args = ['packs', 'import', input, '--id', 'legacy-test', '--version', '1', '--json'];
+    const first = await gm(args, { env });
+    expect(first.code, first.err.join('\n')).toBe(0);
+    const hashPath = join(assets, 'packs', 'legacy-test', '1', 'hash-manifest.txt');
+    const manifest = await readFile(hashPath, 'utf8');
+    const legacy = manifest.split('\n').filter((line) => line && !/\.(unity|prefab|umap|meta)$/i.test(line));
+    await writeFile(hashPath, `${legacy.join('\n')}\n`);
+    const again = await gm(args, { env });
+    expect(again.code, again.err.join('\n')).toBe(0);
+    const installed = join(assets, 'packs', 'legacy-test', '1', 'extracted');
+    await rm(join(installed, 'scene.unity'));
+    await rm(join(installed, 'prop.prefab'));
+    const newer = await gm(['packs', 'import', input, '--id', 'legacy-test', '--version', '2', '--json'], { env });
+    expect(newer.code, newer.err.join('\n')).toBe(0);
+    const restored = await gm(args, { env });
+    expect(restored.code, restored.err.join('\n')).toBe(0);
+    const card = JSON.parse(await readFile(join(assets, 'packs', 'legacy-test', 'collection.card.json'), 'utf8'));
+    expect(card.id).toBe('t1:legacy-test@1');
+    expect(card.scenes).toEqual([]);
+    expect(card.prefabs).toEqual([]);
+    expect(await readFile(hashPath, 'utf8')).toBe(`${legacy.join('\n')}\n`);
+    await writeFile(join(input, 'scene.unity'), 'changed scene');
+    const changed = await gm(args, { env });
+    expect(changed.code).toBe(2);
+    expect(changed.err.join('\n')).toContain('already exists with different content');
+  }, 120_000);
+
   it('writes a valid, stable collection that remains hidden while quarantined', async () => {
     const assets = fresh('gm-pack-assets-');
     const input = await unknownFixture();
@@ -67,6 +129,76 @@ describe('gm packs import', () => {
       env,
     });
     expect(search.out).toEqual([]);
+  });
+
+  it('builds the catalog for imported and legacy manifests', async () => {
+    const assets = fresh('gm-pack-catalog-');
+    const input = await unknownFixture();
+    const result = await gm(
+      [
+        'packs',
+        'import',
+        input,
+        '--id',
+        'catalog-test',
+        '--version',
+        '1',
+        '--vendor',
+        'Example',
+        '--title',
+        'Example Pack',
+        '--source-url',
+        'https://example.com/pack',
+      ],
+      { env: { OGM_ASSETS_ROOT: assets } },
+    );
+    expect(result.code, result.err.join('\n')).toBe(0);
+    const path = join(assets, 'packs', 'catalog-test', 'pack.json');
+    const manifest = JSON.parse(await readFile(path, 'utf8'));
+    expect(manifest).toMatchObject({
+      vendor: 'Example',
+      title: 'Example Pack',
+      requires: [],
+      source: { label: 'Example', url: 'https://example.com/pack' },
+    });
+    expect(
+      JSON.parse(await readFile(join(assets, 'packs', 'catalog-test', 'collection.card.json'), 'utf8')),
+    ).toMatchObject({ title: 'Example Pack', collection_info: { vendor: 'Example' } });
+    const builder = resolve(import.meta.dirname, '../../../scripts/assets/build_catalog.py');
+    execFileSync('python3', ['-I', builder, '--root', assets]);
+    expect(JSON.parse(await readFile(join(assets, 'catalog.json'), 'utf8')).packs[0].requires).toEqual([]);
+    delete manifest.requires;
+    await writeFile(path, JSON.stringify(manifest));
+    execFileSync('python3', ['-I', builder, '--root', assets]);
+    expect(JSON.parse(await readFile(join(assets, 'catalog.json'), 'utf8')).packs[0].requires).toEqual([]);
+    const again = await gm(
+      [
+        'packs',
+        'import',
+        input,
+        '--id',
+        'catalog-test',
+        '--version',
+        '1',
+        '--vendor',
+        'Updated',
+        '--title',
+        'Updated Pack',
+        '--source-url',
+        'https://example.com/new',
+      ],
+      { env: { OGM_ASSETS_ROOT: assets } },
+    );
+    expect(again.code, again.err.join('\n')).toBe(0);
+    expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({
+      vendor: 'Updated',
+      title: 'Updated Pack',
+      requires: [],
+      source: { label: 'Updated', url: 'https://example.com/new' },
+    });
+    expect(
+      JSON.parse(await readFile(join(assets, 'packs', 'catalog-test', 'collection.card.json'), 'utf8')),
+    ).toMatchObject({ title: 'Updated Pack', collection_info: { vendor: 'Updated' } });
   });
 
   it('imports a folder of archives whose members share names', async () => {
@@ -212,7 +344,19 @@ describe('gm packs import', () => {
     );
     const env = { OGM_ASSETS_ROOT: assets };
     const imported = await gm(
-      ['packs', 'import', '--from-queue', 'drop-confirm', '--id', 'confirm-test', '--version', '1', '--json'],
+      [
+        'packs',
+        'import',
+        '--from-queue',
+        'drop-confirm',
+        '--id',
+        'confirm-test',
+        '--version',
+        '1',
+        '--source-url',
+        'https://example.com/pack',
+        '--json',
+      ],
       { env },
     );
     expect(imported.code, imported.err.join('\n')).toBe(0);

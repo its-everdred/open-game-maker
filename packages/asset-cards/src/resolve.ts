@@ -35,7 +35,8 @@ export function resolve(card: AssetCard, collections: Record<string, AssetCard>)
   const inherited = parent ? ownRights(parent) : null;
 
   let rights: Rights;
-  if (own && inherited) rights = intersectRights(inherited, own);
+  if (card.card_type === 'asset' && !parent) rights = NO_RIGHTS;
+  else if (own && inherited) rights = intersectRights(inherited, own);
   else if (own) rights = own;
   else if (inherited) {
     rights = inherited;

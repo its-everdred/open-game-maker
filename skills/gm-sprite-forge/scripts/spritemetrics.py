@@ -125,3 +125,33 @@ def palette_distance(a, b):
     ab = (d.min(1) * na).sum() / na.sum()
     ba = (d.min(0) * nb).sum() / nb.sum()
     return float((ab + ba) / 2)
+
+
+def crispness(a, hard_de=20.0):
+    """How flat and hard-edged a sprite reads (#1338): `same` is the share of neighbouring object pixel pairs with one
+    colour; `hard` is the share of the differing pairs that step by CIE76 dE >= hard_de; `rim_dl` is the mean lightness
+    of rim pixels minus their inner 4-neighbours (negative: a darker rim). Pack Idle frames: same 0.46-0.69, hard
+    0.13-0.52, rim_dl -0.2 to -4.5; finish B: hard 0.01."""
+    from skimage.color import rgb2lab
+    m = mask(a)
+    if m.sum() < 9:
+        return None
+    lab = rgb2lab(a[..., :3] / 255)
+    d = []
+    for s0, s1 in ((np.s_[:, 1:], np.s_[:, :-1]), (np.s_[1:, :], np.s_[:-1, :])):
+        both = m[s0] & m[s1]
+        d.append(np.linalg.norm(lab[s0] - lab[s1], axis=-1)[both])
+    d = np.concatenate(d)
+    diff = d[d >= 1]
+    rim = edge(m)
+    inner = m & ~rim
+    L = lab[..., 0]
+    tot, cnt = np.zeros(L.shape), np.zeros(L.shape)
+    for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        sl = np.roll(inner, (dy, dx), (0, 1)), np.roll(L, (dy, dx), (0, 1))
+        tot += np.where(sl[0], sl[1], 0)
+        cnt += sl[0]
+    r = rim & (cnt > 0)
+    return {'same': float((d < 1).mean()) if len(d) else 0.0,
+            'hard': float((diff >= hard_de).mean()) if len(diff) else 0.0,
+            'rim_dl': float((L[r] - tot[r] / cnt[r]).mean()) if r.any() else 0.0}

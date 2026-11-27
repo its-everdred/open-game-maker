@@ -967,6 +967,18 @@ export type AssetCard = SubkindByKind & {
   vfx?: Vfx;
   map?: Map;
   collection_info?: CollectionInfo;
+  style_family?:
+    | "chunky-low-poly"
+    | "detailed-low-poly"
+    | "simple-low-poly"
+    | "pixel-art"
+    | "flat-cartoon"
+    | "isometric-2d"
+    | "sketch";
+  cameras?: ("isometric" | "top-down" | "third-person" | "first-person" | "side")[];
+  settings?: PackSettings;
+  scenes?: PackScene[];
+  prefabs?: string[];
   proposed_tags?: ProposedTag[];
   provenance: ProvenanceMap;
   flags?: (
@@ -1091,6 +1103,19 @@ export type AssetPath = string;
 export type AssetPathList = [AssetPath, ...AssetPath[]];
 export type LayoutSpecId = string;
 export type CollectionId = string;
+export type PackSettings = (
+  | "medieval-village"
+  | "tavern"
+  | "castle"
+  | "crypt"
+  | "cave"
+  | "dungeon"
+  | "ruins"
+  | "forest"
+  | "desert"
+  | "modern-city"
+  | "sci-fi"
+)[];
 export type Provenance = {
   /**
    * code: measured from the file. model: vision/LLM tagger. human: curation edit (always locked). filename: parsed from names/folders. vendor-metadata: e.g. Synty MaterialList, Kenney Tilesheet.txt. collection: inherited. license: from license text. default: strict default.
@@ -4401,6 +4426,12 @@ export interface CollectionInfo {
    * All files in the collection, including those without cards.
    */
   files_total?: number;
+}
+export interface PackScene {
+  path: string;
+  engine: "unity" | "unreal" | "glb";
+  settings: PackSettings;
+  preview: string | null;
 }
 export interface ProposedTag {
   field:

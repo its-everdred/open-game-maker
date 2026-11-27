@@ -1,3 +1,4 @@
+import { effectiveRights } from '@ogm/contracts';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { buildIndex, formatRow, info, search, statusAllowed, type CardIndex } from '../src/index.js';
@@ -17,6 +18,11 @@ const ids = (q: Parameters<typeof search>[1]) => search(index, q).map((card) => 
 
 beforeAll(async () => {
   index = await buildIndex(FIXTURE);
+  // Search tests use this isolated sprite as a rights-cleared example; its
+  // fixture intentionally has no collection card.
+  const tile = index.cards.find((card) => card.id === TILE)!;
+  const rights = effectiveRights(tile.rights!.basis);
+  tile.resolved.rights = { uses: [...rights.uses], audience: rights.audience, redistribution: rights.redistribution };
 });
 
 describe('search', () => {

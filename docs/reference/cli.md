@@ -564,14 +564,14 @@ gm maps info <map-card-id> [--json]
 ```
 
 `gm maps index` writes `assets-local/index/maps.index.json`: one row per inspiration map and tileset card an agent may
-build from, with the layout as columns (biome, features, scale, grid, rooms, loops, secrets, levels, size, flow). A map
-needs `derive-layout` in its resolved rights and a tileset needs `in-game`; anything else is counted in a `hidden` line
+use, with the layout as columns (biome, features, scale, grid, rooms, loops, secrets, levels, size, flow). A map
+needs `vision-input` or `derive-layout` in its resolved rights and a tileset needs `in-game`; anything else is counted in a `hidden` line
 and never reaches the file. `gm packs index` refreshes the same index, so one command keeps both current.
 
-`gm maps search` reads only that file — no card index parse, no spec scan per query — and prints one line per hit:
+`gm maps search` reads the index and prints one line per hit:
 
 ```text
-t1:<collection>/<map>@<version>  crypt  crypt  battlemap  square@32  4/1/1  small  loop  road,stairs,tomb,water
+t1:<collection>/<map>@<version>  crypt  crypt  battlemap  square@32  4/1/1  small  loop  road,stairs,tomb,water  private/previews/<thumb>  inspiration/<collection>  maps/<file>
 ```
 
 The columns are the id, the map type (or the tileset set), the biome, the scale, the grid and its cell size, rooms /
@@ -579,10 +579,19 @@ loops / secrets, the size class, the flow and the drawn features. A filter never
 so `--rooms 3-5` excludes a map with no layout spec rather than assuming it has three rooms. The command prints a facet
 line (`2 of 2 (map 1, tileset 1) — biome: crypt 1, dungeon 1`) so a caller narrows instead of paging.
 
-**A map row never carries a path.** Maps are chosen from the columns and facts here; there is no preview or tile key in
-the output and no preview command for an inspiration map, so an agent cannot end up looking at a four-thousand-file
-library. Once an agent chooses a searchable map, `gm maps info` returns its validated abstract layout graph without a
-file or preview path. Contact sheets stay a human tool: `gm assets sheet`.
+Vision-authorized maps include a thumbnail and source location for local inspection. With `--maps` and text, search
+also ranks matching local CLIP embeddings when the map-tagger Python environment and cached model are available; it
+warns when falling back to text alone. `gm maps info` returns a validated abstract graph only when `derive-layout` is
+authorized and a graph has been extracted. A vision-only result can be inspected but has no graph to derive from.
+
+## Find packs and scenes
+
+```text
+gm packs search [--camera <camera>] [--setting <setting>] [--style <family-or-set>] [--json]
+gm packs scenes [--setting <setting>] [--json]
+```
+
+Pack search matches all supplied filters against non-quarantined collection cards with effective `in-game` rights. Cameras are `isometric`, `top-down`, `third-person`, `first-person` and `side`; settings use the controlled pack settings in the asset-card schema. Scene search lists matching pre-assembled sources and their preview paths; `null` means no scene preview has been made. Unknown metadata does not match a filter. Intake preserves Unity scenes, prefabs and metadata sidecars and proposes settings from their names; these tags should be reviewed against the content. Supply `--style <family>` and `--cameras <comma-separated cameras>` to `gm packs import` when the pack's style or views are known and are not in the registry. Mixed-license imports discard scene and prefab sources until those sources can carry individual rights.
 
 ## Tag local asset packs
 

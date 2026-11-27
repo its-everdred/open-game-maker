@@ -566,7 +566,7 @@ host's move stick, else a key bound to `move.right`, else a swipe. It fails when
 shows Try again, no first frame arrives, a tap never appears, the frame is blank, or the input changes the frame no
 more than waiting does. A swipe that moves nothing is reported as unchecked instead, unless the host should have drawn
 the game's move stick (a `move` stick without `touch: "self"`). One game plays at a time, in the capture slot, and
-each play is capped at 170 s. A game that fails is played once more and fails only when both plays fail: a loaded host
+each play has a load-adjusted wall-time budget capped at 340 s; capture-slot waiting is capped at 90 s. Published JSON fetches retry transient failures and report their final cause. A boot timeout is inconclusive. A game that fails is played once more and fails only when both plays fail: a loaded host
 can miss one boot, a broken game misses both.
 
 The QA account cannot read another family's private game, so the check answers that game's own API routes from its

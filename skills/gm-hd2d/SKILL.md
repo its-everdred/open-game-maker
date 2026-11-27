@@ -7,7 +7,8 @@ description: Load when a Phaser or three.js game turns on HD-2D lighting, focus 
 
 Use `@gm/sdk/hd2d` when flat pixel art needs depth: canopy light shafts and dapple, lanterns, lit sprites, a crisp
 hero against blurred depth bands, haze, and wind-driven leaves and motes. One call, `createHd2d`, runs all three on
-the game's own renderer. Never write a second lighting, blur or particle system in a game.
+the game's own renderer. Never write a second lighting, blur or particle system in a game. Authored effects (fire,
+casts, auras) use `@gm/sdk/vfx` ([gm-vfx](../gm-vfx/SKILL.md)).
 
 ## Turn it on
 

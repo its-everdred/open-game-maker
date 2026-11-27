@@ -16,7 +16,9 @@ function game(
   const cwd = tempDir('gm-game-');
   writeFileSync(join(cwd, 'assets.lock.json'), JSON.stringify({ version: 1, family, pov: 'topdown', assets }));
   const events = join(cwd, 'events.jsonl');
-  return { cwd, env: { OGM_ASSETS_ROOT: library(), GM_EVENTS_FILE: events }, events };
+  const root = library();
+  addCollection(root, 'kenney-tiny-dungeon');
+  return { cwd, env: { OGM_ASSETS_ROOT: root, GM_EVENTS_FILE: events }, events };
 }
 
 const eventsIn = (file: string) =>
@@ -26,6 +28,16 @@ const eventsIn = (file: string) =>
     .map((line) => JSON.parse(line) as { event: string; payload: Record<string, unknown> });
 
 const rows = (out: string[]) => out.map((line) => line.split('  ')[0]);
+
+/** Give each synthetic sprite a real collection so rights can be inherited safely. */
+function addCollection(root: string, pack: string): void {
+  const collection = JSON.parse(
+    readFileSync(join(root, 'packs', 'kenney-mini-dungeon', 'collection.card.json'), 'utf8'),
+  ) as Record<string, unknown>;
+  const directory = join(root, 'packs', pack);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, 'collection.card.json'), JSON.stringify({ ...collection, id: `t1:${pack}@1.0` }));
+}
 
 function addSmallScaleCard(root: string, pack: string, title: string, action?: string): string {
   type FixtureCard = {
@@ -37,6 +49,7 @@ function addSmallScaleCard(root: string, pack: string, title: string, action?: s
   const fixture = JSON.parse(
     readFileSync(join(root, 'packs', 'kenney-tiny-dungeon', 'cards', 'tiles', 'tile-0097.card.json'), 'utf8'),
   ) as FixtureCard;
+  addCollection(root, pack);
   const id = `t1:${pack}/characters/${title.toLowerCase().replaceAll(' ', '-')}@1.0`;
   const card = {
     ...fixture,

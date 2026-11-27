@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Review Queue</title>
+    <style>
+      :root {
+        --bg: #f4f1ea;
+        --card: #fffdf8;
+        --ink: #1f1b16;
+        --mute: #6b6257;
+        --line: #ddd5c8;
+        --btn: #ece6da;
+        --accent: #2f7d4f;
+        --accent-ink: #fff;
+        --warn: #a5501d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          --bg: #15130f;
+          --card: #201d18;
+          --ink: #f1ece3;
+          --mute: #a59b8d;
+          --line: #3a352d;
+          --btn: #2d2922;
+          --accent: #4fb176;
+          --accent-ink: #0d1a12;
+          --warn: #e08a52;
+        }
+      }
+      :root[data-theme='dark'] {
+        --bg: #15130f;
+        --card: #201d18;
+        --ink: #f1ece3;
+        --mute: #a59b8d;
+        --line: #3a352d;
+        --btn: #2d2922;
+        --accent: #4fb176;
+        --accent-ink: #0d1a12;
+        --warn: #e08a52;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          16px/1.4 system-ui,
+          -apple-system,
+          sans-serif;
+        overflow-x: hidden;
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 12px 16px 48px;
+      }
+      #count {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--bg);
+        padding: 8px 0;
+        font-weight: 600;
+        color: var(--mute);
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+        margin: 0 0 18px;
+      }
+      .card h2 {
+        margin: 0 0 10px;
+        font-size: 1.1rem;
+      }
+      .card h2 .t {
+        color: var(--mute);
+        font-weight: 600;
+        margin-right: 6px;
+      }
+      img,
+      video {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 10px;
+        margin: 0 0 8px;
+        background: #0003;
+      }
+      audio {
+        display: block;
+        width: 100%;
+        margin: 0 0 8px;
+      }
+      .opt {
+        border-top: 1px solid var(--line);
+        padding-top: 10px;
+        margin-top: 10px;
+      }
+      .btns {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 8px 0;
+      }
+      button {
+        flex: 1 1 40%;
+        min-height: 52px;
+        font: inherit;
+        font-weight: 600;
+        border: 2px solid var(--line);
+        border-radius: 12px;
+        background: var(--btn);
+        color: var(--ink);
+        padding: 8px 12px;
+      }
+      .opt button {
+        width: 100%;
+        flex-basis: 100%;
+      }
+      button.on {
+        background: var(--accent);
+        color: var(--accent-ink);
+        border-color: var(--accent);
+      }
+      .grp {
+        border-top: 1px solid var(--line);
+        padding-top: 10px;
+        margin-top: 10px;
+      }
+      .mx {
+        display: grid;
+        gap: 6px;
+        margin: 8px 0;
+        overflow-x: auto;
+        padding-bottom: 4px;
+      }
+      .mxc {
+        padding: 2px;
+        border: 2px solid var(--line);
+        background: none;
+        border-radius: 6px;
+        cursor: pointer;
+        min-width: 0;
+      }
+      .mxc img {
+        width: 100%;
+        height: auto;
+        display: block;
+        image-rendering: pixelated;
+      }
+      .mxc.orig {
+        border-style: dashed;
+        cursor: default;
+      }
+      .mxc.on {
+        border-color: var(--accent);
+        background: var(--btn);
+      }
+      .mxc.dn {
+        border-color: var(--warn);
+        opacity: 0.55;
+      }
+      .mxcol {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+      .mxr {
+        display: flex;
+        gap: 3px;
+      }
+      .mxb {
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 40px;
+        padding: 4px 0;
+        font-size: 1.05rem;
+        border-radius: 8px;
+        border-width: 1px;
+      }
+      .mxb[data-id='dislike'].on {
+        background: var(--warn);
+        border-color: var(--warn);
+      }
+      .mxo {
+        font-size: 12px;
+        color: var(--mute);
+        text-align: center;
+        padding-top: 10px;
+      }
+      .mxc.nt {
+        box-shadow: 0 0 0 2px var(--mute);
+      }
+      .mxd {
+        width: min(92vw, 520px);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--card);
+        color: var(--ink);
+        padding: 14px;
+      }
+      .mxd::backdrop {
+        background: rgba(0, 0, 0, 0.6);
+      }
+      .mxd img {
+        width: 100%;
+        height: auto;
+        max-height: 60vh;
+        object-fit: contain;
+        display: block;
+        image-rendering: pixelated;
+        margin: 8px 0;
+      }
+      .mxd .btns button {
+        font-size: 1.5rem;
+        min-width: 64px;
+      }
+      .mxd textarea {
+        width: 100%;
+        margin-top: 8px;
+      }
+      .mxx {
+        float: right;
+      }
+      .grp h3 {
+        margin: 0 0 6px;
+        font-size: 1rem;
+      }
+      textarea {
+        width: 100%;
+        min-height: 72px;
+        font: inherit;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--bg);
+        color: var(--ink);
+        padding: 8px;
+        margin-top: 8px;
+      }
+      .st {
+        font-size: 0.9rem;
+        color: var(--mute);
+        margin-top: 6px;
+      }
+      .st.err {
+        color: var(--warn);
+      }
+      .card.shut > *:not(h2):not(.st):not(.ph) {
+        display: none;
+      }
+      .ph {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--mute);
+        margin: 0 0 8px;
+      }
+      .ph .on {
+        background: var(--accent);
+        color: var(--accent-ink);
+        border-radius: 999px;
+        padding: 2px 9px;
+      }
+      button.adv {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      button.adv.on {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .card.shut h2,
+      .card.shut .st {
+        cursor: pointer;
+      }
+      .card.shut .st {
+        margin-top: 0;
+      }
+      .card h2 {
+        cursor: pointer;
+      }
+      .cap {
+        font-size: 12px;
+        line-height: 1.35;
+        color: var(--mute);
+        margin: -4px 0 10px;
+        overflow-wrap: anywhere;
+      }
+      .mxc .cap,
+      .mxcol > .cap {
+        font-size: 10px;
+        margin: 2px 0 0;
+        text-align: left;
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .mxd .cap {
+        font-size: 13px;
+        margin: 0 0 8px;
+      }
+      .pair {
+        display: flex;
+        gap: 6px;
+        align-items: flex-start;
+        margin: 0 0 8px;
+      }
+      .pair figure {
+        margin: 0;
+        flex: 1 1 0;
+        min-width: 0;
+      }
+      .pair img {
+        height: min(36vh, 240px);
+        width: 100%;
+        object-fit: contain;
+        image-rendering: pixelated;
+        margin: 0 0 4px;
+      }
+      .pair figcaption {
+        font-size: 12px;
+        color: var(--mute);
+        text-align: center;
+      }
+      .mxh {
+        grid-column: 1/-1;
+        font-weight: 600;
+        font-size: 14px;
+        margin-top: 6px;
+      }
+      .playurl {
+        margin: -4px 0 10px;
+        font:
+          13px/1.3 ui-monospace,
+          monospace;
+        color: var(--mute);
+        overflow-wrap: anywhere;
+        user-select: all;
+      }
+      .play {
+        display: block;
+        margin: 0 0 10px;
+        padding: 16px;
+        border-radius: 12px;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font-weight: 700;
+        font-size: 1.2rem;
+        text-align: center;
+        text-decoration: none;
+      }
+      .take {
+        margin: 0 0 10px;
+        padding: 8px 10px;
+        border-left: 3px solid var(--accent);
+        background: var(--btn);
+        font-size: 14px;
+        color: var(--ink);
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div id="count"></div>
+      <div id="cards"></div>
+    </main>
+    <script type="application/json" id="data">
+      __DATA__
+    </script>
+    <script>
+      (async () => {
+        const CARDS = JSON.parse(document.getElementById('data').textContent);
+        const $ = (t, a = {}, ...k) => {
+          const e = document.createElement(t);
+          for (const [n, v] of Object.entries(a)) n === 'text' ? (e.textContent = v) : e.setAttribute(n, v);
+          e.append(...k);
+          return e;
+        };
+        function vid(src) {
+          const v = $('video', {
+            controls: '',
+            playsinline: '',
+            'webkit-playsinline': '',
+            preload: 'auto',
+            autoplay: '',
+            loop: '',
+            muted: '',
+          });
+          v.muted = true;
+          v.defaultMuted = true;
+          fetch(src)
+            .then((r) => {
+              if (!r.ok) throw 0;
+              return r.blob();
+            })
+            .then((bl) => {
+              v.src = URL.createObjectURL(new Blob([bl], { type: 'video/mp4' }));
+            })
+            .catch(() => {
+              v.src = src;
+            });
+          return v;
+        }
+        function el(m) {
+          return m.kind === 'img'
+            ? $('img', { src: m.src, loading: 'lazy', alt: '' })
+            : m.kind === 'video'
+              ? vid(m.src)
+              : $('audio', { src: m.src, controls: '', preload: 'none' });
+        }
+        function capText(x, full) {
+          if (!x) return '';
+          const t = full
+            ? [
+                x.kind,
+                x.model,
+                x.cost,
+                x.skill,
+                x.tool,
+                x.time,
+                x.ai ? 'AI-generated' : x.ai === false ? 'not AI' : '',
+                x.pack && x.kind !== 'pack original' ? x.pack : '',
+              ]
+            : [x.kind, x.cost, x.model, x.skill, x.ai ? 'AI-generated' : ''];
+          if (x.kind === 'pack original' && x.pack) t[0] = 'Pack original · ' + x.pack;
+          return t.filter(Boolean).join(' · ');
+        }
+        function cap(m, full) {
+          const t = capText(m.meta, full);
+          return t ? [$('div', { class: 'cap', text: t })] : [];
+        }
+        function pair(o, m, full) {
+          return $(
+            'div',
+            { class: 'pair' },
+            $('figure', {}, el(o), $('figcaption', { text: 'Original' })),
+            $('figure', {}, el(m)),
+          );
+        }
+        function media(list, full, orig) {
+          return list.flatMap((m) => {
+            const o = m.orig || (m.kind === 'img' ? orig : null);
+            return [o ? pair(o, m, full) : el(m), ...cap(m, full)];
+          });
+        }
+        const saved = {};
+        const ui = {};
+        const RL = { mock: 'Mock', prototype: 'Prototype', build: 'Build', polish: 'Polish' };
+        const ADV = (n) => 'Approve → ' + (RL[n] && n !== 'polish' ? RL[n] : 'Ship');
+        function count() {
+          const n = CARDS.filter((c) => !(saved[c.key] && finished(c, saved[c.key]))).length;
+          document.getElementById('count').textContent = String(n);
+        }
+        let db = null;
+        async function save(c) {
+          const s = ui[c.key];
+          const t = s.adv && ADV(s.adv);
+          const p = s.pick
+            ? { ...s.pick, ...(t ? { label: s.pick.label + ' · ' + t } : {}) }
+            : t
+              ? { choice: 'advance', label: t }
+              : s.ta.value.trim()
+                ? { choice: 'note', label: 'Note only' }
+                : saved[c.key] && saved[c.key].advance
+                  ? { choice: 'note', label: 'Approval withdrawn', withdrawn: saved[c.key].advance }
+                  : null;
+          if (!p) return;
+          const doc = {
+            choice: p.choice,
+            label: p.label,
+            ...(p.notes ? { notes: p.notes } : {}),
+            ...(s.adv ? { advance: s.adv } : {}),
+            ...(!s.adv && (saved[c.key]?.advance || saved[c.key]?.withdrawn)
+              ? { withdrawn: saved[c.key].advance || saved[c.key].withdrawn }
+              : p.withdrawn
+                ? { withdrawn: p.withdrawn }
+                : {}),
+            ...(c.source ? { source: c.source } : {}),
+            note: s.ta.value,
+            ticket: c.ticket,
+            repo: c.repo,
+            decision: c.decision,
+            at: Date.now(),
+          };
+          if (!db) {
+            s.st.textContent = 'Not saved';
+            s.st.className = 'st err';
+            return;
+          }
+          const seq = (s.seq || 0) + 1;
+          s.seq = seq;
+          saved[c.key] = doc;
+          const complete = finished(c, doc);
+          s.st.textContent = complete ? 'Answered ✓ · ' + doc.label : '';
+          s.st.className = 'st';
+          s.card.classList.toggle('shut', complete);
+          count();
+          s.queue = (s.queue || Promise.resolve()).catch(() => {}).then(() => db.doc('picks/' + c.key).set(doc));
+          try {
+            await s.queue;
+            s.confirmed = doc;
+          } catch (e) {
+            if (s.seq === seq) {
+              if (s.confirmed) saved[c.key] = s.confirmed;
+              else delete saved[c.key];
+              s.st.textContent = 'Not saved';
+              s.st.className = 'st err';
+              s.card.classList.remove('shut');
+              count();
+            }
+          }
+        }
+        function finished(c, d) {
+          const ch = d && d.choice;
+          if (!ch) return false;
+          if (d.advance || d.withdrawn) return true;
+          const wants = (v) => /^(changes|revise|work|needs)/i.test(v);
+          if (c.mode === 'matrix') {
+            const cells = c.rows.flatMap((row) => row.cells.filter((cell) => !cell.orig));
+            return cells.length > 0 && cells.every((cell) => ch[cell.id] || ((d.notes || {})[cell.id] || '').trim());
+          }
+          if (c.mode === 'multi') {
+            if (!c.groups.every((g) => ch[g.id])) return false;
+            return !Object.values(ch).some(wants) || !!(d.note || '').trim();
+          }
+          return !wants(ch) || !!(d.note || '').trim();
+        }
+        function mark(c) {
+          const s = ui[c.key];
+          const ch = s.pick && s.pick.choice;
+          if (s.ab) s.ab.classList.toggle('on', !!s.adv);
+          for (const b of s.btns) {
+            const v = b.dataset.g ? (ch && typeof ch === 'object' ? ch[b.dataset.g] : undefined) : ch;
+            b.classList.toggle('on', v === b.dataset.id);
+            if (c.mode === 'matrix') {
+              b.classList.toggle('dn', v === 'dislike');
+              b.classList.toggle('nt', !!((s.pick && s.pick.notes) || {})[b.dataset.g]);
+            }
+          }
+        }
+        function pickSimple(c, o) {
+          ui[c.key].pick = { choice: o.id, label: o.label };
+          mark(c);
+          save(c);
+        }
+        function pickMulti(c, g, o) {
+          const s = ui[c.key];
+          const ch = Object.assign({}, (s.pick && s.pick.choice) || {});
+          ch[g.id] = o.id;
+          const label = c.groups
+            .filter((x) => ch[x.id])
+            .map((x) => x.label + ': ' + x.options.find((y) => y.id === ch[x.id]).label)
+            .join('; ');
+          s.pick = { choice: ch, label };
+          mark(c);
+          save(c);
+        }
+        function mxLabel(c, ch, notes) {
+          const up = [],
+            dn = [],
+            nt = [];
+          for (const r of c.rows)
+            for (const x of r.cells) {
+              if (ch[x.id] === 'like') up.push(x.label);
+              if (ch[x.id] === 'dislike') dn.push(x.label);
+              if (notes[x.id]) nt.push(x.label + ': ' + notes[x.id]);
+            }
+          return (
+            [
+              up.length ? 'Likes: ' + up.join('; ') : '',
+              dn.length ? 'Dislikes: ' + dn.join('; ') : '',
+              nt.length ? 'Notes: ' + nt.join(' | ') : '',
+            ]
+              .filter(Boolean)
+              .join('. ') || 'No verdicts'
+          );
+        }
+        function mxSet(c, cell, v, note) {
+          const s = ui[c.key];
+          const ch = Object.assign({}, (s.pick && s.pick.choice) || {});
+          const notes = Object.assign({}, (s.pick && s.pick.notes) || {});
+          if (v !== undefined) {
+            if (ch[cell.id] === v) delete ch[cell.id];
+            else ch[cell.id] = v;
+          }
+          if (note !== undefined) {
+            if (note) notes[cell.id] = note;
+            else delete notes[cell.id];
+          }
+          s.pick = { choice: ch, notes, label: mxLabel(c, ch, notes) };
+          mark(c);
+          save(c);
+        }
+        function openCell(c, cell, note, orig) {
+          const s = ui[c.key];
+          const dlg = $('dialog', { class: 'mxd' });
+          const cur = () => ((s.pick && s.pick.choice) || {})[cell.id];
+          const up = $('button', { type: 'button', 'aria-label': 'Like', text: '\u{1F44D}' }),
+            dn = $('button', { type: 'button', 'aria-label': 'Dislike', text: '\u{1F44E}' }),
+            pen = $('button', { type: 'button', 'aria-label': 'Add a note', text: '✎' }),
+            x = $('button', { type: 'button', class: 'mxx', 'aria-label': 'Close', text: '✕' });
+          const ta = $('textarea', { 'aria-label': 'Note' });
+          ta.value = ((s.pick && s.pick.notes) || {})[cell.id] || '';
+          ta.hidden = !ta.value;
+          const sync = () => {
+            up.classList.toggle('on', cur() === 'like');
+            dn.classList.toggle('on', cur() === 'dislike');
+            pen.classList.toggle('on', !ta.hidden);
+          };
+          up.onclick = () => {
+            mxSet(c, cell, 'like');
+            sync();
+          };
+          dn.onclick = () => {
+            mxSet(c, cell, 'dislike');
+            sync();
+          };
+          pen.onclick = () => {
+            ta.hidden = false;
+            sync();
+            ta.focus();
+          };
+          const keep = () => {
+            const v = ta.value.trim();
+            if (v !== (((s.pick && s.pick.notes) || {})[cell.id] || '')) mxSet(c, cell, undefined, v);
+          };
+          ta.addEventListener('change', keep);
+          x.onclick = () => dlg.close();
+          dlg.addEventListener('close', () => {
+            keep();
+            dlg.remove();
+          });
+          dlg.addEventListener('click', (e) => {
+            if (e.target === dlg) dlg.close();
+          });
+          dlg.append(x, ...media(cell.media, true, orig), $('div', { class: 'btns' }, up, dn, pen), ta);
+          document.body.append(dlg);
+          if (note) ta.hidden = false;
+          sync();
+          dlg.showModal();
+          if (note) ta.focus();
+        }
+        const root = document.getElementById('cards');
+        for (const c of CARDS) {
+          const card = $('section', { class: 'card', id: c.key });
+          if (c.phase) {
+            const ph = $('div', { class: 'ph' });
+            ['mock', 'prototype', 'build'].concat(c.phase.at === 'polish' ? ['polish'] : []).forEach((r, i) => {
+              if (i) ph.append($('span', { text: '›' }));
+              ph.append($('span', { class: r === c.phase.at ? 'on' : '', text: RL[r] }));
+            });
+            card.append(ph);
+          }
+          const h = $('h2', {}, ...(c.ticket ? [$('span', { class: 't', text: '#' + c.ticket })] : []), c.title);
+          card.append(h);
+          if (c.play)
+            card.append(
+              $('a', {
+                class: 'play',
+                href: c.play,
+                target: '_blank',
+                rel: 'noopener',
+                text: '\u25B6 ' + (c.playtext || 'Play this'),
+              }),
+              $('p', { class: 'playurl', text: c.play }),
+            );
+          if (c.link)
+            card.append(
+              c.big
+                ? $('a', {
+                    class: 'play',
+                    href: c.link,
+                    target: '_blank',
+                    rel: 'noopener',
+                    text: new URL(c.link).hostname,
+                  })
+                : $(
+                    'p',
+                    { class: 'take' },
+                    $('a', { href: c.link, target: '_blank', rel: 'noopener', text: new URL(c.link).hostname }),
+                  ),
+            );
+          const s = (ui[c.key] = { btns: [], pick: null });
+          if (c.mode === 'matrix') {
+            if (c.take) card.append($('p', { class: 'take', text: c.take }));
+            const n = Math.max(...c.rows.map((r) => r.cells.length));
+            const grid = $('div', { class: 'mx' });
+            grid.style.gridTemplateColumns = 'repeat(' + n + ',minmax(96px,1fr))';
+            for (const r of c.rows) {
+              if (r.head) grid.append($('div', { class: 'mxh', text: r.head }));
+              const ro = (
+                r.cells.find((y) => (y.orig && !y.stage) || (y.orig && /^orig/i.test(y.stage))) || { media: [] }
+              ).media[0];
+              for (const x of r.cells) {
+                if (x.orig) {
+                  grid.append(
+                    $(
+                      'div',
+                      { class: 'mxcol' },
+                      $('div', { class: 'mxc orig' }, ...media(x.media.map((m) => ({ ...m, meta: null })))),
+                      $('div', { class: 'mxo', text: x.stage || 'Original' }),
+                      ...cap(x.media[0] || {}),
+                    ),
+                  );
+                } else {
+                  const img = $(
+                    'button',
+                    { type: 'button', class: 'mxc', 'aria-label': 'Enlarge ' + x.label },
+                    ...media(x.media.map((m) => ({ ...m, meta: null }))),
+                  );
+                  img.onclick = () => openCell(c, x, false, ro);
+                  const up = $('button', {
+                    type: 'button',
+                    class: 'mxb',
+                    'data-id': 'like',
+                    'data-g': x.id,
+                    'aria-label': 'Like ' + x.label,
+                    text: '\u{1F44D}',
+                  });
+                  const dn = $('button', {
+                    type: 'button',
+                    class: 'mxb',
+                    'data-id': 'dislike',
+                    'data-g': x.id,
+                    'aria-label': 'Dislike ' + x.label,
+                    text: '\u{1F44E}',
+                  });
+                  const pen = $('button', {
+                    type: 'button',
+                    class: 'mxb',
+                    'aria-label': 'Note on ' + x.label,
+                    text: '✎',
+                  });
+                  up.onclick = () => mxSet(c, x, 'like');
+                  dn.onclick = () => mxSet(c, x, 'dislike');
+                  pen.onclick = () => openCell(c, x, true, ro);
+                  s.btns.push(up, dn);
+                  grid.append(
+                    $(
+                      'div',
+                      { class: 'mxcol' },
+                      img,
+                      ...(x.stage ? [$('div', { class: 'mxo', text: x.stage })] : []),
+                      $('div', { class: 'mxr' }, up, dn, pen),
+                      ...cap(x.media[0] || {}),
+                    ),
+                  );
+                }
+              }
+              for (let i = r.cells.length; i < n; i++) grid.append($('div', {}));
+            }
+            card.append(grid);
+          } else if (c.mode === 'multi') {
+            if (c.take) card.append($('p', { class: 'take', text: c.take }));
+            for (const g of c.groups) {
+              const gd = $('div', { class: 'grp' }, $('h3', { text: g.label }), ...media(g.media));
+              if (g.options.some((o) => o.media && o.media.length)) {
+                for (const o of g.options) {
+                  const b = $('button', { type: 'button', 'data-id': o.id, 'data-g': g.id, text: o.label });
+                  b.onclick = () => pickMulti(c, g, o);
+                  s.btns.push(b);
+                  gd.append($('div', { class: 'opt' }, ...media(o.media || []), b));
+                }
+              } else {
+                const row = $('div', { class: 'btns' });
+                for (const o of g.options) {
+                  const b = $('button', { type: 'button', 'data-id': o.id, 'data-g': g.id, text: o.label });
+                  b.onclick = () => pickMulti(c, g, o);
+                  s.btns.push(b);
+                  row.append(b);
+                }
+                gd.append(row);
+              }
+              card.append(gd);
+            }
+          } else {
+            if (c.take) card.append($('p', { class: 'take', text: c.take }));
+            card.append(...media(c.shared));
+            if (c.mode === 'choice') {
+              for (const o of c.options) {
+                const b = $('button', { type: 'button', 'data-id': o.id, text: o.label });
+                b.onclick = () => pickSimple(c, o);
+                s.btns.push(b);
+                card.append($('div', { class: 'opt' }, ...media(o.media), b));
+              }
+              const nb = $('button', { type: 'button', 'data-id': 'none', text: 'None' });
+              nb.onclick = () => pickSimple(c, { id: 'none', label: 'None of these' });
+              s.btns.push(nb);
+              card.append($('div', { class: 'btns' }, nb));
+            } else {
+              const row = $('div', { class: 'btns' });
+              for (const o of c.options) {
+                const b = $('button', { type: 'button', 'data-id': o.id, text: o.label });
+                b.onclick = () => pickSimple(c, o);
+                s.btns.push(b);
+                row.append(b);
+              }
+              card.append(row);
+            }
+          }
+          if (c.phase) {
+            s.ab = $('button', { type: 'button', class: 'adv', text: ADV(c.phase.next) });
+            s.ab.onclick = () => {
+              s.adv = s.adv ? null : c.phase.next;
+              mark(c);
+              save(c);
+            };
+            card.append($('div', { class: 'btns' }, s.ab));
+          }
+          s.ta = $('textarea', { 'aria-label': 'Notes' });
+          s.ta.addEventListener('change', () => save(c));
+          s.st = $('div', { class: 'st', text: 'Not saved' });
+          card.append(s.ta, s.st);
+          s.card = card;
+          root.append(card);
+          h.onclick = () => card.classList.toggle('shut');
+          s.st.addEventListener('click', () => {
+            if (card.classList.contains('shut')) card.classList.remove('shut');
+          });
+        }
+        count();
+        try {
+          db = await window.claude?.use?.('db');
+        } catch (e) {}
+        if (db) {
+          await Promise.all(
+            CARDS.map(async (c) => {
+              try {
+                const snap = await db.doc('picks/' + c.key).get();
+                if (snap.exists) {
+                  const d = snap.data();
+                  const s = ui[c.key];
+                  if (s.seq) return;
+                  if (c.ignoreSavedBefore && d.at <= c.ignoreSavedBefore) return;
+                  saved[c.key] = d;
+                  s.confirmed = d;
+                  s.adv = d.advance || null;
+                  s.pick =
+                    d.choice === 'advance'
+                      ? null
+                      : {
+                          choice: d.choice,
+                          label: String(d.label || '').replace(/ · Approve → \w+$/, ''),
+                          ...(d.notes ? { notes: d.notes } : {}),
+                        };
+                  if (d.note) s.ta.value = d.note;
+                  s.st.textContent = finished(c, d) ? 'Answered ✓ · ' + d.label : '';
+                  mark(c);
+                  s.card.classList.toggle('shut', finished(c, d));
+                }
+              } catch (e) {}
+            }),
+          );
+          count();
+        }
+      })();
+    </script>
+  </body>
+</html>
