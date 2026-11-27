@@ -81,6 +81,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
   const events = new EventRing();
   const runtimeState: { current?: RuntimeImpl<D, S> } = {};
   const saveMachineState: { current?: SaveMachine<S> } = {};
+  let captureCache: ReturnType<typeof createSaveThumbnailCache> | undefined;
   let eventCursor = 0;
   let lifecyclePaused = false;
   let networkPaused = false;
@@ -202,16 +203,15 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     const hooks = new SdkHooks(runtime, module.manifest, marks);
     runtime.attachHooks(hooks);
     host.test.register(hooks);
-    const thumbnails =
-      !scenario && module.manifest.saves && module.manifest.manualSaveSlots
-        ? createSaveThumbnailCache({ onFrame: (callback) => runtime.onFrame(callback) })
-        : undefined;
+    const thumbnails = createSaveThumbnailCache({ onFrame: (callback) => runtime.onFrame(callback) });
+    captureCache = thumbnails;
     if (thumbnails) runtime.addCleanup(() => thumbnails.dispose());
     const saveMachine = createSaveMachine({
       instance,
       // A scenario run never writes the player's save.
       send: scenario ? () => undefined : send,
-      captureThumbnail: () => thumbnails?.current(),
+      captureThumbnail: () =>
+        !scenario && module.manifest.saves && module.manifest.manualSaveSlots ? thumbnails.current() : undefined,
     });
     saveMachineState.current = saveMachine;
     runtime.addCleanup(() => saveMachine.dispose());
@@ -225,6 +225,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     if (hello.payload.startupHold) {
       lifecyclePaused = true;
       announcePause(true);
+      captureCache?.pause();
       runtime.clock.pause();
       instance.pause();
     }
@@ -318,11 +319,17 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       switch (envelope.t) {
         case 'hello':
           return;
+        case 'capture.still': {
+          const capture = captureCache?.atOffset(envelope.payload.offsetMs);
+          send('capture.frame', capture ? { image: capture.image, capturedAt: capture.at } : {}, envelope.id);
+          return;
+        }
         case 'lifecycle.pause':
           if (lifecyclePaused) return;
           lifecyclePaused = true;
           announcePause(true);
           if (networkPaused || cancelPausePreparation) return;
+          captureCache?.pause();
           saveMachineState.current?.pause();
           active.discardPendingInput();
           active.clock.pause();
@@ -333,6 +340,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
           if (lifecyclePaused) announcePause(false);
           lifecyclePaused = false;
           if (networkPaused) return;
+          captureCache?.resume();
           active.discardPendingInput();
           active.instance.resume();
           active.clock.resume();
@@ -502,6 +510,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
           cancelPausePreparation?.();
           cancelPausePreparation = undefined;
           if (!networkPaused && (!lifecyclePaused || wasPreparing)) {
+            captureCache?.pause();
             saveMachineState.current?.pause();
             active.discardPendingInput();
             active.clock.pause();
@@ -521,6 +530,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
           const stop = () => {
             cancelPausePreparation?.();
             cancelPausePreparation = undefined;
+            captureCache?.pause();
             saveMachineState.current?.pause();
             active.discardPendingInput();
             active.clock.pause();
@@ -550,6 +560,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
           const release = () => {
             networkResumeTimer = undefined;
             if (networkPaused && !lifecyclePaused) {
+              captureCache?.resume();
               active.discardPendingInput();
               active.instance.resume();
               active.clock.resume();

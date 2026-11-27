@@ -279,6 +279,7 @@ export function mountSceneryPreview(
     onSaveWrite: () => noop,
     onEvent: () => noop,
     netInfo: async () => undefined,
+    captureStill: async () => undefined,
     dispose: () => {
       disposed = true;
       revision++;

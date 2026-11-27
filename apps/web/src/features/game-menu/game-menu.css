@@ -130,6 +130,30 @@
   min-width: 0;
 }
 
+.game-menu-captures {
+  display: flex;
+  gap: 8px;
+  padding: 4px 14px;
+  overflow-x: auto;
+}
+
+.game-menu-captures figure {
+  flex: 0 0 min(28vw, 112px);
+  margin: 0;
+  text-align: center;
+}
+
+.game-menu-captures img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.game-menu-captures figcaption {
+  padding-top: 4px;
+}
+
 .game-menu-sh {
   display: flex;
   align-items: center;

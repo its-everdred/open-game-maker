@@ -68,17 +68,17 @@ export const phaseSchema = z.enum(['editing', 'migrating', 'playing', 'pausedFor
 export type Phase = z.infer<typeof phaseSchema>;
 
 const empty = z.looseObject({});
+const webpData = z
+  .string()
+  .max(32_768)
+  .regex(/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/u);
 const netData = z.string().max(NET_DATA_MAX_CHARS);
 const netSnapshot = z.looseObject({ seq: z.number().int().min(0), tick: z.number().int().min(0), data: netData });
 const netEvent = z.looseObject({ seq: z.number().int().min(0), data: netData });
 const save = z.looseObject({
   saveSchemaVersion: z.number().int().min(0),
   data: z.unknown(),
-  thumbnail: z
-    .string()
-    .max(32768)
-    .regex(/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/u)
-    .optional(),
+  thumbnail: webpData.optional(),
 });
 const playMode = z.enum(['play', 'edit']);
 const testMs = z.looseObject({ ms: z.number().min(0) });
@@ -108,6 +108,10 @@ export const hostToGameSchema = z
     ),
     envelope('lifecycle.pause', empty),
     envelope('lifecycle.resume', empty),
+    envelope(
+      'capture.still',
+      z.looseObject({ offsetMs: z.union([z.literal(0), z.literal(5_000), z.literal(10_000)]) }),
+    ),
     envelope('lifecycle.dispose', empty),
     envelope('mode.set', z.looseObject({ mode: playMode })),
     /** Host-validated effective design; the host checks the sender's role before forwarding. */
@@ -353,6 +357,13 @@ export const gameToHostSchema = z
     /** The host fills identity and slot. */
     envelope('save.write', save),
     envelope('save.restored', z.looseObject({ save: save.optional() })),
+    envelope(
+      'capture.frame',
+      z.looseObject({
+        image: webpData.optional(),
+        capturedAt: z.number().nonnegative().optional(),
+      }),
+    ),
     envelope(
       'event',
       z.looseObject({ kind: z.enum(['achievement', 'analytics', 'checkpoint']), payload: z.unknown() }),

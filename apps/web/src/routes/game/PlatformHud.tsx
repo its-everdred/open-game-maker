@@ -35,7 +35,7 @@ import { getCredits } from '../settings/credits';
 import { SharedSettings } from './SharedSettings';
 import { assignableKey } from './control-keys';
 import { PauseMenu } from './PauseMenu';
-import { BugComposer, type FileBug } from '../../features/game-menu/BugComposer';
+import { BugComposer, type BugCapture, type FileBug } from '../../features/game-menu/BugComposer';
 
 export type PlatformSaveApi = {
   list(gameId: string, query?: SaveListQuery): Promise<OptionalCapability<{ slots: SaveSlot[] }>>;
@@ -81,6 +81,7 @@ type PlatformHudProps = {
   onMoreHost?(host: HTMLElement | null): void;
   /** Files a bug from the play menu; without it the menu offers none. */
   onFileBug?: FileBug;
+  captureBugStills?(): Promise<BugCapture[]>;
   /** The host's log that rides along with a bug. */
   bugLog?(): string;
   onResume(): void;
@@ -176,6 +177,7 @@ export function PlatformHud({
   editDisabled,
   onMoreHost,
   onFileBug,
+  captureBugStills,
   bugLog,
   onResume,
 }: PlatformHudProps) {
@@ -503,7 +505,13 @@ export function PlatformHud({
                 </details>
               </SharedSettings>
             ) : page === 'bug' && onFileBug ? (
-              <BugComposer backRef={backRef} log={log} fileBug={onFileBug} onBack={() => setPage('pause')} />
+              <BugComposer
+                backRef={backRef}
+                log={log}
+                fileBug={onFileBug}
+                captureStills={captureBugStills}
+                onBack={() => setPage('pause')}
+              />
             ) : page === 'more' ? (
               <div className="pause-more">
                 <button

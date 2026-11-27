@@ -1,11 +1,13 @@
 import { api, ApiError } from '../../lib/api/client';
+import type { BugCapture } from '../game-menu/BugComposer';
 import { bugContext, setBugContext, type BugContext } from './slice';
 
-// POST /api/v1/reports (OGM-015). A report is never lost: when the route can't be reached (offline, not deployed yet,
-// a server error) it waits in localStorage and is sent on the next load. The queue holds only what the player typed,
-// the screen's ids and the last error's summary.
+// POST /api/v1/reports (OGM-015). When the route cannot be reached, a text-only report waits in localStorage and is
+// sent on the next load. Captures stay out of that account-agnostic queue to avoid replaying one player's images for
+// another signed-in user.
 export type ReportError = { type: string; message: string; frames: string[] };
-export type Report = BugContext & { text?: string; error?: ReportError };
+// #1408 extends the report service to persist screenshot attachments from this optional client field.
+export type Report = BugContext & { text?: string; error?: ReportError; captures?: BugCapture[] };
 export type ReportResult =
   { reportId: string; route?: string; jobId?: string; pendingBudget?: true; resetsAt?: string } | { queued: true };
 
@@ -21,13 +23,15 @@ export function lastReportError(): ReportError | undefined {
 
 type ErrorContext = { route?: string; gameId?: string };
 
-export async function sendReport(input: { text?: string }): Promise<ReportResult> {
-  const report: Report = { ...bugContext(), text: input.text, error: lastError };
+export async function sendReport(input: { text?: string; captures?: BugCapture[] }): Promise<ReportResult> {
+  const report: Report = { ...bugContext(), text: input.text, error: lastError, captures: input.captures };
   try {
     return await post(report);
   } catch (e) {
     if (!unreachable(e)) throw e;
-    writeQueue([...readQueue(), report]);
+    const queuedReport = { ...report };
+    delete queuedReport.captures;
+    if (!writeQueue([...readQueue(), queuedReport])) throw new Error('report_queue_unavailable', { cause: e });
     return { queued: true };
   }
 }
@@ -99,11 +103,12 @@ function readQueue(): Report[] {
   }
 }
 
-function writeQueue(queue: Report[]): void {
+function writeQueue(queue: Report[]): boolean {
   try {
     if (queue.length === 0) localStorage.removeItem(QUEUE_KEY);
     else localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+    return true;
   } catch {
-    /* private mode: nothing to keep it in */
+    return false;
   }
 }

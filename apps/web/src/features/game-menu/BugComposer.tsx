@@ -1,11 +1,17 @@
-import { useRef, useState, type FormEvent, type Ref } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type Ref } from 'react';
 
 import { Icon } from '../../components/Icon';
 import { openConversation } from '../build-chat/conversation';
 import './game-menu.css';
 
+export type BugCapture = { label: string; image: string };
 /** `attempt` names one bug: a retry sends the same one, so it never files twice. */
-export type FileBug = (text: string, log: string, attempt: string) => Promise<{ jobId?: string }>;
+export type FileBug = (
+  text: string,
+  log: string,
+  attempt: string,
+  captures?: BugCapture[],
+) => Promise<{ jobId?: string }>;
 
 type Sent = { text: string; jobId?: string };
 
@@ -17,11 +23,13 @@ export function BugComposer({
   backRef,
   log,
   fileBug,
+  captureStills,
   onBack,
 }: {
   backRef?: Ref<HTMLButtonElement>;
   log: string;
   fileBug: FileBug;
+  captureStills?(): Promise<BugCapture[]>;
   onBack(): void;
 }) {
   const [draft, setDraft] = useState('');
@@ -29,13 +37,28 @@ export function BugComposer({
   const [sent, setSent] = useState<Sent>();
   const attempt = useRef<string>('');
   const [bugId] = useState(() => crypto.randomUUID());
+  const [captures, setCaptures] = useState<BugCapture[]>([]);
+  const captureRequest = useRef<Promise<BugCapture[]> | undefined>(undefined);
+
+  useEffect(() => {
+    let current = true;
+    const request = captureStills ? captureStills().catch(() => []) : Promise.resolve([]);
+    captureRequest.current = request;
+    void request.then((result) => {
+      if (current && captureRequest.current === request) setCaptures(result);
+    });
+    return () => {
+      current = false;
+    };
+  }, [captureStills]);
 
   const send = async (text: string) => {
     attempt.current = text;
     setSent({ text });
     setState('sending');
     try {
-      const result = await fileBug(text, log, bugId);
+      const stills = (await captureRequest.current) ?? captures;
+      const result = await fileBug(text, log, bugId, stills);
       if (attempt.current !== text) return;
       setSent({ text, jobId: result.jobId });
       setState('sent');
@@ -106,6 +129,16 @@ export function BugComposer({
       ) : null}
       {state === 'compose' ? (
         <>
+          {captures.length > 0 ? (
+            <div className="game-menu-captures" aria-label="Recent game screenshots">
+              {captures.map(({ label, image }) => (
+                <figure key={label}>
+                  <img src={image} alt={`Game screenshot ${label}`} />
+                  <figcaption>{label}</figcaption>
+                </figure>
+              ))}
+            </div>
+          ) : null}
           <div className="game-menu-chips">
             <span className="game-menu-chip">
               <Icon name="paperclip" />

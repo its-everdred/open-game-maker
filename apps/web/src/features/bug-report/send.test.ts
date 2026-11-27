@@ -17,7 +17,10 @@ beforeEach(async () => {
   bug = await import('./index');
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('sendReport', () => {
   it('files the report with the screen context and leaves nothing queued', async () => {
@@ -42,6 +45,18 @@ describe('sendReport', () => {
     });
   });
 
+  it('sends recent game captures with the report for image-capable report routes', async () => {
+    const fetchMock = vi.fn(async () => created());
+    vi.stubGlobal('fetch', fetchMock);
+    bug.setBugContext({ gameId: 'g1', releaseId: 'rel1', buildHash: 'abc' });
+    const captures = [{ label: 'Now', image: 'data:image/webp;base64,YWJj' }];
+
+    await bug.sendReport({ text: 'the door is stuck', captures });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({ captures });
+  });
+
   it('keeps the report when the network is down', async () => {
     vi.stubGlobal(
       'fetch',
@@ -53,6 +68,34 @@ describe('sendReport', () => {
     await expect(bug.sendReport({ text: 'the door is stuck' })).resolves.toEqual({ queued: true });
 
     expect(queued()).toEqual([{ text: 'the door is stuck' }]);
+  });
+
+  it('does not persist screenshots in the account-agnostic offline queue', async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const captures = [{ label: 'Now', image: 'data:image/webp;base64,YWJj' }];
+
+    await expect(bug.sendReport({ text: 'the door is stuck', captures })).resolves.toEqual({ queued: true });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({ captures });
+    expect(queued()).toEqual([{ text: 'the door is stuck' }]);
+  });
+
+  it('keeps the composer informed when offline report storage fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota exceeded', 'QuotaExceededError');
+    });
+
+    await expect(bug.sendReport({ text: 'the door is stuck' })).rejects.toThrow('report_queue_unavailable');
   });
 
   it('keeps the report while the reports route is not deployed', async () => {

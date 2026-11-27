@@ -205,6 +205,7 @@ export function mountPaintedPreview(
     onSaveWrite: () => noop,
     onEvent: () => noop,
     netInfo: async () => undefined,
+    captureStill: async () => undefined,
     dispose: () => {
       disposed = true;
       resize.disconnect();
