@@ -43,6 +43,19 @@ it('retains multiple wall pieces in a corner using distinct Tiled layers', () =>
   expect(new Set(map.pieces('wall').map(({ key }) => key)).size).toBe(2);
 });
 
+it('preserves a sprite scale without changing collision or other copies', () => {
+  const base = { layer: 'decor', asset: 'pillar', facing: 'E', solid: false } as const;
+  const tiled = assemblyMap(2, 1, [
+    { ...base, cell: { x: 0, y: 0 }, scale: 0.4 },
+    { ...base, cell: { x: 1, y: 0 } },
+  ]);
+  const map = new IsoMap(tiled);
+  expect(map.pieces('decor').map((piece) => piece.scale)).toEqual([0.4, undefined]);
+  expect(map.collisionGrid()).toEqual([[false, false]]);
+  expect(() => assemblyMap(1, 1, [{ ...base, cell: { x: 0, y: 0 }, scale: 0 }])).toThrow('scale');
+  expect(() => assemblyMap(1, 1, [{ ...base, layer: 'floor', cell: { x: 0, y: 0 }, scale: 0.4 }])).toThrow('scale');
+});
+
 it('keeps a gate annotation on only the marked floor cell', () => {
   const floor = { layer: 'floor', asset: 'grass', facing: 'E', solid: false } as const;
   const tiled = assemblyMap(2, 1, [

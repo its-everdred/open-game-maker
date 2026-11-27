@@ -79,3 +79,17 @@ it('refuses a corner gate, whose cell would stay solid and seal the way in', () 
   const grid = new IsoMap(assemblyMap(3, 3, run.placements)).collisionGrid();
   expect([grid[2]![1], grid[1]![1]]).toEqual([false, false]);
 });
+
+it('places scaled posts at the inspected gate ends without blocking the entry', () => {
+  const cells = Array.from({ length: 9 }, (_, i) => ({ x: 2 + (i % 3), y: 2 + Math.floor(i / 3) }));
+  const gate = { cell: { x: 3, y: 4 }, edge: 'yMax' as const };
+  const style = { asset: 'pillar', facing: 'E' as const, scale: 0.4 };
+  const run = edgeRun(cells, 'fence', [gate], style);
+  const map = new IsoMap(assemblyMap(6, 6, run.placements));
+  expect(map.pieces('decor').map(({ x, y, scale, solid }) => ({ x, y, scale, solid }))).toEqual([
+    { x: 2, y: 4, scale: 0.4, solid: false },
+    { x: 3, y: 4, scale: 0.4, solid: false },
+  ]);
+  expect(map.collisionGrid()[4]![3]).toBe(false);
+  expect(() => edgeRun(cells, 'fence', [{ cell: { x: 3, y: 2 }, edge: 'yMin' }], style)).toThrow('only inspected');
+});

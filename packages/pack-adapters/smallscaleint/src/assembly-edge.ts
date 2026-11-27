@@ -7,6 +7,11 @@ import type { Cell } from './placement.js';
 import { fenceB1Edges, wallC1Edges, wallF1Edges } from './structural-bounds.js';
 
 export type EdgeKind = 'fence' | 'stone' | 'timber';
+export interface GatePostStyle {
+  asset: string;
+  facing: TileFacing;
+  scale: number;
+}
 const STYLES = {
   fence: {
     asset: 't1:smallscaleint-2d-hd-zombie-rural-tileset/tiles/isometric-tiles/fence-b1@2026-11-01',
@@ -22,8 +27,13 @@ const STYLES = {
   },
 } as const;
 
-/** Boundary placements and opening endpoints; post sprites are not bound until their anchors are verified. */
-export function edgeRun(shape: readonly Cell[] | EdgePolyline, kind: EdgeKind, openings: readonly BoundaryEdge[] = []) {
+/** Boundary placements and opening endpoints; a supplied post style binds inspected yMax gate endpoints. */
+export function edgeRun(
+  shape: readonly Cell[] | EdgePolyline,
+  kind: EdgeKind,
+  openings: readonly BoundaryEdge[] = [],
+  postStyle?: GatePostStyle,
+) {
   if (!Object.hasOwn(STYLES, kind)) throw new Error('unknown edge kind');
   const style = STYLES[kind];
   const edges = Array.isArray(shape) ? boundary(shape) : polylineEdges(shape as EdgePolyline);
@@ -44,5 +54,28 @@ export function edgeRun(shape: readonly Cell[] | EdgePolyline, kind: EdgeKind, o
       )![0];
       return { cell, layer: 'wall', asset: style.asset, facing, solid: true };
     });
+  if (postStyle) {
+    if (kind !== 'fence' || openings.some(({ edge }) => edge !== 'yMax'))
+      throw new Error('gate post placement is only inspected for yMax fence openings');
+    if (
+      !postStyle.asset ||
+      !['E', 'N', 'S', 'W'].includes(postStyle.facing) ||
+      !Number.isFinite(postStyle.scale) ||
+      postStyle.scale <= 0
+    )
+      throw new Error('gate post style needs an asset, facing, and positive scale');
+    for (const vertex of postVertices) {
+      const cell = { x: vertex.x - 1, y: vertex.y - 1 };
+      if (cell.x < 0 || cell.y < 0) throw new Error('gate posts need an enclosing map margin');
+      placements.push({
+        cell,
+        layer: 'decor',
+        asset: postStyle.asset,
+        facing: postStyle.facing,
+        scale: postStyle.scale,
+        solid: false,
+      });
+    }
+  }
   return { placements, postVertices };
 }

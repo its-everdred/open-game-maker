@@ -55,6 +55,7 @@ export function isoMapToScene(json: TiledIsoMap, ids: { game: string; scene: str
     const props = {
       ...(piece.solid === defaultSolid(piece.layer) ? {} : { solid: piece.solid }),
       ...(tags === undefined ? {} : { tags }),
+      ...(piece.scale === undefined ? {} : { scale: piece.scale }),
     };
     const tile: SceneTile = {
       asset: piece.asset,
@@ -145,11 +146,13 @@ export function sceneToIsoMap(input: SceneDoc): TiledIsoMap {
       if (tile.flip) refuse(`tile ${id}:${cell} is flipped; the pack draws facings instead`);
       const facing = (tile.facing ?? 'E') as TileFacing;
       if (!Object.hasOwn(ROTATION, facing)) refuse(`tile ${id}:${cell} facing ${tile.facing} is not E, N, W or S`);
-      const { solid = defaultSolid(id.replace(/-\d+$/, '')), tags, ...rest } = tile.props ?? {};
+      const { solid = defaultSolid(id.replace(/-\d+$/, '')), tags, scale, ...rest } = tile.props ?? {};
       if (typeof solid !== 'boolean') refuse(`tile ${id}:${cell} solid must be a boolean`);
       if (tags !== undefined && typeof tags !== 'string') refuse(`tile ${id}:${cell} tags must be a string`);
+      if (scale !== undefined && (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0 || id === 'floor'))
+        refuse(`tile ${id}:${cell} scale must be positive and cannot be set on floor tiles`);
       if (Object.keys(rest).length > 0) refuse(`tile ${id}:${cell} has props ${Object.keys(rest).join(', ')}`);
-      const signature = JSON.stringify([tile.asset, facing, solid, tile.elevation ?? null, tags]);
+      const signature = JSON.stringify([tile.asset, facing, solid, tile.elevation ?? null, tags, scale]);
       let gid = gids.get(signature);
       if (gid === undefined) {
         gid = tiles.length + 1;
@@ -161,6 +164,7 @@ export function sceneToIsoMap(input: SceneDoc): TiledIsoMap {
             { name: 'rotation', value: ROTATION[facing] },
             { name: 'solid', value: solid },
             ...(tags === undefined ? [] : [{ name: 'tags', value: tags }]),
+            ...(scale === undefined ? [] : [{ name: 'scale', value: scale }]),
             ...(tile.elevation === undefined ? [] : [{ name: 'elevation', value: tile.elevation }]),
           ],
         });

@@ -15,13 +15,19 @@ class Fixture extends Phaser.Scene {
     const cell = { x: 0, y: 0 };
     const map = new IsoMap(
       assemblyMap(1, 1, [
-        { cell, layer: 'wall', asset: 'fence', facing: 'W', solid: true },
+        { cell, layer: 'wall', asset: 'fence', facing: 'W', solid: true, scale: 0.4 },
         { cell, layer: 'wall', asset: 'fence', facing: 'S', solid: true },
         { cell, layer: 'roof', asset: 'roof', facing: 'N', solid: false, elevation: 1.75 },
       ]),
     );
     void map.render(this, {} as AssetLoader).then(({ sprites }) => {
-      const before = sprites.map(({ key, object }) => ({ key, x: object.x, y: object.y, visible: object.visible }));
+      const before = sprites.map(({ key, object }) => ({
+        key,
+        x: object.x,
+        y: object.y,
+        scale: object.scaleX,
+        visible: object.visible,
+      }));
       map.sync({ [sprites[0]!.key]: { visible: false } });
       (window as unknown as { overlap: unknown }).overlap = {
         before,

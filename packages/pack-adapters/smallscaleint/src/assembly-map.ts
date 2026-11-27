@@ -9,6 +9,8 @@ export interface AssemblyPlacement {
   facing: TileFacing;
   solid: boolean;
   elevation?: number;
+  /** Uniform sprite scale, anchored at the asset's ground point. */
+  scale?: number;
   /** Scene-check annotations attached to this placement, such as `gate`. */
   tags?: readonly string[];
 }
@@ -39,6 +41,11 @@ export function assemblyMap(width: number, height: number, placements: readonly 
     }
     if (typeof placement.asset !== 'string' || !placement.asset) throw new Error('placement asset must not be empty');
     if (typeof placement.solid !== 'boolean') throw new Error('placement solid must be a boolean');
+    if (
+      placement.scale !== undefined &&
+      (!Number.isFinite(placement.scale) || placement.scale <= 0 || placement.layer === 'floor')
+    )
+      throw new Error('sprite scale must be positive and cannot be set on floor tiles');
     if (
       placement.tags !== undefined &&
       (!Array.isArray(placement.tags) ||
@@ -77,6 +84,7 @@ export function assemblyMap(width: number, height: number, placements: readonly 
       placement.facing,
       placement.solid,
       placement.elevation ?? 0,
+      placement.scale ?? null,
       tags,
     ]);
     let gid = byKey.get(signature);
@@ -90,6 +98,7 @@ export function assemblyMap(width: number, height: number, placements: readonly 
           { name: 'rotation', value: ROTATION[placement.facing] },
           { name: 'solid', value: placement.solid },
           ...(placement.elevation === undefined ? [] : [{ name: 'elevation', value: placement.elevation }]),
+          ...(placement.scale === undefined ? [] : [{ name: 'scale', value: placement.scale }]),
           ...(tags ? [{ name: 'tags', value: tags }] : []),
         ],
       });

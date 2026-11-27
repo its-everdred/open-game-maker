@@ -40,6 +40,11 @@ it('supplies measured card metadata without inventing anchors or sockets', () =>
     ['yMax'],
     ['xMin'],
   ]);
+  const pillar = structuralCardFacts(
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01',
+  )!;
+  expect(pillar.E?.alpha_bounds?.value).toEqual([69, 9, 174, 236]);
+  expect(pillar.W?.alpha_bounds?.value).toEqual([70, 9, 174, 236]);
   expect(structuralCardFacts('unknown')).toBeUndefined();
   expect(structuralCardFacts('toString')).toBeUndefined();
 });

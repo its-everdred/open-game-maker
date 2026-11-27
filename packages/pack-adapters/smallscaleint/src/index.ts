@@ -44,6 +44,7 @@ export {
   type DressingStyle,
   type EdgeKind,
   type EdgePolyline,
+  type GatePostStyle,
   type ScatterRules,
   type SteppingStyle,
 } from './assemblers.js';

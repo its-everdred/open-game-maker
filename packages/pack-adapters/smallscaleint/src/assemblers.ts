@@ -4,7 +4,7 @@ import type { AssemblyPlacement } from './assembly-map.js';
 import type { BoundaryEdge } from './boundary.js';
 import type { Cell, ScatterRules } from './placement.js';
 
-export { edgeRun, type EdgeKind } from './assembly-edge.js';
+export { edgeRun, type EdgeKind, type GatePostStyle } from './assembly-edge.js';
 export { assemblyMap, type AssemblyPlacement } from './assembly-map.js';
 export type { BoundaryEdge, CellEdge } from './boundary.js';
 export type { EdgePolyline } from './polyline-edges.js';

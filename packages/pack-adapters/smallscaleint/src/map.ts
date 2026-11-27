@@ -73,6 +73,8 @@ export interface IsoPiece {
   depth: number;
   /** Height above the tile in 64-pixel grid units. */
   elevation?: number;
+  /** Uniform scale about the asset's ground point. */
+  scale?: number;
   solid: boolean;
   visible: boolean;
 }
@@ -227,6 +229,12 @@ export class IsoMap {
           throw new Error(`tile gid ${storedGid} solid must be a boolean`);
         }
         const elevation = property(tile.properties, 'elevation');
+        const scale = property(tile.properties, 'scale');
+        if (
+          scale !== undefined &&
+          (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0 || name === 'floor')
+        )
+          throw new Error(`tile gid ${storedGid} scale must be positive and cannot be set on floor tiles`);
         if (
           elevation !== undefined &&
           (typeof elevation !== 'number' || !Number.isFinite(elevation) || elevation < 0)
@@ -249,6 +257,7 @@ export class IsoMap {
           facing: facingOf(property(tile.properties, 'rotation'), storedGid),
           depth: this.depthOf(x, y, name),
           ...(typeof elevation === 'number' ? { elevation } : {}),
+          ...(typeof scale === 'number' ? { scale } : {}),
           solid,
           visible: true,
         });
@@ -428,6 +437,7 @@ export class IsoMap {
           .setOrigin(0.5, 208 / scene.textures.get(`${piece.asset}:${piece.facing}`).getSourceImage().height)
           .setDepth(piece.depth)
           .setVisible(piece.visible);
+        if (piece.scale !== undefined) object.setScale(piece.scale);
         this.#rendered.set(piece.key, object);
         return { key: piece.key, object };
       });

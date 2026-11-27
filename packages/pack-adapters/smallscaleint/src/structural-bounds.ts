@@ -98,9 +98,13 @@ export const structuralImageBounds: Fact<Readonly<Record<string, StructuralImage
       size: [256, 256],
       facings: { E: [64, 176, 191, 240], N: [64, 176, 191, 240], S: [64, 176, 191, 240], W: [64, 176, 191, 240] },
     },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [69, 9, 174, 236], N: [69, 9, 174, 236], S: [69, 9, 174, 236], W: [70, 9, 174, 236] },
+    },
   },
   verified:
-    'Decoded each named source PNG with sharp and scanned every nonzero alpha pixel; bounds are inclusive (2026-11-21).',
+    'Decoded each named source PNG with sharp and scanned every nonzero alpha pixel; bounds are inclusive (2026-11-21 to 2026-11-26).',
 };
 
 /** Grid edge occupied by the rural Fence B1 sprite for each facing. */
