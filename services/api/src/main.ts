@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { serve } from '@hono/node-server';
 
 import { FsBlobStore } from '@ogm/blob-store';
-import { createAiurClient } from '@ogm/aiur-client';
+import { AiurHttpError, createAiurClient } from '@ogm/aiur-client';
 import { createDbDaemonStore, createFleet, createIntake, createIssuesClient, startFeedConsumers } from '@ogm/builder';
 import { parseRepositoryName } from '@ogm/config';
 import { migrate, openDb } from '@ogm/db';
@@ -338,7 +338,11 @@ const executorNotify = createExecutorNotifier(deps, {
 });
 setInterval(() => {
   void executorNotify().catch((error: unknown) =>
-    log({ event: 'executor_notify_error', error: (error as Error).name }),
+    log({
+      event: 'executor_notify_error',
+      error: (error as Error).name,
+      ...(error instanceof AiurHttpError ? { status: error.status, code: error.code } : {}),
+    }),
   );
 }, 30_000).unref();
 // Give the first scheduled pass one interval to start before the independent monitor checks it.

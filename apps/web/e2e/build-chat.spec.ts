@@ -340,12 +340,14 @@ test('names a blocked microphone and a refused voice token at 390x844', async ({
 
   const composer = page.locator('#chat-dock-slot aiur-composer');
   const alert = page.locator('.build-chat-panel [role="alert"]');
-  await composer.getByRole('button', { name: 'Hold to dictate' }).press(' ');
+  await composer.getByRole('button', { name: 'Dictate' }).click();
+  await composer.getByRole('button', { name: 'Stop dictation' }).click();
   await expect(alert).toHaveText(/^Microphone blocked\..*Safari.*\(dictation: mic_denied\)$/);
   await page.screenshot({ path: testInfo.outputPath('mic-denied.png') });
   await expect.poll(() => reports).toContainEqual(expect.objectContaining({ action: 'dictation', code: 'mic_denied' }));
 
-  await composer.getByRole('button', { name: 'Start voice conversation' }).click();
+  await composer.getByRole('button', { name: 'Dictate' }).click();
+  await composer.getByRole('button', { name: 'Switch to voice conversation' }).click();
   await expect(alert).toHaveText('Voice unavailable. (voice: api_403)');
   await page.screenshot({ path: testInfo.outputPath('token-403.png') });
   await expect.poll(() => reports).toContainEqual(expect.objectContaining({ action: 'voice', code: 'api_403' }));
