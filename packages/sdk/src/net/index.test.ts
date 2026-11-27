@@ -58,9 +58,21 @@ describe('GmNet controller', () => {
     });
     controller.handleMessage('net.primary', { epoch: 'old-epoch', seat: 0 });
     expect(controller.net.primarySeat).toBe(1);
-    controller.handleMessage('net.primary', { epoch: 'epoch-1', seat: 2 });
+    controller.handleMessage('net.start', {
+      epoch: 'epoch-1',
+      mode: 'per-seat',
+      startAt: 1000,
+      seed: 42,
+      primarySeat: 2,
+      seats,
+    });
     expect(controller.net.primarySeat).toBe(2);
     expect(seen).toEqual([1, 2]);
+    controller.handleMessage('net.primary', { epoch: 'epoch-1', seat: 1 });
+    expect(controller.net.primarySeat).toBe(1);
+    controller.handleMessage('net.primary', { epoch: 'epoch-1', seat: 2 });
+    expect(controller.net.primarySeat).toBe(2);
+    expect(seen).toEqual([1, 2, 1, 2]);
     controller.handleMessage('net.epoch.end', { epoch: 'epoch-1', tick: 0 });
     expect(controller.net.primarySeat).toBe(1);
     controller.dispose();

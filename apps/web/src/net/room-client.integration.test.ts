@@ -12,7 +12,7 @@ import {
   type MultiplayerHooksV2,
   type RoomPin,
 } from '@ogm/contracts';
-import { createNetController } from '@gm/sdk/net';
+import { createNetController, type NetController } from '@gm/sdk/net';
 import { signGrant } from '@ogm/room-protocol';
 import { createRoomsServer } from '@ogm/rooms';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -65,11 +65,12 @@ describe('RoomClient with GameRoom', () => {
         }),
     );
     const starts: unknown[][] = [[], []];
+    let controllers: NetController[] = [];
     const forwards = clients.map((client, index) =>
       attachBridgeForwarding({
         bridge: {
           send: (envelope) => {
-            if (envelope.t === 'net.start') starts[index]!.push(envelope.payload);
+            controllers[index]?.handleMessage(envelope.t, envelope.payload);
           },
         },
         client,
@@ -86,7 +87,7 @@ describe('RoomClient with GameRoom', () => {
       restore() {},
       digest: () => [],
     } satisfies MultiplayerHooksV2;
-    const controllers = forwards.map((forward, index) =>
+    controllers = forwards.map((forward, index) =>
       createNetController({
         manifest: { inputs: { actions: {} }, net: { authority: 'per-seat', maxSeats: 2 } } as GameManifest,
         hooks,
@@ -99,6 +100,7 @@ describe('RoomClient with GameRoom', () => {
         now: () => 0,
       }),
     );
+    controllers.forEach((controller, index) => controller.net.onStart((start) => starts[index]!.push(start)));
     try {
       for (const [index, client] of clients.entries()) {
         await client.join({

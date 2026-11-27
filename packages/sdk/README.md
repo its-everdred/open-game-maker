@@ -159,7 +159,8 @@ For a connected per-seat room, call `gm.net.setReady(true)` when the local playe
 readiness), then have the primary call `gm.net.requestStart()`. The room checks membership, readiness and primary-seat
 authority before it broadcasts `onStart`; these calls do not create or join a room.
 Use `gm.net.primarySeat` to identify the room's elected primary: the editor's `role` can belong to a different session.
-It is `null` when no connected seat is eligible, and `onSeats` fires when the primary changes during a match.
+Before a match it is `null` when no connected seat is eligible. During a match it retains the room's last elected
+primary until the room elects another; `onSeats` fires when that primary changes.
 
 A per-seat manifest must implement `MultiplayerHooksV2`: `capture({ seat })` returns that seat's owned slice and
 `capture({})` the shared one, `restore(snapshot)` applies exactly the slice it is given, and `digest()` returns

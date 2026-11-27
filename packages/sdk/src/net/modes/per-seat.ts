@@ -347,6 +347,7 @@ export class PerSeatMode {
 
   private start(start: NetStart): void {
     if (this.started && this.epoch === start.epoch) {
+      this.epochPrimary = start.primarySeat;
       this.setSeats(start.seats);
       return;
     }

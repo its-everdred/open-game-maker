@@ -40,7 +40,7 @@ export interface GmNet {
   readonly mode: AuthorityMode;
   /** This client's seat, or `null` for a spectator — the one honest value that cannot be confused with seat 0. */
   readonly localSeat: number | null;
-  /** The room's elected primary seat, or `null` when no seat is eligible. */
+  /** The room's primary seat; before a match, `null` until an eligible seat is known. */
   readonly primarySeat: number | null;
   /** The seat table: who is seated, on which team, connected, ready, forfeited or spectating. */
   readonly seats: readonly NetSeat[];
