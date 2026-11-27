@@ -58,6 +58,7 @@ Only aiur main runs on the NUC: fixes reach us by ticket → branch → PR → m
 
 ## Host steps and protection
 - **Approved designs are replicated exactly** (Kevin 2026-11-26: "i care about replicating even the smallest details"). A redesign PR needs the `gm design parity` report (#1449): artboard renders vs app screenshots, strict thresholds, token/component lint. Reject any visible deviation in the side-by-side even when the score passes.
+- **Core auto-merge sweep** (`executor/automerge.sh`, every 3 min) merges green aiur/* core PRs, except pc:* tickets (the PC merges those) and PRs labelled `hold-for-look`. Label any visual PR before Kevin's card (11-27: it merged the churchyard before his look).
 - **Visual looks:** `executor/host-steps.done` (`judged:<pr>@<sha>`) / `host-steps.looked-back` (`rejected:…`). Look at the stills first.
 - **Merges and publishes:** `og-batch` / `og-merge` / `og-publish`. Game publishes are unlimited. Netlify deploys are at most one per hour each (app, site), and none 23:00–05:00 Pacific (`executor/quiet-hours.sh`).
 - **Heavy jobs** go in `ogm-heavy.slice`.
