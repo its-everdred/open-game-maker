@@ -1,6 +1,6 @@
 import { JobPlan, Reservation, type CreateJobAccepted, type Job, type JobState } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 
 import { HttpError } from '../app/errors.js';
 import { daemonRowForGame } from './daemons.js';
@@ -79,7 +79,8 @@ export function listJobs(db: Db, gameIds: string | readonly string[]): Job[] {
     db,
     rows.map(({ job }) => job.id),
   );
-  return rows.map(({ job, projection }) => toJob(job, projection, requests.get(job.id), queuePosition(db, job)));
+  const at = new Date();
+  return rows.map(({ job, projection }) => toJob(job, projection, requests.get(job.id), queuePosition(db, job, at)));
 }
 
 function openRequestCounts(db: Db, jobIds: readonly string[]): Map<string, number> {
@@ -93,14 +94,16 @@ function openRequestCounts(db: Db, jobIds: readonly string[]): Map<string, numbe
   return new Map(rows.map(({ jobId, count }) => [jobId, Number(count)]));
 }
 
-export function acceptedFor(db: Db, row: JobRow): CreateJobAccepted {
+export function acceptedFor(db: Db, row: JobRow, at = new Date()): CreateJobAccepted {
   const reservation = Reservation.parse(JSON.parse(row.reservation));
   if (row.state !== 'queued') return { jobId: row.id, state: 'admitted', reservation, slot: row.slot };
-  return { jobId: row.id, state: row.state, reservation, slot: row.slot, position: queuePosition(db, row) };
+  return { jobId: row.id, state: row.state, reservation, slot: row.slot, position: queuePosition(db, row, at) };
 }
 
-function queuePosition(db: Db, row: JobRow): number | undefined {
+function queuePosition(db: Db, row: JobRow, at = new Date()): number | undefined {
   if (row.state !== 'queued') return undefined;
+  const now = at.toISOString();
+  const ready = row.start === 'now' || (row.startAt !== null && row.startAt <= now);
   const position =
     db
       .select({ id: schema.jobs.id })
@@ -110,7 +113,7 @@ function queuePosition(db: Db, row: JobRow): number | undefined {
           eq(schema.jobs.familyId, row.familyId),
           eq(schema.jobs.state, 'queued'),
           eq(schema.jobs.slot, row.slot),
-          eq(schema.jobs.start, row.start),
+          ready ? or(eq(schema.jobs.start, 'now'), lte(schema.jobs.startAt, now)) : eq(schema.jobs.start, 'at_reset'),
         ),
       )
       .orderBy(asc(schema.jobs.createdAt), sql`rowid`)

@@ -1,7 +1,8 @@
 import { schema } from '@ogm/db';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
-import { activeJobs, activeJobsForSlug, byTicket } from '../src/jobs/repo.js';
+import { acceptedFor, activeJobs, activeJobsForSlug, byTicket, findJob, findJobRow } from '../src/jobs/repo.js';
 import { makeDeps } from './helpers.js';
 
 function setup() {
@@ -83,6 +84,26 @@ function insertJob(
 }
 
 describe('job projection directory', () => {
+  it('counts overdue reset jobs ahead of an immediate job but excludes future reset jobs', () => {
+    const deps = setup();
+    insertJob(deps, 'j_due', 1, 'queued');
+    insertJob(deps, 'j_future', 2, 'queued');
+    insertJob(deps, 'j_now', 3, 'queued');
+    deps.db
+      .update(schema.jobs)
+      .set({ start: 'at_reset', startAt: '2000-01-01T00:00:00.000Z' })
+      .where(eq(schema.jobs.id, 'j_due'))
+      .run();
+    deps.db
+      .update(schema.jobs)
+      .set({ start: 'at_reset', startAt: '2099-01-01T00:00:00.000Z' })
+      .where(eq(schema.jobs.id, 'j_future'))
+      .run();
+
+    expect(findJob(deps.db, 'j_due').position).toBe(1);
+    expect(findJob(deps.db, 'j_now').position).toBe(2);
+    expect(acceptedFor(deps.db, findJobRow(deps.db, 'j_now'), new Date('1999-01-01T00:00:00.000Z')).position).toBe(1);
+  });
   it('resolves daemon tickets and lists only non-terminal jobs', () => {
     const deps = setup();
     insertJob(deps, 'j_queued', 141, 'queued');

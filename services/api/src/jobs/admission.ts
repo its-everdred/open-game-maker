@@ -101,7 +101,7 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
         if (existing)
           return {
             created: false,
-            response: acceptedFor(deps.db, existing),
+            response: acceptedFor(deps.db, existing, now),
             samePlan: JSON.parse(existing.plan).summary === request.plan.summary,
           };
       }
@@ -230,7 +230,7 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
       });
       return {
         created: true,
-        response: acceptedFor(deps.db, deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, id)).get()!),
+        response: acceptedFor(deps.db, deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, id)).get()!, now),
       };
     })
     .immediate();
