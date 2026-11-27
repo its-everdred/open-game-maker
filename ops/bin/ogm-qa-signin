@@ -2,10 +2,11 @@
 # OGM QA sign-in: mint a Playwright storage state for the QA test account, so headless capture of the app shell
 # (`gm run --app`, the Executor's shell-shots.mjs with STORAGE=…) plays signed in instead of landing on Sign in.
 #
-# usage: ogm-qa-signin [--email <address>] [--origin <app origin>] [--out <file>]
+# usage: ogm-qa-signin [--email <address>] [--origin <app origin>] [--out <file>] [--admin-state <file>]
 #
 #   --email   the QA account (default: the first OGM_QA_EMAILS address in api.env)
 #   --origin  the app origin to sign in to (default: OGM_APP_ORIGIN in api.env)
+#   --admin-state  admin Playwright storage state; exercise Admin invite and phone first-run to Blobs
 #   --out     the storage state (default: ~/.config/ogm/qa/storage.json; the directory is 700, the file 600)
 #
 # Asks the app for a magic link, reads it from the admin inbox (the API keeps OGM_QA_EMAILS mail there even with SMTP
@@ -18,18 +19,21 @@
 set -uo pipefail
 
 usage() {
-  printf 'usage: ogm-qa-signin [--email <address>] [--origin <app origin>] [--out <file>]\n' >&2
+  printf 'usage: ogm-qa-signin [--email <address>] [--origin <app origin>] [--out <file>] [--admin-state <file>]\n' >&2
   exit 64
 }
 
 email=
 origin=
 out=
+admin_state=
 while (($#)); do
   case $1 in
-    --email | --origin | --out)
+    --email | --origin | --out | --admin-state)
       [[ $# -ge 2 ]] || usage
-      declare "${1#--}=$2"
+      option=${1#--}
+      option=${option//-/_}
+      declare "$option=$2"
       shift 2
       ;;
     *) usage ;;
@@ -49,6 +53,8 @@ env_value() {
 
 qa_emails=${OGM_QA_EMAILS:-$(env_value OGM_QA_EMAILS)}
 email=${email:-${qa_emails%%,*}}
+email=${email//[[:space:]]/}
+email=${email,,}
 origin=${origin:-${OGM_APP_ORIGIN:-$(env_value OGM_APP_ORIGIN)}}
 data_dir=${OGM_DATA_DIR:-$(env_value OGM_DATA_DIR)}
 db=$data_dir/ogm.sqlite3
@@ -56,58 +62,95 @@ out=${out:-$HOME/.config/ogm/qa/storage.json}
 [[ -n $email ]] || fail "no QA address: set OGM_QA_EMAILS in $env_dir/api.env or pass --email" 65
 [[ -n $origin ]] || fail "no app origin: set OGM_APP_ORIGIN in $env_dir/api.env or pass --origin" 65
 [[ -n $data_dir && -f $db ]] || fail "no database at $db: set OGM_DATA_DIR in $env_dir/api.env" 65
+if [[ -n $admin_state ]]; then
+  [[ -f $admin_state ]] || fail "admin state file not found" 65
+  mkdir -p "$HOME/.config/ogm/qa" || fail "cannot create QA lock directory" 65
+  exec 9> "$HOME/.config/ogm/qa/invite-to-play.lock" || fail "cannot open QA lock" 65
+  flock -n 9 || fail "another invite-to-play check is running" 65
+  qa_addresses=${qa_emails//[[:space:]]/}
+  [[ ",${qa_addresses,,}," == *",${email,,},"* ]] || fail "invite-to-play requires an address in OGM_QA_EMAILS" 65
+fi
 
 dir=$(dirname -- "$out")
 mkdir -p "$dir" && chmod 700 "$dir" || fail "cannot create $dir" 65
 
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
-QA_EMAIL=$email QA_ORIGIN=${origin%/} QA_DB=$db QA_OUT=$out QA_REPO=$repo \
+QA_ADMIN_STATE=$admin_state QA_EMAIL=$email QA_ORIGIN=${origin%/} QA_DB=$db QA_OUT=$out QA_REPO=$repo \
   node --input-type=module - << 'NODE' || exit 1
 import { chmodSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 
-const { QA_EMAIL: email, QA_ORIGIN: origin, QA_DB: dbPath, QA_OUT: out, QA_REPO: repo } = process.env;
+const { QA_EMAIL: email, QA_ORIGIN: origin, QA_DB: dbPath, QA_OUT: out, QA_REPO: repo, QA_ADMIN_STATE: adminState } = process.env;
 const { chromium } = createRequire(`${repo}/packages/gm-verify/package.json`)('playwright');
 const Database = createRequire(`${repo}/packages/db/package.json`)('better-sqlite3');
 
-const fail = (message) => {
-  console.error(`ogm-qa-signin: ${message}`);
-  process.exit(1);
-};
+const fail = (message) => { throw new Error(message); };
 const db = new Database(dbPath, { readonly: true, fileMustExist: true });
 const unopened = db.prepare(
   'SELECT id, text, created_at FROM mail_outbox WHERE lower("to") = lower(?) AND opened_at IS NULL ORDER BY created_at DESC',
 );
-const newest = (pattern, since) => {
+const newest = (pattern, since, exclude = new Set()) => {
   for (const row of unopened.all(email)) {
-    const match = row.created_at >= since ? pattern.exec(row.text) : null;
+    const match = row.created_at >= since && !exclude.has(row.id) ? pattern.exec(row.text) : null;
     if (match) return match[0];
   }
   return null;
 };
 
 const browser = await chromium.launch();
+const runId = randomUUID();
+let admin, expectedFamily, adminId, attempted = false, created = false, priorInvites = new Set(), asked;
 try {
-  const context = await browser.newContext();
+  const context = await browser.newContext(adminState ? { viewport: { width: 390, height: 844 }, isMobile: true } : {});
   const headers = { origin, 'content-type': 'application/json' };
-  const asked = new Date().toISOString();
-  const sent = await context.request.post(`${origin}/auth/sign-in/magic-link`, {
-    headers,
-    data: { email, callbackURL: `${origin}/` },
-    failOnStatusCode: false,
-  });
-  if (!sent.ok()) fail(`the app refused a sign-in link for ${email} (${sent.status()})`);
+  const priorMail = new Set(unopened.all(email).map((row) => row.id));
+  asked = new Date().toISOString();
+  if (adminState) {
+    admin = await browser.newContext({ storageState: adminState, viewport: { width: 390, height: 844 }, isMobile: true });
+    const adminMe = await admin.request.get(`${origin}/api/v1/me`, { failOnStatusCode: false });
+    if (!adminMe.ok()) fail('admin state is not signed in');
+    const identity = await adminMe.json();
+    expectedFamily = identity.family?.id;
+    adminId = identity.user?.id;
+    if (!expectedFamily || !adminId) fail('admin account has no family');
+    priorInvites = new Set(db.prepare("SELECT id FROM invitations WHERE email = ? AND family_id = ? AND inviter_id = ? AND kind = 'member'").all(email, expectedFamily, adminId).map((row) => row.id));
+    const members = await admin.request.get(`${origin}/api/v1/families/${encodeURIComponent(expectedFamily)}/members`);
+    if (!members.ok()) fail('could not inspect the admin family');
+    if ((await members.json()).members.some((m) => m.email?.toLowerCase() === email)) fail('QA address already belongs to the admin family');
+    const adminPage = await admin.newPage();
+    await adminPage.setExtraHTTPHeaders({ 'x-ogm-qa-run': runId });
+    await adminPage.goto(`${origin}/admin/users`, { waitUntil: 'load' });
+    await adminPage.getByRole('heading', { name: 'Users', exact: true }).waitFor();
+    const row = adminPage.getByRole('row').filter({ hasText: email });
+    if (await row.count()) fail('invite-to-play requires a fresh QA address not already on the allow list');
+    await adminPage.getByLabel('Email', { exact: true }).fill(email);
+    await adminPage.locator('form select').selectOption('maker');
+    attempted = true;
+    const [response] = await Promise.all([adminPage.waitForResponse((r) => r.url().endsWith('/api/v1/admin/users') && r.request().method() === 'POST', { timeout: 10_000 }), adminPage.getByRole('button', { name: 'Add user' }).click()]);
+    if (!response.ok()) fail(`admin invitation failed (${response.status()})`);
+    created = true;
+  } else {
+    const sent = await context.request.post(`${origin}/auth/sign-in/magic-link`, {
+      headers, data: { email, callbackURL: `${origin}/` }, failOnStatusCode: false,
+    });
+    if (!sent.ok()) fail(`the app refused a sign-in link for ${email} (${sent.status()})`);
+  }
 
   // The API answers the same whether or not it sent a link, so the inbox is the only proof one went out.
   const link = new RegExp(`${origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/auth/magic-link/verify\\?\\S+`);
   let url = null;
   for (let i = 0; i < 40 && url === null; i++) {
-    url = newest(link, asked);
+    url = newest(link, asked, priorMail);
     if (url === null) await new Promise((resolve) => setTimeout(resolve, 250));
   }
   if (url === null)
     fail(`no sign-in link for ${email} in the admin inbox: is it on the allow list and in OGM_QA_EMAILS (api.env)?`);
 
+  if (adminState) {
+    const callback = new URL(new URL(url).searchParams.get('callbackURL'));
+    if (callback.pathname !== '/welcome' || !callback.searchParams.get('invite')) fail('invitation has no first-run membership token');
+  }
   const page = await context.newPage();
   await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
 
@@ -116,8 +159,22 @@ try {
     if (!me.ok()) fail(`the sign-in link did not sign ${email} in (/api/v1/me answered ${me.status()})`);
     return me.json();
   };
+  if (adminState) {
+    await page.getByRole('link', { name: 'Play Blobs' }).waitFor({ timeout: 60_000 });
+    if (!(await page.getByRole('link', { name: 'New Game' }).isVisible())) fail('New Game is missing from first run');
+    await page.getByRole('link', { name: 'Play Blobs' }).click();
+    await page.waitForURL(/\/g\//, { timeout: 60_000 });
+    await page.locator('.game-frame iframe').waitFor({ state: 'attached', timeout: 60_000 });
+    const game = page.frameLocator('.game-frame iframe');
+    for (const name of ['Play', 'Endless', 'Blobs', 'Play']) {
+      await game.getByRole('button', { name, exact: true }).click({ timeout: 90_000 });
+    }
+    await game.locator('[data-gm-play-area]').waitFor({ state: 'attached', timeout: 60_000 });
+    console.log('invite-to-play started Blobs Endless');
+  }
   let { user, family } = await whoami();
-  const invite = family ? null : newest(/\/join\/([A-Za-z0-9_-]+)/, '');
+  if (adminState && family?.id !== expectedFamily) fail('the invited account did not join the admin family');
+  const invite = family || adminState ? null : newest(/\/join\/([A-Za-z0-9_-]+)/, '');
   if (invite !== null) {
     const token = invite.split('/').pop();
     const accepted = await context.request.post(`${origin}/api/v1/invites/${encodeURIComponent(token)}/accept`, {
@@ -127,11 +184,73 @@ try {
     console.log(`invitation ${accepted.ok() ? 'accepted' : `not accepted (${accepted.status()})`}`);
     ({ user, family } = await whoami());
   }
-  writeFileSync(out, `${JSON.stringify(await context.storageState(), null, 1)}\n`, { mode: 0o600 });
-  chmodSync(out, 0o600);
-  console.log(`${user.email} signed in to ${origin}; family: ${family ? family.name : 'none (invite it from Admin › Invites, then run this again)'}`);
-  console.log(`storage state ${out}`);
+  if (!adminState) {
+    writeFileSync(out, `${JSON.stringify(await context.storageState(), null, 1)}\n`, { mode: 0o600 });
+    chmodSync(out, 0o600);
+    console.log(`${user.email} signed in to ${origin}; family: ${family ? family.name : 'none (invite it from Admin › Invites, then run this again)'}`);
+    console.log(`storage state ${out}`);
+  }
+} catch (error) {
+  console.error(`ogm-qa-signin: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
 } finally {
+  if (attempted && !created && admin) {
+    try {
+      let added, candidates;
+      for (let i = 0; i < 40; i++) {
+        added = db.prepare('SELECT added_by, added_at FROM allowed_users WHERE email = ?').get(email);
+        candidates = db.prepare("SELECT id FROM invitations WHERE email = ? AND family_id = ? AND inviter_id = ? AND kind = 'member'").all(email, expectedFamily, adminId).filter((row) => !priorInvites.has(row.id));
+        if (added || candidates.length) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      if (added?.added_by === `${adminId}:qa:${runId}` && added.added_at >= asked && candidates.length === 1) {
+        created = true;
+        console.error('ogm-qa-signin: reconciled an indeterminate add response');
+      } else {
+        console.error('ogm-qa-signin: add response was indeterminate; inspect the QA account and invitations before retrying');
+        process.exitCode = 1;
+      }
+    } catch (error) {
+      console.error(`ogm-qa-signin: add reconciliation failed: ${error instanceof Error ? error.message : String(error)}`);
+      process.exitCode = 1;
+    }
+  }
+  if (created && admin) {
+    let cleanupFailed = false;
+    try {
+      const response = await admin.request.get(`${origin}/api/v1/families/${encodeURIComponent(expectedFamily)}/members`);
+      if (!response.ok()) throw new Error('could not inspect family for cleanup');
+      const member = (await response.json()).members.find((m) => m.email?.toLowerCase() === email);
+      if (member) {
+        const removed = await admin.request.delete(`${origin}/api/v1/admin/members/${encodeURIComponent(member.userId)}`, { headers: { origin } });
+        if (!removed.ok()) throw new Error('could not remove QA family membership');
+      }
+    } catch (error) {
+      console.error(`ogm-qa-signin: cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+      cleanupFailed = true;
+    }
+    try {
+      const removed = await admin.request.delete(`${origin}/api/v1/admin/users/${encodeURIComponent(email)}`, { headers: { origin } });
+      if (!removed.ok()) throw new Error('could not remove QA allow-list entry');
+    } catch (error) {
+      console.error(`ogm-qa-signin: cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+      cleanupFailed = true;
+    }
+    try {
+      const candidates = db.prepare("SELECT id FROM invitations WHERE email = ? AND family_id = ? AND inviter_id = ? AND kind = 'member'").all(email, expectedFamily, adminId).filter((row) => !priorInvites.has(row.id));
+      if (candidates.length !== 1) throw new Error('cannot identify the one QA invitation for cleanup');
+      const writer = new Database(dbPath, { fileMustExist: true });
+      try {
+        const removed = writer.prepare("DELETE FROM invitations WHERE id = ? AND email = ? AND family_id = ? AND inviter_id = ? AND kind = 'member'").run(candidates[0].id, email, expectedFamily, adminId);
+        if (removed.changes !== 1) throw new Error('could not remove QA invitation');
+      } finally { writer.close(); }
+    } catch (error) {
+      console.error(`ogm-qa-signin: cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+      cleanupFailed = true;
+    }
+    if (cleanupFailed) process.exitCode = 1;
+    else console.log('QA membership, allow-list entry and invitation removed');
+  }
   await browser.close();
   db.close();
 }

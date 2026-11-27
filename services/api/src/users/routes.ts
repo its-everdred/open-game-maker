@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { schema } from '@ogm/db';
 import { authorize, type Actor } from '@ogm/policy';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
@@ -20,6 +20,7 @@ import {
   setAllowedRole,
 } from '../auth/allow-list.js';
 import { authContextFor } from '../auth/routes.js';
+import { createInvitation } from '../invites/invites.js';
 
 // The instance sign-in allow list and its roles. Every route is admin-only, so a player cannot
 // reach user management even by hand-crafting the request.
@@ -47,22 +48,57 @@ function admin(c: Context<ApiBindings>): Caller {
   return { actor, email: normalizeEmail(row?.email ?? '') };
 }
 
-// The invited address signs in through the same magic-link endpoint the browser posts to. The link
-// lands on the instance's games screen, or on the game the admin named.
-async function sendInvite(deps: AppDeps, address: string, gameId?: string): Promise<void> {
+// The magic link carries an email-bound family invitation to first run, or opens the named game.
+async function sendInvite(
+  deps: AppDeps,
+  actor: Actor,
+  address: string,
+  role: 'player' | 'maker' | 'admin',
+  gameId?: string,
+): Promise<void> {
   const auth = authContextFor(deps);
   if (!auth) throw new HttpError(503, 'mail_sender_unavailable');
-  const callback = new URL(gameId ? `/g/${encodeURIComponent(gameId)}` : '/games', deps.config.appOrigin);
-  const response = await auth.auth.handler(
-    new Request(new URL('/auth/sign-in/magic-link', deps.config.appOrigin), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', origin: deps.config.appOrigin },
-      body: JSON.stringify({ email: address, callbackURL: callback.href }),
-    }),
+  const membership = deps.db
+    .select({ familyId: schema.familyMembers.familyId })
+    .from(schema.familyMembers)
+    .innerJoin(schema.user, eq(schema.user.id, schema.familyMembers.userId))
+    .where(sql`lower(${schema.user.email}) = ${address}`)
+    .get();
+  const firstRun = !gameId && Boolean(actor.familyId) && (!membership || membership.familyId === actor.familyId);
+  const callback = new URL(
+    gameId ? `/g/${encodeURIComponent(gameId)}` : firstRun ? '/welcome' : '/games',
+    deps.config.appOrigin,
   );
-  if (!response.ok) {
-    deps.log({ event: 'admin-invite-mail-failed', reason: `status_${response.status}` });
-    throw new HttpError(502, 'mail_failed');
+  let invitationId: string | undefined;
+  if (firstRun && !membership) {
+    const invitation = await createInvitation(
+      deps,
+      actor,
+      {
+        kind: 'member',
+        email: address,
+        capability: role === 'player' ? 'player' : 'creator',
+      },
+      { delivery: 'link' },
+    );
+    invitationId = invitation.id;
+    callback.searchParams.set('invite', invitation.token);
+  }
+  try {
+    const response = await auth.auth.handler(
+      new Request(new URL('/auth/sign-in/magic-link', deps.config.appOrigin), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: deps.config.appOrigin },
+        body: JSON.stringify({ email: address, callbackURL: callback.href }),
+      }),
+    );
+    if (!response.ok) {
+      deps.log({ event: 'admin-invite-mail-failed', reason: `status_${response.status}` });
+      throw new HttpError(502, 'mail_failed');
+    }
+  } catch (error) {
+    if (invitationId) deps.db.delete(schema.invitations).where(eq(schema.invitations.id, invitationId)).run();
+    throw error;
   }
 }
 
@@ -85,9 +121,16 @@ const routes = new Hono<ApiBindings>()
     const deps = c.get('deps');
     const body = await parseBody(c, AddUserBody);
     if (body.gameId) requireFamilyGame(deps, actor.familyId, body.gameId);
-    const added = addAllowedUser(deps.db, { email: body.email, role: body.role, addedBy: actor.userId });
+    const qaRun = c.req.header('x-ogm-qa-run');
+    const addedBy = qaRun && /^[a-f0-9-]{36}$/.test(qaRun) ? `${actor.userId}:qa:${qaRun}` : actor.userId;
+    const added = addAllowedUser(deps.db, { email: body.email, role: body.role, addedBy });
     if (!added) throw new HttpError(409, 'email_already_listed');
-    await sendInvite(deps, added.email, body.gameId);
+    try {
+      await sendInvite(deps, actor, added.email, body.role, body.gameId);
+    } catch (error) {
+      removeAllowedUser(deps.db, added.email);
+      throw error;
+    }
     return c.json({ user: added }, 201);
   })
   .patch('/:email', async (c) => {
@@ -112,9 +155,10 @@ const routes = new Hono<ApiBindings>()
     const address = normalizeEmail(c.req.param('email'));
     const body = await parseBody(c, InviteBody);
     // The invite re-checks the address, so a resend can never mail someone the list does not hold.
-    if (roleForEmail(deps.db, address) === null) throw new HttpError(404, 'user_not_found');
+    const existingRole = roleForEmail(deps.db, address);
+    if (existingRole === null) throw new HttpError(404, 'user_not_found');
     if (body.gameId) requireFamilyGame(deps, actor.familyId, body.gameId);
-    await sendInvite(deps, address, body.gameId);
+    await sendInvite(deps, actor, address, existingRole, body.gameId);
     return c.json({ invited: address });
   });
 

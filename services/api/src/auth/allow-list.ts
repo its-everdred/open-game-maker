@@ -1,5 +1,5 @@
 import { schema, type Db } from '@ogm/db';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { normalizeEmail } from './access.js';
 
@@ -127,6 +127,17 @@ export function removeAllowedUser(db: Db, email: string): boolean {
   return db.transaction((tx) => {
     const deleted = tx.delete(schema.allowedUsers).where(eq(schema.allowedUsers.email, address)).run();
     if (deleted.changes === 0) return false;
+    tx.update(schema.invitations)
+      .set({ revokedAt: new Date().toISOString() })
+      .where(
+        and(
+          eq(schema.invitations.email, address),
+          eq(schema.invitations.kind, 'member'),
+          isNull(schema.invitations.acceptedAt),
+          isNull(schema.invitations.revokedAt),
+        ),
+      )
+      .run();
     const users = tx
       .select({ id: schema.user.id })
       .from(schema.user)

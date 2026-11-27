@@ -25,14 +25,14 @@ export function Users() {
   const me = useAdminMe();
   const users = useAllowedUsers();
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<AllowListRole>('player');
+  const [role, setRole] = useState<AllowListRole>('maker');
   const [pending, setPending] = useState<Pending | null>(null);
   const add = useMutation({
     mutationFn: (value: { email: string; role: AllowListRole }) =>
       adminRequest('/admin/users', { method: 'POST', json: value }),
     onSuccess: async () => {
       setEmail('');
-      setRole('player');
+      setRole('maker');
       await invalidateAdmin(adminKeys.users());
     },
   });
