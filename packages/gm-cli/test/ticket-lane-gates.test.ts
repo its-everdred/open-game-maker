@@ -138,8 +138,16 @@ describe('gm check ticket lanes', () => {
     expect(result.err.join('\n')).toContain('needs at least two assets-local/packs or assets-local/sets refs');
   });
 
-  it('requires an approved design reference on glass mocks and permits prototype work', async () => {
+  it('requires glass references and ticket-specific coverage before skipping a mock', async () => {
     const { cwd, git } = repo();
+    mkdirSync(join(cwd, 'docs/design/ogm-glass'), { recursive: true });
+    writeFileSync(
+      join(cwd, 'docs/design/ogm-glass/screens.md'),
+      '| Account | [Account](https://example.test/#artboard-Account) | #123 |\n',
+    );
+    git('add', '-A');
+    git('commit', '-qm', 'record approved screen');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     mkdirSync(join(cwd, 'review/mocks'), { recursive: true });
     writeFileSync(join(cwd, 'review/mocks/mock.png'), 'mock');
     const record = {
@@ -151,23 +159,29 @@ describe('gm check ticket lanes', () => {
     writeFileSync(join(cwd, 'review/mocks/request.json'), JSON.stringify(record));
     git('add', '-A');
     git('commit', '-qm', 'add glass mock');
-    writeFileSync(join(cwd, 'pr.md'), 'Labels: lane:creative phase:mock design:ogm-glass');
-    const missing = await gm(['check', '--body', 'pr.md', '--base', 'origin/main'], { cwd });
+    writeFileSync(join(cwd, 'pr.md'), 'Closes #123');
+    const flags = ['check', '--body', 'pr.md', '--base', 'origin/main', '--lane', 'creative', '--design', 'ogm-glass'];
+    const missing = await gm([...flags, '--phase', 'mock'], { cwd });
     expect(missing.err.join('\n')).toContain('needs an approved OGM glass design image reference');
-    mkdirSync(join(cwd, 'tests/design-baselines/ogm-glass'), { recursive: true });
-    writeFileSync(join(cwd, 'tests/design-baselines/ogm-glass/Account-780x1688.png'), 'design');
-    record.refs.push('tests/design-baselines/ogm-glass/Account-780x1688.png');
+    mkdirSync(join(cwd, 'assets-local/review/design-ogm-glass'), { recursive: true });
+    writeFileSync(join(cwd, 'assets-local/review/design-ogm-glass/Account.png'), 'design');
+    record.refs = ['assets-local/review/design-ogm-glass/Account.png'];
     writeFileSync(join(cwd, 'review/mocks/request.json'), JSON.stringify(record));
-    const referenced = await gm(['check', '--body', 'pr.md', '--base', 'origin/main'], { cwd });
+    const referenced = await gm([...flags, '--phase', 'mock'], { cwd });
     expect(referenced.err.join('\n')).not.toContain('needs an approved OGM glass design image reference');
-    writeFileSync(join(cwd, 'pr.md'), 'Labels: lane:creative phase:prototype design:ogm-glass');
-    const absentDesign = await gm(['check', '--body', 'pr.md', '--base', 'origin/main'], { cwd });
-    expect(absentDesign.err.join('\n')).toContain('phase:prototype needs an approved mock');
-    mkdirSync(join(cwd, 'docs/design/ogm-glass'), { recursive: true });
-    writeFileSync(join(cwd, 'docs/design/ogm-glass/README.md'), 'approved design');
-    writeFileSync(join(cwd, 'pr.md'), 'Labels: lane:creative phase:prototype design:ogm-glass');
-    const prototype = await gm(['check', '--body', 'pr.md', '--base', 'origin/main'], { cwd });
+    expect(referenced.err.join('\n')).not.toContain('needs at least two assets-local/packs');
+    const absentScreen = await gm([...flags, '--phase', 'prototype'], { cwd });
+    expect(absentScreen.err.join('\n')).toContain('phase:prototype needs an approved mock');
+    const wrongScreen = await gm([...flags, '--phase', 'prototype', '--design-screen', 'Settings'], { cwd });
+    expect(wrongScreen.err.join('\n')).toContain('phase:prototype needs an approved mock');
+    const prototype = await gm([...flags, '--phase', 'prototype', '--design-screen', 'Account'], { cwd });
     expect(prototype.err.join('\n')).not.toContain('phase:prototype needs an approved mock');
+    writeFileSync(join(cwd, 'pr.md'), 'Closes #124');
+    const wrongTicket = await gm([...flags, '--phase', 'prototype', '--design-screen', 'Account'], { cwd });
+    expect(wrongTicket.err.join('\n')).toContain('phase:prototype needs an approved mock');
+    writeFileSync(join(cwd, 'pr.md'), 'Closes #123');
+    const build = await gm([...flags, '--phase', 'build', '--design-screen', 'Account'], { cwd });
+    expect(build.err.join('\n')).toContain('phase:build needs an approved prototype');
   });
 
   it('accepts a creative mock with two pack or set references and a matching output record', async () => {

@@ -69,7 +69,10 @@ the packs, gm-asset-variants and the generation routes below.
 Never call a built-in image tool (`image_gen`, `imagegen`): it bypasses the reference check and is off for workers.
 Always run `python3 <this skill>/scripts/request-mock.py --prompt-file <file> --out <dir> --ref <workspace path>...
 [--aspect 9:16]`. The broker refuses an image without 2+ refs under `assets-local/packs/` or `assets-local/sets/` (or
-the game logo from `assets-local/review/<slug>/` for a logo-derived screen) and says why.
+the game logo from `assets-local/review/<slug>/` for a logo-derived screen) and says why. For an OGM glass UI
+ticket, attach its approved artboard and component stills from `assets-local/review/design-ogm-glass/`; the host
+broker uses the ticket label and requires a design reference instead of pack references. Check the round with
+`gm check --body <pr-body.md> --lane creative --phase mock --design ogm-glass`.
 The host's mock broker writes the image into `<dir>`; the script waits and prints the paths. You never hold a provider
 key. Mark outputs as AI-generated. Keep each prompt self-contained: the screen, the moment, the palette, the HUD.
 

@@ -62,7 +62,9 @@ function mockReferenceProblems(changed: string[], cwd: string, ogmGlass: boolean
       typeof record.prompt === 'string' && /\b(title|loading|end(?: screen)?|thumbnail)\b/i.test(record.prompt);
     const designRef = refs.some(
       (ref) =>
-        /^(?:docs\/design\/ogm-glass|tests\/design-baselines\/ogm-glass)\/.+\.(?:png|jpe?g|webp)$/i.test(ref) &&
+        /^(?:docs\/design\/ogm-glass|tests\/design-baselines\/ogm-glass|assets-local\/review\/design-ogm-glass)\/.+\.(?:png|jpe?g|webp)$/i.test(
+          ref,
+        ) &&
         !ref.split('/').includes('..') &&
         existsSync(join(cwd, ref)),
     );
@@ -85,10 +87,44 @@ function mockReferenceProblems(changed: string[], cwd: string, ogmGlass: boolean
   return problems;
 }
 
-function ticketGate(cwd: string, body: string, base: string, lane?: string, phase?: string): string[] {
+function coveredGlassScreen(
+  cwd: string,
+  base: string,
+  ticket: string | undefined,
+  screen: string | undefined,
+): boolean {
+  if (!ticket || !screen || !/^[A-Za-z0-9_-]+$/.test(screen)) return false;
+  try {
+    const screens = execFileSync('git', ['show', `${base}:docs/design/ogm-glass/screens.md`], {
+      cwd,
+      encoding: 'utf8',
+    });
+    return screens
+      .split('\n')
+      .some(
+        (line) =>
+          line.startsWith('|') &&
+          line.includes(`#artboard-${screen})`) &&
+          new RegExp(`(?:^|\\D)#${ticket}(?!\\d)`).test(line),
+      );
+  } catch {
+    return false;
+  }
+}
+
+function ticketGate(
+  cwd: string,
+  body: string,
+  base: string,
+  lane?: string,
+  phase?: string,
+  design?: string,
+  screen?: string,
+): string[] {
   const labels = ticketLabels(body);
   if (lane) labels.add(`lane:${lane}`);
   if (phase) labels.add(`phase:${phase}`);
+  if (design) labels.add(`design:${design}`);
   if (!labels.has('lane:creative') && !labels.has('lane:clone')) return [];
   const problems: string[] = [];
   let changed: string[];
@@ -156,7 +192,7 @@ function ticketGate(cwd: string, body: string, base: string, lane?: string, phas
       !(
         effectiveLabels.has('phase:prototype') &&
         effectiveLabels.has('design:ogm-glass') &&
-        existsSync(join(cwd, 'docs/design/ogm-glass/README.md'))
+        coveredGlassScreen(cwd, base, ticketNumber, screen)
       )
     )
       problems.push(
@@ -222,13 +258,16 @@ export async function runSelected(ctx: GmContext, checks: RunL0Options): Promise
 export const command: GmCommand = {
   name: 'check',
   summary: 'run deterministic static, hook, and asset gates',
-  usage: '[--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase <mock|prototype|build|polish>] [--json]',
+  usage:
+    '[--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase <mock|prototype|build|polish>] [--design ogm-glass] [--design-screen <artboard>] [--json]',
   example: 'check',
   flags: {
     body: { type: 'string', help: 'pull request body markdown for ticket PR gates' },
     base: { type: 'string', help: 'base ref for changed-file detection (default origin/main)' },
     lane: { type: 'string', help: 'ticket lane for ticket PR gates: creative or clone' },
     phase: { type: 'string', help: 'current look rung: mock, prototype, build, or polish' },
+    design: { type: 'string', help: 'approved design from ticket label: ogm-glass' },
+    'design-screen': { type: 'string', help: 'covered glass artboard identifier' },
   },
   async run(ctx, args, flags) {
     if (args.length > 0) throw new UsageError(`unexpected argument ${args[0]}`, 'gm help check');
@@ -238,6 +277,10 @@ export const command: GmCommand = {
     const lane = flags.lane as string | undefined;
     if (lane !== undefined && !['creative', 'clone'].includes(lane))
       throw new UsageError(`invalid ticket lane "${lane}"`, 'use --lane creative|clone');
+    const design = flags.design as string | undefined;
+    if (design !== undefined && design !== 'ogm-glass')
+      throw new UsageError(`invalid approved design "${design}"`, 'use --design ogm-glass');
+    const screen = flags['design-screen'] as string | undefined;
     const verify = await import('@ogm/gm-verify');
     const gate = verify.runL0(ctx.cwd);
 
@@ -269,6 +312,8 @@ export const command: GmCommand = {
               typeof flags.base === 'string' ? flags.base : 'origin/main',
               lane,
               phase,
+              design,
+              screen,
             ),
           ]
         : [];

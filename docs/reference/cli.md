@@ -122,7 +122,7 @@ gm qa games-cache [--origin <app origin>] [--game <slug>] [--after-publish <buil
 ```
 
 ```text
-gm check [--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase mock|prototype|build|polish] [--json]
+gm check [--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase mock|prototype|build|polish] [--design ogm-glass] [--design-screen <artboard>] [--json]
 gm check static [--json]
 gm check hooks [--json]
 gm check images [--json]
@@ -285,6 +285,10 @@ During prototype work, a screen may mark its look scope provisional with an owne
 `{"screens":{"play":{"provisional":{"owner":"Kevin","until":"build"}}}}`.
 Before the expiry rung, `gm look check` reports a visible warning and exits successfully for the missing approved target and
 sheet. The creative ticket gate still requires a recorded mock approval before prototype work and a prototype approval before build work. At the expiry rung or later, `gm look check` fails until the provisional declaration is replaced by an approved look target.
+For a ticket labeled `design:ogm-glass`, pass `--design ogm-glass`; for a covered prototype also pass
+`--design-screen <artboard>`. The base branch's `docs/design/ogm-glass/screens.md` must map that artboard to the
+ticket named in the PR body. Glass mock references may use `assets-local/review/design-ogm-glass/`.
+
 Pass the active rung with `gm check --phase <rung>`; the phase does not auto-advance from the branch or ticket. While a
 provisional scope exists, omitting `--phase` fails closed and asks for the current rung.
 
