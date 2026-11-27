@@ -12,7 +12,7 @@ import { FRAME_OBSERVER, FRAME_OBSERVER_FILE, observeFrameHtml } from './frame-o
 import { BadBlobName, BadId, blobPath, buildDir, isComplete, isServableId, resolveFile } from './layout.js';
 import { isCompressiblePath, mimeForPath } from './mime.js';
 import { bootstrapPreviewHtml, PREVIEW_BOOTSTRAP, PREVIEW_BOOTSTRAP_FILE } from './preview-bootstrap.js';
-import { accessCookie, blobOwners, mayReadGame } from './access.js';
+import { blobOwners, mayReadGame } from './access.js';
 
 export interface GamesHostOptions {
   accessApi?: string;
@@ -29,7 +29,9 @@ export function createApp(options: GamesHostOptions): Hono {
   const app = new Hono();
   const gameHeaderEntries = Object.entries(gameHeaders(options.appOrigin));
   const uptimeSec = options.uptimeSec ?? (() => process.uptime());
-  const issuedCookies = new WeakMap<Request, string>();
+  // Requests that arrived under /t/<token>/ carry their build capability here, never in a cookie, so a game in another
+  // frame cannot borrow the player's access to this one.
+  const pathTokens = new WeakMap<Request, string>();
 
   const secureResponse: MiddlewareHandler = async (context, next) => {
     await next();
@@ -50,8 +52,6 @@ export function createApp(options: GamesHostOptions): Hono {
       context.res.headers.set('Cache-Control', 'no-cache');
     }
     context.res.headers.delete('set-cookie');
-    const issuedCookie = issuedCookies.get(context.req.raw);
-    if (issuedCookie) context.res.headers.set('set-cookie', issuedCookie);
   };
   app.use('/g/*', secureResponse);
   app.use('/p/*', secureResponse);
@@ -75,21 +75,8 @@ export function createApp(options: GamesHostOptions): Hono {
         buildId.startsWith('preview-')
       )
         return context.text('Not Found', 404);
-      const supplied = url.searchParams.get('access');
-      if (supplied && !/^gba1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u.test(supplied)) return context.text('Forbidden', 403);
       if (!/^[A-Za-z0-9_-]{1,80}$/u.test(gameId)) return context.text('Forbidden', 403);
-      const token = supplied ?? accessCookie(context.req.header('cookie'), gameId);
-      if (!(await check(gameId, token))) return context.text('Forbidden', 403);
-      if (supplied) {
-        url.searchParams.delete('access');
-        const secure = options.appOrigin.split(/\s+/u).some((origin) => origin.startsWith('https:'));
-        issuedCookies.set(
-          context.req.raw,
-          `ogm_build_${gameId}=${supplied}; Path=/; HttpOnly; Max-Age=86400; ${secure ? 'SameSite=None; Secure' : 'SameSite=Lax'}`,
-        );
-        context.header('Referrer-Policy', 'no-referrer');
-        return context.redirect(`${url.pathname}${url.search}`, 302);
-      }
+      if (!(await check(gameId, pathTokens.get(context.req.raw)))) return context.text('Forbidden', 403);
       await next();
     });
     app.use('/a/*', async (context, next) => {
@@ -102,11 +89,8 @@ export function createApp(options: GamesHostOptions): Hono {
       }
       const owners = await ownersFor(options.root, file);
       if (owners === null || owners.length === 0) return context.text('Forbidden', 403);
-      if (
-        !(await Promise.all(owners.map((game) => check(game, accessCookie(context.req.header('cookie'), game))))).some(
-          Boolean,
-        )
-      )
+      const token = pathTokens.get(context.req.raw);
+      if (!(await Promise.all(owners.map((game) => check(game, token)))).some(Boolean))
         return context.text('Forbidden', 403);
       await next();
     });
@@ -150,8 +134,9 @@ export function createApp(options: GamesHostOptions): Hono {
 
     const urlPath = new URL(context.req.url).pathname.split('/').slice(4).join('/');
     const isPreview = new URL(context.req.url).pathname.startsWith('/p/');
+    const opaque = isPreview || pathTokens.has(context.req.raw);
     if (
-      !isPreview &&
+      !opaque &&
       (urlPath === '' || urlPath === 'index.html') &&
       !new URL(context.req.url).searchParams.has('frameObserver')
     ) {
@@ -171,7 +156,7 @@ export function createApp(options: GamesHostOptions): Hono {
     }
     if (urlPath === FRAME_OBSERVER_FILE)
       return context.body(FRAME_OBSERVER, 200, { 'content-type': 'text/javascript; charset=utf-8' });
-    if (isPreview && urlPath === PREVIEW_BOOTSTRAP_FILE)
+    if (opaque && urlPath === PREVIEW_BOOTSTRAP_FILE)
       return context.body(PREVIEW_BOOTSTRAP, 200, { 'content-type': 'text/javascript; charset=utf-8' });
     const file = await resolveFile(directory, urlPath);
     if (file === null) {
@@ -180,9 +165,9 @@ export function createApp(options: GamesHostOptions): Hono {
 
     const relativePath = relative(directory, file).split(sep).join('/');
     const observeFrame = new URL(context.req.url).searchParams.get('frameObserver') === '2';
-    if ((isPreview || observeFrame) && relativePath === 'index.html') {
+    if ((opaque || observeFrame) && relativePath === 'index.html') {
       let html = await readFile(file, 'utf8');
-      if (isPreview) html = bootstrapPreviewHtml(html);
+      if (opaque) html = bootstrapPreviewHtml(html);
       if (observeFrame) html = observeFrameHtml(html);
       context.header('content-type', 'text/html; charset=utf-8');
       return context.req.method === 'HEAD' ? context.body(null, 200) : context.body(html, 200);
@@ -223,6 +208,20 @@ export function createApp(options: GamesHostOptions): Hono {
   app.on(['GET', 'HEAD'], '/g/:gameId/:buildId/*', serveGame);
   app.on(['GET', 'HEAD'], '/p/:gameId/:buildId/*', serveGame);
   app.on(['GET', 'HEAD'], '/a/:file', serveBlob);
+  app.on(['GET', 'HEAD'], '/t/:token/*', async (context) => {
+    const url = new URL(context.req.url);
+    const [, , token = '', ...rest] = url.pathname.split('/');
+    if (!/^gba1\.[A-Za-z0-9_-]{1,2048}\.[A-Za-z0-9_-]{1,128}$/u.test(token) || (rest[0] !== 'g' && rest[0] !== 'a'))
+      return context.text('Not Found', 404, { 'Cache-Control': 'no-store' });
+    url.pathname = `/${rest.join('/')}`;
+    const headers = new Headers(context.req.raw.headers);
+    headers.delete('cookie');
+    headers.delete('accept-encoding');
+    const inner = new Request(url, { method: context.req.method, headers });
+    pathTokens.set(inner, token);
+    const response = await app.fetch(inner);
+    return tokenResponse(response, `/t/${token}`, url.pathname, context.req.header('Accept-Encoding'));
+  });
   app.on(['GET', 'HEAD'], '/game-cache.js', (context) =>
     serveFile(context, options.workerScript, { 'Service-Worker-Allowed': '/g/' }),
   );
@@ -266,6 +265,47 @@ async function previewDirectory(root: string, gameId: string, accessId: string):
     return join(directory, '.builds', row.buildId);
   }
   return null;
+}
+
+const TEXT_TYPES =
+  /^(text\/html|text\/css|text\/javascript|application\/javascript|application\/json|image\/svg\+xml)/u;
+// Built bundles name shared blobs and cyclic build files by absolute path; carry the capability into those paths too.
+const ABSOLUTE_GAME_PATH =
+  /(?<![\w./-])\/(?=a\/[0-9a-f]{64}\.[a-z0-9]{1,12}|g\/[A-Za-z0-9_-]{1,80}\/[A-Za-z0-9_-]{1,80}\/)/gu;
+
+// A capability URL is always an opaque document: the CSP sandbox holds even if an embedder allows same-origin.
+async function tokenResponse(
+  response: Response,
+  prefix: string,
+  pathname: string,
+  acceptEncoding: string | undefined,
+): Promise<Response> {
+  const headers = new Headers(response.headers);
+  headers.append('Content-Security-Policy', 'sandbox allow-scripts allow-pointer-lock');
+  headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Cache-Control', 'no-store');
+  headers.set('Referrer-Policy', 'no-referrer');
+  headers.delete('ETag');
+  const location = headers.get('Location');
+  if (location?.startsWith('/a/') || location?.startsWith('/g/')) headers.set('Location', `${prefix}${location}`);
+  if (response.body === null || response.status !== 200)
+    return new Response(response.body, { status: response.status, headers });
+  let body: ReadableStream<Uint8Array> = response.body;
+  if (TEXT_TYPES.test(headers.get('Content-Type') ?? '')) {
+    const text = (await response.text()).replace(ABSOLUTE_GAME_PATH, `${prefix}/`);
+    body = new Blob([text]).stream();
+    headers.set('Content-Length', String(Buffer.byteLength(text)));
+  }
+  if (
+    (TEXT_TYPES.test(headers.get('Content-Type') ?? '') || isCompressiblePath(pathname)) &&
+    /(^|[\s,])gzip(?!;\s*q=0(\.0*)?(\s|,|$))/u.test(acceptEncoding ?? '')
+  ) {
+    headers.set('Vary', 'Accept-Encoding');
+    headers.set('Content-Encoding', 'gzip');
+    headers.delete('Content-Length');
+    body = body.pipeThrough(new CompressionStream('gzip') as unknown as ReadableWritablePair<Uint8Array, Uint8Array>);
+  }
+  return new Response(body, { status: 200, headers });
 }
 
 async function serveFile(

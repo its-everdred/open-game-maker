@@ -213,20 +213,17 @@ const routes = new Hono<ApiBindings>()
     );
     const buildId = c.req.param('buildId');
     if (!/^[a-zA-Z0-9_-]{1,80}$/u.test(buildId)) throw new HttpError(400, 'invalid_build');
+    // The capability rides in the path, never a cookie, and the games host serves it as an opaque document, so one
+    // game cannot read another with the player's access.
+    const token = signBuildAccess(
+      { gameId: game.id, userId: principal.userId, familyId: principal.familyId, sessionId: session.session.id },
+      deps.config.jobTokenSecret,
+    );
     const target = new URL(
-      `/g/${encodeURIComponent(game.id)}/${encodeURIComponent(buildId)}/index.html`,
+      `/t/${token}/g/${encodeURIComponent(game.id)}/${encodeURIComponent(buildId)}/index.html`,
       deps.config.gamesOrigin,
     );
-    for (const [key, value] of new URL(c.req.url).searchParams) {
-      if (key !== 'access') target.searchParams.append(key, value);
-    }
-    target.searchParams.set(
-      'access',
-      signBuildAccess(
-        { gameId: game.id, userId: principal.userId, familyId: principal.familyId, sessionId: session.session.id },
-        deps.config.jobTokenSecret,
-      ),
-    );
+    for (const [key, value] of new URL(c.req.url).searchParams) target.searchParams.append(key, value);
     c.header('Cache-Control', 'no-store');
     c.header('Referrer-Policy', 'no-referrer');
     return c.redirect(target.toString(), 302);

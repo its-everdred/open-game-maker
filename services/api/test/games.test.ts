@@ -302,7 +302,8 @@ describe('games routes', () => {
     } as unknown as ReturnType<typeof authRoutes.authContextFor>);
     const launch = await app.request('/api/v1/games/g-soon/launch/build1', { headers: asUser(player.userId) });
     expect(launch.status).toBe(302);
-    const token = new URL(launch.headers.get('location')!).searchParams.get('access');
+    const location = new URL(launch.headers.get('location')!);
+    const token = /^\/t\/([^/]+)\/g\/g-soon\/build1\/index\.html$/u.exec(location.pathname)?.[1];
     expect(token).toBeTruthy();
     const buildDir = join(deps.config.gamesRoot, 'g-soon', 'build1');
     mkdirSync(buildDir, { recursive: true });
@@ -317,12 +318,9 @@ describe('games routes', () => {
       accessApi: 'http://127.0.0.1:4300',
     });
     expect((await host.request('/g/g-soon/build1/index.html')).status).toBe(403);
-    const hostLaunch = await host.request(`/g/g-soon/build1/index.html?access=${token}`);
-    expect(hostLaunch.status).toBe(302);
-    const hostCookie = hostLaunch.headers.get('set-cookie')!.split(';')[0]!;
-    expect(
-      (await host.request('/g/g-soon/build1/index.html?frameObserver=2', { headers: { cookie: hostCookie } })).status,
-    ).toBe(200);
+    const launched = await host.request(`${location.pathname}?frameObserver=2`);
+    expect(launched.status).toBe(200);
+    expect(launched.headers.get('content-security-policy')).toContain('sandbox allow-scripts allow-pointer-lock');
     const check = () =>
       app.request('/api/v1/internal/games/g-soon/build-access', {
         method: 'POST',
@@ -333,7 +331,8 @@ describe('games routes', () => {
     sessionSpy.mockRestore();
     expect((await app.request(grantUrl, { method: 'DELETE', headers: asUser(admin.userId) })).status).toBe(204);
     expect((await check()).status).toBe(403);
-    expect((await host.request('/g/g-soon/build1/index.html', { headers: { cookie: hostCookie } })).status).toBe(403);
+    // Revoking the grant revokes the capability already in the player's frame.
+    expect((await host.request(location.pathname)).status).toBe(403);
     vi.unstubAllGlobals();
     expect((await app.request(grantUrl, { method: 'PUT', headers: asUser(admin.userId) })).status).toBe(204);
     deps.db.delete(schema.session).where(eq(schema.session.id, 'session-test')).run();

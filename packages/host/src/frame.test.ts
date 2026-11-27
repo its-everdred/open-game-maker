@@ -6,7 +6,7 @@ import { createGameFrame, HostError } from './frame.js';
 afterEach(() => document.body.replaceChildren());
 
 describe('createGameFrame', () => {
-  it('starts authenticated builds at the app launch endpoint', () => {
+  it('starts authenticated builds at the app launch endpoint in an opaque frame', () => {
     const frame = createGameFrame({
       container: document.createElement('div'),
       gamesOrigin: 'https://games.test',
@@ -21,6 +21,8 @@ describe('createGameFrame', () => {
       role: () => 'owner',
     });
     expect(frame.iframe.src).toBe('https://app.test/api/v1/games/g1/launch/b1?build=draft&protocol=1&frameObserver=2');
+    // Without allow-same-origin the game cannot use another game's storage or the player's games-origin cookies.
+    expect(frame.iframe.getAttribute('sandbox')).toBe('allow-scripts allow-pointer-lock');
     frame.dispose();
   });
   it('keeps preview frames outside the published-build service worker scope', () => {

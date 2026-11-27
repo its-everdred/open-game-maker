@@ -100,12 +100,3 @@ export async function blobOwners(root: string, file: string): Promise<string[] |
     return null;
   }
 }
-
-export function accessCookie(header: string | undefined, gameId: string): string | undefined {
-  const name = `ogm_build_${gameId}=`;
-  const value = header
-    ?.split(';')
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(name));
-  return value?.slice(name.length);
-}

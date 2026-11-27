@@ -18,7 +18,10 @@ A build is invisible until its directory contains `.complete`. Publishers should
 The API's build publisher (`services/api/src/builds`) is the production writer.
 
 The service exposes `GET /healthz`, `GET|HEAD /g/<gameId>/<buildId>/<path>`, shared content-addressed blobs at
-`GET|HEAD /a/<sha256>.<ext>`, and the cache worker at `GET|HEAD /game-cache.js`. The host stores short-lived build
-capabilities in HTTP-only cookies and rechecks them with the API; it never lists a directory and applies the game
-security headers to every game, blob, and worker response. Text responses negotiate
+`GET|HEAD /a/<sha256>.<ext>`, and the cache worker at `GET|HEAD /game-cache.js`. Protected builds and their blobs are
+served only under `/t/<capability>/g/...` and `/t/<capability>/a/...`: the API's launch endpoint puts a short-lived
+build capability in the path, never a cookie, and the host rechecks it with the API on every request. Those responses
+carry a CSP `sandbox` so the game is an opaque document, and absolute `/a/` and `/g/` paths in text files are rewritten
+to keep the capability. The host never lists a directory and applies the game security headers to every game, blob,
+and worker response. Text responses negotiate
 Brotli or gzip; media files are never compressed.

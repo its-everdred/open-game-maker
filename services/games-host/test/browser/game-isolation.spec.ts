@@ -15,12 +15,20 @@ test('one game cannot read another protected game using the player’s existing 
     for (const game of ['attacker', 'victim']) {
       const build = join(root, game, 'build1');
       await mkdir(build, { recursive: true });
-      await writeFile(join(build, 'index.html'), `<html><body>${game}</body></html>`);
+      await writeFile(
+        join(build, 'index.html'),
+        `<html><body>${game}<script type="module" src="/g/${game}/build1/main.js"></script></body></html>`,
+      );
+      await writeFile(
+        join(build, 'main.js'),
+        `document.body.dataset.loaded = (await fetch('/g/${game}/build1/data.json').then((r) => r.json())).ok;`,
+      );
+      await writeFile(join(build, 'data.json'), '{"ok":"yes"}');
       await markComplete(build);
     }
     const app = createApp({
       root,
-      accessCheck: async (game, token) => game === 'attacker' || (game === 'victim' && token === 'victim-token'),
+      accessCheck: async (game, token) => game === 'attacker' || (game === 'victim' && token === 'gba1.victim.token'),
       appOrigin: 'http://127.0.0.1:3000',
       version: 'test',
       workerScript: join(root, 'missing-worker.js'),
@@ -34,6 +42,11 @@ test('one game cannot read another protected game using the player’s existing 
     await page.goto(`${origin}/g/attacker/build1/index.html`);
     const status = await page.evaluate(async () => (await fetch('/g/victim/build1/index.html')).status);
     expect(status).toBe(403);
+
+    // The victim's own launch: an opaque document whose absolute asset paths keep its capability.
+    await page.goto(`${origin}/t/gba1.victim.token/g/victim/build1/index.html`);
+    await expect(page.locator('body')).toHaveAttribute('data-loaded', 'yes');
+    expect(await page.evaluate(() => self.origin)).toBe('null');
   } finally {
     if (server) {
       server.close();

@@ -29,7 +29,7 @@ export interface GameFrameOptions {
   buildId: string;
   /** A scoped preview capability, served outside the published-build service worker scope. */
   preview?: boolean;
-  /** Resolve an authenticated build capability through the app before navigating to the game origin. */
+  /** Resolve an authenticated build capability through the app; the game then runs as an opaque document. */
   authenticated?: boolean;
   build: 'draft' | 'test' | 'published';
   /** Extra query parameters the game reads at boot, such as a review deck's scenario (`speed=slow`). */
@@ -94,13 +94,15 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   }
   if (gamesOrigin.origin === appOrigin.origin) throw new HostError('same-origin');
 
+  /* Previews and authenticated launches carry their capability in the URL and run as opaque documents. */
+  const opaque = options.preview || options.authenticated;
   const wrapper = document.createElement('div');
   Object.assign(wrapper.style, { position: 'relative', width: '100%', height: '100%' });
   const iframe = document.createElement('iframe');
   iframe.title = 'Game';
   iframe.setAttribute(
     'sandbox',
-    options.preview ? 'allow-scripts allow-pointer-lock' : 'allow-scripts allow-same-origin allow-pointer-lock',
+    opaque ? 'allow-scripts allow-pointer-lock' : 'allow-scripts allow-same-origin allow-pointer-lock',
   );
   iframe.setAttribute('allow', 'autoplay; fullscreen; gamepad');
   iframe.setAttribute('referrerpolicy', 'origin');
@@ -126,7 +128,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     if (
       !iframe.contentWindow ||
       event.source !== iframe.contentWindow ||
-      event.origin !== (options.preview ? 'null' : gamesOrigin.origin)
+      event.origin !== (opaque ? 'null' : gamesOrigin.origin)
     )
       return;
     if (typeof event.data !== 'object' || event.data === null || event.data.type !== 'ogm.frame.ready.v2') return;
@@ -155,7 +157,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   const bridge = new HostBridge({
     iframe,
     origin: gamesOrigin.origin,
-    ...(options.preview ? { opaqueOrigin: true } : {}),
+    ...(opaque ? { opaqueOrigin: true } : {}),
     role: options.role,
     readyTimeoutMs: options.readyTimeoutMs,
     onFatal: dispose,

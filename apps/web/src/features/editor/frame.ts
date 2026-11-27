@@ -238,7 +238,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   const observeOrigin = (event: MessageEvent) => {
     if (event.origin === trustedOrigin) return;
     if (
-      options.preview &&
+      (options.preview || options.authenticated) &&
       event.origin === 'null' &&
       event.source === options.container.querySelector('iframe')?.contentWindow
     )
