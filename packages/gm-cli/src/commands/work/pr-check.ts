@@ -9,7 +9,7 @@ import {
   relatedWorkProblems,
   reviewerProblems,
 } from '../../related-work-check.js';
-import { pullFiles, workRead as invoke } from '../../work-io.js';
+import { matchesWorkTicket, pullFiles, workRead as invoke } from '../../work-io.js';
 
 type Issue = { number: number; labels: { name: string }[] };
 type Pull = { number: number; state: string; body: string | null; head: { ref: string } };
@@ -18,7 +18,6 @@ const refs = (body: string) =>
   [...body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?)\s+#\d+(?:\s*(?:,|and)\s*#\d+)*/gi)].flatMap(
     (match) => [...match[0].matchAll(/#(\d+)\b/g)].map((id) => Number(id[1])),
   );
-const mentioned = (body: string) => [...body.matchAll(/(?<![\w/])#(\d+)\b/g)].map((match) => Number(match[1]));
 
 /** CI-side check uses GitHub's feature label projection; no aiur daemon is required on the runner. */
 export const command: GmCommand = {
@@ -121,10 +120,7 @@ export const command: GmCommand = {
           ]),
         );
         const candidates = open.filter(
-          (pull) =>
-            pull.number !== flags.pr &&
-            (mentioned(pull.body ?? '').some((id) => peers.has(id)) ||
-              [...peers].some((id) => new RegExp(`(?:^|/)${id}(?:-|$)`).test(pull.head.ref))),
+          (pull) => pull.number !== flags.pr && matchesWorkTicket(pull.body ?? '', pull.head.ref, peers),
         );
         const pulls: { number: number; state: string; files: string[] }[] = [];
         for (const pull of candidates) {

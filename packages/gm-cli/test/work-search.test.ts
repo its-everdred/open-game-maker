@@ -5,7 +5,15 @@ import { expect, it } from 'vitest';
 
 import { tempDir } from './helpers.js';
 import { command } from '../src/commands/work/search.js';
+import { matchesWorkTicket } from '../src/work-io.js';
 import type { GmContext } from '../src/command.js';
+
+it('matches local ticket references without confusing another repository for this one', () => {
+  const members = new Set([12]);
+  expect(matchesWorkTicket('Refs other/repo#12', 'unrelated', members)).toBe(false);
+  expect(matchesWorkTicket('Refs #12', 'unrelated', members)).toBe(true);
+  expect(matchesWorkTicket('', 'aiur/12-attack', members)).toBe(true);
+});
 
 it('finds in-flight feature work, its files and decisions', async () => {
   const root = tempDir('gm-work-');

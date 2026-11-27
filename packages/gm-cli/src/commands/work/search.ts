@@ -6,7 +6,7 @@ import { loadIndex, search } from '@ogm/asset-cards';
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
 import { workspaceRoot } from '../../outbox.js';
 import { terms } from '../../related-work.js';
-import { pullFiles, workRead as run } from '../../work-io.js';
+import { matchesWorkTicket, pullFiles, workRead as run } from '../../work-io.js';
 
 type Feature = { key: string; label: string };
 type Detail = { feature: Feature; members: { id: number; epic: string }[]; also: number[] };
@@ -133,11 +133,9 @@ export const command: GmCommand = {
       .filter(Boolean)
       .map((line) => JSON.parse(line) as Pull)
       .filter((pull) => {
-        const refs = [...(pull.body ?? '').matchAll(/#(\d+)\b/g)].map((match) => Number(match[1]));
         return (
           (pull.state === 'open' || Date.parse(pull.updated_at) >= cutoff) &&
-          (refs.some((number) => members.has(number)) ||
-            [...members].some((number) => new RegExp(`(?:^|/)${number}(?:-|$)`).test(pull.head.ref)))
+          matchesWorkTicket(pull.body ?? '', pull.head.ref, members)
         );
       });
     const pullsWithFiles: (Pull & { files: string[] })[] = [];

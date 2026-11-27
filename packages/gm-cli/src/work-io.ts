@@ -5,6 +5,15 @@ import { CommandError, type GmContext } from './command.js';
 
 const exec = promisify(execFile);
 
+/** Associate only local ticket references or ticket-named branches with feature members. */
+export function matchesWorkTicket(body: string, branch: string, members: Set<number>): boolean {
+  const references = [...body.matchAll(/(?<![\w/])#(\d+)\b/g)].map((match) => Number(match[1]));
+  return (
+    references.some((id) => members.has(id)) ||
+    [...members].some((id) => new RegExp(`(?:^|/)${id}(?:-|$)`).test(branch))
+  );
+}
+
 /** Run a bounded, argument-vector-only context read without hiding the underlying diagnostic. */
 export async function workRead(ctx: GmContext, program: string, args: string[], cwd = ctx.cwd): Promise<string> {
   try {
