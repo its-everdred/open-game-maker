@@ -278,7 +278,7 @@ describe('operator publish', () => {
     const lookup = await app.request(`${operatorPrefix}/games/castle-game/builds/${body.jobId}`, {
       headers: { 'x-ogm-internal': INTERNAL_TOKEN },
     });
-    expect(await lookup.json()).toEqual({ state: 'done', buildId: body.buildId });
+    expect(await lookup.json()).toEqual({ state: 'done', buildId: body.buildId, publishResult: 'skipped' });
     expect((await app.request(`${operatorPrefix}/games/castle-game/builds/${body.jobId}`)).status).toBe(401);
 
     const build = buildRow(deps, body.jobId);
