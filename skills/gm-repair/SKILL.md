@@ -14,12 +14,15 @@ them as private evidence. Ask a focused follow-up if needed, then reproduce the 
 game. Do not claim a reproduction or a fix without observing it. If it cannot be reproduced, explain what was tried and
 what evidence is missing in the conversation; do not invent a promise or change unrelated behavior.
 
-Once reproduced, create a failing regression test for the reported behavior where practical and use the repair steps
-below. When a supplied promise and replay exist, use them as directed below.
+Once reproduced, create a failing regression test for the reported behavior where practical, then follow “Make the
+smallest repair” and “Prove and record”. If a promise and replay were supplied, follow “Start from supplied diagnostics”
+first. Do not require a promise for a report that has none.
 
 ## Start from supplied diagnostics
 
-1. For a supplied diagnostic repair, read `.gm/context/diagnostics.json` before editing source.
+Only for a supplied diagnostic repair:
+
+1. Read `.gm/context/diagnostics.json` before editing source.
 2. If it is missing, run `gm skills sync`, then re-read `.gm/context/`.
 3. Materialize the supplied promise spec and replay JSON at their `promises/` paths on your branch.
 4. Run `pnpm exec vitest run promises` and prove that the promise fails for the reported error before changing production code.
@@ -39,8 +42,8 @@ below. When a supplied promise and replay exist, use them as directed below.
 
 1. Run `gm check` and keep L0 green.
 2. Run `gm test` and keep L1 and the regression test or supplied promise green.
-3. Run `gm run` and confirm the repaired game has no matching console error.
-4. Post the redacted result with `gm chat post`.
-5. Add `.gm/changes/<jobId>.md` naming the behavior change without private report content.
+3. Run `gm run` and confirm the reported behavior is repaired; if a console error was reported, confirm it is gone.
+4. Reply in the report conversation with the redacted result. For a job with a valid job context, use `gm chat post`.
+5. For a job with an id, add `.gm/changes/<jobId>.md` naming the behavior change without private report content.
 
 For a supplied promise there are two attempts. On attempt 2, address the first failing promise assertion directly and keep the same scope.

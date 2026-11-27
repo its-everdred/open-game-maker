@@ -37,5 +37,8 @@ describe('gm-repair skill', () => {
     expect(skill).toContain('captured game state');
     expect(skill).toContain('reproduce');
     expect(skill).toContain('Do not claim a reproduction');
+    expect(skill).toContain('Do not require a promise for a report that has none');
+    expect(skill).toContain('Reply in the report conversation');
+    expect(skill).toContain('For a job with a valid job context');
   });
 });
