@@ -93,9 +93,8 @@ export function runGlassScreens(files, { gameDist, run, log, error }) {
   }
   for (const screen of screens.filter((item) => item !== 'Unmapped')) {
     if (screen === 'Editor' && !gameDist) {
-      log(
-        'Post-deploy check: open the Blobs editor in the signed-in app on a physical iPhone and compare portrait and landscape with the approved Editor artboards (operator: physical iPhone).',
-      );
+      error('Glass parity requires OGM_GLASS_GAME_DIST pointing to a real built game for the Editor capture.');
+      failed = true;
       continue;
     }
     if (screen === 'Settings')

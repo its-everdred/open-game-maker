@@ -73,7 +73,7 @@ it('finds changed screen files from the repository root', async () => {
   }
 }, 30_000);
 
-it('runs covered screens even when another screen is missing, and reports manual checks', async () => {
+it('runs covered screens and fails when a screen or real editor game is missing', async () => {
   const { runGlassScreens } = await import('../../tools/glass-change-selection.mjs');
   const run = vi.fn(() => true);
   const log = vi.fn();
@@ -89,9 +89,18 @@ it('runs covered screens even when another screen is missing, and reports manual
   expect(run).toHaveBeenCalledWith('GameSheet');
   expect(error).toHaveBeenCalledOnce();
   run.mockClear();
-  expect(runGlassScreens(['apps/web/src/features/editor/EditorChrome.tsx'], { run, log, error })).toBe(0);
+  expect(runGlassScreens(['apps/web/src/features/editor/EditorChrome.tsx'], { run, log, error })).toBe(1);
   expect(run).not.toHaveBeenCalled();
-  expect(log).toHaveBeenCalledWith(expect.stringContaining('Post-deploy check:'));
+  expect(error).toHaveBeenCalledWith(expect.stringContaining('requires OGM_GLASS_GAME_DIST'));
+  expect(
+    runGlassScreens(['apps/web/src/features/editor/EditorChrome.tsx'], {
+      gameDist: '/real-game/dist',
+      run,
+      log,
+      error,
+    }),
+  ).toBe(0);
+  expect(run).toHaveBeenCalledWith('Editor');
   run.mockReturnValue(false);
   expect(runGlassScreens(['apps/web/src/routes/games/GamesScreen.tsx'], { run, log, error })).toBe(1);
 });

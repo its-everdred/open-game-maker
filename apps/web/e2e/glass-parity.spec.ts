@@ -9,7 +9,7 @@ import { installAuthRoutes } from './fixtures/auth-routes';
 import { mockGamesRoutes } from './fixtures/games-routes';
 import { installNewRoutes } from './fixtures/new-routes';
 import { buildId, installGameApi } from './support/mock-game-api';
-import { captureUrlFile } from './support/shell-capture-files';
+import { captureBuildSuffix, captureUrlFile } from './support/shell-capture-files';
 import { gameHeaders } from '@ogm/contracts';
 import type { DesignDoc } from '@ogm/contracts/browser';
 
@@ -74,6 +74,9 @@ for (const target of screens) {
     });
     try {
       const page = await context.newPage();
+      const pageErrors: string[] = [];
+      page.on('pageerror', (error) => pageErrors.push(error.message));
+      let actualGameId: string | undefined;
       await page.route('**/api/v1/**', (route) => route.fulfill({ status: 404, json: { error: 'unmocked' } }));
       await installAuthRoutes(page, { signedIn: target.screen !== 'SignIn' });
       if (target.screen === 'Editor') {
@@ -81,13 +84,17 @@ for (const target of screens) {
         const dist = await realpath(gameDist);
         if (dist.split(/[\\/]/).includes('fixtures')) throw new Error('Editor parity cannot use a test fixture game');
         const design = JSON.parse(await readFile(resolve(dist, 'design/design.json'), 'utf8')) as DesignDoc;
-        const manifest = JSON.parse(await readFile(resolve(dist, 'manifest.json'), 'utf8')) as { title?: string };
+        const manifest = JSON.parse(await readFile(resolve(dist, 'manifest.json'), 'utf8')) as {
+          id?: string;
+          title?: string;
+        };
+        actualGameId = manifest.id;
         await installGameApi(page, design, manifest.title ?? 'Game');
         await page.route(`http://127.0.0.1:${bridgePort}/**`, async (route) => {
           const path = new URL(route.request().url()).pathname;
-          const marker = `/${buildId}/`;
-          if (!path.includes(marker)) return route.fallback();
-          const file = captureUrlFile(dist, path.split(marker)[1] || 'index.html');
+          const suffix = captureBuildSuffix(path, buildId);
+          if (suffix === null) return route.fallback();
+          const file = captureUrlFile(dist, suffix);
           if (!file) throw new Error(`Missing game build file: ${path}`);
           return route.fulfill({
             path: file,
@@ -366,6 +373,28 @@ for (const target of screens) {
           null,
           { timeout: 30_000 },
         );
+        if (actualGameId === 'blobs') {
+          const game = page.frameLocator('.game-frame iframe');
+          await expect(game.locator('html')).toHaveAttribute('data-boot-stage', 'ready', {
+            timeout: 180_000,
+          });
+          for (const [screen, text, next] of [
+            ['title', 'Play', 'menu'],
+            ['menu', 'Endless', 'pieces'],
+            ['pieces', 'Blobs', 'select'],
+            ['select', 'Play', 'solo'],
+          ] as const) {
+            const flow = game.locator('#blobs-flow');
+            await expect(flow).toHaveAttribute('data-screen', screen, { timeout: 30_000 });
+            const button =
+              screen === 'select' ? flow.locator('.blobs-menu__play') : flow.getByText(text, { exact: true }).first();
+            await expect(button).toBeVisible({ timeout: 30_000 });
+            // Activate the game's own control while the editor owns pointer input.
+            await button.evaluate((element: HTMLElement) => element.click());
+            expect(pageErrors, 'Game errors during capture setup').toEqual([]);
+            await expect(flow).toHaveAttribute('data-screen', next, { timeout: 30_000 });
+          }
+        }
       }
       await page.evaluate(async () => {
         const ready = Promise.all([
