@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { AiurHttpError } from '@ogm/aiur-client';
 import { ScopeChoices, ScopeRevisionRequest, type Principal, type ScopeSession } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { authorize } from '@ogm/policy';
@@ -225,7 +224,7 @@ const routes = new Hono<ApiBindings>()
     const session = scopeSessions.get(deps.db, c.req.param('id'));
     if (session === null || session.game_id !== c.req.param('gameId'))
       throw new HttpError(404, 'scope_session_not_found');
-    const game = requireOwner(deps, session, principal);
+    requireOwner(deps, session, principal);
     const before = findJobRow(deps.db, session.job_id);
     const retrying = session.status === 'abandoned' && !['done', 'failed', 'cancelled'].includes(before.state);
     if (session.status !== 'open' && session.status !== 'revising' && !retrying)
@@ -258,27 +257,12 @@ const routes = new Hono<ApiBindings>()
           const result = await aiur.cancel(String(job.aiurIssueNumber));
           if (result.process.status !== 'exited') throw new Error('upstream cancellation unconfirmed');
         } catch (error) {
-          if (error instanceof AiurHttpError && error.status === 409 && error.code === 'agent_not_running') {
-            try {
-              const writer = deps.registry.issueStateWriter;
-              if (!writer) throw new Error('issue state writer unavailable', { cause: error });
-              await writer.setStateLabel(job.aiurRepo, job.aiurIssueNumber, 'cancelled', game.slug ?? 'agent');
-            } catch (fallbackError) {
-              deps.log({
-                event: 'scope-cancel-upstream-failed',
-                jobId: job.id,
-                error: fallbackError instanceof Error ? fallbackError.name : 'unknown',
-              });
-              throw new HttpError(503, 'scope_cancel_unconfirmed');
-            }
-          } else {
-            deps.log({
-              event: 'scope-cancel-upstream-failed',
-              jobId: job.id,
-              error: error instanceof Error ? error.name : 'unknown',
-            });
-            throw new HttpError(503, 'scope_cancel_unconfirmed');
-          }
+          deps.log({
+            event: 'scope-cancel-upstream-failed',
+            jobId: job.id,
+            error: error instanceof Error ? error.name : 'unknown',
+          });
+          throw new HttpError(503, 'scope_cancel_unconfirmed');
         }
       }
       const current = findJobRow(deps.db, job.id);

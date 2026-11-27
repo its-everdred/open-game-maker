@@ -122,7 +122,7 @@ export function createControlsRoutes(services: ControlsServices): Hono<ApiBindin
 
   return new Hono<ApiBindings>()
     .post('/:id/cancel', async (c) => {
-      const { row, game } = loadAuthorized(c, 'job.cancel');
+      const { row } = loadAuthorized(c, 'job.cancel');
       const deps = c.get('deps');
       if (row.state === 'cancelled') return c.json(cancelled(deps, row, now));
       if (row.state === 'done' || row.state === 'failed') throw new HttpError(409, 'job_not_active');
@@ -136,22 +136,7 @@ export function createControlsRoutes(services: ControlsServices): Hono<ApiBindin
         const client = await services.daemonFor(deps, row.gameId);
         for (const linked of linkedTickets) {
           if (linked.terminalState !== null) continue;
-          const fallback = async () => {
-            try {
-              const issues = services.issues(deps);
-              if (issues === null) throw new Error('issue state writer unavailable');
-              await issues.setStateLabel(linked.repo, linked.issueNumber, 'cancelled', game.slug ?? 'agent');
-            } catch (error) {
-              deps.log({
-                event: 'admin-alert',
-                code: 'cancel_fallback_failed',
-                jobId: row.id,
-                error: (error as Error).name,
-              });
-              throw new HttpError(503, 'cancel_fallback_failed');
-            }
-          };
-          if (client === null) await fallback();
+          if (client === null) throw new HttpError(503, 'cancel_unconfirmed');
           else {
             let status = 'still_running';
             let confirmed = false;
@@ -165,9 +150,7 @@ export function createControlsRoutes(services: ControlsServices): Hono<ApiBindin
                 }
               } catch (error) {
                 if (error instanceof AiurHttpError && error.status === 409 && error.code === 'agent_not_running') {
-                  await fallback();
-                  confirmed = true;
-                  break;
+                  throw new HttpError(503, 'cancel_unconfirmed');
                 }
                 if (
                   error instanceof AiurHttpError &&
@@ -197,23 +180,7 @@ export function createControlsRoutes(services: ControlsServices): Hono<ApiBindin
 
       const filed = ticket(row);
       const client = await services.daemonFor(deps, row.gameId);
-      const labelFallback = async () => {
-        try {
-          const issues = services.issues(deps);
-          if (issues === null) throw new Error('issue state writer unavailable');
-          await issues.setStateLabel(filed.repo, filed.issue, 'cancelled', game.slug ?? 'agent');
-        } catch (error) {
-          deps.log({
-            event: 'admin-alert',
-            code: 'cancel_fallback_failed',
-            jobId: row.id,
-            error: (error as Error).name,
-          });
-          throw new HttpError(503, 'cancel_fallback_failed');
-        }
-        return c.json(cancelled(deps, row, now));
-      };
-      if (client === null) return labelFallback();
+      if (client === null) throw new HttpError(503, 'cancel_unconfirmed');
 
       let status = 'still_running';
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -223,7 +190,7 @@ export function createControlsRoutes(services: ControlsServices): Hono<ApiBindin
           if (status === 'exited') return c.json(cancelled(deps, row, now));
         } catch (error) {
           if (error instanceof AiurHttpError && error.status === 409 && error.code === 'agent_not_running') {
-            return labelFallback();
+            throw new HttpError(503, 'cancel_unconfirmed');
           }
           if (
             error instanceof AiurHttpError &&

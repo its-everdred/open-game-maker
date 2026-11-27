@@ -186,6 +186,27 @@ describe('job controls', () => {
     expect(cancel.mock.calls.map(([ticket]) => ticket)).toEqual(['143']);
     expect(deps.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
   });
+  it('keeps multi-ticket work active when the daemon is unavailable', async () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.jobTickets)
+      .values([
+        { jobId: ids.job, key: 'first', issueNumber: 142, repo: 'owner/game', sig: 'first' },
+        { jobId: ids.job, key: 'second', issueNumber: 143, repo: 'owner/game', sig: 'second' },
+      ])
+      .run();
+    const setStateLabel = vi.fn();
+    const { app } = appWith(deps, { client: null, issues: { setStateLabel } });
+    expect((await post(app, 'cancel')).status).toBe(503);
+    expect(setStateLabel).not.toHaveBeenCalled();
+    expect(
+      deps.db
+        .select()
+        .from(schema.jobTickets)
+        .all()
+        .every((ticket) => ticket.terminalState === null),
+    ).toBe(true);
+  });
   it('authorizes before making an aiur call', async () => {
     const deps = setup();
     const cancel = vi.fn();
@@ -261,53 +282,25 @@ describe('job controls', () => {
     expect(deps.db.select().from(schema.jobs).get()?.state).toBe('running');
   });
 
-  it('falls back to the cancelled state label when aiur has no running process', async () => {
+  it('keeps a filed job active when Aiur cannot confirm a running worker', async () => {
     const deps = setup('filed');
     const cancel = vi
       .fn()
       .mockRejectedValue(new AiurHttpError(409, 'agent_not_running', 'not running', 'http://127.0.0.1:4101'));
-    const setStateLabel = vi.fn().mockResolvedValue(undefined);
+    const setStateLabel = vi.fn();
     const { app } = appWith(deps, { client: { cancel }, issues: { setStateLabel } });
-
-    const response = await post(app, 'cancel');
-
-    expect(response.status).toBe(200);
-    expect(setStateLabel).toHaveBeenCalledWith('owner/game', 142, 'cancelled', 'castle-run');
-    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
-  });
-
-  it('uses the label fallback when the daemon is absent', async () => {
-    const deps = setup('filed');
-    const setStateLabel = vi.fn().mockResolvedValue(undefined);
-    const { app } = appWith(deps, { client: null, issues: { setStateLabel } });
-
-    expect((await post(app, 'cancel')).status).toBe(200);
-    expect(setStateLabel).toHaveBeenCalledWith('owner/game', 142, 'cancelled', 'castle-run');
-  });
-
-  it('falls back to the agent prefix for a game saved before slugs existed', async () => {
-    const deps = setup('filed');
-    deps.db.update(schema.games).set({ slug: null }).where(eq(schema.games.id, ids.game)).run();
-    const setStateLabel = vi.fn().mockResolvedValue(undefined);
-    const { app } = appWith(deps, { client: null, issues: { setStateLabel } });
-
-    expect((await post(app, 'cancel')).status).toBe(200);
-    expect(setStateLabel).toHaveBeenCalledWith('owner/game', 142, 'cancelled', 'agent');
-  });
-
-  it('alerts and leaves the job active when the label fallback fails', async () => {
-    const deps = setup('filed');
-    const setStateLabel = vi.fn().mockRejectedValue(new Error('github unavailable'));
-    const { app } = appWith(deps, { client: null, issues: { setStateLabel } });
-
-    const response = await post(app, 'cancel');
-
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: 'cancel_fallback_failed' });
+    expect((await post(app, 'cancel')).status).toBe(503);
+    expect(setStateLabel).not.toHaveBeenCalled();
     expect(deps.db.select().from(schema.jobs).get()?.state).toBe('filed');
-    expect(deps.lines).toContainEqual(
-      expect.objectContaining({ event: 'admin-alert', code: 'cancel_fallback_failed', jobId: ids.job }),
-    );
+  });
+
+  it('keeps a filed job active when the daemon is absent', async () => {
+    const deps = setup('filed');
+    const setStateLabel = vi.fn();
+    const { app } = appWith(deps, { client: null, issues: { setStateLabel } });
+    expect((await post(app, 'cancel')).status).toBe(503);
+    expect(setStateLabel).not.toHaveBeenCalled();
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('filed');
   });
 
   it('maps daemon HTTP failures without exposing upstream details', async () => {

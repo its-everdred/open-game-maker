@@ -260,7 +260,7 @@ describe('scope session routes', () => {
     expect(deps.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
   });
 
-  it('cancels the tracker ticket when the scope worker is not running', async () => {
+  it('keeps the slot when the scope worker cannot be confirmed stopped', async () => {
     const deps = setup();
     const app = createApp(deps);
     app.route('/api/v1/games', scopeRoutes);
@@ -275,9 +275,9 @@ describe('scope session routes', () => {
       method: 'POST',
       headers: asUser(ids.creator),
     });
-    expect(result.status).toBe(200);
-    expect(setStateLabel).toHaveBeenCalledWith('owner/game', 42, 'cancelled', 'agent');
-    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+    expect(result.status).toBe(503);
+    expect(setStateLabel).not.toHaveBeenCalled();
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('filed');
   });
 
   it('starts one revision from the latest agreement and rejects stale or mismatched versions', async () => {
