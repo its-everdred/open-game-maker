@@ -91,6 +91,7 @@ export function StudioMenu() {
   const { data: session } = useSession();
   const creatorId = session?.user.id;
   const admin = useAdminMe(Boolean(session));
+  const canManage = Boolean(creatorId) && admin.data?.user?.id === creatorId && admin.data?.capability === 'creator';
   const builds = useMyJobs();
   const decisions = useCreatorCommands(creatorId);
   const sound = useSyncExternalStore(onChange, status);
@@ -146,14 +147,14 @@ export function StudioMenu() {
     () => statusGroups(groupBuilds(visibleBuilds, gameTitles), ownedGames),
     [gameTitles, ownedGames, visibleBuilds],
   );
-  const buildingJobs = useMemo(() => builds.jobs.filter(isBuilding), [builds.jobs]);
+  const buildingJobs = useMemo(() => (canManage ? builds.jobs.filter(isBuilding) : []), [builds.jobs, canManage]);
   // The badge counts every open player-facing decision across the creator's games, and each game's quick voice chat
   // as one entry; red when a decision blocks its build.
   const openDecisions = decisions.commands.length + decisions.sessions.length;
-  const blocked = decisions.commands.some((command) => command.blocking);
+  const blocked = canManage && decisions.commands.some((command) => command.blocking);
   // The instance owner's thread with the Executor. A reply only raises a count, never text over the screen; its text
   // shows when the owner opens the thread.
-  const threadAccess = useThreadAccess(isShowcase ? undefined : creatorId);
+  const threadAccess = useThreadAccess(isShowcase || !canManage ? undefined : creatorId) && canManage;
   useThreadPolling(creatorId, threadAccess);
   const unreadReplies = useUnreadReplies(threadAccess ? creatorId : undefined);
   const pendingReviews =
@@ -161,10 +162,16 @@ export function StudioMenu() {
     reviewCommands.length +
     coreReview.targets.length +
     missingReviewTargets(workers, reviews, reviewCommands).length;
-  const menuBadge =
-    openDecisions + unreadReplies + pendingReviews - reviewCommands.length + visibleFinished.length + unreadUpdates;
+  const menuBadge = canManage
+    ? openDecisions + unreadReplies + pendingReviews - reviewCommands.length + visibleFinished.length + unreadUpdates
+    : 0;
   // In a game's editor the menu is the paused modal (#1326): its badge counts only what is ready for review.
-  const isEdit = gameId !== undefined && new URLSearchParams(location.search).get('mode') === 'edit';
+  const isEdit =
+    gameId !== undefined &&
+    new URLSearchParams(location.search).get('mode') === 'edit' &&
+    admin.data?.user?.id === creatorId &&
+    admin.data?.capability === 'creator' &&
+    ownedGames.some((game) => game.id === gameId);
   const editTargets = isEdit ? [...missingReviewTargets(workers, reviews, reviewCommands), ...coreReview.targets] : [];
   const editCards = isEdit ? reviewCards(reviews, reviewCommands, editTargets, workers) : [];
   const editSessions = isEdit ? decisions.sessions.filter((item) => item.game_id === gameId) : [];
@@ -247,10 +254,13 @@ export function StudioMenu() {
   }, [creatorId, questions]);
 
   useEffect(() => {
-    if (!creatorId) return;
+    if (!creatorId || !canManage) {
+      setAnnouncement('');
+      return;
+    }
     const messages = buildAnnouncements(creatorId, builds.jobs, buildingJobs, gameTitles);
     if (messages.length > 0) setAnnouncement(messages.join('. '));
-  }, [buildingJobs, builds.jobs, creatorId, gameTitles]);
+  }, [buildingJobs, builds.jobs, canManage, creatorId, gameTitles]);
 
   useEffect(() => {
     const nextExpiry = nextRecentBuildExpiry(builds.jobs);
@@ -299,7 +309,7 @@ export function StudioMenu() {
       ...controls.extras,
     );
   }
-  if (openDecisions > 0) {
+  if (canManage && openDecisions > 0) {
     circles.push(
       <button
         key="decisions"
@@ -320,7 +330,7 @@ export function StudioMenu() {
       </button>,
     );
   }
-  if (buildGroups.length > 0) {
+  if (canManage && buildGroups.length > 0) {
     circles.push(
       <button
         key="jobs"
@@ -338,6 +348,7 @@ export function StudioMenu() {
     );
   }
   if (
+    canManage &&
     isGameView &&
     (hasUpdates ||
       (acknowledged && acknowledged.creatorId === creatorId && acknowledged.finished.length > 0) ||
@@ -438,7 +449,7 @@ export function StudioMenu() {
   );
   if (!hasStudioHeader && !inPause) circles.push(volumeCircle);
   circles.push(<BugButton key="bug" open={sheet === 'bug'} onToggle={() => toggleSheet('bug')} />);
-  if (gamePath) {
+  if (gamePath && canManage && ownedGames.some((game) => game.id === gameId)) {
     circles.push(
       <MenuLink key="versions" label="Versions" icon="versions" to={`${gamePath}/versions`} close={close} />,
       <MenuLink
@@ -503,7 +514,7 @@ export function StudioMenu() {
     );
   } else if (sheet === 'energy' && session) {
     sheetContent = <EnergyDetail close={close} />;
-  } else if (sheet === 'decisions' && openDecisions > 0) {
+  } else if (canManage && sheet === 'decisions' && openDecisions > 0) {
     sheetContent = (
       <ul id="studio-menu-decisions" className="studio-menu-decisions" aria-label="Decisions">
         {decisions.commands.map((command) => (
@@ -547,7 +558,7 @@ export function StudioMenu() {
         ))}
       </ul>
     );
-  } else if (sheet === 'builds') {
+  } else if (canManage && sheet === 'builds') {
     sheetContent = (
       <BuildPanel
         key={creatorId ?? 'signed-out'}
@@ -573,7 +584,7 @@ export function StudioMenu() {
         id="studio-menu-builds"
       />
     );
-  } else if (sheet === 'jobs' && buildGroups.length > 0) {
+  } else if (canManage && sheet === 'jobs' && buildGroups.length > 0) {
     sheetContent = (
       <ul id="studio-menu-jobs" className="studio-menu-builds" aria-label="Build progress">
         {buildGroups.map((group) => (
@@ -794,7 +805,7 @@ export function StudioMenu() {
       ) : (
         createPortal(tray, trayHost)
       )}
-      <JobConversationModal />
+      {canManage ? <JobConversationModal /> : null}
       {threadAccess && creatorId ? (
         <ExecutorThread
           creatorId={creatorId}
@@ -810,10 +821,10 @@ export function StudioMenu() {
           }}
         />
       ) : null}
-      {deck && deck.creatorId === creatorId ? (
+      {canManage && deck && deck.creatorId === creatorId ? (
         <DecisionDeck commands={decisions.commands} first={deck.command} onClose={() => setDeck(undefined)} />
       ) : null}
-      {questions && questions.creatorId === creatorId ? (
+      {canManage && questions && questions.creatorId === creatorId ? (
         <QuestionSession
           session={questions.session}
           creatorId={questions.creatorId}

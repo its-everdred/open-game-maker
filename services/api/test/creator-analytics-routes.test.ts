@@ -58,6 +58,7 @@ function seed(deps: ReturnType<typeof makeDeps>) {
       ownerId: creator.userId,
       title: 'Analytics',
       visibility: 'listed',
+      publishedReleaseId: 'rel-fixture',
       repoVisibility: 'private',
       createdAt: now,
     })

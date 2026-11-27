@@ -30,10 +30,13 @@ describe('accounts routes', () => {
     expect(family).toMatchObject({ name: 'Our House' });
 
     const me = await app.request('/api/v1/me', { headers: asUser(owner.userId) });
+    expect(me.headers.get('x-ogm-user-id')).toBe(owner.userId);
+    expect(me.headers.get('x-ogm-capability')).toBe('creator');
     expect(await me.json()).toEqual({
       user: { id: owner.userId, email: owner.email },
       family: { id: family.id, name: 'Our House', role: 'owner', capability: 'creator' },
       platformRole: 'admin',
+      capability: 'creator',
     });
 
     const members = await app.request(`/api/v1/families/${family.id}/members`, {

@@ -13,6 +13,7 @@ import {
   getBuildDesign,
   getDesignSnapshot,
   getGame,
+  getOptionalPublished,
   getFallbackPalette,
   getEditorPreviews,
   getEditorStage,
@@ -53,6 +54,7 @@ import type { FileBug } from '../../features/game-menu/BugComposer';
 import { bugLog } from '../../features/game-menu/bug-log';
 import { fileBug as fileBugRequest } from '../../features/game-menu/file-bug';
 import { useSession } from '../../lib/api/session';
+import { useAdminMe } from '../admin/api';
 import { energyRefusalText } from '../../features/energy/api';
 import type { SnapPrefs } from '../../features/editor/SnapPrefs';
 import {
@@ -65,12 +67,12 @@ import {
 import { api } from '../../lib/api/client';
 import { pushToast } from '../../lib/notify/slice';
 import { MapEditor } from '../../features/editor/map/MapEditor';
+import type { GameSummary } from '../games/types';
 import { DiagnosticsOverlay } from '../../net/diagnostics/DiagnosticsOverlay';
 import { RoomLayer } from '../../features/room/RoomLayer';
 import { useRoomRuntime } from '../../features/room/useRoomRuntime';
 import { useMenuRoomPause } from '../../features/room/useMenuRoomPause';
 import { useBranches } from '../games/useBranches';
-import type { GameSummary } from '../games/types';
 import { clearRoomGrant, storeRoomGrant } from '../join/grant-store';
 import { LoadingLayer } from './LoadingLayer';
 import { EditPlayBar, GameEditWorkspace } from './EditWorkspace';
@@ -115,35 +117,67 @@ export function GameScreen() {
   const roomId = searchParams.get('room')?.trim() || undefined;
   const scenario = searchParams.get('scenario');
   /* A link to one build (a review's "Play this build") names it here; the frame plays it instead of the branch head. */
-  const linkedBuild = searchParams.get('build')?.trim() || undefined;
+  const requestedBuild = searchParams.get('build')?.trim() || undefined;
   const isGameRoute = useMatch('/g/:gameId') !== null;
-  const mode: 'play' | 'edit' = searchParams.get('mode') === 'edit' ? 'edit' : 'play';
   const gamesOrigin = import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000';
-  const game = useQuery({ queryKey: ['game', gameId], queryFn: () => getGame(gameId), enabled: gameId !== '' });
+  const { data: session } = useSession();
+  const me = useAdminMe(Boolean(session));
+  const game = useQuery({
+    queryKey: ['game', gameId, session?.user?.id, me.data?.capability, me.data?.platformRole],
+    queryFn: () => getGame(gameId),
+    enabled: gameId !== '' && Boolean(session?.user?.id) && me.data?.user?.id === session?.user?.id,
+  });
+  const accessLoaded = Boolean(me.data);
+  const isAdmin =
+    Boolean(session?.user?.id) &&
+    me.data?.user?.id === session?.user?.id &&
+    (me.data?.platformRole === 'admin' || me.data?.platformRole === 'maintainer');
+  const canEdit =
+    Boolean(session?.user?.id) &&
+    me.data?.user?.id === session?.user?.id &&
+    me.data?.capability === 'creator' &&
+    game.data?.ownerId === session?.user?.id;
+  const mode: 'play' | 'edit' = searchParams.get('mode') === 'edit' && canEdit ? 'edit' : 'play';
+  const linkedBuild = canEdit || isAdmin ? requestedBuild : undefined;
   const loadedGameId = game.data?.id;
-  /* The games list already holds this game's art, so the loading screen never waits on the game request. */
-  const listedGame = useMemo(
-    () =>
-      queryClient
-        .getQueriesData<GameSummary[]>({ queryKey: ['games'] })
-        .flatMap(([, games]) => games ?? [])
-        .find((item) => item.id === gameId),
-    [queryClient, gameId],
-  );
+  const listedGame = useMemo(() => {
+    if (!session?.user?.id || me.data?.user?.id !== session.user.id || !me.dataUpdatedAt) return undefined;
+    return queryClient
+      .getQueryCache()
+      .findAll({ queryKey: ['games', session.user.id, me.data.capability, me.data.platformRole] })
+      .filter((query) => query.state.dataUpdatedAt > me.dataUpdatedAt)
+      .flatMap((query) => (query.state.data as GameSummary[] | undefined) ?? [])
+      .find((item) => item.id === gameId);
+  }, [
+    queryClient,
+    gameId,
+    session?.user?.id,
+    me.data?.user?.id,
+    me.data?.capability,
+    me.data?.platformRole,
+    me.dataUpdatedAt,
+  ]);
   useEffect(() => {
-    if (!isGameRoute || mode !== 'play' || loadedGameId !== gameId || !gameId) return;
+    if (!isGameRoute || !accessLoaded || mode !== 'play' || loadedGameId !== gameId || !gameId) return;
     const controller = new AbortController();
     void recordPlay(gameId, controller.signal)
       .then(() => queryClient.invalidateQueries({ queryKey: ['games'] }))
       .catch(() => {});
     return () => controller.abort();
-  }, [gameId, isGameRoute, loadedGameId, mode, queryClient]);
+  }, [gameId, isGameRoute, loadedGameId, accessLoaded, mode, queryClient]);
   const design = useQuery({
-    queryKey: ['design', gameId, branch],
-    queryFn: () => getDesignSnapshot(gameId, branch),
-    enabled: gameId !== '',
+    queryKey: ['design', gameId, branch, session?.user?.id, canEdit, isAdmin],
+    queryFn: async () => {
+      if (canEdit || isAdmin) {
+        return getDesignSnapshot(gameId, branch);
+      }
+      const release = await getOptionalPublished(gameId);
+      if (!release.available || !release.modified || !release.value.buildId) throw new Error('not_published');
+      return getBuildDesign(gameId, release.value.buildId);
+    },
+    enabled: gameId !== '' && !!game.data && !!me.data,
   });
-  const branches = useBranches(gameId === '' ? null : gameId);
+  const branches = useBranches(gameId === '' || !canEdit ? null : gameId);
   // Games open with the branch id in `v`; job admission only takes the canonical name of the main branch.
   const jobBranch = branches.data?.find(({ id }) => id === branch)?.name === 'main' ? 'main' : branch;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -165,17 +199,24 @@ export function GameScreen() {
   const fallbackInFlight = useRef(false);
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();
   const [pendingBuild, setPendingBuild] = useState<{ snapshot: DesignSnapshot; report: ReapplyReport }>();
+  useEffect(() => {
+    if (!canEdit) {
+      setPendingBuild(undefined);
+      setAdopted(undefined);
+    }
+  }, [canEdit]);
   const [publishedBuildId, setPublishedBuildId] = useState<string>();
   const [lastSaveAt, setLastSaveAt] = useState<string>();
   /* Outlives the watcher overlay (unmounted while playing); a new frame starts its game on the default follow camera. */
   const [watcherCamera, setWatcherCamera] = useState<'follow' | 'free'>('follow');
-  const activeSnapshot = adopted?.gameId === gameId && adopted.branch === branch ? adopted.snapshot : design.data;
+  const activeSnapshot =
+    canEdit && adopted?.gameId === gameId && adopted.branch === branch ? adopted.snapshot : design.data;
   const noBuild = activeSnapshot?.buildId === NO_BUILD_ID;
-  const designLoadFailed = design.isError && activeSnapshot === undefined;
+  const designLoadFailed = me.isError || game.isError || (design.isError && activeSnapshot === undefined);
   const otherBuild =
     linkedBuild !== undefined && activeSnapshot !== undefined && linkedBuild !== activeSnapshot.buildId;
   const linkedDesign = useQuery({
-    queryKey: ['build-design', gameId, linkedBuild],
+    queryKey: ['build-design', gameId, session?.user?.id, linkedBuild],
     queryFn: () => getBuildDesign(gameId, linkedBuild!),
     enabled: gameId !== '' && otherBuild,
     retry: false,
@@ -447,7 +488,15 @@ export function GameScreen() {
     setLastSaveAt(undefined);
   }, [branch, gameId]);
 
-  useReadyBuild({ gameId, branch, jobBranch, activeSnapshot, jobs: jobs.data?.jobs, setAdopted, setPendingBuild });
+  useReadyBuild({
+    gameId,
+    branch,
+    jobBranch,
+    activeSnapshot,
+    jobs: canEdit ? jobs.data?.jobs : undefined,
+    setAdopted,
+    setPendingBuild,
+  });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -633,7 +682,6 @@ export function GameScreen() {
     },
     [searchParams, setSearchParams],
   );
-  const { data: session } = useSession();
   const ownsGame = Boolean(session && game.data && game.data.ownerId === session.user?.id);
   const fileBug = useCallback<FileBug>(
     async (text, log, attempt) => {
@@ -668,6 +716,7 @@ export function GameScreen() {
       branchId: branch,
       buildId: runningBuildId,
       mode,
+      canEdit,
       authorityMode: frameState.manifest?.net?.authority,
       onNavigate: closeMenu,
       onRoomCreated: activateRoom,
@@ -679,6 +728,7 @@ export function GameScreen() {
       runningBuildId,
       activateRoom,
       branch,
+      canEdit,
       closeMenu,
       frameState.manifest?.net?.authority,
       gameId,
@@ -729,7 +779,7 @@ export function GameScreen() {
                 onSelect: (): void => void leaveRoom(),
               },
               ...preferenceAction,
-              ...(mode === 'play'
+              ...(mode === 'play' && canEdit
                 ? [
                     {
                       id: 'edit',
@@ -743,13 +793,17 @@ export function GameScreen() {
                     },
                   ]
                 : []),
-              {
-                id: 'ask-change',
-                label: 'Ask for a change',
-                icon: 'speak',
-                disabled: room.snapshot?.role === 'peer',
-                onSelect: askForChange,
-              },
+              ...(canEdit
+                ? [
+                    {
+                      id: 'ask-change',
+                      label: 'Ask for a change',
+                      icon: 'speak',
+                      disabled: room.snapshot?.role === 'peer',
+                      onSelect: askForChange,
+                    },
+                  ]
+                : []),
             ],
             extras: gameExtraElements('topbar', extraProps),
             hideButton: hidesHostPause(mode, frameState),
@@ -758,18 +812,23 @@ export function GameScreen() {
             actions: [
               { id: 'games', label: 'Games', icon: 'games', onSelect: (): void => void leaveRoom() },
               ...preferenceAction,
-              {
-                id: 'ask-change',
-                label: 'Ask for a change',
-                icon: 'speak',
-                disabled: room.snapshot?.role === 'peer',
-                onSelect: askForChange,
-              },
+              ...(canEdit
+                ? [
+                    {
+                      id: 'ask-change',
+                      label: 'Ask for a change',
+                      icon: 'speak',
+                      disabled: room.snapshot?.role === 'peer',
+                      onSelect: askForChange,
+                    },
+                  ]
+                : []),
             ],
             extras: gameExtraElements('topbar', extraProps),
           },
     [
       askForChange,
+      canEdit,
       extraProps,
       frameState.bridgeState,
       frameState.hostPauseVisible,
@@ -929,10 +988,14 @@ export function GameScreen() {
                   }
                 : undefined
             }
-            onEdit={() => {
-              setMenuOpen(false);
-              void requestMode('edit');
-            }}
+            onEdit={
+              canEdit
+                ? () => {
+                    setMenuOpen(false);
+                    void requestMode('edit');
+                  }
+                : undefined
+            }
             editDisabled={room.snapshot?.role === 'peer'}
             onMoreHost={setMoreHost}
             onFileBug={fileBug}
@@ -1097,7 +1160,9 @@ export function GameScreen() {
             className="tap-primary"
             type="button"
             onClick={() => {
-              if (designLoadFailed) void design.refetch();
+              if (me.isError) void me.refetch();
+              if (game.isError) void game.refetch();
+              if (design.isError) void design.refetch();
               if (activeSnapshot?.buildId === NO_BUILD_ID) void scenerySource.refetch();
               if (linkedDesign.isError) void linkedDesign.refetch();
               setFrameAttempt((attempt) => attempt + 1);
@@ -1107,7 +1172,7 @@ export function GameScreen() {
           </button>
         </div>
       ) : null}
-      {pendingBuild ? (
+      {canEdit && pendingBuild ? (
         <ReapplyCard
           report={pendingBuild.report}
           onConfirm={(choices) => {
@@ -1120,7 +1185,7 @@ export function GameScreen() {
           }}
         />
       ) : null}
-      <Outlet />
+      {canEdit ? <Outlet /> : null}
     </section>
   );
 }

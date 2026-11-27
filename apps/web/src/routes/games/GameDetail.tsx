@@ -103,7 +103,7 @@ export function GameDetail({
   job?: JobView;
   sharedCover?: boolean;
   onPlay(): void;
-  onEdit(): void;
+  onEdit?(): void;
   onClose(): void;
 }) {
   const close = useRef<HTMLButtonElement>(null);
@@ -208,9 +208,11 @@ export function GameDetail({
           <button type="button" className="tap-primary games-play" aria-label={`Play ${game.title}`} onClick={onPlay}>
             ▶
           </button>
-          <button type="button" className="tap-primary games-edit" aria-label={`Edit ${game.title}`} onClick={onEdit}>
-            <Icon name="pencil" />
-          </button>
+          {onEdit && (
+            <button type="button" className="tap-primary games-edit" aria-label={`Edit ${game.title}`} onClick={onEdit}>
+              <Icon name="pencil" />
+            </button>
+          )}
         </div>
       </div>
       <div

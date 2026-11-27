@@ -159,7 +159,7 @@ describe('games routes', () => {
     expect(body.games[0]).toMatchObject({ id: 'g-play', lastPlayedAt: expect.any(String) });
     expect(body.games[0]!.lastPlayedAt! > now).toBe(true);
     expect(deps.db.select().from(schema.gamePlays).all()).toHaveLength(1);
-    deps.db.update(schema.games).set({ visibility: 'listed' }).run();
+    deps.db.update(schema.games).set({ visibility: 'listed', publishedReleaseId: 'r_fixture' }).run();
     const otherList = await app.request('/api/v1/games', { headers: asUser(player.userId) });
     const otherBody = (await otherList.json()) as { games: { lastPlayedAt: string | null }[] };
     expect(otherBody.games[0]?.lastPlayedAt).toBeNull();
@@ -823,6 +823,7 @@ describe('games routes', () => {
           ownerId: admin.userId,
           title: 'Listed',
           visibility: 'listed',
+          publishedReleaseId: 'r_fixture',
           repoVisibility: 'private',
           createdAt: now,
         },

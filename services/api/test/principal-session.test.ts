@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { verifyWsToken } from '../src/app/app.js';
 import type { Auth } from '../src/auth/auth.js';
 import { sessionResolver } from '../src/auth/principal.js';
+import { NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { signIn, WS_SECRET } from './auth-helpers.js';
 import { makeApp } from './helpers.js';
 
@@ -24,6 +25,82 @@ const whoami = async (app: Awaited<ReturnType<typeof setup>>['app'], headers: Re
   (await app.request('/api/v1/zz-test/whoami', { headers })).json();
 
 describe('session principal resolver', () => {
+  it('applies allow-list promotion and demotion to the same session on the next request', async () => {
+    const { app, deps, outbox } = await setup();
+    const { session } = await signIn(app, outbox, 'kim@example.com');
+    deps.sqlite.prepare('UPDATE allowed_users SET role = ? WHERE email = ?').run('admin', 'sam@example.com');
+    const { session: adminSession } = await signIn(app, outbox, 'sam@example.com');
+    for (const [role, capability] of [
+      ['player', 'player'],
+      ['maker', 'creator'],
+      ['player', 'player'],
+    ] as const) {
+      const response = await app.request('/api/v1/admin/users/kim%40example.com', {
+        method: 'PATCH',
+        headers: { cookie: adminSession, 'content-type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      expect(response.status).toBe(200);
+      expect(await whoami(app, { cookie: session })).toMatchObject({ capability });
+      const me = await app.request('/api/v1/me', { headers: { cookie: session } });
+      expect(me.headers.get('x-ogm-capability')).toBe(capability);
+    }
+  });
+
+  it('allows a promoted familyless account to create and edit, then denies edits after demotion', async () => {
+    const { app, deps, outbox } = await setup();
+    deps.registry.repoProvisioner = new NullRepoProvisioner();
+    const startDraft = vi.fn().mockResolvedValue({ repo: 'instance/games', ticket: '42' });
+    deps.registry.draftScopeAssistant = { create: startDraft, close: vi.fn(), transcript: vi.fn() };
+    const { session } = await signIn(app, outbox, 'kim@example.com');
+    deps.sqlite.prepare('UPDATE allowed_users SET role = ? WHERE email = ?').run('admin', 'sam@example.com');
+    const { session: adminSession } = await signIn(app, outbox, 'sam@example.com');
+    const setRole = (role: string) =>
+      app.request('/api/v1/admin/users/kim%40example.com', {
+        method: 'PATCH',
+        headers: { cookie: adminSession, 'content-type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+    const create = () =>
+      app.request('/api/v1/games', {
+        method: 'POST',
+        headers: { cookie: session, 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'My game', repoVisibility: 'private' }),
+      });
+    const draft = () =>
+      app.request('/api/v1/game-drafts', {
+        method: 'POST',
+        headers: { cookie: session, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          choices: {
+            genre: 'platformer',
+            vibe: 'cozy',
+            family: 'chunky-low-poly',
+            world: 'floating islands',
+            players: 'single',
+            pov: 'isometric',
+          },
+        }),
+      });
+    expect((await setRole('player')).status).toBe(200);
+    expect((await draft()).status).toBe(403);
+    expect(startDraft).not.toHaveBeenCalled();
+    expect((await create()).status).toBe(403);
+    expect((await setRole('maker')).status).toBe(200);
+    expect((await draft()).status).toBe(201);
+    const created = await create();
+    expect(created.status).toBe(201);
+    const game = (await created.json()) as { id: string };
+    const edit = () =>
+      app.request(`/api/v1/games/${game.id}`, {
+        method: 'PATCH',
+        headers: { cookie: session, 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'Updated game' }),
+      });
+    expect((await edit()).status).toBe(200);
+    expect((await setRole('player')).status).toBe(200);
+    expect((await edit()).status).toBe(403);
+  });
   it('resolves the session cookie and the bearer session token to the same familyless maker', async () => {
     const { app, outbox, userId } = await setup();
     const { session, token } = await signIn(app, outbox, 'kim@example.com');
@@ -64,9 +141,11 @@ describe('session principal resolver', () => {
 
   it('names maintainers from OGM_MAINTAINER_EMAILS, case-insensitively', async () => {
     vi.stubEnv('OGM_MAINTAINER_EMAILS', 'other@example.com, Kevin@Example.com');
-    const { app, outbox } = await setup();
+    const { app, deps, outbox } = await setup();
     const { session } = await signIn(app, outbox, 'kevin@example.com');
     expect(await whoami(app, { cookie: session })).toMatchObject({ platformRole: 'maintainer' });
+    deps.sqlite.prepare('UPDATE allowed_users SET role = ? WHERE email = ?').run('player', 'kevin@example.com');
+    expect(await whoami(app, { cookie: session })).toMatchObject({ platformRole: 'maintainer', capability: 'creator' });
   });
 
   it('uses the stored display name and never exposes email as the room name', async () => {

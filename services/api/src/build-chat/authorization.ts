@@ -8,10 +8,16 @@ import { requirePrincipal } from '../app/principal.js';
 import type { ChatJob } from '../app/registry.js';
 import type { ApiBindings } from '../app/types.js';
 
-export async function authorizedChatJob(c: Context<ApiBindings>, action: Action, ownerOnly = false): Promise<ChatJob> {
+export async function authorizedChatJob(
+  c: Context<ApiBindings>,
+  action: Action,
+  ownerOnly = false,
+  adminRead = false,
+): Promise<ChatJob> {
   const principal = requirePrincipal(c, ['user']);
   const job = await c.get('deps').registry.chatJobs?.get(c.req.param('jobId') ?? '');
   if (!job) throw new HttpError(404, 'job_not_found');
+  if (adminRead && principal.platformRole !== 'none') return job;
   requireAuthorization(
     authorize(actorFromPrincipal(principal), action, {
       gameId: job.gameId,

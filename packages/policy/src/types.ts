@@ -33,6 +33,7 @@ export type Resource = {
   ownerId?: string;
   familyId?: string;
   visibility?: 'listed' | 'private';
+  published?: boolean;
   inviteKind?: 'member' | 'play' | 'room';
   targetRole?: 'owner' | 'admin' | 'member';
   granted?: boolean;

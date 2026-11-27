@@ -133,7 +133,8 @@ describe('admin policy table', () => {
       expect(((await response.clone().json()) as { error: string }).error).toMatch(/^[a-z]+_not_found$/);
     if (actor === 'otherAdmin' && status < 300) {
       const text = await response.text();
-      for (const id of X_IDS) expect(text).not.toContain(id);
+      if (path === '/games?includeDelisted=1') expect(text).toContain(X.game);
+      else for (const id of X_IDS) expect(text).not.toContain(id);
     }
   });
 });

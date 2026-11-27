@@ -11,7 +11,7 @@ import { HttpError } from '../app/errors.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
 import { FsBaseDocSource } from '../design/base-doc.js';
-import { findGameForFamily, hasGameGrant } from '../games/games.js';
+import { findGame, findGameForFamily, hasGameGrant } from '../games/games.js';
 import { countSavesAboveSchema } from '../saves/store.js';
 import { CommitUnavailable, HttpCommitClient } from './commit-client.js';
 import { checkPublishRights, RightsCheckUnavailable } from './rights.js';
@@ -74,12 +74,13 @@ function requireBuilder(c: Parameters<typeof requirePrincipal>[0]): void {
 
 function requirePlayer(c: Parameters<typeof requirePrincipal>[0], gameId: string): void {
   const principal = requirePrincipal(c, ['user']);
-  const game = findGameForFamily(c.get('deps').db, gameId, principal.familyId);
+  const game = findGame(c.get('deps').db, gameId);
   requireAuthorization(
     authorize(actorFromPrincipal(principal), 'game.play', {
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      published: game.publishedReleaseId !== null,
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
     }),
   );
@@ -234,6 +235,7 @@ const routes = new Hono<ApiBindings>()
       if (c.req.header('if-none-match') === etag) return c.body(null, 304);
       return c.json({
         releaseId: release.id,
+        buildId: release.buildId,
         version: release.version,
         buildUrl: `${runtime(c).gamesOrigin.replace(/\/$/, '')}/g/${release.gameId}/${release.buildId}/`,
         changelog: release.changelog,

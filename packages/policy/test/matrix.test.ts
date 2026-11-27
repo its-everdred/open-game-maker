@@ -67,16 +67,7 @@ const ownAllowed = {
   maintainer: ACTIONS,
   admin,
   creator: own,
-  player: [
-    'game.edit',
-    'game.publish',
-    'game.play',
-    'game.fork',
-    'job.cancel',
-    'job.edit',
-    'game.delist',
-    'report.file',
-  ],
+  player: ['game.play', 'report.file'],
 } as const satisfies Record<ActorName, readonly Action[]>;
 
 function resource(actor: Actor, action: Action, scope: Scope): Resource {
@@ -85,6 +76,7 @@ function resource(actor: Actor, action: Action, scope: Scope): Resource {
     familyId: scope === 'other-family' ? 'family-b' : actor.familyId,
     ownerId: ownResource ? actor.userId : 'another-user',
     visibility: 'listed',
+    published: true,
     inviteKind: 'play',
     audit: actor.platformRole === 'maintainer' && scope === 'other',
   };
@@ -98,10 +90,11 @@ const rows = Object.entries(actors).flatMap(([name, actor]) =>
       scope,
       action,
       ok:
-        scope !== 'other-family' &&
-        (scope === 'own' ? ownAllowed[name as ActorName] : sameFamilyOther[name as ActorName]).includes(
-          action as never,
-        ),
+        scope === 'other-family'
+          ? action === 'game.play' || action === 'report.file'
+          : (scope === 'own' ? ownAllowed[name as ActorName] : sameFamilyOther[name as ActorName]).includes(
+              action as never,
+            ),
     })),
   ),
 );

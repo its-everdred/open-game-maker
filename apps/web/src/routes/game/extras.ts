@@ -11,6 +11,7 @@ export type GameExtraProps = {
   branchId: string;
   buildId?: string;
   mode: 'play' | 'edit';
+  canEdit?: boolean;
   authorityMode?: AuthorityMode;
   onNavigate?: () => void;
   onRoomCreated?: (room: CreatedRoom) => void;

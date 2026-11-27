@@ -84,7 +84,11 @@ function GameMenuScreen({ hideButton }: { hideButton: boolean }) {
 }
 
 const state = vi.hoisted(() => ({
-  admin: { data: undefined as { platformRole: 'maintainer' | 'admin' | 'none' } | undefined },
+  admin: {
+    data: undefined as
+      | { platformRole: 'maintainer' | 'admin' | 'none'; user?: { id: string }; capability?: 'creator' | 'player' }
+      | undefined,
+  },
   jobs: {
     jobs: [] as TestJob[],
     active: [] as TestJob[],
@@ -173,7 +177,16 @@ vi.mock('../lib/api/session', () => ({ useSession: () => state.session }));
 vi.mock('../lib/api/auth', () => auth);
 vi.mock('../features/bug-report/send', () => report);
 vi.mock('../lib/sound', () => sound);
-vi.mock('../routes/admin/api', () => ({ useAdminMe: () => state.admin }));
+vi.mock('../routes/admin/api', () => ({
+  useAdminMe: () =>
+    state.admin.data
+      ? state.admin
+      : {
+          data: state.session.data
+            ? { user: state.session.data.user, capability: 'creator', platformRole: 'none' }
+            : undefined,
+        },
+}));
 vi.mock('../features/energy/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/energy/api')>()),
   useEnergy: () => state.energy,
@@ -269,6 +282,16 @@ afterEach(() => {
 });
 
 describe('StudioMenu', () => {
+  it('hides jobs and decisions for a player even when old data is cached', () => {
+    const job = runningJob({ id: 'job-player' });
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.admin = { data: { user: { id: 'user-1' }, capability: 'player', platformRole: 'none' } };
+    state.jobs = { jobs: [job], active: [job], games: [{ id: 'game-1', title: 'Moon Vault', ownerId: 'user-1' }] };
+    state.decisions = [decision('d1')];
+    renderMenu('/games');
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(screen.queryByRole('button', { name: /Jobs:|Decisions:/ })).toBeNull();
+  });
   it('requests build data only for the signed-in creator’s games', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.jobs.games = [
@@ -490,7 +513,8 @@ describe('StudioMenu', () => {
 
   it('shows signed-in and game actions only in their relevant context', () => {
     state.session = { data: { user: { id: 'user-1' } } };
-    state.admin = { data: { platformRole: 'maintainer' } };
+    state.admin = { data: { platformRole: 'maintainer', user: { id: 'user-1' }, capability: 'creator' } };
+    state.jobs.games = [{ id: 'game-1', title: 'Game', ownerId: 'user-1' }];
 
     const view = renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));

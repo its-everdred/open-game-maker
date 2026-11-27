@@ -8,7 +8,7 @@ import { schema } from '@ogm/db';
 import { authorize } from '@ogm/policy';
 import { eq } from 'drizzle-orm';
 
-import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
+import { actorFromPrincipal, createFamily, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
@@ -38,12 +38,14 @@ function requireOwner(draft: ReturnType<typeof gameDrafts.get>, principal: UserP
 const routes = new Hono<ApiBindings>()
   .post('/', async (c) => {
     const principal = requirePrincipal(c, ['user']);
+    requireAuthorization(authorize(actorFromPrincipal(principal), 'game.create', { familyId: principal.familyId }));
     const body = await parseBody(c, createBody);
     const deps = c.get('deps');
     const assistant = deps.registry.draftScopeAssistant;
     if (!assistant) throw new HttpError(503, 'draft_scope_unavailable');
+    const familyId = principal.familyId || createFamily(deps.db, { userId: principal.userId, name: 'My games' }).id;
     const draft = gameDrafts.create(deps.db, {
-      familyId: principal.familyId,
+      familyId,
       creatorId: principal.userId,
       choices: body.choices,
       allowAiGeneratedAssets: body.allowAiGeneratedAssets,

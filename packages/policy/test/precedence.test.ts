@@ -12,6 +12,18 @@ const admin: Actor = { ...creator, userId: 'admin', platformRole: 'admin' };
 const maintainer: Actor = { ...creator, userId: 'maintainer', platformRole: 'maintainer' };
 
 describe('deny-wins precedence', () => {
+  it('denies a demoted owner edits and permits listed games across families', () => {
+    const player: Actor = { ...creator, capability: 'player' };
+    expect(authorize(player, 'game.edit', { familyId: 'family-a', ownerId: player.userId }).ok).toBe(false);
+    expect(authorize(player, 'game.play', { familyId: 'family-b', visibility: 'listed', published: true }).ok).toBe(
+      true,
+    );
+    expect(authorize(player, 'game.play', { familyId: 'family-b', visibility: 'listed', published: false }).ok).toBe(
+      false,
+    );
+    expect(authorize(player, 'game.play', { familyId: 'family-b', visibility: 'private' }).ok).toBe(false);
+    expect(authorize(admin, 'game.play', { familyId: 'family-b', visibility: 'private' }).ok).toBe(true);
+  });
   it('denies cross-family actions even for a maintainer with audit enabled', () => {
     expect(
       authorize(maintainer, 'game.edit', {

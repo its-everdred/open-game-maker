@@ -78,7 +78,8 @@ const host = vi.hoisted(() => {
 });
 
 vi.mock('../../features/editor/api', () => editorApi);
-vi.mock('../../lib/api/session', () => ({ useSession: () => ({ data: null }) }));
+vi.mock('../../lib/api/session', () => ({ useSession: () => ({ data: { user: { id: 'owner' } } }) }));
+vi.mock('../admin/api', () => ({ useAdminMe: () => ({ data: { user: { id: 'owner' }, capability: 'creator' } }) }));
 const branchList = vi.hoisted(() => ({ value: undefined as Array<{ id: string; name: string }> | undefined }));
 vi.mock('../games/useBranches', () => ({ useBranches: () => ({ data: branchList.value }) }));
 vi.mock('../../features/editor/frame', async (importOriginal) => ({
@@ -137,7 +138,7 @@ beforeEach(() => {
   branchList.value = undefined;
   preview.mountSceneryPreview.mockReturnValue(host.controller);
   useDock.getState().reset();
-  editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar' });
+  editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar', ownerId: 'owner' });
   editorApi.getFallbackPalette.mockResolvedValue({ mode: 'request', palette: { categories: [], items: [] } });
   editorApi.getEditorPreviews.mockResolvedValue({ previews: [] });
   editorApi.getEditorStage.mockResolvedValue({ stage: null });

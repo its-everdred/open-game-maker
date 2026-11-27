@@ -29,8 +29,9 @@ describe('build chat jobs', () => {
         if (url === '/api/v1/games') {
           return json({
             games: [
-              { id: 'g_good', title: 'Good game' },
-              { id: 'g_bad', title: 'Bad game' },
+              { id: 'g_good', title: 'Good game', ownerId: job.creatorId },
+              { id: 'g_bad', title: 'Bad game', ownerId: job.creatorId },
+              { id: 'g_other', title: 'Other game', ownerId: 'other' },
             ],
           });
         }
@@ -41,11 +42,13 @@ describe('build chat jobs', () => {
 
     await expect(fetchMyJobs(job.creatorId)).resolves.toEqual({
       games: [
-        { id: 'g_good', title: 'Good game' },
-        { id: 'g_bad', title: 'Bad game' },
+        { id: 'g_good', title: 'Good game', ownerId: job.creatorId },
+        { id: 'g_bad', title: 'Bad game', ownerId: job.creatorId },
+        { id: 'g_other', title: 'Other game', ownerId: 'other' },
       ],
       jobs: [job],
     });
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('gameId=g_other'))).toBe(false);
   });
 });
 

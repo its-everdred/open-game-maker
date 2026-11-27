@@ -1,14 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { api, ApiError } from '../../lib/api/client';
+import { useSession } from '../../lib/api/session';
 import { TERMINAL_JOB_STATES, type JobView } from './types';
 
 type JobsResponse = JobView[] | { jobs: JobView[] };
 
-export function useActiveJobs() {
+export function useActiveJobs(enabled = true) {
+  const { data: session } = useSession();
   return useQuery({
-    queryKey: ['jobs', 'active'],
+    queryKey: ['jobs', 'active', session?.user?.id],
     queryFn: fetchActiveJobs,
+    enabled: enabled && Boolean(session?.user?.id),
     refetchInterval: (query) => nextActiveJobsPoll(query.state.data),
   });
 }

@@ -10,7 +10,7 @@ import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
 import { createRateLimiter } from '../auth/rate-limit.js';
-import { findGameForFamily, hasGameGrant, type GameRow } from '../games/games.js';
+import { findGame, findGameForFamily, hasGameGrant, type GameRow } from '../games/games.js';
 import { AchievementError, award, listAchievements, progress, revokeAward } from './store.js';
 
 export const prefix = '/api/v1';
@@ -29,12 +29,13 @@ function routeParam(c: Parameters<typeof requirePrincipal>[0], name: string): st
 
 function playableGame(c: Parameters<typeof requirePrincipal>[0]): { principal: UserPrincipal; game: GameRow } {
   const principal = requirePrincipal(c, ['user']);
-  const game = findGameForFamily(c.get('deps').db, routeParam(c, 'gameId'), principal.familyId);
+  const game = findGame(c.get('deps').db, routeParam(c, 'gameId'));
   requireAuthorization(
     authorize(actorFromPrincipal(principal), 'game.play', {
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      published: game.publishedReleaseId !== null,
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
     }),
   );

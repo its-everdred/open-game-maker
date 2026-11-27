@@ -78,6 +78,26 @@ async function createJob(app: Awaited<ReturnType<typeof makeApp>>['app'], overri
 }
 
 describe('jobs routes', () => {
+  it('removes access to owned queues immediately on demotion', async () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.allowances)
+      .values({ familyId: ids.family, userId: ids.user, dailyMicroUsd: 20_000_000 })
+      .run();
+    const { app } = await makeApp(deps);
+    const created = await createJob(app);
+    expect(created.status).toBe(202);
+    const { jobId } = (await created.json()) as { jobId: string };
+    deps.db
+      .update(schema.familyMembers)
+      .set({ capability: 'player' })
+      .where(eq(schema.familyMembers.userId, ids.user))
+      .run();
+    for (const path of [`/api/v1/jobs?gameId=${ids.game}`, '/api/v1/jobs?state=active', `/api/v1/jobs/${jobId}`]) {
+      expect((await app.request(path, { headers: asUser(ids.user) })).status).toBe(403);
+    }
+  });
+
   it("serves the web app's game and active jobs query strings", async () => {
     const deps = setup();
     deps.db

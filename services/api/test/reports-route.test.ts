@@ -3,12 +3,32 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 
 import { StoredIssueWriter } from '../src/reports/issue-writer.js';
-import { asUser } from './helpers.js';
+import { asUser, installUsers } from './helpers.js';
 import { crash, ids, reportsApp } from './reports-helpers.js';
 
 type Created = { reportId: string; signature: string; route: string; jobId?: string; pendingBudget?: true };
 
 describe('POST /api/v1/reports', () => {
+  it('accepts a report from a player in another family for a published game', async () => {
+    const { deps, app } = await reportsApp();
+    installUsers(deps, [
+      {
+        kind: 'user',
+        userId: 'u-visitor',
+        familyId: '',
+        platformRole: 'none',
+        capability: 'player',
+        email: 'visitor@example.test',
+      },
+    ]);
+    deps.db.update(schema.games).set({ publishedReleaseId: ids.release }).where(eq(schema.games.id, ids.game)).run();
+    const response = await app.request('/api/v1/reports', {
+      method: 'POST',
+      headers: { ...asUser('u-visitor'), 'content-type': 'application/json' },
+      body: JSON.stringify(crash()),
+    });
+    expect(response.status).toBe(201);
+  });
   it('routes the worked example to one repair job and attaches the duplicate', async () => {
     const { deps, post } = await reportsApp();
     const first = await post(crash());

@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { cleanup, fireEvent, render as renderWithTestingLibrary, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { GameMenuProvider, useGameMenu, useGameMenuControls } from './GameMenu';
 import { StudioMenu } from './StudioMenu';
 
+function render(element: ReactElement) {
+  return renderWithTestingLibrary(<QueryClientProvider client={new QueryClient()}>{element}</QueryClientProvider>);
+}
+
 vi.mock('../features/build-chat/jobs', () => ({
   isTerminal: (value: string) => ['done', 'failed', 'cancelled'].includes(value),
-  useMyJobs: () => ({ jobs: [], active: [], games: [] }),
+  useMyJobs: () => ({ jobs: [], active: [], games: [{ id: 'game-1', ownerId: 'u_creator' }] }),
   setJobPaused: vi.fn(),
 }));
 vi.mock('../features/worker-builds/useWorkers', () => ({ useWorkers: () => ({ workers: [], feeds: [] }) }));
@@ -23,8 +28,10 @@ vi.mock('../features/commands-inbox/commands', () => ({
   useCreatorReviewCommands: () => ({ commands: [], error: false, loading: false }),
   useCreatorCommands: () => ({ commands: [], sessions: [] }),
 }));
-vi.mock('../lib/api/session', () => ({ useSession: () => ({ data: null }) }));
-vi.mock('../routes/admin/api', () => ({ useAdminMe: () => ({ data: undefined }) }));
+vi.mock('../lib/api/session', () => ({ useSession: () => ({ data: { user: { id: 'u_creator' } } }) }));
+vi.mock('../routes/admin/api', () => ({
+  useAdminMe: () => ({ data: { user: { id: 'u_creator' }, capability: 'creator' } }),
+}));
 vi.mock('../lib/sound', () => ({
   getVolume: () => 0.75,
   onChange: () => () => undefined,

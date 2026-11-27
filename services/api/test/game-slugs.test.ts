@@ -1,5 +1,6 @@
 import { schema } from '@ogm/db';
 import { describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 
 import { NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { slugify } from '../src/games/slug.js';
@@ -21,9 +22,10 @@ function user(overrides: Partial<TestUser> & Pick<TestUser, 'userId' | 'familyId
 const owner = user({ userId: 'u-owner', familyId: 'f-house' });
 const sibling = user({ userId: 'u-sibling', familyId: 'f-house' });
 const stranger = user({ userId: 'u-stranger', familyId: 'f-other' });
+const admin = user({ userId: 'u-admin', familyId: 'f-other', platformRole: 'admin' });
 
 function seed(app: { deps: ReturnType<typeof makeDeps> }) {
-  installUsers(app.deps, [owner, sibling, stranger]);
+  installUsers(app.deps, [owner, sibling, stranger, admin]);
   app.deps.db
     .insert(schema.families)
     .values([
@@ -80,6 +82,47 @@ async function rename(app: App, gameId: string, title: string) {
 }
 
 describe('game slugs', () => {
+  it('creates a family for a newly promoted maker on first game creation', async () => {
+    const deps = makeDeps();
+    deps.registry.repoProvisioner = new NullRepoProvisioner();
+    const promoted = user({ userId: 'u-promoted', familyId: '' });
+    installUsers(deps, [promoted]);
+    const { app } = await makeApp(deps);
+    const response = await app.request('/api/v1/games', {
+      method: 'POST',
+      headers: { ...asUser(promoted.userId), 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'First game', repoVisibility: 'private' }),
+    });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { familyId: string };
+    expect(body.familyId).toMatch(/^f_/);
+    expect(
+      deps.db.select().from(schema.familyMembers).where(eq(schema.familyMembers.userId, promoted.userId)).get()
+        ?.familyId,
+    ).toBe(body.familyId);
+  });
+  it('lists and plays a published game across accounts without exposing a private game', async () => {
+    const { app, deps } = await setup();
+    const published = await createGame(app, 'Public game');
+    const privateGame = await createGame(app, 'Private game');
+    deps.db.update(schema.games).set({ visibility: 'listed' }).where(eq(schema.games.id, privateGame.id)).run();
+    deps.db
+      .update(schema.games)
+      .set({ visibility: 'listed', publishedReleaseId: 'r_public' })
+      .where(eq(schema.games.id, published.id))
+      .run();
+    const list = await app.request('/api/v1/games', { headers: asUser(stranger.userId) });
+    expect(await list.json()).toMatchObject({ games: [expect.objectContaining({ id: published.id })] });
+    expect((await app.request(`/api/v1/games/${published.id}`, { headers: asUser(stranger.userId) })).status).toBe(200);
+    expect((await app.request(`/api/v1/games/${privateGame.id}`, { headers: asUser(stranger.userId) })).status).toBe(
+      403,
+    );
+    const adminGames = await app.request('/api/v1/games', { headers: asUser(admin.userId) });
+    expect(await adminGames.json()).toMatchObject({
+      games: expect.arrayContaining([expect.objectContaining({ id: privateGame.id })]),
+    });
+    expect((await app.request(`/api/v1/games/${privateGame.id}`, { headers: asUser(admin.userId) })).status).toBe(200);
+  });
   it('derives the shareable slug from the title and resolves it', async () => {
     const { app } = await setup();
 

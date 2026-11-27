@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 
 import { registerTestApi } from '../../app/testHook';
+import { useAdminMe } from '../admin/api';
+import { useSession } from '../../lib/api/session';
 import { set as setMusic } from '../../lib/sound';
 import { GameCell } from './GameCell';
 import {
@@ -40,10 +42,14 @@ export function GamesScreen() {
   const spotlightDismissed = isSpotlightDismissed(location.state);
 
   const gamesQuery = useGames();
-  const jobsQuery = useActiveJobs();
+  const { data: session } = useSession();
+  const me = useAdminMe(Boolean(session));
+  const canCreate =
+    Boolean(session?.user?.id) && me.data?.user?.id === session?.user?.id && me.data?.capability === 'creator';
+  const jobsQuery = useActiveJobs(canCreate);
   const realGames = gamesQuery.data ?? [];
   const games = useMemo(() => mergeShowcase(gamesQuery.data ?? []), [gamesQuery.data]);
-  const jobs = jobsQuery.data ?? [];
+  const jobs = canCreate ? (jobsQuery.data ?? []) : [];
   const selectedId = searchParams.get('spotlight');
   const selected = games.find((game) => game.id === selectedId) ?? null;
   const goblin = realGames.find(
@@ -54,7 +60,7 @@ export function GamesScreen() {
       ? goblin
       : null
     : selected;
-  const branchesQuery = useBranches(target?.id ?? null);
+  const branchesQuery = useBranches(canCreate && target && target.ownerId === session?.user?.id ? target.id : null);
   const branches = branchesQuery.data ?? [];
   const gridRef = useRef<HTMLDivElement>(null);
   const pendingRects = useRef<TileRects | null>(null);
@@ -204,6 +210,7 @@ export function GamesScreen() {
     });
   }, []);
 
+  if (me.isError) return <RetryLine onRetry={() => void me.refetch()} />;
   if (gamesQuery.isPending)
     return (
       <div className="games-loading" role="progressbar" aria-label="Loading">
@@ -263,7 +270,11 @@ export function GamesScreen() {
                           sharedCover
                           job={activeJobs.get(selected.id)}
                           onPlay={() => open(selectedIndex ?? -1, 'play')}
-                          onEdit={() => open(selectedIndex ?? -1, 'edit')}
+                          onEdit={
+                            canCreate && target?.ownerId === session?.user?.id
+                              ? () => open(selectedIndex ?? -1, 'edit')
+                              : undefined
+                          }
                           onClose={close}
                         />
                       ) : null
@@ -276,7 +287,7 @@ export function GamesScreen() {
         </>
       )}
 
-      {!selected && (
+      {!selected && canCreate && (
         <button type="button" className="tap-primary games-new" aria-label="New game" onClick={() => navigate('/new')}>
           <span className="plus" aria-hidden="true">
             <svg viewBox="0 0 16 16" width="14" height="14">

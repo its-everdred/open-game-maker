@@ -44,6 +44,7 @@ async function setup() {
       ownerId: ids.user,
       title: 'Save routes',
       visibility: 'listed',
+      publishedReleaseId: 'release_fixture',
       repoVisibility: 'private',
       createdAt: now,
     })

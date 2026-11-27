@@ -71,6 +71,7 @@ const jobs = [
 
 let jobsResponse = jobs;
 let commandsResponse: unknown[] = [];
+let capability: 'creator' | 'player' = 'creator';
 
 const branches = [
   {
@@ -152,15 +153,17 @@ function setGridColumns(columns: number) {
 }
 
 beforeEach(() => {
-  session.userId = undefined;
+  session.userId = 'u_1';
   localStorage.clear();
   gamesResponse = games;
   jobsResponse = jobs;
   commandsResponse = [];
+  capability = 'creator';
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.endsWith('/api/v1/me')) return json({ user: { id: 'u_1' }, capability, platformRole: 'none' });
       if (url.endsWith('/api/v1/games/g_2') && init?.method === 'PATCH') {
         const preference = JSON.parse(String(init.body)) as { allowAiGeneratedAssets: boolean };
         gamesResponse = gamesResponse.map((game) => (game.id === 'g_2' ? { ...game, ...preference } : game));
@@ -375,6 +378,7 @@ describe('GamesScreen', () => {
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/api/v1/games')) return json({ games });
+      if (url.endsWith('/api/v1/me')) return json({ user: { id: 'u_1' }, capability: 'creator', platformRole: 'none' });
       if (url.includes('/api/v1/jobs')) return pendingJobs;
       if (url.endsWith('/commands')) return json({ commands: commandsResponse });
       if (url.endsWith('/api/v1/games/g_2/branches')) return json({ branches });
@@ -415,6 +419,16 @@ describe('GamesScreen', () => {
     expect(screen.getByRole('button', { name: 'Edit Midnight Crumbs' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Play Midnight Crumbs' }));
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/g/g_1?mode=play'));
+  });
+
+  it('hides creation and editing for a player', async () => {
+    capability = 'player';
+    renderGames('/all?spotlight=g_1');
+    await screen.findByRole('heading', { name: 'Midnight Crumbs' });
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/me'), expect.anything()));
+    expect(screen.queryByRole('button', { name: 'Edit Midnight Crumbs' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close game' }));
+    expect(screen.queryByRole('button', { name: 'New game' })).toBeNull();
   });
 
   it('uses the prototype creation affordance without adding helper copy', async () => {
@@ -519,18 +533,19 @@ describe('GamesScreen', () => {
     expect(screen.queryByRole('region', { name: /spotlight/ })).toBeNull();
   });
 
-  it('shows the saved library immediately while refreshing it', async () => {
+  it('does not show a saved library before the current request authorizes it', async () => {
     session.userId = 'user-1';
-    localStorage.setItem('ogm.games.v1.user-1', JSON.stringify(games));
+    localStorage.setItem('ogm.games.v1.user-1.creator.none', JSON.stringify(games));
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       if (String(input).endsWith('/api/v1/games')) return new Promise<Response>(() => {});
+      if (String(input).endsWith('/api/v1/me'))
+        return json({ user: { id: 'user-1' }, capability: 'creator', platformRole: 'none' });
       return json({ jobs });
     });
     setGridColumns(20);
     renderGames();
-    expect(screen.getAllByRole('button', { name: /Midnight Crumbs/ }).length).toBeGreaterThan(0);
-    expect(await screen.findByText('Building 40%')).toBeVisible();
-    expect(screen.queryByRole('progressbar', { name: 'Loading' })).toBeNull();
+    await screen.findByRole('progressbar', { name: 'Loading' });
+    expect(screen.queryByRole('button', { name: /Midnight Crumbs/ })).toBeNull();
     expect(screen.getByTestId('location')).not.toHaveTextContent('spotlight');
   });
 
@@ -541,20 +556,21 @@ describe('GamesScreen', () => {
     expect(screen.queryByText('Loading your games…')).toBeNull();
   });
 
-  it('keeps cached tiles visible and offers retry when a refresh fails', async () => {
+  it('offers retry without revealing cached tiles when a refresh fails', async () => {
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/api/v1/games')) return json({ error: 'unavailable' }, 503);
+      if (url.endsWith('/api/v1/me')) return json({ user: { id: 'u_1' }, capability: 'creator', platformRole: 'none' });
       if (url.includes('/api/v1/jobs')) return json({ jobs: [] });
       return json({ error: 'not_found' }, 404);
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(['games', undefined], games);
+    client.setQueryData(['games', 'u_1', 'creator', 'none'], games);
 
     const { container } = renderGames('/all', client);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t refresh the library');
-    expect(container.querySelectorAll('[data-game-id]')).toHaveLength(8);
+    expect(container.querySelector('[data-game-id="g_1"]')).toBeNull();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
   });
 
@@ -562,6 +578,7 @@ describe('GamesScreen', () => {
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/api/v1/games')) return json({ games });
+      if (url.endsWith('/api/v1/me')) return json({ user: { id: 'u_1' }, capability: 'creator', platformRole: 'none' });
       if (url.includes('/api/v1/jobs')) return json({ error: 'unavailable' }, 503);
       return json({ error: 'not_found' }, 404);
     });

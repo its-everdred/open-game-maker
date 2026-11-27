@@ -108,7 +108,7 @@ describe('release previews', () => {
       expect(unauthenticated.status).toBe(401);
       expect(await unauthenticated.json()).toEqual({ error: 'unauthenticated' });
       expect(forbidden.status).toBe(403);
-      expect(await forbidden.json()).toEqual({ error: 'not_owner' });
+      expect(await forbidden.json()).toEqual({ error: 'creator_required' });
     },
   );
 });

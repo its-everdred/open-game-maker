@@ -56,6 +56,7 @@ function seed(deps: ReturnType<typeof makeDeps>) {
       ownerId: creator.userId,
       title: 'Castle',
       visibility: 'listed',
+      publishedReleaseId: 'rel-1',
       repoVisibility: 'private',
       createdAt: now,
     })

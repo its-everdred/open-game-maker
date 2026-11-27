@@ -84,6 +84,16 @@ const reply = {
 };
 
 describe('executor thread', () => {
+  it('rejects the instance owner after demotion to player', async () => {
+    const executorThreadMessages = vi.fn();
+    const { app, deps } = await setup({ executorThreadMessages });
+    deps.db
+      .insert(schema.familyMembers)
+      .values({ familyId: ids.family, userId: ids.owner, role: 'owner', capability: 'player', joinedAt: AT })
+      .run();
+    expect((await app.request('/api/v1/me/executor/thread/messages', { headers: asUser(ids.owner) })).status).toBe(403);
+    expect(executorThreadMessages).not.toHaveBeenCalled();
+  });
   // The Executor is the instance owner's operator: no other creator, even in the same family, reads or writes it.
   it('answers only the instance owner', async () => {
     const executorThreadMessages = vi.fn();

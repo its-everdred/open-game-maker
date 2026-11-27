@@ -1,4 +1,5 @@
 import { schema } from '@ogm/db';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
 import { allowanceRemaining } from '../src/budget/allowance.js';
@@ -150,17 +151,18 @@ describe('admin members, games and mail', () => {
   });
 
   it('delists a member game from the picker without giving admins an edit path', async () => {
-    const { app, call } = await seededApp();
+    const { app, call, deps } = await seededApp();
+    deps.db.update(schema.games).set({ publishedReleaseId: 'rel-fixture' }).where(eq(schema.games.id, X.game)).run();
     expect((await call(X.admin, 'POST', `/games/${X.game}/delist`)).status).toBe(200);
     const picker = (await (await app.request('/api/v1/games', { headers: asUser(X.player.userId) })).json()) as {
       games: unknown[];
     };
     expect(picker.games).toEqual([]);
     expect((await app.request(`/api/v1/games/${X.game}`, { headers: asUser(X.creator.userId) })).status).toBe(200);
-    expect(((await (await call(X.admin, 'GET', '/games')).json()) as { games: unknown[] }).games).toEqual([]);
+    expect(((await (await call(X.admin, 'GET', '/games')).json()) as { games: unknown[] }).games).toHaveLength(1);
     expect(
       ((await (await call(X.admin, 'GET', '/games?includeDelisted=1')).json()) as { games: unknown[] }).games,
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     const edit = await app.request(`/api/v1/games/${X.game}`, {
       method: 'PATCH',
       headers: { ...asUser(X.admin.userId), 'content-type': 'application/json' },

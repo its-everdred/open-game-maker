@@ -12,7 +12,7 @@ describe('VersionControls', () => {
 
     rerender(
       <MemoryRouter>
-        <VersionControls gameId="game" branchId="main" mode="play" />
+        <VersionControls gameId="game" branchId="main" mode="play" canEdit />
       </MemoryRouter>,
     );
     expect(screen.getByRole('group', { name: 'Versions and releases' })).toBeVisible();
@@ -22,7 +22,7 @@ describe('VersionControls', () => {
     const onNavigate = vi.fn();
     const view = render(
       <MemoryRouter>
-        <VersionControls gameId="game" branchId="main" mode="play" onNavigate={onNavigate} />
+        <VersionControls gameId="game" branchId="main" mode="play" canEdit onNavigate={onNavigate} />
       </MemoryRouter>,
     );
 

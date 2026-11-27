@@ -191,11 +191,11 @@ function chatStream(c: Context<ApiBindings>, job: ChatJob, since: number) {
 
 export default new Hono<ApiBindings>()
   .get('/:jobId/chat', async (c) => {
-    const job = await authorizedChatJob(c, 'game.edit');
+    const job = await authorizedChatJob(c, 'game.edit', false, true);
     return chatStream(c, job, sinceOf(c));
   })
   .get('/:jobId/chat/messages', async (c) => {
-    const job = await authorizedChatJob(c, 'game.edit');
+    const job = await authorizedChatJob(c, 'game.edit', false, true);
     const since = sinceOf(c);
     const { sign } = getChatRuntime(c.get('deps'));
     const rows = listSince(c.get('deps').sqlite, job.jobId, since);

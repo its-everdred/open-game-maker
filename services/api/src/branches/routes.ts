@@ -14,7 +14,7 @@ import { parseBody } from '../app/validate.js';
 import { getDesignRuntime } from '../design/routes.js';
 import { BranchArchived, BranchNotFound } from '../design/store.js';
 import { LeaseMismatch } from '../design/lease.js';
-import { findGameForFamily, hasGameGrant, type GameRow } from '../games/games.js';
+import { findGame, findGameForFamily, hasGameGrant, type GameRow } from '../games/games.js';
 import { InvalidResolution, PatchTooLargeError, UnresolvedConflict } from '@ogm/design-log';
 import {
   InvalidBranchPair,
@@ -65,7 +65,10 @@ function routeParam(c: Context<ApiBindings>, name: string): string {
 
 function authorizedGame(c: Context<ApiBindings>, action: 'game.edit' | 'game.play'): { game: GameRow; userId: string } {
   const principal = requirePrincipal(c, ['user']);
-  const game = findGameForFamily(c.get('deps').db, routeParam(c, 'gameId'), principal.familyId);
+  const game =
+    action === 'game.play'
+      ? findGame(c.get('deps').db, routeParam(c, 'gameId'))
+      : findGameForFamily(c.get('deps').db, routeParam(c, 'gameId'), principal.familyId);
   requireAuthorization(
     authorize(
       actorFromPrincipal(principal),
@@ -76,11 +79,17 @@ function authorizedGame(c: Context<ApiBindings>, action: 'game.edit' | 'game.pla
             familyId: game.familyId,
             ownerId: game.ownerId,
             visibility: game.visibility,
+            published: game.publishedReleaseId !== null,
             granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
           },
     ),
   );
   return { game, userId: principal.userId };
+}
+
+function readableBranches(c: Context<ApiBindings>): { game: GameRow; userId: string } {
+  const principal = requirePrincipal(c, ['user']);
+  return authorizedGame(c, principal.platformRole !== 'none' ? 'game.play' : 'game.edit');
 }
 
 function branchError(c: Context<ApiBindings>, error: unknown): Response {
@@ -156,7 +165,7 @@ const routes = new Hono<ApiBindings>()
     }
   })
   .get('/games/:gameId/branches', async (c) => {
-    const { game } = authorizedGame(c, 'game.play');
+    const { game } = readableBranches(c);
     const counts = createVersionCounts(c.get('deps').sqlite);
     const branches = await Promise.all(
       listBranches(c.get('deps').sqlite, game.id).map(async (branch) => ({
@@ -167,7 +176,7 @@ const routes = new Hono<ApiBindings>()
     return c.json({ branches });
   })
   .get('/games/:gameId/branches/:branchId', async (c) => {
-    const { game } = authorizedGame(c, 'game.play');
+    const { game } = readableBranches(c);
     try {
       const branch = getBranch(c.get('deps').sqlite, game.id, routeParam(c, 'branchId'));
       const version = await createVersionCounts(c.get('deps').sqlite).versionFor(branch);

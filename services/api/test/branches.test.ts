@@ -375,7 +375,7 @@ describe('branch routes', () => {
     });
   });
 
-  it('requires game.edit for mutations while allowing family reads', async () => {
+  it('restricts branch reads and mutations to the game owner', async () => {
     const { app } = await setup();
     expect(
       (
@@ -386,7 +386,7 @@ describe('branch routes', () => {
         })
       ).status,
     ).toBe(403);
-    expect((await app.request(collectionUrl, { headers: asUser(ids.other) })).status).toBe(200);
+    expect((await app.request(collectionUrl, { headers: asUser(ids.other) })).status).toBe(403);
   });
 });
 

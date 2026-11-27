@@ -1,9 +1,56 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+vi.mock('../../lib/api/session', () => ({ useSession: () => ({ data: { user: { id: 'u1' } } }) }));
 
 import { queryClient } from '../../app/query';
-import { adminRequest, fetchAdminBuilds } from './api';
+import { api } from '../../lib/api/client';
+import { adminRequest, fetchAdminBuilds, useAdminMe } from './api';
 
 describe('admin requests', () => {
+  it('updates the mounted account capability when a later request reports demotion', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let role = 'creator';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async (path: string) =>
+          new Response(
+            JSON.stringify(
+              path.endsWith('/me')
+                ? { user: { id: 'u1', email: 'u@example.test' }, family: null, capability: role, platformRole: 'none' }
+                : { games: [] },
+            ),
+            {
+              headers: {
+                'content-type': 'application/json',
+                'x-ogm-user-id': 'u1',
+                'x-ogm-capability': role,
+                'x-ogm-platform-role': 'none',
+              },
+            },
+          ),
+      ),
+    );
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children);
+    const { result } = renderHook(() => useAdminMe(), { wrapper });
+    await waitFor(() => expect(result.current.data?.capability).toBe('creator'));
+    role = 'player';
+    await act(async () => {
+      await api('/games');
+    });
+    await waitFor(() => expect(result.current.data?.capability).toBe('player'));
+    act(() =>
+      window.dispatchEvent(
+        new CustomEvent('ogm:access-state', {
+          detail: { userId: 'u1', capability: 'creator', platformRole: 'none' },
+        }),
+      ),
+    );
+    expect(result.current.data?.capability).toBe('player');
+    await waitFor(() => expect(result.current.data?.capability).toBe('player'));
+  });
   afterEach(() => {
     vi.restoreAllMocks();
   });

@@ -65,6 +65,30 @@ function recordingAiur() {
 }
 
 describe('build chat routes', () => {
+  it('lets an admin read another account’s chat without posting to it', async () => {
+    const { app, deps } = await makeChatApp();
+    deps.registry.principalResolvers.push(async (c) =>
+      c.req.header('x-admin')
+        ? {
+            kind: 'user',
+            userId: 'admin',
+            familyId: 'another-family',
+            platformRole: 'admin',
+            capability: 'creator',
+          }
+        : null,
+    );
+    expect((await app.request(`${url()}/messages`, { headers: { 'x-admin': '1' } })).status).toBe(200);
+    expect(
+      (
+        await app.request(url(), {
+          method: 'POST',
+          headers: { ...json, 'x-admin': '1' },
+          body: JSON.stringify({ text: 'hello' }),
+        })
+      ).status,
+    ).toBe(403);
+  });
   it('stores a creator post and mirrors it to the job ticket through the aiur client', async () => {
     const aiur = recordingAiur();
     const { app, deps } = await makeChatApp(jobTable(chatJob()), aiur.client);

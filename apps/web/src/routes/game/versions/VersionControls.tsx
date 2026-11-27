@@ -2,10 +2,10 @@ import { useNavigate } from 'react-router';
 
 import type { GameExtraProps } from '../extras';
 
-export function VersionControls({ gameId, branchId, mode, onNavigate }: GameExtraProps) {
+export function VersionControls({ gameId, branchId, mode, onNavigate, canEdit }: GameExtraProps) {
   const navigate = useNavigate();
   const query = `?v=${encodeURIComponent(branchId)}`;
-  if (mode === 'edit') return null;
+  if (mode === 'edit' || !canEdit) return null;
 
   return (
     <div className="version-controls" role="group" aria-label="Versions and releases">

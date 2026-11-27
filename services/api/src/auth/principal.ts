@@ -52,7 +52,7 @@ export function sessionResolver(
       displayName: sessionDisplayName(session.user.name, session.user.email),
       familyId: member?.family_id ?? '',
       platformRole,
-      capability: role === 'player' ? 'player' : 'creator',
+      capability: role === 'player' && platformRole !== 'maintainer' ? 'player' : 'creator',
     };
   };
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Db } from '@ogm/db';
 import { schema } from '@ogm/db';
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, or } from 'drizzle-orm';
 
 import type { AppDeps } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
@@ -73,6 +73,28 @@ export function listGames(db: Db, familyId: string, userId: string): GameRow[] {
         or(eq(schema.games.visibility, 'listed'), eq(schema.games.ownerId, userId)),
       ),
     )
+    .all();
+}
+
+export function listPlayableGames(
+  db: Db,
+  userId: string,
+  familyId: string,
+  capability: 'player' | 'creator',
+  isAdmin: boolean,
+): GameRow[] {
+  const visibility = isAdmin
+    ? undefined
+    : capability === 'creator'
+      ? or(
+          and(eq(schema.games.visibility, 'listed'), isNotNull(schema.games.publishedReleaseId)),
+          and(eq(schema.games.ownerId, userId), eq(schema.games.familyId, familyId)),
+        )
+      : and(eq(schema.games.visibility, 'listed'), isNotNull(schema.games.publishedReleaseId));
+  return db
+    .select()
+    .from(schema.games)
+    .where(and(isNull(schema.games.delistedAt), visibility))
     .all();
 }
 

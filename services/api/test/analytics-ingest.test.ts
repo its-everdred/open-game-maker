@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { schema } from '@ogm/db';
 
 import { signJobToken } from '../src/app/job-token.js';
 import { JOB_SECRET, makeApp } from './helpers.js';
@@ -22,6 +23,48 @@ function jobHeaders(input = { jobId, gameId, familyId }) {
 }
 
 describe('POST /api/v1/analytics/events', () => {
+  it('records a visitor’s activity against a published game’s family', async () => {
+    const { app, deps } = await makeApp();
+    deps.db
+      .insert(schema.families)
+      .values({ id: familyId, name: 'Family', ownerUserId: userId, createdAt: '2026-11-01' })
+      .run();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: gameId,
+        familyId,
+        ownerId: userId,
+        title: 'Game',
+        visibility: 'listed',
+        repoVisibility: 'private',
+        publishedReleaseId: 'release',
+        createdAt: '2026-11-01',
+      })
+      .run();
+    deps.registry.principalResolvers.push(async () => ({
+      kind: 'user',
+      userId: 'visitor',
+      familyId: '',
+      platformRole: 'none',
+      capability: 'player',
+    }));
+    deps.registry.gameResolver = async () => ({ familyId, ownerId: userId, visibility: 'listed' });
+    const human = {
+      ...fixture.events[0],
+      jobId: undefined,
+      actor: 'human',
+      source: 'editor',
+      ts: '2026-10-31T09:12:04Z',
+    };
+    const response = await app.request('/api/v1/analytics/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ events: [human] }),
+    });
+    expect(response.status).toBe(202);
+    expect(deps.sqlite.prepare('SELECT family_id FROM activity_events').get()).toEqual({ family_id: familyId });
+  });
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-01T12:00:00.000Z'));

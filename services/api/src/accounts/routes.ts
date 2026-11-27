@@ -24,6 +24,7 @@ const routes = new Hono<ApiBindings>()
       user: { id: principal.userId, email },
       family: familyForUser(c.get('deps').db, principal.userId) ?? null,
       platformRole: principal.platformRole,
+      capability: principal.capability,
     });
   })
   .post('/families', async (c) => {

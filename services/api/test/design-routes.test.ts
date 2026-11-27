@@ -288,6 +288,16 @@ describe('design log routes', () => {
     expect(missing.status).toBe(404);
   });
 
+  it('does not expose unpublished branch design or an arbitrary build to another user', async () => {
+    const { app, deps } = await setup();
+    deps.sqlite.prepare('UPDATE games SET published_release_id = ? WHERE id = ?').run('missing-release', ids.game);
+    expect((await app.request(`${branchUrl}/design`, { headers: asUser(ids.other) })).status).toBe(403);
+    expect(
+      (await app.request(`/api/v1/games/${ids.game}/builds/${ids.build}/design`, { headers: asUser(ids.other) }))
+        .status,
+    ).toBe(403);
+  });
+
   it('serializes 50 competing writers into revisions 1 through 50', async () => {
     const { app } = await setup();
     const lease = await acquire(app, 'browser-one');

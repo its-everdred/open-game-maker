@@ -16,8 +16,9 @@ read once, on the first start after this table exists: the allowed addresses bec
 maintainers become `admin` rows. After that the database is the source of truth, so editing the env lists changes
 nothing and an empty table admits nobody (one `auth-allow-list-empty` warning at startup).
 `OGM_MAINTAINER_EMAILS` also stays a break-glass platform role read from the environment on every boot.
-Roles reach the API as `capability` (a `player` cannot create or edit) and `platformRole` (`admin` manages users),
-never as hidden buttons.
+The API enforces `capability` (a `player` cannot create or edit) and `platformRole` (`admin` manages users).
+Role changes take effect on the next authenticated request. Players can play listed games with a published release;
+makers can create games and edit their own, while admins can inspect games and build activity across the instance.
 The API also reads `OGM_COMMIT_INTERNAL_URL`, `OGM_COMMIT_SERVICE_TOKEN`, `OGM_GAME_TEMPLATE_REF` (defaults to
 `game-2d@1`), `OGM_INSTANCE_REPO` (`owner/repository` of the one repository every game's folder lives in),
 `OGM_VAPID_KEY_FILE`, `OGM_VAPID_SUBJECT`, `OGM_BUILDER_WORKSPACES_ROOT` (optional), and

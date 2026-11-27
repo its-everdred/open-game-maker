@@ -6,6 +6,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OgmHost } from '../../app/testHook';
 import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
 
+vi.mock('../../lib/api/session', () => ({ useSession: () => ({ data: { user: { id: 'owner' } } }) }));
+const access = vi.hoisted(() => ({ capability: 'creator' as 'creator' | 'player', real: false }));
+vi.mock('../admin/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../admin/api')>();
+  return {
+    ...actual,
+    useAdminMe: (...args: Parameters<typeof actual.useAdminMe>) =>
+      access.real
+        ? actual.useAdminMe(...args)
+        : { data: { user: { id: 'owner' }, capability: access.capability }, dataUpdatedAt: 1 },
+  };
+});
+
 type MockFrameState = {
   bridgeState: 'connecting' | 'ready' | 'error';
   dropped: number;
@@ -165,10 +178,12 @@ async function readyPlayFrame(playMenuButton?: unknown) {
 }
 
 beforeEach(() => {
+  access.capability = 'creator';
+  access.real = false;
   branchList.value = undefined;
   preview.mountSceneryPreview.mockReturnValue(host.controller);
   useDock.getState().reset();
-  editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar' });
+  editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar', ownerId: 'owner' });
   editorApi.getFallbackPalette.mockResolvedValue({ mode: 'request', palette: { categories: [], items: [] } });
   editorApi.getEditorPreviews.mockResolvedValue({ previews: [] });
   editorApi.getEditorStage.mockResolvedValue({ stage: null });
@@ -207,10 +222,82 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
   delete window.__ogmHost;
 });
 
 describe('GameScreen', () => {
+  it('closes the open editor when the next request observes demotion', async () => {
+    access.real = true;
+    let capability = 'creator';
+    editorApi.getDesignSnapshot
+      .mockResolvedValueOnce({ rev: 0, buildId: 'build', doc: { schemaVersion: 1, globals: {}, entities: {} } })
+      .mockResolvedValue({ rev: 1, buildId: 'new-build', doc: { schemaVersion: 1, globals: {}, entities: {} } });
+    editorApi.listJobs.mockResolvedValue({
+      jobs: [{ id: 'job', branchId: 'main', state: 'done', updatedAt: '2026-11-13T00:00:00Z' }],
+    });
+    editorApi.getOptionalReapply.mockResolvedValue({
+      available: true,
+      value: { carried: [], renamed: [], needsChoice: [], conflicts: [], dropped: [] },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        const body = path.endsWith('/me')
+          ? { user: { id: 'owner', email: 'owner@example.test' }, family: null, capability, platformRole: 'none' }
+          : {};
+        return new Response(JSON.stringify(body), {
+          headers: {
+            'content-type': 'application/json',
+            'x-ogm-user-id': 'owner',
+            'x-ogm-capability': capability,
+            'x-ogm-platform-role': 'none',
+          },
+        });
+      }),
+    );
+    const { container } = renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(container.querySelector('.edit-workspace-chat aiur-composer')).not.toBeNull());
+    expect(await screen.findByRole('button', { name: 'Apply update' })).toBeVisible();
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    const disposalsBeforeDemotion = host.controller.dispose.mock.calls.length;
+    capability = 'player';
+    const { api } = await import('../../lib/api/client');
+    await act(async () => {
+      await api('/games');
+    });
+    await waitFor(() => expect(container.querySelector('.edit-workspace-chat')).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Apply update' })).toBeNull();
+    expect(host.controller.dispose.mock.calls.length).toBeGreaterThan(disposalsBeforeDemotion);
+    expect(container.querySelector('[data-edit-frame]')).toBeNull();
+    vi.unstubAllGlobals();
+  });
+  it('does not open the editor when a player follows an edit link', async () => {
+    access.capability = 'player';
+    const { container } = renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(editorApi.getGame).toHaveBeenCalled());
+    expect(container.querySelector('.edit-workspace-chat')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+  });
+
+  it('loads the published build rather than the branch head for a player', async () => {
+    access.capability = 'player';
+    editorApi.getOptionalPublished.mockResolvedValue({
+      available: true,
+      modified: true,
+      value: { buildId: 'published-build' },
+    });
+    editorApi.getBuildDesign.mockResolvedValue({
+      rev: 0,
+      buildId: 'published-build',
+      doc: { schemaVersion: 1, globals: {}, entities: {} },
+    });
+    renderGame('/g/game?mode=play');
+    await waitFor(() => expect(editorApi.getBuildDesign).toHaveBeenCalledWith('game', 'published-build'));
+    expect(editorApi.getDesignSnapshot).not.toHaveBeenCalled();
+  });
   it('does not record play when opening a nested screen', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(new Response('{}', { headers: { 'content-type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchSpy);
@@ -221,9 +308,9 @@ describe('GameScreen', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shapes the edit preview like the window, with no orientation buttons', () => {
+  it('shapes the edit preview like the window, with no orientation buttons', async () => {
     const { container } = renderGame('/g/game?mode=edit');
-    expect(container.querySelector('.edit-workspace-chat aiur-composer')).not.toBeNull();
+    await waitFor(() => expect(container.querySelector('.edit-workspace-chat aiur-composer')).not.toBeNull());
     expect(container.querySelector('.game-stage-area')?.hasAttribute('data-edit-frame')).toBe(true);
     expect(screen.queryByRole('group', { name: 'Game orientation' })).toBeNull();
     expect(screen.queryByRole('button', { name: /(Wide|Vertical) game/ })).toBeNull();
@@ -239,6 +326,7 @@ describe('GameScreen', () => {
     let allowed = true;
     editorApi.getGame.mockImplementation(async () => ({
       id: 'game',
+      ownerId: 'owner',
       title: 'Goblin Cellar',
       allowAiGeneratedAssets: allowed,
     }));
@@ -266,8 +354,13 @@ describe('GameScreen', () => {
   });
 
   it('keeps the preference action disabled while its updated value reloads', async () => {
-    let finishReload!: (value: { id: string; title: string; allowAiGeneratedAssets: boolean }) => void;
-    editorApi.getGame.mockResolvedValueOnce({ id: 'game', title: 'Goblin Cellar', allowAiGeneratedAssets: true });
+    let finishReload!: (value: { id: string; ownerId: string; title: string; allowAiGeneratedAssets: boolean }) => void;
+    editorApi.getGame.mockResolvedValueOnce({
+      id: 'game',
+      ownerId: 'owner',
+      title: 'Goblin Cellar',
+      allowAiGeneratedAssets: true,
+    });
     editorApi.getGame.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -285,7 +378,9 @@ describe('GameScreen', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Disable AI-generated assets' }));
       await waitFor(() => expect(editorApi.getGame).toHaveBeenCalledTimes(2));
       expect(screen.getByRole('button', { name: 'Disable AI-generated assets' })).toBeDisabled();
-      await act(async () => finishReload({ id: 'game', title: 'Goblin Cellar', allowAiGeneratedAssets: false }));
+      await act(async () =>
+        finishReload({ id: 'game', ownerId: 'owner', title: 'Goblin Cellar', allowAiGeneratedAssets: false }),
+      );
       await waitFor(() => expect(screen.getByRole('button', { name: 'Enable AI-generated assets' })).toBeEnabled());
     } finally {
       vi.unstubAllGlobals();
@@ -496,11 +591,11 @@ describe('GameScreen', () => {
     expect(host.controller.dispose).toHaveBeenCalled();
   });
 
-  it('keeps the loading layer if game metadata fails while the build starts', async () => {
+  it('does not start a build if game authorization metadata fails', async () => {
     editorApi.getGame.mockRejectedValue(new Error('offline'));
     renderGame();
-    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
-    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeVisible();
+    expect(host.mountGameFrame).not.toHaveBeenCalled();
   });
 
   it('keeps the current game visible when a background design refresh fails', async () => {
@@ -512,7 +607,12 @@ describe('GameScreen', () => {
       await client.invalidateQueries({ queryKey: ['design', 'game'] });
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
-    expect(client.getQueryState(['design', 'game', 'main'])?.status).toBe('error');
+    expect(
+      client
+        .getQueryCache()
+        .findAll({ queryKey: ['design', 'game', 'main'] })
+        .some((query) => query.state.status === 'error'),
+    ).toBe(true);
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
     expect(host.controller.dispose).not.toHaveBeenCalled();
   });
@@ -530,7 +630,7 @@ describe('GameScreen', () => {
     editorApi.getGame.mockImplementation(() => new Promise(() => undefined));
     renderGame();
     await waitFor(() => expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument());
-    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    expect(host.mountGameFrame).not.toHaveBeenCalled();
   });
 
   // Kevin: the loading screen must show the game's own art and logo, never a grey placeholder.
@@ -538,7 +638,7 @@ describe('GameScreen', () => {
     editorApi.getGame.mockImplementation(() => new Promise(() => undefined));
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(
-      ['games', 'u_1'],
+      ['games', 'owner', 'creator', undefined],
       [{ id: 'game', familyId: 'f', title: 'Goblin Cellar', coverUrl: '/cover.png', logoUrl: '/logo.png' }],
     );
     const { container } = renderGame('/g/game', client);

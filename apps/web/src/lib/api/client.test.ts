@@ -3,6 +3,28 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, api } from './client';
 
 describe('API client', () => {
+  it('announces the role on a successful request', async () => {
+    const listener = vi.fn();
+    window.addEventListener('ogm:access-state', listener);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('{}', {
+          headers: {
+            'content-type': 'application/json',
+            'x-ogm-user-id': 'u1',
+            'x-ogm-capability': 'player',
+            'x-ogm-platform-role': 'none',
+          },
+        }),
+      ),
+    );
+    await api('/games');
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ detail: { userId: 'u1', capability: 'player', platformRole: 'none' } }),
+    );
+    window.removeEventListener('ogm:access-state', listener);
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
   });

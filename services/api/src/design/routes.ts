@@ -7,18 +7,22 @@ import {
   OverrideKeySchema,
   StableIdSchema,
   TransactionSchema,
+  OverrideEntrySchema,
+  EntityOverrideSchema,
   type Principal,
   type Transaction,
 } from '@ogm/contracts';
-import { PatchTooLargeError, validateCommands, validatePatches } from '@ogm/design-log';
+import { fold, PatchTooLargeError, validateCommands, validatePatches } from '@ogm/design-log';
+import { schema } from '@ogm/db';
 import { authorize } from '@ogm/policy';
+import { and, eq } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
-import { findGameForFamily, hasGameGrant, type GameRow } from '../games/games.js';
+import { findGame, findGameForFamily, hasGameGrant, type GameRow } from '../games/games.js';
 import { FsBaseDocSource, type BaseDocSource } from './base-doc.js';
 import { acquireLease, heartbeatLease, LeaseMismatch, releaseLease } from './lease.js';
 import {
@@ -115,12 +119,13 @@ function ownedGame(c: Parameters<typeof requirePrincipal>[0]): {
 
 function readableGame(c: Parameters<typeof requirePrincipal>[0]): GameRow {
   const principal = requirePrincipal(c, ['user']);
-  const game = findGameForFamily(c.get('deps').db, routeParam(c, 'gameId'), principal.familyId);
+  const game = findGame(c.get('deps').db, routeParam(c, 'gameId'));
   requireAuthorization(
     authorize(actorFromPrincipal(principal), 'game.play', {
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      published: game.publishedReleaseId !== null,
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
     }),
   );
@@ -330,7 +335,7 @@ const routes = new Hono<ApiBindings>()
     }
   })
   .get('/games/:gameId/branches/:branch/transactions', (c) => {
-    const game = readableGame(c);
+    const { game } = ownedGame(c);
     const branch = branchFor(c, game.id);
     const query = parseQuery(c, transactionsQuery);
     const after = effectiveAfter(c, query.after);
@@ -340,7 +345,8 @@ const routes = new Hono<ApiBindings>()
     return transactionStream(c, branch.id, after, c.get('deps'), getDesignRuntime(c.get('deps')).stream);
   })
   .get('/games/:gameId/branches/:branch/design', async (c) => {
-    const game = readableGame(c);
+    const principal = requirePrincipal(c, ['user']);
+    const game = principal.platformRole !== 'none' ? readableGame(c) : ownedGame(c).game;
     const branch = branchFor(c, game.id);
     const query = parseQuery(c, designQuery);
     return c.json(
@@ -356,6 +362,45 @@ const routes = new Hono<ApiBindings>()
   .get('/games/:gameId/builds/:buildId/design', async (c) => {
     const game = readableGame(c);
     const buildId = stableRouteParam(c, 'buildId');
+    const principal = requirePrincipal(c, ['user']);
+    if (
+      principal.platformRole !== 'admin' &&
+      principal.platformRole !== 'maintainer' &&
+      (principal.capability !== 'creator' || principal.userId !== game.ownerId)
+    ) {
+      const release = c
+        .get('deps')
+        .db.select({ buildId: schema.releases.buildId, snapshotId: schema.releases.snapshotId })
+        .from(schema.releases)
+        .where(and(eq(schema.releases.id, game.publishedReleaseId ?? ''), eq(schema.releases.gameId, game.id)))
+        .get();
+      if (!release || release.buildId !== buildId) throw new HttpError(403, 'not_published');
+      const snapshot = c
+        .get('deps')
+        .db.select()
+        .from(schema.overrideSnapshots)
+        .where(eq(schema.overrideSnapshots.id, release.snapshotId))
+        .get();
+      if (!snapshot || snapshot.gameId !== game.id || snapshot.buildId !== buildId)
+        throw new HttpError(404, 'snapshot_not_found');
+      const entries = z.array(OverrideEntrySchema).parse(JSON.parse(snapshot.entriesJson));
+      const operations = z.array(EntityOverrideSchema).parse(JSON.parse(snapshot.entityOpsJson));
+      const workingSet = {
+        gameId: game.id,
+        branchId: snapshot.branchId,
+        buildId,
+        headRev: snapshot.headRev,
+        entries: Object.fromEntries(entries.map((entry) => [entry.key, entry])),
+        entityOps: Object.fromEntries(operations.map((operation) => [operation.entityId, operation])),
+      };
+      let base;
+      try {
+        base = await getDesignRuntime(c.get('deps')).source.load(game.id, buildId);
+      } catch {
+        throw new HttpError(404, 'build_not_found');
+      }
+      return c.json({ rev: snapshot.headRev, buildId, doc: fold(base, workingSet).doc });
+    }
     let doc;
     try {
       doc = await getDesignRuntime(c.get('deps')).source.load(game.id, buildId);
@@ -365,7 +410,7 @@ const routes = new Hono<ApiBindings>()
     return c.json({ rev: 0, buildId, doc });
   })
   .get('/games/:gameId/branches/:branch/reapply/:buildId', async (c) => {
-    const game = readableGame(c);
+    const { game } = ownedGame(c);
     const branch = branchFor(c, game.id);
     const buildId = stableRouteParam(c, 'buildId');
     try {

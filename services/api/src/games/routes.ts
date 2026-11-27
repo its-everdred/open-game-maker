@@ -6,7 +6,7 @@ import { schema } from '@ogm/db';
 import { authorize } from '@ogm/policy';
 import { and, count, eq, inArray, lt, sql } from 'drizzle-orm';
 
-import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
+import { actorFromPrincipal, createFamily, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
 import { sameSecret } from '../app/internal-auth.js';
 import { requirePrincipal } from '../app/principal.js';
@@ -20,7 +20,7 @@ import {
   gameResponse,
   hasGameGrant,
   isGameProvisioning,
-  listGames,
+  listPlayableGames,
   provisionGame,
 } from './games.js';
 import { gameMedia } from './media.js';
@@ -146,8 +146,9 @@ const routes = new Hono<ApiBindings>()
           `${deps.config.instanceRepo.owner}/${deps.config.instanceRepo.name}`.toLowerCase())
     )
       throw new HttpError(503, 'qa_repository_not_configured');
+    const familyId = principal.familyId || createFamily(deps.db, { userId: principal.userId, name: 'My games' }).id;
     const game = createGameRow(deps.db, {
-      familyId: principal.familyId,
+      familyId,
       ownerId: principal.userId,
       title: body.title,
       repoVisibility: body.repoVisibility,
@@ -165,19 +166,28 @@ const routes = new Hono<ApiBindings>()
   })
   .get('/games', async (c) => {
     const principal = requirePrincipal(c, ['user']);
-    requireAuthorization(
-      authorize(actorFromPrincipal(principal), 'game.play', {
-        familyId: principal.familyId,
-        visibility: 'listed',
-      }),
-    );
     const db = c.get('deps').db;
-    const games = listGames(db, principal.familyId, principal.userId);
+    const games = listPlayableGames(
+      db,
+      principal.userId,
+      principal.familyId,
+      principal.capability,
+      principal.platformRole !== 'none',
+    );
     const plays = db.select().from(schema.gamePlays).where(eq(schema.gamePlays.userId, principal.userId)).all();
     const playedAt = new Map(plays.map((play) => [play.gameId, play.lastPlayedAt]));
     const media = await gameMedia(
       c.get('deps'),
       games.map((game) => game.id),
+      new Set(
+        games
+          .filter(
+            (game) =>
+              principal.platformRole === 'none' &&
+              (principal.capability !== 'creator' || game.ownerId !== principal.userId),
+          )
+          .map((game) => game.id),
+      ),
     );
     const stats = gameStats(db, games);
     // A game with a published release is live: the menu's status shows it beside the game (#854).
@@ -208,16 +218,28 @@ const routes = new Hono<ApiBindings>()
   })
   .get('/games/:id', async (c) => {
     const principal = requirePrincipal(c, ['user']);
-    const game = findGameForFamily(c.get('deps').db, c.req.param('id'), principal.familyId);
+    const game = findGame(c.get('deps').db, c.req.param('id'));
+    if (game.familyId !== principal.familyId && game.visibility !== 'listed' && principal.platformRole === 'none') {
+      throw new HttpError(404, 'game_not_found');
+    }
     requireAuthorization(
       authorize(actorFromPrincipal(principal), 'game.play', {
         familyId: game.familyId,
         ownerId: game.ownerId,
         visibility: game.visibility,
+        published: game.publishedReleaseId !== null,
         granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
       }),
     );
-    const media = await gameMedia(c.get('deps'), [game.id]);
+    const media = await gameMedia(
+      c.get('deps'),
+      [game.id],
+      new Set(
+        principal.platformRole === 'none' && (principal.capability !== 'creator' || game.ownerId !== principal.userId)
+          ? [game.id]
+          : [],
+      ),
+    );
     const stats = gameStats(c.get('deps').db, [game]);
     return c.json({ ...gameResponse(game), ...media.get(game.id), stats: stats.get(game.id) });
   })
@@ -231,6 +253,7 @@ const routes = new Hono<ApiBindings>()
         familyId: game.familyId,
         ownerId: game.ownerId,
         visibility: game.visibility,
+        published: game.publishedReleaseId !== null,
         granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
       }),
     );
@@ -245,6 +268,7 @@ const routes = new Hono<ApiBindings>()
         familyId: game.familyId,
         ownerId: game.ownerId,
         visibility: game.visibility,
+        published: game.publishedReleaseId !== null,
         granted: hasGameGrant(db, game.id, principal.userId),
       }),
     );

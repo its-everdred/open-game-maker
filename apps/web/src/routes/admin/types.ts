@@ -21,6 +21,7 @@ export type AdminMe = {
     capability: 'creator' | 'player';
   } | null;
   platformRole: 'maintainer' | 'admin' | 'none';
+  capability: 'creator' | 'player';
 };
 
 export type AdminMember = {

@@ -65,7 +65,9 @@ vi.mock('../features/commands-inbox/commands', () => ({
   useCreatorCommands: () => ({ commands: [], sessions: [] }),
 }));
 vi.mock('../lib/api/session', () => ({ useSession: () => ({ data: { user: { id: 'u_kevin' } } }) }));
-vi.mock('../routes/admin/api', () => ({ useAdminMe: () => ({ data: undefined }) }));
+vi.mock('../routes/admin/api', () => ({
+  useAdminMe: () => ({ data: { user: { id: 'u_kevin' }, capability: 'creator' } }),
+}));
 vi.mock('../features/executor-thread/thread', () => ({
   closeThread: vi.fn(),
   openThread: vi.fn(),

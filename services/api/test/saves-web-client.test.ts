@@ -41,6 +41,7 @@ async function setup() {
       ownerId: ids.user,
       title: 'Web saves',
       visibility: 'listed',
+      publishedReleaseId: 'release_fixture',
       repoVisibility: 'private',
       createdAt: now,
     })

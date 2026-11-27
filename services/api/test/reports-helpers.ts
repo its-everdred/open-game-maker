@@ -60,6 +60,7 @@ export async function reportsApp(input: { ownerDaily?: number } = {}) {
         ownerId: ids.owner,
         title: id,
         visibility,
+        publishedReleaseId: visibility === 'listed' ? ids.release : null,
         repoVisibility: 'private',
         createdAt: AT,
       })

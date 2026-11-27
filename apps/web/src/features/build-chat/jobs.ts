@@ -76,11 +76,12 @@ export function refreshJobsForNotification(
 
 export async function fetchMyJobs(creatorId: string): Promise<JobsData> {
   const { games } = await api<{ games: GameSummary[] }>('/games');
+  const owned = games.filter((game) => game.ownerId === creatorId);
   const results = await Promise.allSettled(
-    games.map(({ id }) => api<JobsData>(`/jobs?gameId=${encodeURIComponent(id)}`)),
+    owned.map(({ id }) => api<JobsData>(`/jobs?gameId=${encodeURIComponent(id)}`)),
   );
   const pages = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
-  if (games.length > 0 && pages.length === 0) {
+  if (owned.length > 0 && pages.length === 0) {
     throw results.find((result): result is PromiseRejectedResult => result.status === 'rejected')?.reason;
   }
   return {

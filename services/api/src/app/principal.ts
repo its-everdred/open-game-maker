@@ -39,6 +39,11 @@ export function principalMiddleware(): MiddlewareHandler<ApiBindings> {
 
     c.set('principal', principal ?? { kind: 'anonymous' });
     await next();
+    if (principal?.kind === 'user') {
+      c.header('x-ogm-user-id', principal.userId);
+      c.header('x-ogm-capability', principal.capability);
+      c.header('x-ogm-platform-role', principal.platformRole);
+    }
   };
 }
 

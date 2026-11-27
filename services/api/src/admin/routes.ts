@@ -51,8 +51,7 @@ export const prefix = '/api/v1/admin';
 
 const flag = z.enum(['0', '1']).optional();
 
-// Every route acts on the caller's own family; no route takes a family id. Without an `ownerId`,
-// `game.delist` is admin-only, so a game's owner cannot relist what an admin delisted.
+// Without an `ownerId`, `game.delist` is admin-only, so a game's owner cannot relist what an admin delisted.
 function admin(c: Context<ApiBindings>, action: Action): Actor {
   const actor = actorFromPrincipal(requirePrincipal(c, ['user']));
   requireAuthorization(authorize(actor, action, { familyId: actor.familyId }));
@@ -203,7 +202,7 @@ const routes = new Hono<ApiBindings>()
   .get('/games', (c) => {
     const actor = admin(c, 'game.delist');
     const query = parseQuery(c, z.object({ includeDelisted: flag }));
-    const family = eq(schema.games.familyId, actor.familyId);
+    const family = actor.platformRole !== 'none' ? undefined : eq(schema.games.familyId, actor.familyId);
     const games = c
       .get('deps')
       .db.select()
@@ -297,7 +296,9 @@ const routes = new Hono<ApiBindings>()
   })
   .get('/builds', async (c) => {
     const actor = admin(c, 'admin.analytics.read');
-    return c.json({ builds: await familyBuilds(c.get('deps'), actor.familyId) });
+    return c.json({
+      builds: await familyBuilds(c.get('deps'), actor.platformRole !== 'none' ? undefined : actor.familyId),
+    });
   })
   .get('/intake', (c) => {
     admin(c, 'admin.settings.set');

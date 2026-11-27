@@ -38,9 +38,10 @@ export function owner(c: import('hono').Context<ApiBindings>): {
   repo?: { owner: string; name: string };
 } {
   const deps = c.get('deps');
-  const principal = requirePrincipal(c, ['user']).userId;
+  const user = requirePrincipal(c, ['user']);
+  const principal = user.userId;
   const ownerId = deps.config.instanceOwnerId;
-  if (!ownerId || principal !== ownerId) throw new HttpError(403, 'forbidden');
+  if (!ownerId || principal !== ownerId || user.capability !== 'creator') throw new HttpError(403, 'forbidden');
   const daemon = c.req.query('daemon') ?? 'core';
   if (daemon !== 'core' && daemon !== 'pc') throw new HttpError(400, 'invalid_daemon');
   const entry = deps.registry.coreAiurClients.find((item) => item.id === daemon);

@@ -7,7 +7,7 @@ import { authorize } from '@ogm/policy';
 import { eq } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
-import { hasGameGrant, listGames as listVisibleGames } from '../games/games.js';
+import { listGames as listVisibleGames } from '../games/games.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
@@ -39,12 +39,11 @@ function gameFor(deps: AppDeps, gameId: string) {
 
 function requireRead(deps: AppDeps, gameId: string, actor: ReturnType<typeof actorFromPrincipal>) {
   const game = gameFor(deps, gameId);
+  if (actor.platformRole !== 'none') return game;
   requireAuthorization(
-    authorize(actor, 'game.play', {
+    authorize(actor, 'game.edit', {
       familyId: game.familyId,
       ownerId: game.ownerId,
-      visibility: game.visibility,
-      granted: hasGameGrant(deps.db, game.id, actor.userId),
     }),
   );
   return game;
@@ -79,8 +78,18 @@ const routes = new Hono<ApiBindings>()
       return c.json({ jobs: listJobs(deps.db, query.gameId) });
     }
 
-    requireAuthorization(authorize(actor, 'game.play', { familyId: principal.familyId, visibility: 'listed' }));
-    const visibleGameIds = listVisibleGames(deps.db, principal.familyId, principal.userId).map((game) => game.id);
+    requireAuthorization(authorize(actor, 'game.create', { familyId: principal.familyId }));
+    const games =
+      principal.platformRole !== 'none'
+        ? deps.db.select().from(schema.games).all()
+        : listVisibleGames(deps.db, principal.familyId, principal.userId);
+    const visibleGameIds = games
+      .filter(
+        (game) =>
+          principal.platformRole !== 'none' ||
+          authorize(actor, 'game.edit', { familyId: game.familyId, ownerId: game.ownerId }).ok,
+      )
+      .map((game) => game.id);
     const jobs = listJobs(deps.db, visibleGameIds).filter((job) => !isTerminal(job.state));
     return c.json({ jobs });
   })

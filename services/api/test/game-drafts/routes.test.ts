@@ -51,6 +51,47 @@ async function setup() {
 }
 
 describe('temporary game drafts', () => {
+  it('rejects a player before starting the assistant and permits the same account after promotion', async () => {
+    const { deps, app, create } = await setup();
+    const player = { ...user, userId: 'u_draft-player', email: 'player@example.test', capability: 'player' as const };
+    installUsers(deps, [player]);
+    deps.db
+      .insert(schema.familyMembers)
+      .values({
+        familyId: user.familyId,
+        userId: player.userId,
+        role: 'member',
+        capability: 'player',
+        joinedAt: '2026-11-20',
+      })
+      .run();
+    const request = () =>
+      app.request('/api/v1/game-drafts', {
+        method: 'POST',
+        headers: { ...asUser(player.userId), 'content-type': 'application/json' },
+        body: JSON.stringify({ choices }),
+      });
+    expect((await request()).status).toBe(403);
+    expect(create).not.toHaveBeenCalled();
+    deps.sqlite.prepare('UPDATE family_members SET capability = ? WHERE user_id = ?').run('creator', player.userId);
+    expect((await request()).status).toBe(201);
+    expect(create).toHaveBeenCalledOnce();
+  });
+
+  it('creates a family for a familyless maker before starting the draft', async () => {
+    const { deps, app } = await setup();
+    const maker = { ...user, userId: 'u_new-maker', email: 'maker@example.test', familyId: '' };
+    installUsers(deps, [maker]);
+    const response = await app.request('/api/v1/game-drafts', {
+      method: 'POST',
+      headers: { ...asUser(maker.userId), 'content-type': 'application/json' },
+      body: JSON.stringify({ choices }),
+    });
+    expect(response.status).toBe(201);
+    expect(
+      deps.sqlite.prepare('SELECT family_id FROM family_members WHERE user_id = ?').get(maker.userId),
+    ).toBeDefined();
+  });
   it('starts scope chat without creating a games row or per-game daemon', async () => {
     const { deps, app, create } = await setup();
     const response = await app.request('/api/v1/game-drafts', {

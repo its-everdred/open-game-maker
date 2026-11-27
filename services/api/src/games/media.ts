@@ -111,13 +111,26 @@ async function manifestMedia(directory: string): Promise<{
 }
 
 /** Media belongs to the current main build; display variants have their own content address. */
-export async function gameMedia(deps: AppDeps, gameIds: string[]) {
+export async function gameMedia(deps: AppDeps, gameIds: string[], publishedOnly: ReadonlySet<string> = new Set()) {
   if (!gameIds.length) return new Map();
   const branches = deps.db
     .select({ gameId: schema.branches.gameId, buildId: schema.branches.latestBuildId })
     .from(schema.branches)
     .where(and(inArray(schema.branches.gameId, gameIds), eq(schema.branches.name, 'main')))
     .all();
+  const released = deps.db
+    .select({ gameId: schema.games.id, buildId: schema.releases.buildId })
+    .from(schema.games)
+    .innerJoin(
+      schema.releases,
+      and(eq(schema.games.publishedReleaseId, schema.releases.id), eq(schema.games.id, schema.releases.gameId)),
+    )
+    .where(inArray(schema.games.id, gameIds))
+    .all();
+  const publishedBuilds = new Map(released.map((row) => [row.gameId, row.buildId]));
+  const mediaBuilds = new Map(branches.map((row) => [row.gameId, row.buildId]));
+  for (const gameId of publishedOnly) mediaBuilds.set(gameId, publishedBuilds.get(gameId) ?? null);
+  const selected = [...mediaBuilds].map(([gameId, buildId]) => ({ gameId, buildId }));
   const entries: Array<
     readonly [
       string,
@@ -136,10 +149,10 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
       },
     ]
   > = [];
-  for (let index = 0; index < branches.length; index += 8) {
+  for (let index = 0; index < selected.length; index += 8) {
     entries.push(
       ...(await Promise.all(
-        branches.slice(index, index + 8).map(async ({ gameId, buildId }) => {
+        selected.slice(index, index + 8).map(async ({ gameId, buildId }) => {
           if (!buildId) return [gameId, {}] as const;
           let directory: string;
           try {

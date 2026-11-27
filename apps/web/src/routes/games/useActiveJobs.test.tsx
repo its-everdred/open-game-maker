@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { nextActiveJobsPoll, useActiveJobs } from './useActiveJobs';
 
+vi.mock('../../lib/api/session', () => ({ useSession: () => ({ data: { user: { id: 'u_creator' } } }) }));
+
 const activeJob = {
   id: 'j_1',
   gameId: 'g_1',
@@ -21,6 +23,38 @@ afterEach(() => {
 });
 
 describe('useActiveJobs', () => {
+  it('does not request private jobs when access is disabled', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useActiveJobs(false), { wrapper });
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('stops polling when creator access is removed', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ jobs: [activeJob] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result, rerender, unmount } = renderHook(({ enabled }) => useActiveJobs(enabled), {
+      wrapper,
+      initialProps: { enabled: true },
+    });
+    await vi.waitFor(() => expect(result.current.data).toEqual([activeJob]));
+    rerender({ enabled: false });
+    await act(() => vi.advanceTimersByTimeAsync(20_000));
+    expect(fetchMock).toHaveBeenCalledOnce();
+    unmount();
+    client.clear();
+  });
+
   it('selects a 10-second interval only while a job is active', () => {
     expect(nextActiveJobsPoll([activeJob])).toBe(10_000);
     expect(nextActiveJobsPoll([{ ...activeJob, state: 'done' }])).toBe(false);

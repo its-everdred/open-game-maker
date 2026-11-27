@@ -7,7 +7,6 @@ import { useSession } from '../../lib/api/session';
 import { FocusZone, useFocusable, useInitialFocus } from '../../lib/input';
 import { set } from '../../lib/sound';
 import { TitleTown } from './TitleTown';
-import { preloadGames } from '../games/gamesCache';
 import './title.css';
 
 export function TitleScreen({ townSrc }: { townSrc?: string }) {
@@ -15,8 +14,6 @@ export function TitleScreen({ townSrc }: { townSrc?: string }) {
   const navigate = useNavigate();
   const enteringGames = useRef(false);
   useInitialFocus('title-menu');
-
-  useEffect(() => preloadGames(session?.user.id), [session?.user.id]);
 
   useEffect(() => {
     set('title');

@@ -106,6 +106,7 @@ describe('creation Energy and play', () => {
   // Energy pays for building; a finished game must stay playable when a member has none left.
   it('still lets a member with no Energy left play and save', async () => {
     const { app, deps } = await seededApp();
+    deps.db.update(schema.games).set({ publishedReleaseId: 'rel-fixture' }).run();
     deps.db.insert(schema.allowances).values({ familyId: X.family, userId: X.player.userId, dailyMicroUsd: 0 }).run();
     const response = await app.request(`/api/v1${savesPath(X.game)}/lease`, {
       method: 'POST',

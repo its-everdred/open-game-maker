@@ -1,4 +1,6 @@
 import type { BoundaryVerdict, CommitOp, CommitResult } from '@ogm/contracts';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
@@ -16,9 +18,64 @@ import {
   sha,
 } from './release-fixtures.js';
 import { insertBranch } from '../src/design/store.js';
-import { asUser, JOB_SECRET, makeApp } from './helpers.js';
+import { asUser, installUsers, JOB_SECRET, makeApp } from './helpers.js';
 
 describe('release routes', () => {
+  it('lets another account retrieve the published build but not an unpublished design', async () => {
+    const { deps, source } = setup();
+    insertBuild(deps, source);
+    deps.sqlite
+      .prepare(
+        `INSERT INTO design_transactions
+        (id, game_id, branch_id, rev, base_rev, lease_token, actor, kind, label, base_build_id,
+         commands_json, patches_json, inverse_json, created_at)
+        VALUES (?, ?, ?, 1, 0, 1, ?, 'manual', 'Change gravity', ?, ?, '[]', '[]', ?)`,
+      )
+      .run(
+        ids.tx1,
+        ids.game,
+        ids.main,
+        ids.user,
+        ids.build,
+        JSON.stringify([{ op: 'set', control: 'world.gravity', targets: 'global', value: 3 }]),
+        now,
+      );
+    deps.sqlite.prepare('UPDATE branches SET head_rev = 1 WHERE id = ?').run(ids.main);
+    installUsers(deps, [
+      {
+        kind: 'user',
+        userId: 'u-player',
+        familyId: '',
+        platformRole: 'none',
+        capability: 'player',
+        email: 'player@example.test',
+      },
+    ]);
+    const { app } = await makeApp(deps);
+    deps.db.update(schema.games).set({ visibility: 'listed' }).where(eq(schema.games.id, ids.game)).run();
+    expect((await app.request(`/api/v1/games/${ids.game}/published`, { headers: asUser('u-player') })).status).toBe(
+      403,
+    );
+    expect((await publish(app)).status).toBe(201);
+    const published = await app.request(`/api/v1/games/${ids.game}/published`, { headers: asUser('u-player') });
+    expect(published.status).toBe(200);
+    expect(await published.json()).toMatchObject({ buildId: ids.build });
+    const designDirectory = join(deps.config.gamesRoot, ids.game, ids.build, 'design');
+    mkdirSync(designDirectory, { recursive: true });
+    writeFileSync(
+      join(designDirectory, 'design.json'),
+      JSON.stringify({ schemaVersion: 1, globals: { 'world.gravity': 9.8 }, entities: {} }),
+    );
+    const design = await app.request(`/api/v1/games/${ids.game}/builds/${ids.build}/design`, {
+      headers: asUser('u-player'),
+    });
+    expect(design.status).toBe(200);
+    expect(await design.json()).toMatchObject({ buildId: ids.build, doc: { globals: { 'world.gravity': 3 } } });
+    const draft = await app.request(`/api/v1/games/${ids.game}/builds/${ids.build2}/design`, {
+      headers: asUser('u-player'),
+    });
+    expect(draft.status).toBe(403);
+  });
   it('registers builds for the builder and advances main when testing completes', async () => {
     const { deps, runtime } = setup();
     const { app } = await makeApp(deps);

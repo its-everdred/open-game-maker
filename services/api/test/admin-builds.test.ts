@@ -129,13 +129,14 @@ describe('GET /api/v1/admin/builds', () => {
     });
   });
 
-  it('returns the whole family newest first, delisted games included, with per-build retries and no stage before a projection', async () => {
+  it('returns all families newest first, delisted games included, with per-build retries', async () => {
     const { call } = await seeded();
     const { builds } = (await (await call(X.owner, 'GET', '/builds')).json()) as {
       builds: { job: { id: string; stage: string | null }; retries: number }[];
     };
     expect(builds.find((build) => build.job.id === 'j-old')?.job.stage).toBeNull();
     expect(builds.map((build) => [build.job.id, build.retries])).toEqual([
+      ['j-y', 1],
       ['j-private', 2],
       ['j-delisted', 0],
       ['j-old', 0],
@@ -144,19 +145,27 @@ describe('GET /api/v1/admin/builds', () => {
     ]);
   });
 
-  it('never shows another family the builds, and the other family sees only its own', async () => {
+  it('lets an admin see builds across families without mismatched rows', async () => {
     const { call } = await seeded();
     const { builds } = (await (await call(Y.admin, 'GET', '/builds')).json()) as {
       builds: { job: { id: string }; retries: number }[];
     };
-    expect(builds.map((build) => [build.job.id, build.retries])).toEqual([['j-y', 1]]);
+    expect(builds.map((build) => [build.job.id, build.retries])).toEqual([
+      ['j-y', 1],
+      ['j-private', 2],
+      ['j-delisted', 0],
+      ['j-old', 0],
+      ['j-tie-second', 0],
+      ['j-tie-first', 0],
+    ]);
   });
 
   it('ignores a caller-supplied family id', async () => {
     const { call } = await seeded();
     const res = await call(Y.admin, 'GET', `/builds?familyId=${X.family}`);
     const { builds } = (await res.json()) as { builds: { job: { id: string } }[] };
-    expect(builds.map((build) => build.job.id)).toEqual(['j-y']);
+    expect(builds.map((build) => build.job.id)).toContain('j-private');
+    expect(builds.map((build) => build.job.id)).toContain('j-y');
   });
 
   it('keeps prompt text and the plan out of the response', async () => {

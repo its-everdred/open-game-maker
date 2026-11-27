@@ -20,7 +20,7 @@ export async function api<T>(path: string, init: ApiInit = {}): Promise<T> {
   return responseBody as T;
 }
 
-export function apiFetch(path: string, init: ApiInit = {}): Promise<Response> {
+export async function apiFetch(path: string, init: ApiInit = {}): Promise<Response> {
   requireApiPath(path);
   const { json, ...requestInit } = init;
   const headers = new Headers(requestInit.headers);
@@ -29,12 +29,27 @@ export function apiFetch(path: string, init: ApiInit = {}): Promise<Response> {
     headers.set('content-type', 'application/json');
     body = JSON.stringify(json);
   }
-  return fetch(`/api/v1${path}`, {
+  const response = await fetch(`/api/v1${path}`, {
     ...requestInit,
     body,
     credentials: 'include',
     headers,
   });
+  const userId = response.headers.get('x-ogm-user-id');
+  const capability = response.headers.get('x-ogm-capability');
+  const platformRole = response.headers.get('x-ogm-platform-role');
+  if (
+    typeof window !== 'undefined' &&
+    path !== '/me' &&
+    userId &&
+    (capability === 'player' || capability === 'creator') &&
+    (platformRole === 'admin' || platformRole === 'maintainer' || platformRole === 'none')
+  ) {
+    window.dispatchEvent(new CustomEvent('ogm:access-state', { detail: { userId, capability, platformRole } }));
+  }
+  if (typeof window !== 'undefined' && response.status === 403 && path !== '/me')
+    window.dispatchEvent(new Event('ogm:access-denied'));
+  return response;
 }
 
 export function sse(path: string): EventSource {

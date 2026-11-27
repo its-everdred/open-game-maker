@@ -1,9 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import type { BuildTimeline, Rollup } from '@ogm/contracts';
 
 import { queryClient } from '../../app/query';
 import { api, ApiError } from '../../lib/api/client';
+import { useSession } from '../../lib/api/session';
 import type {
   AdminAllowedUser,
   AdminBudget,
@@ -49,7 +51,54 @@ export async function invalidateAdmin(...keys: readonly (readonly unknown[])[]):
 }
 
 export function useAdminMe(enabled = true) {
-  return useQuery({ queryKey: adminKeys.me(), queryFn: () => adminRequest<AdminMe>('/me'), retry: false, enabled });
+  const client = useQueryClient();
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+  const key = [...adminKeys.me(), userId] as const;
+  const query = useQuery({
+    queryKey: key,
+    queryFn: () => adminRequest<AdminMe>('/me'),
+    retry: false,
+    enabled: enabled && Boolean(userId),
+  });
+  useEffect(() => {
+    if (!enabled) return;
+    const refresh = () => {
+      void client.invalidateQueries({ queryKey: key, exact: true }, { cancelRefetch: false });
+    };
+    const update = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          userId: string;
+          capability: AdminMe['capability'];
+          platformRole: AdminMe['platformRole'];
+        }>
+      ).detail;
+      if (detail.userId !== userId) return;
+      const current = client.getQueryData<AdminMe>(key);
+      if (
+        current &&
+        current.user.id === detail.userId &&
+        current.capability === detail.capability &&
+        current.platformRole === detail.platformRole
+      )
+        return;
+      if (current?.user.id === detail.userId)
+        client.setQueryData<AdminMe>(key, {
+          ...current,
+          capability: 'player',
+          platformRole: 'none',
+        });
+      void client.cancelQueries({ queryKey: key, exact: true }).then(() => query.refetch());
+    };
+    window.addEventListener('ogm:access-denied', refresh);
+    window.addEventListener('ogm:access-state', update);
+    return () => {
+      window.removeEventListener('ogm:access-denied', refresh);
+      window.removeEventListener('ogm:access-state', update);
+    };
+  }, [client, enabled, query.refetch, userId]);
+  return query;
 }
 
 export function useMembers() {

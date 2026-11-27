@@ -7,9 +7,12 @@ import {
   type Principal,
 } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
+import { authorize } from '@ogm/policy';
+import { eq } from 'drizzle-orm';
 import type { ZodError } from 'zod';
 
 import { HttpError } from '../app/errors.js';
+import { actorFromPrincipal } from '../accounts/families.js';
 import { resolveGame, type Registry } from '../app/registry.js';
 import type { LogLine } from '../app/types.js';
 
@@ -58,6 +61,7 @@ export async function ingestAnalytics(input: {
   const accepted: ActivityEvent[] = [];
   const seen = new Set<string>();
   const resolvedGames = new Map<string, Awaited<ReturnType<typeof resolveGame>>>();
+  const eventFamilies = new Map<string, string>();
 
   for (const [index, raw] of input.events.entries()) {
     const parsed = ActivityEventSchema.safeParse(normalizedRaw(raw));
@@ -93,7 +97,21 @@ export async function ingestAnalytics(input: {
         game = await resolveGame(input.registry, event.gameId);
         resolvedGames.set(event.gameId, game);
       }
-      if (!game || game.familyId !== input.principal.familyId) throw new HttpError(403, 'game_unresolved');
+      if (!game) throw new HttpError(403, 'game_unresolved');
+      if (game.familyId !== input.principal.familyId) {
+        const row = input.db.select().from(schema.games).where(eq(schema.games.id, event.gameId)).get();
+        if (
+          !row ||
+          !authorize(actorFromPrincipal(input.principal), 'game.play', {
+            familyId: row.familyId,
+            ownerId: row.ownerId,
+            visibility: row.visibility,
+            published: row.publishedReleaseId !== null,
+          }).ok
+        )
+          throw new HttpError(403, 'game_unresolved');
+      }
+      eventFamilies.set(event.gameId, game.familyId);
       if (event.jobId !== undefined) {
         rejected.push({ index, reason: 'job_not_allowed' });
         continue;
@@ -118,7 +136,7 @@ export async function ingestAnalytics(input: {
             id: `i_${randomUUID()}`,
             ts: event.ts,
             receivedAt: now.toISOString(),
-            familyId: input.principal.familyId,
+            familyId: eventFamilies.get(event.gameId) ?? input.principal.familyId,
             gameId: event.gameId,
             jobId: event.jobId,
             aiurRunId: event.aiurRunId,
