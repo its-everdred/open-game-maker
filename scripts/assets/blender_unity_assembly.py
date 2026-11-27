@@ -59,7 +59,7 @@ def build_material(surface, uv_names):
     nodes = material.node_tree.nodes
     shader = nodes.get("Principled BSDF")
     shader.inputs["Base Color"].default_value = surface["color"]
-    if surface.get("blends") or surface.get("products") or surface.get("adjustment") or any(value > 1 for value in surface["color"]):
+    if surface.get("blends") or surface.get("products") or surface.get("scalarMask") or surface.get("adjustment") or any(value > 1 for value in surface["color"]):
         return build_blended_material(material, surface, uv_names)
     textures = surface["textures"]
     texture_paths = surface["texturePaths"]
@@ -152,6 +152,8 @@ def build_blended_material(material, surface, uv_names):
         layers.extend(zip(textures, paths, spaces))
         for product in term.get("products", []):
             collect(product)
+        if term.get("scalarMask"):
+            collect_weight(term["scalarMask"])
         for blend in term.get("blends", []):
             weight = blend["weight"]
             collect(blend["a"])
@@ -193,6 +195,8 @@ def build_blended_material(material, surface, uv_names):
             value = np.asarray(term["color"], dtype=np.float32)
             for product in term.get("products", []):
                 value = value * constant(product)
+            if term.get("scalarMask"):
+                value = value * constant_weight(term["scalarMask"])
             for blend in term.get("blends", []):
                 weight = constant_weight(blend["weight"])
                 value = value * (constant(blend["a"]) * (1 - weight) + constant(blend["b"]) * weight)
@@ -242,6 +246,8 @@ def build_blended_material(material, surface, uv_names):
             bpy.data.images.remove(copy)
         for product in term.get("products", []):
             value *= evaluate(product)
+        if term.get("scalarMask"):
+            value *= evaluate_weight(term["scalarMask"])
         for blend in term.get("blends", []):
             a, b, weight = evaluate(blend["a"]), evaluate(blend["b"]), evaluate_weight(blend["weight"])
             value *= a * (1 - weight) + b * weight

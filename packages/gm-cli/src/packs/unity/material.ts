@@ -13,6 +13,7 @@ export type UnitySurface = {
   textures: UnityTexture[];
   color: [number, number, number, number];
   products?: UnitySurface[];
+  scalarMask?: { term: UnitySurface; channel: number };
   adjustment?: { op: 'power' | 'saturation'; amount: number };
   blends?: Array<{
     a: UnitySurface;
@@ -146,6 +147,11 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
     if (color.some((value) => !Number.isFinite(value) || value < 0))
       throw new Error('unsupported Unity base color factor');
     const products = term?.products?.map(resolve);
+    const scalarMask = term?.scalarMask
+      ? { term: resolve(term.scalarMask.term), channel: term.scalarMask.channel }
+      : undefined;
+    if (scalarMask && (!Number.isInteger(scalarMask.channel) || scalarMask.channel < 0 || scalarMask.channel > 3))
+      throw new Error('invalid Unity scalar mask channel');
     const adjustment = term?.adjustment
       ? { op: term.adjustment.op, amount: resolveFactor(term.adjustment.amount) }
       : undefined;
@@ -159,13 +165,18 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
     )
       throw new Error(`unsupported Unity color adjustment amount: ${adjustment.op}=${String(adjustment.amount)}`);
     const containsBlend = (surface: UnitySurface): boolean =>
-      Boolean(surface.blends?.length || surface.products?.some(containsBlend));
+      Boolean(
+        surface.blends?.length ||
+        surface.products?.some(containsBlend) ||
+        (surface.scalarMask && containsBlend(surface.scalarMask.term)),
+      );
     if (adjustment?.op === 'power' && products?.some(containsBlend))
       throw new Error('unsupported Unity power input with blends');
     return {
       textures,
       color,
       ...(products ? { products } : {}),
+      ...(scalarMask ? { scalarMask } : {}),
       ...(adjustment ? { adjustment: adjustment as UnitySurface['adjustment'] } : {}),
       ...(term?.blends
         ? {

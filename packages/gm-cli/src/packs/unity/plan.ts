@@ -19,11 +19,12 @@ import { textureIsSrgb } from './texture-meta.js';
 import { readUnityRecords } from './read.js';
 import type { UnityMeshNode, UnityReference } from './hierarchy.js';
 
-export type PlannedUnitySurface = Omit<UnitySurface, 'blends' | 'products'> & {
+export type PlannedUnitySurface = Omit<UnitySurface, 'blends' | 'products' | 'scalarMask'> & {
   path: string;
   texturePaths: string[];
   textureSrgb: boolean[];
   products?: PlannedUnitySurface[];
+  scalarMask?: { term: PlannedUnitySurface; channel: number };
   blends?: Array<{
     a: PlannedUnitySurface;
     b: PlannedUnitySurface;
@@ -143,13 +144,14 @@ export async function planUnityAssembly(
         const textureSrgb = texturePaths.map((texturePath) =>
           textureIsSrgb(readFileSync(`${texturePath}.meta`, 'utf8')),
         );
-        const { blends, products, ...base } = term;
+        const { blends, products, scalarMask, ...base } = term;
         return {
           ...base,
           path,
           texturePaths,
           textureSrgb,
           ...(products ? { products: products.map(resolveSurface) } : {}),
+          ...(scalarMask ? { scalarMask: { ...scalarMask, term: resolveSurface(scalarMask.term) } } : {}),
           ...(blends
             ? {
                 blends: blends.map(({ a, b, weight }) => ({

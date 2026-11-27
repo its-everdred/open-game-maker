@@ -53,6 +53,7 @@ export type ShaderGraphBase = {
   textureUvTransforms?: Array<UvAffine | null>;
   factors: ShaderGraphFactor[];
   products?: ShaderGraphBase[];
+  scalarMask?: { term: ShaderGraphBase; channel: number };
   adjustment?: { op: 'power' | 'saturation'; amount: ShaderGraphFactor };
   blends?: Array<{
     a: ShaderGraphBase;
@@ -119,6 +120,31 @@ export function shaderGraphBase(
     if (!node) throw new Error(`missing Unity shader node ${id}`);
     const type = node.m_Type;
     const inputs = incoming.get(id) ?? [];
+    const resolveSource = (input: { node: string; outputSlot: number }): ShaderGraphBase => {
+      const source = byId.get(input.node);
+      if (source?.m_Type === 'UnityEditor.ShaderGraph.SplitNode')
+        return { textures: [], factors: [scalarFactor(input)] };
+      if (source?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode' && [4, 5, 6, 7].includes(input.outputSlot)) {
+        if (source.m_TextureType !== undefined && source.m_TextureType !== 0)
+          throw new Error('unsupported Unity texture sample type');
+        try {
+          return { textures: [], factors: [scalarFactor(input)] };
+        } catch (error) {
+          if (!(error instanceof Error) || !error.message.startsWith('unsupported Unity color adjustment amount'))
+            throw error;
+        }
+        return {
+          textures: [],
+          factors: [],
+          scalarMask: { term: visit(input.node, new Set(ancestors).add(id)), channel: input.outputSlot - 4 },
+        };
+      }
+      if (input.outputSlot !== graphOutputSlot(source))
+        throw new Error(
+          `unsupported Unity shader graph output channel ${input.outputSlot} from ${String(source?.m_Type)} at ${input.node}`,
+        );
+      return visit(input.node, new Set(ancestors).add(id));
+    };
     if (type === 'UnityEditor.ShaderGraph.Vector1Node' && inputs.length === 0) {
       const slots = Array.isArray(node.m_Slots) ? node.m_Slots.map((slot) => byId.get(nodeId(slot))) : [];
       const matches = slots.filter((slot) => slot?.m_Id === 1 && slot.m_SlotType === 0);
@@ -153,12 +179,10 @@ export function shaderGraphBase(
         throw new Error('unsupported Unity color adjustment');
       const source = inputs.find((input) => input.inputSlot === 0)!;
       const amount = inputs.find((input) => input.inputSlot === 1)!;
-      if (source.outputSlot !== graphOutputSlot(byId.get(source.node)))
-        throw new Error('unsupported Unity shader graph output channel');
       return {
         textures: [],
         factors: [],
-        products: [visit(source.node, new Set(ancestors).add(id))],
+        products: [resolveSource(source)],
         adjustment: {
           op: type === 'UnityEditor.ShaderGraph.PowerNode' ? 'power' : 'saturation',
           amount: scalarFactor(amount),
@@ -167,18 +191,17 @@ export function shaderGraphBase(
     }
     if (type === 'UnityEditor.ShaderGraph.LerpNode') {
       if (
-        inputs.length !== 3 ||
-        new Set(inputs.map((input) => input.inputSlot)).size !== 3 ||
+        !inputs.some((input) => input.inputSlot === 2) ||
+        new Set(inputs.map((input) => input.inputSlot)).size !== inputs.length ||
         inputs.some((input) => ![0, 1, 2].includes(input.inputSlot))
       )
         throw new Error('unsupported Unity shader graph interpolation');
       const amount = inputs.find((input) => input.inputSlot === 2)!;
       const amountNode = byId.get(amount.node);
       const resolveInput = (slot: number) => {
-        const input = inputs.find((entry) => entry.inputSlot === slot)!;
-        if (input.outputSlot !== graphOutputSlot(byId.get(input.node)))
-          throw new Error('unsupported Unity shader graph output channel');
-        return visit(input.node, new Set(ancestors).add(id));
+        const input = inputs.find((entry) => entry.inputSlot === slot);
+        if (!input) throw new Error('unsupported Unity shader graph interpolation input');
+        return resolveSource(input);
       };
       type Mask = { term: ShaderGraphBase; channel: number; invert?: boolean };
       const maskFor = (edge: { node: string; outputSlot: number }, seen: Set<string>): Mask | undefined => {
@@ -384,22 +407,10 @@ export function shaderGraphBase(
       new Set(inputs.map((input) => input.inputSlot)).size !== inputs.length
     )
       throw new Error(`unsupported Unity shader graph node ${String(type)}`);
-    const next = new Set(ancestors).add(id);
-    const terms = inputs.map((input): ShaderGraphBase => {
-      const source = byId.get(input.node);
-      if (source?.m_Type === 'UnityEditor.ShaderGraph.SplitNode')
-        return { textures: [], factors: [scalarFactor(input)] };
-      if (source?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode' && [4, 5, 6, 7].includes(input.outputSlot))
-        return { textures: [], factors: [scalarFactor(input)] };
-      const outputSlot = graphOutputSlot(source);
-      if (input.outputSlot !== outputSlot)
-        throw new Error(
-          `unsupported Unity shader graph output channel ${input.outputSlot} from ${String(source?.m_Type)} at ${input.node}`,
-        );
-      return visit(input.node, next);
-    });
+    const terms = inputs.map(resolveSource);
     if (expected === 1) return terms[0]!;
-    if (terms.some((term) => term.products || term.adjustment)) return { textures: [], factors: [], products: terms };
+    if (terms.some((term) => term.products || term.adjustment || term.scalarMask))
+      return { textures: [], factors: [], products: terms };
     const result: ShaderGraphBase = { textures: [], factors: [] };
     for (const term of terms) {
       const channels = [

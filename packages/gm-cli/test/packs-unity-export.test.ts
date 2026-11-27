@@ -365,17 +365,56 @@ it.skipIf(!available)(
           },
         ],
       };
+      const scalarNode = structuredClone(plan[3]!);
+      scalarNode.name = 'Scalar mask';
+      scalarNode.transformId = 'root/scalar';
+      scalarNode.parentId = null;
+      scalarNode.surfaces[0] = {
+        path: 'scalar.mat',
+        textures: [],
+        texturePaths: [],
+        textureSrgb: [],
+        color: [1, 1, 1, 1],
+        scalarMask: {
+          channel: 1,
+          term: {
+            path: 'scalar.mat',
+            textures: [{ guid: 'rgb', scale: [1, 1], offset: [0, 0] }],
+            texturePaths: [rgbMask],
+            textureSrgb: [false],
+            color: [1, 1, 1, 1],
+          },
+        },
+      };
+      rgbPlan.push(scalarNode);
       const rgbOutput = join(root, 'rgb.glb');
       await exportUnityAssembly(rgbPlan, rgbOutput);
       const rgbDocument = await new NodeIO()
         .registerExtensions([KHRTextureTransform])
         .readBinary(await readFile(rgbOutput));
-      const rgbImage = rgbDocument.getRoot().listMaterials()[0]!.getBaseColorTexture()!.getImage()!;
+      const rgbImage = rgbDocument
+        .getRoot()
+        .listMaterials()
+        .find((entry) => entry.getName() === 'rgb')!
+        .getBaseColorTexture()!
+        .getImage()!;
       const rgbPixels = await sharp(rgbImage).ensureAlpha().raw().toBuffer();
       expect(rgbPixels[0]).toBeLessThan(3);
       expect(rgbPixels[1]).toBeGreaterThan(185);
       expect(rgbPixels[1]).toBeLessThan(191);
       expect(rgbPixels[2]).toBeGreaterThan(252);
+      const scalarImage = rgbDocument
+        .getRoot()
+        .listMaterials()
+        .find((entry) => entry.getName() === 'scalar')
+        ?.getBaseColorTexture()
+        ?.getImage();
+      expect(scalarImage).toBeTruthy();
+      const scalarPixels = await sharp(scalarImage!).ensureAlpha().raw().toBuffer();
+      for (const channel of [0, 1, 2]) {
+        expect(scalarPixels[channel]).toBeGreaterThan(185);
+        expect(scalarPixels[channel]).toBeLessThan(191);
+      }
       const adjustedPlan = [structuredClone(plan[3]!)];
       adjustedPlan[0]!.parentId = null;
       adjustedPlan[0]!.surfaces[0] = {

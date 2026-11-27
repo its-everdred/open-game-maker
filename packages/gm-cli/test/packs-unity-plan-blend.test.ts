@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -283,6 +283,25 @@ it('resolves texture paths inside blended graph terms', async () => {
     await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
     const defaultPlan = await planUnityAssembly(root, prefab);
     expect(defaultPlan[0]?.surfaces[0]?.adjustment).toEqual({ op: 'power', amount: 1 });
+    const materialPath = join(root, 'surface.mat');
+    await writeFile(materialPath, (await readFile(materialPath, 'utf8')).replace('_Weight: 0.5', '_Weight: 1'));
+    docs[0]!.m_Edges = [
+      edge('outer', 'base', 0, 2),
+      edge('a', 'outer', 0),
+      edge('partial', 'outer', 1, 3),
+      edge('b', 'partial', 1, 4),
+      edge('amount', 'partial', 2),
+    ];
+    docs.push(
+      { m_ObjectId: 'outer', m_Type: 'UnityEditor.ShaderGraph.MultiplyNode' } as (typeof docs)[number],
+      { m_ObjectId: 'partial', m_Type: 'UnityEditor.ShaderGraph.LerpNode' } as (typeof docs)[number],
+    );
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const maskPlan = await planUnityAssembly(root, prefab);
+    expect(maskPlan[0]?.surfaces[0]?.products).toMatchObject([
+      { texturePaths: [join(root, 'a.png')] },
+      { scalarMask: { channel: 0, term: { texturePaths: [join(root, 'b.png')], textureSrgb: [true] } } },
+    ]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
