@@ -89,10 +89,6 @@ export const command: GmCommand = {
       remaining,
       signal,
     );
-    if (screen === 'all') {
-      ctx.err('Full glass parity coverage is not yet available; uncovered artboards cannot pass.');
-      return result === EXIT.ok ? EXIT.failed : result;
-    }
     return result;
   },
 };

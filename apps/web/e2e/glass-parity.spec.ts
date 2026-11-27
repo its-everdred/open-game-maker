@@ -12,6 +12,7 @@ import { installNewRoutes } from './fixtures/new-routes';
 import { buildId, installGameApi } from './support/mock-game-api';
 import { captureBuildSuffix, captureUrlFile } from './support/shell-capture-files';
 import { parityBridgePort } from './support/parity-bridge';
+import { missingParityCoverage, requiredParityArtboards } from './support/parity-coverage';
 import { parityEditorRoute } from './support/parity-editor-route';
 import { paritySelection } from './support/parity-selection';
 import { installTitleCapture, settleTitleCapture } from './support/parity-title';
@@ -61,6 +62,23 @@ const screens = [
   },
   { screen: 'Settings', name: 'Settings-780x1688', width: 390, height: 844, scale: 2, route: '/settings?test' },
 ] as const;
+
+test('@glass-parity all required artboards have references and captures', async () => {
+  test.skip(selected !== 'all', 'Full coverage is checked for all');
+  const manifest: unknown = JSON.parse(await readFile(resolve(baseline, 'manifest.json'), 'utf8'));
+  if (!Array.isArray(manifest) || manifest.some((entry) => typeof entry?.file !== 'string'))
+    throw new Error('Invalid glass reference manifest');
+  const coverage = missingParityCoverage(
+    requiredParityArtboards,
+    manifest.map((entry: { file: string }) => entry.file),
+    screens,
+    selectedScreens,
+  );
+  expect(coverage, 'Missing artboard references or selected captures').toEqual({
+    missingReferences: [],
+    missingCaptures: [],
+  });
+});
 
 for (const target of screens) {
   test(`@glass-parity ${target.name}`, async ({ browser }, testInfo) => {

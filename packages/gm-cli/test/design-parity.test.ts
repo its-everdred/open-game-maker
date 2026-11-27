@@ -50,14 +50,15 @@ it('fails closed on invalid selection and propagates a failing build or comparis
   expect(child.calls).toHaveLength(2);
 });
 
-it('runs available captures for all while failing on incomplete coverage', async () => {
+it('propagates the all-artboard capture result', async () => {
   const ctx = fixture();
   mkdirSync(join(ctx.cwd, 'real-game/dist/design'), { recursive: true });
   for (const file of ['index.html', 'manifest.json', 'design/design.json'])
     writeFileSync(join(ctx.cwd, 'real-game/dist', file), '{}');
-  expect(await command.run(ctx, [], { ...flags, screen: 'all', dist: 'real-game/dist' })).toBe(1);
+  expect(await command.run(ctx, [], { ...flags, screen: 'all', dist: 'real-game/dist' })).toBe(0);
   expect(child.calls[1]!.env.OGM_GLASS_PARITY_SCREEN).toBe('all');
-  expect(ctx.err).toHaveBeenCalledWith(expect.stringContaining('coverage is not yet available'));
+  child.codes = [0, 1];
+  expect(await command.run(ctx, [], { ...flags, screen: 'all', dist: 'real-game/dist' })).toBe(1);
 });
 
 it('passes an explicit real game build to editor capture', async () => {
