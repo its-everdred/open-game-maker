@@ -119,6 +119,13 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
       buildId: sql<
         string | null
       >`CASE WHEN ${schema.games.visibility} = 'listed' AND ${schema.games.publishedReleaseId} IS NOT NULL THEN ${schema.releases.buildId}
+        WHEN ${schema.games.visibility} = 'listed' THEN (
+          SELECT legacy.id FROM builds AS legacy
+          WHERE legacy.game_id = ${schema.games.id} AND legacy.branch_id = ${schema.branches.id}
+            AND legacy.status = 'tested' AND legacy.artifact = 'present'
+            AND NOT EXISTS (SELECT 1 FROM publish_checks AS checked WHERE checked.build_id = legacy.id)
+          ORDER BY legacy.created_at DESC, legacy.rowid DESC LIMIT 1
+        )
         WHEN ${schema.games.visibility} = 'listed' THEN NULL
         ELSE ${schema.branches.latestBuildId} END`,
     })

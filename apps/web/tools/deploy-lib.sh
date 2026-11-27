@@ -84,3 +84,11 @@ report_attention() {
     printf '%s web deploy: %s\n' "$(date -u +%FT%TZ)" "$1" >>"$attention"
   fi
 }
+
+# The commit recorded for a deploy must identify the source actually used for the build.
+source_unchanged() {
+  local root="$1" sha="$2" current dirty
+  current="$(git -C "$root" rev-parse HEAD)" || return 1
+  dirty="$(git -C "$root" status --porcelain --untracked-files=all)" || return 1
+  [[ "$current" == "$sha" && -z "$dirty" ]]
+}

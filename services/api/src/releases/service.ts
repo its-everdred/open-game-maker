@@ -14,13 +14,13 @@ import {
   affectedSaves,
   type Changelog,
   preparePublish,
-  releaseVersion,
   requireGameBranch,
   requireMainBuild,
   requireRollbackTarget,
 } from './preview.js';
 import { withPublishLock } from './publish-lock.js';
 import type { RightsReason } from './rights.js';
+import { reserveReleaseVersion } from './tag-reservations.js';
 
 type BuildRow = typeof schema.builds.$inferSelect;
 type ReleaseRow = typeof schema.releases.$inferSelect;
@@ -336,7 +336,8 @@ export async function publish(
     if (!current || current.publishedReleaseId !== expected) throw new ReleaseError('pointer_moved', 409);
 
     const snapshot = await prepareSnapshot(deps, runtime, build);
-    const { version, prepared } = await preparePublish(deps, runtime, input.gameId, input.changelog);
+    const { prepared } = await preparePublish(deps, runtime, input.gameId, input.changelog);
+    const version = reserveReleaseVersion(deps, runtime, input.gameId);
     const result = await runtime.commit.execute({
       kind: 'release',
       gameId: input.gameId,
@@ -386,7 +387,6 @@ export async function rollback(
     if (!current || current.publishedReleaseId !== expected) throw new ReleaseError('pointer_moved', 409);
 
     const saves = await affectedSaves(runtime, input.gameId, build);
-    const version = await releaseVersion(deps, runtime, input.gameId);
     const changelog = { summary: `Restores ${target.version}`, items: [] };
     /* Restoring rewrites only this game's folder on main; the tag then points at the commit that did it. */
     const restored = await runtime.commit.execute({
@@ -395,6 +395,7 @@ export async function rollback(
       sha: foldSha,
     });
     if (!restored.ok) throw new ReleaseError('gate_refused', 403, { verdict: restored.verdict });
+    const version = reserveReleaseVersion(deps, runtime, input.gameId);
     const result = await runtime.commit.execute({
       kind: 'release',
       gameId: input.gameId,

@@ -229,7 +229,9 @@ before_remove: |
     sha="$(git rev-parse HEAD)"
     test_result=not-run
     test_mode_result=not-run
+    test_config_result=not-run
     test_artifact_hash=''
+    test_build_hash=''
     stage=''
     snapshot_result=not-run
     integrity_result=not-run
@@ -253,26 +255,37 @@ before_remove: |
         if ! production_hash="$(tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C dist . | sha256sum | cut -d ' ' -f 1)"; then snapshot_result=failed; fi
       fi
       test_script="$(node -e 'try{process.stdout.write(require("./package.json").scripts?.test || "")}catch{}')"
-      needs_test_build=0
-      case "$test_script" in 'gm test'|'gm test '*) needs_test_build=1 ;; esac
-      if [ "$snapshot_result" = passed ] && [ "$needs_test_build" = 1 ]; then
+      needs_test_build="$(node -e 'process.stdout.write(/^\s*gm\s+test(?:\s|$)/u.test(process.argv[1]) ? "1" : "0")' "$test_script")"
+      if [ "$needs_test_build" = 1 ]; then
+        if node -e 'const words=process.argv[1].trim().split(/\s+/); if(words.shift()!=="gm" || words.shift()!=="test")process.exit(1); while(words.length){const word=words.shift();if(word==="--json")continue;const m=/^--(inputs|ticks|deadline|out)(?:=([A-Za-z0-9_./:-]+))?$/.exec(word);if(!m)process.exit(1);const value=m[2] ?? words.shift();if(!value || value.startsWith("-") || !/^[A-Za-z0-9_./:-]+$/.test(value))process.exit(1)}' "$test_script"; then
+          test_config_result=passed
+        else
+          test_config_result=failed
+          echo "gm test must use the default dist directory and simple arguments" >&2
+        fi
+      fi
+      if [ "$snapshot_result" = passed ] && [ "$needs_test_build" = 1 ] && [ "$test_config_result" = passed ]; then
         test_mode_result=failed
         if game_pnpm exec vite build --mode test --base=./ >&2; then
           test_archive="$(mktemp)"
           if tar --format=ustar -czf "$test_archive" -C dist .; then
             test_artifact_hash="$(sha256sum "$test_archive" | cut -d ' ' -f 1)"
+            test_build_hash="$(tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C dist . | sha256sum | cut -d ' ' -f 1)"
             test_mode_result=passed
           fi
           rm -f "$test_archive"
         fi
       fi
-      if [ "$snapshot_result" = passed ] && [ "$test_mode_result" != failed ]; then
+      if [ "$snapshot_result" = passed ] && [ "$test_mode_result" != failed ] && [ "$test_config_result" != failed ]; then
         test_result=failed
         if game_pnpm run test >&2; then test_result=passed; fi
       fi
       if [ "$test_result" = passed ]; then
         integrity_result=passed
-        if [ "$needs_test_build" = 0 ]; then
+        if [ "$needs_test_build" = 1 ]; then
+          after_hash="$(tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C dist . | sha256sum | cut -d ' ' -f 1)" || integrity_result=failed
+          if [ -z "$test_build_hash" ] || [ "$after_hash" != "$test_build_hash" ]; then integrity_result=failed; fi
+        else
           if ! after_hash="$(tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C dist . | sha256sum | cut -d ' ' -f 1)"; then integrity_result=failed; fi
           if [ -z "$production_hash" ] || [ "$after_hash" != "$production_hash" ]; then integrity_result=failed; fi
         fi
@@ -291,7 +304,7 @@ before_remove: |
         artifact_hash="$(sha256sum "$stage.tgz" | cut -d ' ' -f 1)"
       fi
     fi
-    checks="$(node -e 'const [gitSha,build,mode,test,snapshot,integrity,hash,testHash,needsTestBuild]=process.argv.slice(1);const checks=[{name:"pnpm run build",result:build}];for(const [name,result] of [["test-mode build",mode],["pnpm run test",test],["production snapshot",snapshot],["production build integrity",integrity]])if(result!=="not-run")checks.push({name,result});console.log(JSON.stringify({gitSha,surface:"game",sizes:test==="passed" && needsTestBuild==="1"?["390x844","1180x820"]:[],checks,...(hash?{artifactSha256:hash}:{}),...(testHash?{testArtifactSha256:testHash}:{})}))' "$sha" "$build_result" "$test_mode_result" "$test_result" "$snapshot_result" "$integrity_result" "$artifact_hash" "$test_artifact_hash" "${needs_test_build:-0}")"
+    checks="$(node -e 'const [gitSha,build,mode,test,snapshot,integrity,hash,testHash,needsTestBuild,config]=process.argv.slice(1);const checks=[{name:"pnpm run build",result:build}];for(const [name,result] of [["production snapshot",snapshot],["test configuration",config],["test-mode build",mode],["pnpm run test",test],["production build integrity",integrity]])if(result!=="not-run")checks.push({name,result});console.log(JSON.stringify({gitSha,surface:"game",sizes:test==="passed" && needsTestBuild==="1"?["390x844","1180x820"]:[],checks,...(hash?{artifactSha256:hash}:{}),...(testHash?{testArtifactSha256:testHash}:{})}))' "$sha" "$build_result" "$test_mode_result" "$test_result" "$snapshot_result" "$integrity_result" "$artifact_hash" "$test_artifact_hash" "${needs_test_build:-0}" "$test_config_result")"
     answer="$(curl -fsS --max-time 20 -X POST -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $sha" -H "content-type: application/json" --data-binary "$checks" "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/publish-checks")" || answer=''
     check_id="$(printf '%s' "$answer" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const r=JSON.parse(s);if(r.result==="passed" && typeof r.id==="string")process.stdout.write(r.id)}catch{}})')"
     if [ -n "$check_id" ] && [ -n "$artifact_hash" ]; then

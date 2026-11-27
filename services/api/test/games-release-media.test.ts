@@ -65,3 +65,33 @@ it('does not expose artwork from an unchecked first build of a listed game', asy
 
   expect((await gameMedia(deps, [ids.game])).get(ids.game)).not.toHaveProperty('coverUrl');
 });
+
+it('preserves media for a legacy tested main build with no release', async () => {
+  const { deps, source } = setup();
+  insertBuild(deps, source);
+  const dir = join(deps.config.gamesRoot, ids.game, ids.build);
+  mkdirSync(join(dir, 'media'), { recursive: true });
+  writeFileSync(join(dir, '.complete'), '');
+  writeFileSync(join(dir, 'media/thumbnail.png'), 'image');
+  deps.db.update(schema.games).set({ visibility: 'listed' }).run();
+  deps.sqlite.prepare('UPDATE branches SET latest_build_id = ? WHERE id = ?').run(ids.build, ids.main);
+  expect((await gameMedia(deps, [ids.game])).get(ids.game)?.coverUrl).toContain(`/${ids.build}/media/thumbnail.png`);
+  insertBuild(deps, source, { id: ids.build2, status: 'failed' });
+  deps.sqlite.prepare('UPDATE branches SET latest_build_id = ? WHERE id = ?').run(ids.build2, ids.main);
+  expect((await gameMedia(deps, [ids.game])).get(ids.game)?.coverUrl).toContain(`/${ids.build}/media/thumbnail.png`);
+  deps.db
+    .insert(schema.publishChecks)
+    .values({
+      id: 'pc_new',
+      gameId: ids.game,
+      buildId: ids.build,
+      gitSha: 'a'.repeat(40),
+      surface: 'game',
+      sizesJson: '[]',
+      checksJson: '[]',
+      result: 'passed',
+      createdAt: now,
+    })
+    .run();
+  expect((await gameMedia(deps, [ids.game])).get(ids.game)).not.toHaveProperty('coverUrl');
+});

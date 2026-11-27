@@ -37,3 +37,4 @@ export * from './game-drafts.js';
 export * from './scenes.js';
 export * from './telemetry.js';
 export * from './publish-checks.js';
+export * from './release-tag-reservations.js';

@@ -25,21 +25,26 @@ CHECKS_FILE="$DEPLOY_DIR.checks.jsonl"
 CHECKS_SHA=''
 CHECKS_SIZES=''
 PUBLISH_RESULT=skipped
+RECORD_DEPLOY=false
+BUILD_GIT_SHA="$(git -C "$ROOT" rev-parse HEAD)"
+BUILD_GIT_SHORT="$(git -C "$ROOT" rev-parse --short "$BUILD_GIT_SHA")"
 record_check() {
   printf '{"name":"%s","result":"%s"}\n' "$1" "$2" >>"$CHECKS_FILE"
 }
 cleanup() {
   local deploy_status=$?
+  if [[ "$RECORD_DEPLOY" == true ]]; then
   if ((deploy_status != 0)) && ! grep -q '"result":"failed"' "$CHECKS_FILE" 2>/dev/null; then record_check preparation failed; fi
   if [[ ! -s "$CHECKS_FILE" ]]; then record_check preparation failed; fi
   # This metadata file is outside the staged output and never uploaded.
-  CHECKS_SHA="$CHECKS_SHA" CHECKS_SIZES="$CHECKS_SIZES" PUBLISH_RESULT="$PUBLISH_RESULT" DEPLOY_STARTED="$DEPLOY_STARTED" \
-    node -e 'const fs=require("node:fs"), cp=require("node:child_process"); const dir=process.argv[1];
+  CHECKS_SHA="$CHECKS_SHA" CHECKS_SIZES="$CHECKS_SIZES" PUBLISH_RESULT="$PUBLISH_RESULT" DEPLOY_STARTED="$DEPLOY_STARTED" BUILD_GIT_SHA="$BUILD_GIT_SHA" \
+    node -e 'const fs=require("node:fs"); const dir=process.argv[1];
       const checks=fs.readFileSync(dir+".checks.jsonl","utf8").trim().split("\n").map(JSON.parse);
-      const gitSha=cp.execFileSync("git",["-C",process.argv[2],"rev-parse","HEAD"],{encoding:"utf8"}).trim();
-      fs.writeFileSync(dir+".record.json",JSON.stringify({gitSha,surface:"app",attemptedAt:new Date(Number(process.env.DEPLOY_STARTED)*1000).toISOString(),sizes:process.env.CHECKS_SIZES ? [process.env.CHECKS_SIZES] : [],checks,publishResult:process.env.PUBLISH_RESULT,...(process.env.CHECKS_SHA ? {artifactSha256:process.env.CHECKS_SHA} : {})}));' "$DEPLOY_DIR" "$ROOT" &&
+      const gitSha=process.env.BUILD_GIT_SHA;
+      fs.writeFileSync(dir+".record.json",JSON.stringify({gitSha,surface:"app",attemptedAt:new Date(Number(process.env.DEPLOY_STARTED)*1000).toISOString(),sizes:process.env.CHECKS_SIZES ? [process.env.CHECKS_SIZES] : [],checks,publishResult:process.env.PUBLISH_RESULT,...(process.env.CHECKS_SHA ? {artifactSha256:process.env.CHECKS_SHA} : {})}));' "$DEPLOY_DIR" &&
     node "$ROOT/apps/web/tools/record-publish-checks.mjs" "$DEPLOY_DIR.record.json" ||
     printf '%s\n' 'deploy: could not record app publish checks' >&2
+  fi
   rm -f -- "$DEPLOY_DIR.record.json" "$CHECKS_FILE"
 
   # Let a background prototype build finish so a retry never runs two builds over the same trees.
@@ -100,6 +105,13 @@ require_directory "$ROOT/apps/web/title-town/models/variants"
 require_directory "$ROOT/apps/web/title-town/models/candidates"
 require_directory "$ROOT/apps/web/title-town/models/mdungeon"
 
+RECORD_DEPLOY=true
+if ! source_unchanged "$ROOT" "$BUILD_GIT_SHA"; then
+  record_check 'source integrity' failed
+  printf '%s\n' 'deploy: commit or source files changed; commit the changes before deploying' >&2
+  exit 1
+fi
+
 TC="$ROOT/apps/web/title-town"
 PACKS="$ROOT/assets-local/packs"
 # Step results keyed by their inputs; delete this directory to force every step.
@@ -145,7 +157,7 @@ else
 fi
 # VITE_APP_VERSION tags every telemetry event with the commit that is live (#1318).
 if timed web-build env VITE_GAMES_ORIGIN="$GAMES_ORIGIN" VITE_INSTANCE_LOGO_URL="$INSTANCE_LOGO_URL" \
-  VITE_APP_VERSION="$(git -C "$ROOT" rev-parse --short HEAD)" \
+  VITE_APP_VERSION="$BUILD_GIT_SHORT" \
   pnpm --dir "$ROOT/apps/web" exec vite build; then
   record_check web-build passed
 else
@@ -162,6 +174,12 @@ if ((PROTO_STATUS != 0)); then
   exit "$PROTO_STATUS"
 fi
 record_check prototype-build passed
+if ! source_unchanged "$ROOT" "$BUILD_GIT_SHA"; then
+  record_check 'source integrity' failed
+  printf '%s\n' 'deploy: commit or source files changed during the build' >&2
+  exit 1
+fi
+record_check 'source integrity' passed
 
 STAGE_STARTED="$(date +%s)"
 cp -R "$ROOT/apps/web/dist/." "$DEPLOY_DIR/"

@@ -240,6 +240,26 @@ describe('before_remove hook to a playable build', () => {
     }
   });
 
+  it.each(['gm test --serve old-dist', 'gm test --help'])('rejects invalid smoke script %s', async (script) => {
+    const { deps, app } = world();
+    const api = await serveApi(app);
+    const { dir, sha } = workspace(COPY_WEB, script);
+    try {
+      const hook = await runHook(dir, api.base);
+      expect(hook.stderr).toContain('gm test must use the default dist directory');
+      completeRun(deps);
+      expect(await publishStaged(deps, ids.job)).toBeNull();
+      const record = deps.sqlite
+        .prepare('SELECT result, checks_json FROM publish_checks WHERE git_sha = ?')
+        .get(sha) as { result: string; checks_json: string };
+      expect(record.result).toBe('failed');
+      expect(JSON.parse(record.checks_json)).toContainEqual({ name: 'test configuration', result: 'failed' });
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('does not upload when tests mutate the production build', async () => {
     const { deps, app } = world();
     const api = await serveApi(app);

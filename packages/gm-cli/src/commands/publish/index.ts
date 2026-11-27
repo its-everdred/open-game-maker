@@ -26,6 +26,7 @@ import { mergePrototypeReviews, parsePrototypeReview } from '../../prototype-rev
 import { publishSandboxEnv, writePublishSandbox } from '../../publish-sandbox.js';
 import { publishBuildHash } from '../../publish-build-hash.js';
 import { readPublishLock, stagePublishAssets } from '../../publish-assets.js';
+import { safePublishTestScript } from '../../publish-test-script.js';
 
 /*
  * The operator's publish for a game registered against a repository whose own tickets are not Game Maker jobs: no
@@ -434,6 +435,7 @@ export const command: GmCommand = {
         await failCheck('dependency install');
         throw new CommandError(`pnpm install failed in the worktree:\n${tail(install.err || install.out)}`);
       }
+      checks.push({ name: 'dependency install', result: 'passed' });
       const buildTimeout = env.OGM_PUBLISH_BUILD_TIMEOUT_MS;
       const build = exec(
         'pnpm',
@@ -448,19 +450,35 @@ export const command: GmCommand = {
       if (!build.ok) throw new CommandError(`the game's build failed:\n${tail(`${build.out}\n${build.err}`)}`);
       checks.push({ name: 'pnpm run build', result: 'passed' });
       const dist = join(game, 'dist');
-      const productionHash = publishBuildHash(dist);
+      let productionHash: string;
       const productionSnapshot = join(scratch, 'production-dist');
-      cpSync(dist, productionSnapshot, { recursive: true, verbatimSymlinks: true });
-      for (const file of FROM_REPO) {
-        if (!existsSync(join(game, file))) continue;
-        mkdirSync(dirname(join(productionSnapshot, file)), { recursive: true });
-        cpSync(join(game, file), join(productionSnapshot, file), { verbatimSymlinks: true });
+      try {
+        productionHash = publishBuildHash(dist);
+        cpSync(dist, productionSnapshot, { recursive: true, verbatimSymlinks: true });
+        for (const file of FROM_REPO) {
+          if (!existsSync(join(game, file))) continue;
+          mkdirSync(dirname(join(productionSnapshot, file)), { recursive: true });
+          cpSync(join(game, file), join(productionSnapshot, file), { verbatimSymlinks: true });
+        }
+      } catch (error) {
+        await failCheck('production snapshot');
+        throw new CommandError(
+          `cannot snapshot the production build: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
+
+      checks.push({ name: 'production snapshot', result: 'passed' });
 
       // The SDK strips its test hooks from published builds. A gm test script needs a test-mode build,
       // while the immutable production snapshot remains outside the game sandbox.
       const needsTestBuild = /^\s*gm\s+test(?:\s|$)/u.test(pkg.scripts.test);
+      if (needsTestBuild && !safePublishTestScript(pkg.scripts.test)) {
+        await failCheck('test configuration');
+        throw new CommandError('gm test must use the default dist directory and simple arguments');
+      }
+      let testBuildHash: string | undefined;
       if (needsTestBuild) {
+        checks.push({ name: 'test configuration', result: 'passed' });
         const testBuild = exec(
           'pnpm',
           ['exec', 'vite', 'build', '--mode', 'test', '--base=./'],
@@ -480,19 +498,26 @@ export const command: GmCommand = {
           throw new CommandError(`cannot identify the test build: ${tail(packed.err, 3)}`);
         }
         testArtifactSha256 = createHash('sha256').update(readFileSync(testArchive)).digest('hex');
+        testBuildHash = publishBuildHash(dist);
       }
       const test = exec('pnpm', ['run', 'test'], game, buildEnv, buildTimeout);
       if (!test.ok) await failCheck('pnpm run test');
       if (test.timedOut) throw new CommandError(`the game's tests timed out after ${Math.ceil(buildTimeout / 1000)} s`);
       if (!test.ok) throw new CommandError(`the game's tests failed:\n${tail(`${test.out}\n${test.err}`)}`);
       checks.push({ name: 'pnpm run test', result: 'passed' });
-      if (needsTestBuild) checkedSizes = ['390x844', '1180x820'];
+      if (needsTestBuild && publishBuildHash(dist) !== testBuildHash) {
+        await failCheck('test build integrity');
+        throw new CommandError('the game checks changed the test build');
+      }
+      if (needsTestBuild) {
+        checks.push({ name: 'test build integrity', result: 'passed' });
+        checkedSizes = ['390x844', '1180x820'];
+      }
       if (!needsTestBuild && publishBuildHash(dist) !== productionHash) {
         await failCheck('production build integrity');
         throw new CommandError('the game checks changed the production build');
       }
       const problems = checkPublishDist(productionSnapshot);
-      checks.push({ name: 'production snapshot', result: 'passed' });
       if (!needsTestBuild) checks.push({ name: 'production build integrity', result: 'passed' });
       checks.push({ name: 'publish artifact', result: problems.length ? 'failed' : 'passed' });
       if (problems.length) {

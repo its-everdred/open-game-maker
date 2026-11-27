@@ -34,6 +34,8 @@ let unlistedSha: string;
 let slowSha: string;
 let failingTestSha: string;
 let smokeTestSha: string;
+let wrongServeSha: string;
+let mutatingSmokeSha: string;
 let mutationSha: string;
 
 function git(cwd: string, ...args: string[]): string {
@@ -124,6 +126,18 @@ beforeAll(async () => {
   );
   git(origin, 'commit', '-qam', 'smoke test fixture');
   smokeTestSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'mutating-smoke', 'smoke-test');
+  writeFileSync(join(origin, 'games', 'blobs', '.mutate-test'), 'yes');
+  git(origin, 'add', '-A');
+  git(origin, 'commit', '-qm', 'mutating smoke fixture');
+  mutatingSmokeSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'wrong-serve', 'main');
+  writeFileSync(
+    join(origin, 'games', 'blobs', 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"gm test --serve old-dist"}}\n',
+  );
+  git(origin, 'commit', '-qam', 'wrong serve fixture');
+  wrongServeSha = git(origin, 'rev-parse', 'HEAD');
   git(origin, 'switch', '-qc', 'mutating-test', 'main');
   writeFileSync(
     join(origin, 'games', 'blobs', 'package.json'),
@@ -145,7 +159,7 @@ beforeAll(async () => {
       '[[ ${1:-} == install ]] && exit 0',
       'if [[ ${1:-} == exec ]]; then touch .test-mode; exit 0; fi',
       '[[ ${1:-} == run ]] && shift',
-      'if [[ ${1:-} == test ]] && [[ "$(node -p \'require("./package.json").scripts.test\')" == "gm test" ]]; then test -f .test-mode; exit; fi',
+      'if [[ ${1:-} == test ]] && [[ "$(node -p \'require("./package.json").scripts.test\')" == "gm test" ]]; then test -f .test-mode; if [[ -f .mutate-test ]]; then printf changed > dist/index.html; fi; exit; fi',
       'if [[ ${1:-} == test ]]; then exec sh -c "$(node -p \'require("./package.json").scripts.test\')"; fi',
       '[[ ${1:-} == build ]] && shift',
       '[[ ${1:-} == -- ]] && shift',
@@ -309,9 +323,10 @@ describe('gm publish', () => {
       checks: [
         { name: 'asset references', result: 'passed' },
         { name: 'asset rights and files', result: 'passed' },
+        { name: 'dependency install', result: 'passed' },
         { name: 'pnpm run build', result: 'passed' },
-        { name: 'pnpm run test', result: 'passed' },
         { name: 'production snapshot', result: 'passed' },
+        { name: 'pnpm run test', result: 'passed' },
         { name: 'production build integrity', result: 'passed' },
         { name: 'publish artifact', result: 'passed' },
       ],
@@ -532,7 +547,9 @@ describe('gm publish', () => {
       checks: [
         { name: 'asset references', result: 'passed' },
         { name: 'asset rights and files', result: 'passed' },
+        { name: 'dependency install', result: 'passed' },
         { name: 'pnpm run build', result: 'passed' },
+        { name: 'production snapshot', result: 'passed' },
         { name: 'pnpm run test', result: 'failed' },
       ],
     });
@@ -555,6 +572,31 @@ describe('gm publish', () => {
         ]),
       }),
     );
+  });
+
+  it('rejects a smoke test that changes its recorded build', async () => {
+    const run = await publish(['blobs', '--sha', mutatingSmokeSha, '--api', api]);
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain('the game checks changed the test build');
+    expect(checkRecords).toContainEqual(
+      expect.objectContaining({
+        gitSha: mutatingSmokeSha,
+        checks: expect.arrayContaining([{ name: 'test build integrity', result: 'failed' }]),
+      }),
+    );
+  });
+
+  it('rejects gm test when it would serve a different build', async () => {
+    const run = await publish(['blobs', '--sha', wrongServeSha, '--api', api]);
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain('gm test must use the default dist directory');
+    expect(checkRecords).toContainEqual(
+      expect.objectContaining({
+        gitSha: wrongServeSha,
+        checks: expect.arrayContaining([{ name: 'test configuration', result: 'failed' }]),
+      }),
+    );
+    expect(requests.map((request) => request.method)).toEqual(['GET']);
   });
 
   it('does not publish if tests change the production build', async () => {

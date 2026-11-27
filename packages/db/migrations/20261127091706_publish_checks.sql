@@ -14,4 +14,11 @@ CREATE TABLE `publish_checks` (
 	FOREIGN KEY (`game_id`) REFERENCES `games`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `publish_checks_game_index` ON `publish_checks` (`game_id`,`created_at`);
+CREATE INDEX `publish_checks_game_index` ON `publish_checks` (`game_id`,`created_at`);--> statement-breakpoint
+CREATE TABLE `release_tag_reservations` (
+	`game_id` text NOT NULL,
+	`number` integer NOT NULL,
+	FOREIGN KEY (`game_id`) REFERENCES `games`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `release_tag_reservations_game_number_unique` ON `release_tag_reservations` (`game_id`,`number`);
