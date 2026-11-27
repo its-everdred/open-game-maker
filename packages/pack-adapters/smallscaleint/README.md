@@ -74,6 +74,9 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
     it must be finite and is zero on floor tiles. Scene conversion and editor drawing preserve it.
     The structural asset ids are pinned card ids; record them in the game's asset list.
   - Not bound yet: other gate orientations, steps and other building styles.
+- `node packages/gm-cli/scripts/derive-wall-a12-steps.ts <Wall-A12-S.png> <new-directory>` rebuilds the provisional
+  shallow stair trial from the measured south view without altering the pack. Its manifest records provenance;
+  register the derived PNG with `gm assets register <derived.png> --made-by-agent --from <source-card-id>` to preserve the source rights.
 - `scripts/stage-structural-cards.mjs <library> <empty-dir>` (after `pnpm build`) writes validated card copies carrying
   the structural facts and a source-hash plan, for a host operator to apply to the shared library.
 - `structuralImageBounds`: inclusive alpha bounds for measured structural or paving assets, keyed by asset card id.
