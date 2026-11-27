@@ -29,6 +29,7 @@ it('selects affected screens and fails closed on other visible routes', () => {
   expect(glassScreens(['tests/design-baselines/ogm-glass/__proto__-1x1.png'])).toEqual(['Unmapped']);
   for (const file of [
     'apps/web/e2e/glass-parity.spec.ts',
+    'apps/web/e2e/support/parity-title.ts',
     'apps/web/e2e/fixtures/glass/blobs-thumbnail.png',
     'apps/web/tools/glass-parity-ci.mjs',
     'apps/web/playwright.config.ts',

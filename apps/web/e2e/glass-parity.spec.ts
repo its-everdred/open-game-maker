@@ -14,6 +14,7 @@ import { captureBuildSuffix, captureUrlFile } from './support/shell-capture-file
 import { parityBridgePort } from './support/parity-bridge';
 import { parityEditorRoute } from './support/parity-editor-route';
 import { paritySelection } from './support/parity-selection';
+import { installTitleCapture, settleTitleCapture } from './support/parity-title';
 import { intersectsViewport } from './support/parity-viewport';
 import { gameHeaders } from '@ogm/contracts';
 import type { DesignDoc } from '@ogm/contracts/browser';
@@ -329,6 +330,7 @@ for (const target of screens) {
           );
         }
       }
+      if (target.screen === 'Title') await installTitleCapture(page);
       const route = target.screen === 'Editor' ? parityEditorRoute(target.route, actualGameId) : target.route;
       await page.goto(route, { waitUntil: 'domcontentloaded' });
       const selector =
@@ -350,6 +352,7 @@ for (const target of screens) {
                         ? '[data-game-id]'
                         : '.settings-screen';
       await expect(page.locator(selector).first()).toBeVisible({ timeout: 30_000 });
+      if (target.screen === 'Title') await settleTitleCapture(page);
       if (target.screen === 'Activity') {
         await page.locator(selector).first().click();
         await expect(page.locator('.worker-tracker-panel')).toBeVisible();

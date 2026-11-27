@@ -53,6 +53,7 @@ export function changedGlassFiles(root, base) {
       'apps/web/e2e/support/parity-editor-route.ts',
       'apps/web/e2e/support/parity-viewport.ts',
       'apps/web/e2e/support/parity-selection.ts',
+      'apps/web/e2e/support/parity-title.ts',
       'apps/web/e2e/support/shell-capture-files.ts',
       'apps/web/e2e/support/mock-game-api.ts',
       'apps/web/e2e/support/stage-prototype-fixture.mjs',
@@ -103,7 +104,7 @@ export function glassScreens(files) {
       file.startsWith('apps/web/e2e/fixtures/glass/') ||
       /^apps\/web\/tools\/(?:glass-|generate-glass-tokens|import-glass-exports)/.test(file) ||
       /^apps\/web\/e2e\/support\/(?:mock-game-api\.ts|stage-prototype-fixture\.mjs)$/.test(file) ||
-      /^apps\/web\/e2e\/(?:support\/(?:parity-(?:bridge|editor-route|viewport|selection)|shell-capture-files)|fixtures\/(?:auth|games|new)-routes)\.ts$/.test(
+      /^apps\/web\/e2e\/(?:support\/(?:parity-(?:bridge|editor-route|viewport|selection|title)|shell-capture-files)|fixtures\/(?:auth|games|new)-routes)\.ts$/.test(
         file,
       ) ||
       (file.startsWith('packages/gm-cli/src/design-parity/') && !/\.test\.ts$/.test(file)) ||
