@@ -52,6 +52,7 @@ export function changedGlassFiles(root, base) {
       'apps/web/e2e/support/parity-bridge.ts',
       'apps/web/e2e/support/parity-editor-route.ts',
       'apps/web/e2e/support/parity-viewport.ts',
+      'apps/web/e2e/support/parity-selection.ts',
       'apps/web/e2e/support/shell-capture-files.ts',
       'apps/web/e2e/support/mock-game-api.ts',
       'apps/web/e2e/support/stage-prototype-fixture.mjs',
@@ -102,7 +103,7 @@ export function glassScreens(files) {
       file.startsWith('apps/web/e2e/fixtures/glass/') ||
       /^apps\/web\/tools\/(?:glass-|generate-glass-tokens|import-glass-exports)/.test(file) ||
       /^apps\/web\/e2e\/support\/(?:mock-game-api\.ts|stage-prototype-fixture\.mjs)$/.test(file) ||
-      /^apps\/web\/e2e\/(?:support\/(?:parity-(?:bridge|editor-route|viewport)|shell-capture-files)|fixtures\/(?:auth|games|new)-routes)\.ts$/.test(
+      /^apps\/web\/e2e\/(?:support\/(?:parity-(?:bridge|editor-route|viewport|selection)|shell-capture-files)|fixtures\/(?:auth|games|new)-routes)\.ts$/.test(
         file,
       ) ||
       (file.startsWith('packages/gm-cli/src/design-parity/') && !/\.test\.ts$/.test(file)) ||
@@ -165,6 +166,7 @@ export function runGlassScreens(files, { gameDist, run, log, error }) {
       `Glass parity has no capture for changed UI: ${unmapped.join(', ')}. Add a reviewed screen capture before merging.`,
     );
   }
+  const runnable = [];
   for (const screen of screens.filter((item) => item !== 'Unmapped')) {
     if (screen === 'Editor' && !gameDist) {
       error('Glass parity requires OGM_GLASS_GAME_DIST pointing to a real built game for the Editor capture.');
@@ -175,7 +177,8 @@ export function runGlassScreens(files, { gameDist, run, log, error }) {
       log(
         'Post-deploy check: open Settings on a physical iPhone in landscape and compare it with the approved Settings layout (operator: physical iPhone).',
       );
-    if (!run(screen)) failed = true;
+    runnable.push(screen);
   }
+  if (runnable.length && !run(runnable)) failed = true;
   return failed ? 1 : 0;
 }

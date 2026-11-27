@@ -129,13 +129,22 @@ it('runs covered screens and fails when a screen or real editor game is missing'
       error,
     }),
   ).toBe(1);
-  expect(run).toHaveBeenCalledWith('Home');
-  expect(run).toHaveBeenCalledWith('GameSheet');
+  expect(run).toHaveBeenCalledOnce();
+  expect(run).toHaveBeenCalledWith(['GameSheet', 'Home']);
   expect(error).toHaveBeenCalledOnce();
   run.mockClear();
   expect(runGlassScreens(['apps/web/src/features/editor/EditorChrome.tsx'], { run, log, error })).toBe(1);
   expect(run).not.toHaveBeenCalled();
   expect(error).toHaveBeenCalledWith(expect.stringContaining('requires OGM_GLASS_GAME_DIST'));
+  expect(
+    runGlassScreens(['apps/web/src/features/editor/EditorChrome.tsx', 'apps/web/src/routes/signin/SignInScreen.tsx'], {
+      run,
+      log,
+      error,
+    }),
+  ).toBe(1);
+  expect(run).toHaveBeenCalledWith(['SignIn']);
+  run.mockClear();
   expect(
     runGlassScreens(['apps/web/src/features/editor/EditorChrome.tsx'], {
       gameDist: '/real-game/dist',
@@ -144,7 +153,7 @@ it('runs covered screens and fails when a screen or real editor game is missing'
       error,
     }),
   ).toBe(0);
-  expect(run).toHaveBeenCalledWith('Editor');
+  expect(run).toHaveBeenCalledWith(['Editor']);
   run.mockReturnValue(false);
   expect(runGlassScreens(['apps/web/src/routes/games/GamesScreen.tsx'], { run, log, error })).toBe(1);
 });

@@ -18,11 +18,11 @@ process.exitCode = runGlassScreens(files, {
   gameDist: process.env.OGM_GLASS_GAME_DIST,
   log: console.log,
   error: console.error,
-  run: (screen) => {
+  run: (screens) => {
     const result = spawnSync(
       'pnpm',
       ['exec', 'playwright', 'test', 'e2e/glass-parity.spec.ts', '--project', 'desktop', '--workers=1'],
-      { stdio: 'inherit', env: { ...process.env, OGM_GLASS_PARITY_SCREEN: screen } },
+      { stdio: 'inherit', env: { ...process.env, OGM_GLASS_PARITY_SCREEN: screens.join(',') } },
     );
     return !result.error && result.status === 0;
   },

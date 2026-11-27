@@ -13,6 +13,7 @@ import { buildId, installGameApi } from './support/mock-game-api';
 import { captureBuildSuffix, captureUrlFile } from './support/shell-capture-files';
 import { parityBridgePort } from './support/parity-bridge';
 import { parityEditorRoute } from './support/parity-editor-route';
+import { paritySelection } from './support/parity-selection';
 import { intersectsViewport } from './support/parity-viewport';
 import { gameHeaders } from '@ogm/contracts';
 import type { DesignDoc } from '@ogm/contracts/browser';
@@ -24,14 +25,7 @@ const selected = process.env.OGM_GLASS_PARITY_SCREEN;
 const gameDist = process.env.OGM_GLASS_GAME_DIST;
 // eslint-disable-next-line no-restricted-properties
 const bridgePort = parityBridgePort(process.env);
-if (
-  selected &&
-  !['all', 'Title', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet', 'Admin', 'Activity'].includes(
-    selected,
-  )
-) {
-  throw new Error(`Unknown glass parity screen: ${selected}`);
-}
+const selectedScreens = paritySelection(selected);
 const root = resolve(process.cwd(), '../..');
 const baseline = resolve(root, 'tests/design-baselines/ogm-glass');
 const runId = randomUUID();
@@ -69,7 +63,7 @@ const screens = [
 
 for (const target of screens) {
   test(`@glass-parity ${target.name}`, async ({ browser }, testInfo) => {
-    test.skip(!selected || (selected !== 'all' && selected !== target.screen), 'Selected by gm design parity');
+    test.skip(!selectedScreens.has(target.screen), 'Selected by gm design parity');
     test.skip(testInfo.project.name !== 'desktop', 'Each reference specifies its own viewport');
     const context = await browser.newContext({
       viewport: { width: target.width, height: target.height },
