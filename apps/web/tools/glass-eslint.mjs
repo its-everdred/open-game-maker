@@ -70,9 +70,10 @@ export const glassComponentsRule = {
       JSXOpeningElement(node) {
         if (node.name.type === 'JSXIdentifier' && intrinsicControls.has(node.name.name))
           context.report({ node, messageId: 'control', data: { name: node.name.name } });
-        if (node.name.type !== 'JSXIdentifier' || !/^[a-z]/.test(node.name.name)) return;
+        const intrinsic = node.name.type === 'JSXIdentifier' && /^[a-z]/.test(node.name.name);
         for (const attr of node.attributes) {
           if (
+            intrinsic &&
             attr.type === 'JSXAttribute' &&
             attr.name.name === 'role' &&
             attr.value &&
@@ -80,6 +81,7 @@ export const glassComponentsRule = {
           )
             context.report({ node: attr, messageId: 'control', data: { name: 'role' } });
           if (
+            intrinsic &&
             attr.type === 'JSXAttribute' &&
             attr.name.name === 'className' &&
             attr.value &&
