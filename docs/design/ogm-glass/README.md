@@ -40,3 +40,4 @@ This is OGM's chrome only. Dusk Helm's pixel UI and any game's own art are separ
 - Every chat element uses the one blue accent: composer buttons, mic, two-way, send, bubbles and waveform.
 - In any other screen or panel, interactive elements share one accent colour.
 - State (muted, error) is shown through shape, icon or opacity within that colour, not by adding new hues. Destructive actions are the only exception, and only where needed.
+- Kevin 2026-11-27: dark mode is right, as long as the glassy, colourful glow background (as on the game picker / Home) sits behind it. No screen uses a flat black background.
