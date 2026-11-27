@@ -31,28 +31,12 @@ for (const viewport of [
       expect(box).not.toBeNull();
       const x = box!.x + box!.width / 2;
       const y = box!.y + box!.height / 2;
-      await move.dispatchEvent('pointerdown', {
-        pointerId: 1,
-        pointerType: 'touch',
-        isPrimary: true,
-        clientX: x,
-        clientY: y,
-      });
-      await move.dispatchEvent('pointermove', {
-        pointerId: 1,
-        pointerType: 'touch',
-        isPrimary: true,
-        clientX: x + 30,
-        clientY: y,
-      });
+      const touch = await context.newCDPSession(page);
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + 30, y }] });
       await request(page, 'test.advanceTime', { ms: 500 });
-      await move.dispatchEvent('pointerup', {
-        pointerId: 1,
-        pointerType: 'touch',
-        isPrimary: true,
-        clientX: x + 30,
-        clientY: y,
-      });
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await touch.detach();
       const playing = (await request(page, 'test.renderGameToText', {})) as Snapshot;
       expect(playing.tick).toBeGreaterThan(initial.tick);
       const position = (snapshot: Snapshot) => {

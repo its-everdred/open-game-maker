@@ -4,12 +4,20 @@ import { startBrowserSystem } from '../../../services/api/test/browser-system-ha
 import { startDictationSystemServer } from '../../../packages/voice-client/e2e/dictation-system-server';
 
 import { launchArgs } from './support/gpu';
+import { bridgeOrigin } from './support/visibility';
 
 type System = Awaited<ReturnType<typeof startBrowserSystem>>;
+type TestWindow = Window & {
+  advanceTime?: (ms: number) => void;
+  render_game_to_text?: () => string;
+  __gm?: { runtime: { clock: { paused: boolean } } };
+};
 const test = base.extend<{ system: System }>({
   system: async ({ page, baseURL }, use) => {
     if (!baseURL) throw new Error('browser base URL is required');
-    const system = await startBrowserSystem(baseURL);
+    // A prepared copy avoids compiling the same template per viewport on loaded test hosts.
+    // eslint-disable-next-line no-restricted-properties -- optional test-only fixture path.
+    const system = await startBrowserSystem(baseURL, process.env.OGM_TEST_TEMPLATE_DIST);
     let closing = false;
     try {
       // Forward browser requests to the local API; no auth or API response is stubbed.
@@ -56,7 +64,7 @@ test.use({
 
 async function signIn(page: Page, system: System) {
   await page.goto('/all', { waitUntil: 'domcontentloaded' });
-  await expect(page).toHaveURL(/\/signin/);
+  await expect(page).toHaveURL(/\/signin/, { timeout: 30_000 });
   await page.getByLabel('Email').fill('player@example.test');
   await page.getByRole('button', { name: 'Send sign-in link' }).tap();
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
@@ -65,7 +73,7 @@ async function signIn(page: Page, system: System) {
   if (!link) throw new Error('local outbox has no magic link');
   await page.goto(link, { waitUntil: 'domcontentloaded' });
   const offer = page.getByRole('button', { name: 'Not now' });
-  await expect(offer).toBeVisible();
+  await expect(offer).toBeVisible({ timeout: 30_000 });
   await offer.tap();
   await expect(page).toHaveURL(/\/all/);
 }
@@ -208,23 +216,57 @@ for (const viewport of [
       await signIn(page, system);
       system.seedChat();
       const game = await system.seedEditor();
-      await page.route(/^http:\/\/127\.0\.0\.1:(10000|10001)\//, async (route) => {
-        const incoming = new URL(route.request().url());
-        const target = new URL(incoming.pathname + incoming.search, game.origin);
-        await route.fulfill({ response: await route.fetch({ url: target.href, maxRedirects: 0 }) });
-      });
+      await page.route(
+        (url) => [bridgeOrigin, 'http://127.0.0.1:10000'].includes(url.origin),
+        async (route) => {
+          const incoming = new URL(route.request().url());
+          const target = new URL(incoming.pathname + incoming.search, game.origin);
+          await route.fulfill({ response: await route.fetch({ url: target.href, maxRedirects: 0 }) });
+        },
+      );
       await page.goto(`/g/${game.gameId}?mode=edit&test`, { waitUntil: 'domcontentloaded' });
       await expect(page.getByLabel('Game editor')).toBeVisible({ timeout: 120_000 });
       await page.getByLabel('Game editor').tap();
       await page.getByRole('button', { name: 'Light', exact: true }).tap();
       await page.getByRole('button', { name: 'Night', exact: true }).tap();
-      await expect.poll(() => system.editorTransactions(), { timeout: 30_000 }).not.toEqual([]);
+      await expect
+        .poll(() => system.editorTransactions(), { timeout: 30_000 })
+        .toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              label: 'Changed scenery light',
+              commands: expect.arrayContaining([
+                expect.objectContaining({ op: 'set', control: 'scenery.lighting', targets: 'global', value: 'night' }),
+              ]),
+            }),
+          ]),
+        );
+      const gameFrame = () =>
+        page
+          .frames()
+          .find((candidate) =>
+            [bridgeOrigin, 'http://127.0.0.1:10000'].some((origin) => candidate.url().startsWith(`${origin}/g/`)),
+          );
+      await expect.poll(() => Boolean(gameFrame()), { timeout: 30_000 }).toBe(true);
+      const frame = gameFrame()!;
+      await frame.waitForFunction(() => typeof (window as TestWindow).advanceTime === 'function');
       await page.getByRole('button', { name: 'Play', exact: true }).tap();
+      const tick = () => frame.evaluate(() => JSON.parse((window as TestWindow).render_game_to_text!()).tick as number);
+      await frame.evaluate(() => (window as TestWindow).advanceTime!(500));
+      const playingTick = await tick();
+      expect(playingTick).toBeGreaterThan(0);
       await page.getByRole('button', { name: 'Menu', exact: true }).tap();
       const paused = page.getByRole('dialog', { name: 'Paused' });
       await expect(paused).toBeVisible();
+      await expect.poll(() => frame.evaluate(() => (window as TestWindow).__gm?.runtime.clock.paused)).toBe(true);
+      const pausedTick = await tick();
+      await frame.evaluate(() => (window as TestWindow).advanceTime!(500));
+      expect(await tick()).toBe(pausedTick);
       await paused.getByRole('button', { name: 'Resume' }).tap();
       await expect(paused).toBeHidden();
+      await expect.poll(() => frame.evaluate(() => (window as TestWindow).__gm?.runtime.clock.paused)).toBe(false);
+      await frame.evaluate(() => (window as TestWindow).advanceTime!(500));
+      expect(await tick()).toBeGreaterThan(pausedTick);
     });
   });
 }

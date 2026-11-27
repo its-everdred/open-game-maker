@@ -1,6 +1,6 @@
 /* The real auth route reads its environment at setup; isolate test-only values in this worker. */
 import { execFile } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,7 +18,7 @@ import { makeApp, makeDeps } from './helpers.js';
 const run = promisify(execFile);
 
 /** Start the actual API routes with a private database, mail outbox and filesystem. */
-export async function startBrowserSystem(appOrigin: string) {
+export async function startBrowserSystem(appOrigin: string, editorBuildDirectory?: string) {
   const scratch = mkdtempSync(join(tmpdir(), 'ogm-browser-system-'));
   const overrides: Record<string, string> = {
     TMPDIR: scratch,
@@ -98,10 +98,14 @@ export async function startBrowserSystem(appOrigin: string) {
         const directory = join(deps!.config.gamesRoot, gameId, buildId);
         mkdirSync(directory, { recursive: true });
         // Match gm publish: Vite needs a relative base when served under /g/<game>/<build>/.
-        pendingBuild = run('pnpm', ['exec', 'vite', 'build', '--base=./', '--mode=published', '--outDir', directory], {
-          cwd: fileURLToPath(new URL('../../../templates/game-3d/', import.meta.url)),
-        });
-        await pendingBuild;
+        if (editorBuildDirectory) {
+          cpSync(editorBuildDirectory, directory, { recursive: true });
+        } else {
+          pendingBuild = run('pnpm', ['exec', 'vite', 'build', '--base=./', '--mode=draft', '--outDir', directory], {
+            cwd: fileURLToPath(new URL('../../../templates/game-3d/', import.meta.url)),
+          });
+          await pendingBuild;
+        }
         if (closing) throw new Error('system closed while staging the editor build');
         writeFileSync(join(directory, '.complete'), '');
         const branch = ensureMainBranch(deps!.sqlite, gameId);
@@ -122,7 +126,12 @@ export async function startBrowserSystem(appOrigin: string) {
         return { origin: `http://127.0.0.1:${address.port}`, gameId };
       },
       editorTransactions: () =>
-        deps!.sqlite.prepare('SELECT label FROM design_transactions ORDER BY rev').all() as { label: string }[],
+        (
+          deps!.sqlite.prepare('SELECT label, commands_json FROM design_transactions ORDER BY rev').all() as {
+            label: string;
+            commands_json: string;
+          }[]
+        ).map(({ label, commands_json }) => ({ label, commands: JSON.parse(commands_json) as unknown })),
       seedChat() {
         const user = deps!.sqlite.prepare('SELECT id FROM user WHERE email = ?').get('player@example.test') as
           { id: string } | undefined;
