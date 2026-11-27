@@ -182,13 +182,12 @@ describe('GameRoom lifecycle', () => {
     const token = player.reconnectionToken;
     player.reconnection.enabled = false;
     await player.leave(false);
-    await sleep(30);
+    await waitFor(() => room.state.members.get('player')?.connected === false, 'player held', 5_000);
 
     room.revoke({ userId: 'player' });
 
     await expect(harness.testServer.sdk.reconnect(token)).rejects.toThrow();
-    await sleep(30);
-    expect(room.state.members.has('player')).toBe(false);
+    await waitFor(() => !room.state.members.has('player'), 'revoked player removed', 5_000);
   });
 
   it('keeps a held owner session alive when the other owner device closes', async () => {
@@ -198,10 +197,10 @@ describe('GameRoom lifecycle', () => {
     const token = second.reconnectionToken;
     second.reconnection.enabled = false;
     await second.leave(false);
-    await sleep(30);
+    await waitFor(() => room.state.editorSessionId === first.sessionId, 'first owner restored', 5_000);
 
     await first.leave();
-    expect(room.state.phase).toBe('pausedForHost');
+    await waitFor(() => room.state.phase === 'pausedForHost', 'owner paused', 5_000);
     expect(harness.testServer.getRoomById(room.roomId)).toBeDefined();
 
     const reconnected = await harness.testServer.sdk.reconnect(token);
