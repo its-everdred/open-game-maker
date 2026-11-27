@@ -27,6 +27,15 @@ import { AiurHttpError } from '@ogm/aiur-client';
 import type { BlobHash } from '@ogm/blob-store';
 import { reviewMediaUrl } from '../blobs/review-url.js';
 import { ownsTicket, ticketDetailView } from './detail.js';
+import { getChatRow, insertChatRow, listSince, markMirror } from '../build-chat/store.js';
+
+const ticketChatKey = (gameId: string, repo: { owner: string; name: string }, ticket: string) =>
+  `ticket:${gameId}:${repo.owner.toLowerCase()}/${repo.name.toLowerCase()}:${ticket}`;
+function orderConversation<T extends { at?: string }>(messages: T[]): Omit<T, 'at'>[] {
+  return messages
+    .sort((a, b) => (Date.parse(a.at ?? '') || 0) - (Date.parse(b.at ?? '') || 0))
+    .map(({ at: _at, ...message }) => message);
+}
 
 export const prefix = '/api/v1';
 const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) => {
@@ -263,9 +272,81 @@ routes.get('/games/:gameId/tickets/:ticket/conversation', async (c) => {
     throw new HttpError(503, 'ticket_scope_unavailable');
   });
   if (!owned) throw new HttpError(404, 'ticket_not_found');
-  return c.json({
-    messages: await deps.registry.ticketConversation(repo, ticketId, [...scope.slugs], scope.owned.has(ticketId)),
+  const comments = await deps.registry.ticketConversation(repo, ticketId, [...scope.slugs], scope.owned.has(ticketId));
+  const sent = listSince(deps.sqlite, ticketChatKey(game.id, repo, ticketId), 0, 10000).flatMap((row) =>
+    row.text
+      ? [{ text: row.text, at: row.at, ...(row.mirrorState === 'pending' ? { pending: true, id: row.id } : {}) }]
+      : [],
+  );
+  try {
+    const client = await deps.aiurClientForGame(game.id);
+    const [progress, transcript] = await Promise.allSettled([
+      client.progress(ticketId, 20),
+      client.ticketTranscript(ticketId),
+    ]);
+    const updates = (progress.status === 'fulfilled' ? progress.value.events : []).flatMap((event) => {
+      const text = [event.label, event.summary].find(
+        (value): value is string => typeof value === 'string' && !!value.trim(),
+      );
+      return text ? [{ text, ...(typeof event.at === 'string' ? { at: event.at } : {}) }] : [];
+    });
+    const replies = (transcript.status === 'fulfilled' ? [...transcript.value.events].reverse() : [])
+      .filter((event) => event.role === 'assistant' && event.body.trim())
+      .map((event) => ({ text: event.body, ...(event.timestamp ? { at: event.timestamp } : {}) }));
+    return c.json({
+      messages: orderConversation([...comments, ...sent, ...updates, ...replies]),
+      workerUnavailable: progress.status === 'rejected' || transcript.status === 'rejected',
+    });
+  } catch {
+    return c.json({ messages: orderConversation([...comments, ...sent]), workerUnavailable: true });
+  }
+});
+routes.post('/games/:gameId/tickets/:ticket/conversation', async (c) => {
+  const game = authorizedGame(c, 'game.edit');
+  if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
+  const deps = c.get('deps');
+  const ticket = c.req.param('ticket');
+  const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
+  if (!repo || !game.slug || !deps.registry.trackerTickets || !deps.registry.ticketConversation)
+    throw new HttpError(503, 'ticket_scope_unavailable');
+  const scope = ticketScope(deps.db, game.id, game.slug, `${repo.owner}/${repo.name}`);
+  const owned = await ownsTicket(deps, repo, scope, ticket).catch(() => {
+    throw new HttpError(503, 'ticket_scope_unavailable');
   });
+  if (!owned) throw new HttpError(404, 'ticket_not_found');
+  await deps.registry.ticketConversation(repo, ticket, [...scope.slugs], scope.owned.has(ticket));
+  const body: unknown = await c.req.json().catch(() => null);
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    !('text' in body) ||
+    typeof body.text !== 'string' ||
+    !body.text.trim() ||
+    body.text.length > 10000 ||
+    !('id' in body) ||
+    typeof body.id !== 'string' ||
+    !/^[a-zA-Z0-9-]{1,100}$/.test(body.id)
+  )
+    throw new HttpError(400, 'invalid_message');
+  const jobId = ticketChatKey(game.id, repo, ticket);
+  const existing = getChatRow(deps.sqlite, body.id);
+  if (existing && (existing.jobId !== jobId || existing.text !== body.text))
+    throw new HttpError(409, 'message_id_conflict');
+  if (existing?.mirrorState === 'sent') return c.json({ status: 'sent' });
+  if (!existing)
+    insertChatRow(deps.sqlite, {
+      id: body.id,
+      jobId,
+      actor: 'creator',
+      kind: 'text',
+      text: body.text,
+      mirrorState: 'pending',
+    });
+  const client = await deps.aiurClientForGame(game.id);
+  const receipt = await client.message(ticket, body.text, body.id, AbortSignal.timeout(15000));
+  if (receipt.warning) throw new HttpError(502, 'message_unconfirmed');
+  markMirror(deps.sqlite, body.id, 'sent');
+  return c.json({ status: 'sent' });
 });
 routes.get('/games/:gameId/tickets/:ticket/detail', async (c) => {
   const game = authorizedGame(c, 'game.edit');

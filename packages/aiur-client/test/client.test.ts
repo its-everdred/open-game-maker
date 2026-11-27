@@ -206,6 +206,22 @@ describe('createAiurClient', () => {
     });
   });
 
+  it('retains transcript roles for safe conversation projection', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        events: [
+          { type: 'message', role: 'assistant', body: 'Reply', turn_id: 'turn-1', timestamp: '2026-11-27T00:00:00Z' },
+          { type: 'message', role: 'tool', body: 'secret' },
+        ],
+        pagination: { next_cursor: null },
+      }),
+    );
+    expect((await createAiurClient(daemon, fetchImpl).ticketTranscript('42')).events).toEqual([
+      { body: 'Reply', turn_id: 'turn-1', role: 'assistant', timestamp: '2026-11-27T00:00:00Z' },
+      { body: 'secret', turn_id: null, role: 'tool' },
+    ]);
+  });
+
   it('builds the exact allowlisted control expression and validates ids locally', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(fixture('control')));
     const client = createAiurClient(daemon, fetchImpl);

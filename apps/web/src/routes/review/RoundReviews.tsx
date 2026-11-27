@@ -21,6 +21,9 @@ export type Round = {
   /** The reviewed build started in its scenario, which the card plays in place (#1281). */
   sliceUrl?: string | null;
   id: string;
+  postedAt?: string;
+  verdict?: 'approved' | 'needs_work' | 'kill' | null;
+  verdictAt?: string | null;
   ticket: string;
   question: string | null;
   media: { kind: 'still' | 'clip' | 'audio'; url: string; role?: 'target'; meta?: MediaMetaValue }[];
