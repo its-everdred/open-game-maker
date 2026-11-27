@@ -48,6 +48,24 @@ export const glassComponentsRule = {
     },
   },
   create(context) {
+    function checkStyleObject(expression) {
+      if (expression.type !== 'ObjectExpression') return;
+      for (const property of expression.properties) {
+        if (property.type === 'SpreadElement') {
+          checkStyleObject(property.argument);
+          continue;
+        }
+        if (property.type !== 'Property') continue;
+        const name =
+          property.key.type === 'Literal'
+            ? property.key.value
+            : !property.computed && property.key.type === 'Identifier'
+              ? property.key.name
+              : undefined;
+        if (typeof name !== 'string' || !designStyle.test(name)) continue;
+        if (rawDesignValue(property.value)) context.report({ node: property, messageId: 'style', data: { name } });
+      }
+    }
     return {
       JSXOpeningElement(node) {
         if (node.name.type === 'JSXIdentifier' && intrinsicControls.has(node.name.name))
@@ -74,14 +92,7 @@ export const glassComponentsRule = {
             attr.value?.type !== 'JSXExpressionContainer'
           )
             continue;
-          const expression = attr.value.expression;
-          if (expression.type !== 'ObjectExpression') continue;
-          for (const property of expression.properties) {
-            if (property.type !== 'Property' || property.computed) continue;
-            const name = property.key.type === 'Identifier' ? property.key.name : property.key.value;
-            if (typeof name !== 'string' || !designStyle.test(name)) continue;
-            if (rawDesignValue(property.value)) context.report({ node: property, messageId: 'style', data: { name } });
-          }
+          checkStyleObject(attr.value.expression);
         }
       },
     };

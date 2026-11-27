@@ -96,6 +96,19 @@ it('rejects concatenated inline design values', async () => {
   expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(2);
 }, 30_000);
 
+it('rejects raw inline design values in computed keys and object spreads', async () => {
+  const eslint = new ESLint({
+    overrideConfig: [
+      { plugins: { glass: { rules: { components: glassComponentsRule } } }, rules: { 'glass/components': 'error' } },
+    ],
+  });
+  const [result] = await eslint.lintText(
+    'const Screen = () => <div style={{ ["color"]: "#fff", ...{ borderRadius: 8 }, ...{ opacity: "var(--opacity)" } }} />;',
+    { filePath: 'src/Screen.tsx' },
+  );
+  expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(2);
+}, 30_000);
+
 it('rejects ad-hoc controls in conditional and template class names', async () => {
   const eslint = new ESLint({
     overrideConfig: [
