@@ -95,11 +95,17 @@ function coveredGlassScreen(
 ): boolean {
   if (!ticket || !screen || !/^[A-Za-z0-9_-]+$/.test(screen)) return false;
   try {
-    const screens = execFileSync('git', ['show', `${base}:docs/design/ogm-glass/screens.md`], {
-      cwd,
-      encoding: 'utf8',
+    const readScreens = (ref: string) =>
+      execFileSync('git', ['show', `${ref}:docs/design/ogm-glass/screens.md`], { cwd, encoding: 'utf8' }).split('\n');
+    const coversArtboard = (line: string) => line.startsWith('|') && line.includes(`#artboard-${screen})`);
+    const approved = readScreens(base).some(coversArtboard);
+    const ticketPattern = new RegExp(`(?:^|\\D)#${ticket}(?!\\d)`);
+    const assigned = readScreens('HEAD').some((line) => {
+      if (!coversArtboard(line)) return false;
+      const columns = line.split('|');
+      return columns.length >= 7 && ticketPattern.test(columns[5] ?? '');
     });
-    return screens.split('\n').some((line) => line.startsWith('|') && line.includes(`#artboard-${screen})`));
+    return approved && assigned;
   } catch {
     return false;
   }
@@ -130,7 +136,9 @@ export function ticketDesignFromIssue(
     const labels = (value as { labels: { name?: unknown }[] }).labels;
     return labels.some((label) => label?.name === 'design:ogm-glass') ? { design: 'ogm-glass' } : {};
   } catch {
-    return { error: `cannot read design labels for ticket #${ticket}; pass --design ogm-glass for a glass ticket` };
+    return {
+      error: `cannot read design labels for ticket #${ticket}; pass --design ogm-glass or --design none for the known ticket design`,
+    };
   }
 }
 

@@ -287,7 +287,8 @@ Before the expiry rung, `gm look check` reports a visible warning and exits succ
 sheet. The creative ticket gate requires a recorded mock approval before prototype work unless an approved glass artboard covers the screen. It requires a prototype approval before build work. At the expiry rung or later, `gm look check` fails until the provisional declaration is replaced by an approved look target.
 For a ticket labeled `design:ogm-glass`, pass `--design ogm-glass`; for a covered prototype also pass
 `--design-screen <artboard>`. The PR body must name the ticket, and the base branch's `docs/design/ogm-glass/screens.md` must contain that
-artboard. With an OGM GitHub remote, the gate also reads the named ticket's labels; if that lookup fails, pass the design
+artboard. The branch's `screens.md` must assign the named ticket to that artboard in its Tickets column; add the
+assignment in the same change when filing a new ticket. With an OGM GitHub remote, the gate also reads the named ticket's labels; if that lookup fails, pass the design
 explicitly for a glass ticket or `--design none` for a confirmed non-glass ticket. Glass mock references may use `assets-local/review/design-ogm-glass/`.
 
 Pass the active rung with `gm check --phase <rung>`; the phase does not auto-advance from the branch or ticket. While a

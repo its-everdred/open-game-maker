@@ -143,7 +143,7 @@ describe('gm check ticket lanes', () => {
     mkdirSync(join(cwd, 'docs/design/ogm-glass'), { recursive: true });
     writeFileSync(
       join(cwd, 'docs/design/ogm-glass/screens.md'),
-      '| Account | [Account](https://example.test/#artboard-Account) | #123 |\n',
+      '| Account | [Account](https://example.test/#artboard-Account) | approved | route | #123 |\n',
     );
     git('add', '-A');
     git('commit', '-qm', 'record approved screen');
@@ -178,7 +178,15 @@ describe('gm check ticket lanes', () => {
     expect(prototype.err.join('\n')).not.toContain('phase:prototype needs an approved mock');
     writeFileSync(join(cwd, 'pr.md'), 'Closes #124');
     const wrongTicket = await gm([...flags, '--phase', 'prototype', '--design-screen', 'Account'], { cwd });
-    expect(wrongTicket.err.join('\n')).not.toContain('phase:prototype needs an approved mock');
+    expect(wrongTicket.err.join('\n')).toContain('phase:prototype needs an approved mock');
+    writeFileSync(
+      join(cwd, 'docs/design/ogm-glass/screens.md'),
+      '| Account | [Account](https://example.test/#artboard-Account) | approved | route | #123, #124 |\n',
+    );
+    git('add', 'docs/design/ogm-glass/screens.md');
+    git('commit', '-qm', 'assign screen to ticket');
+    const newlyAssigned = await gm([...flags, '--phase', 'prototype', '--design-screen', 'Account'], { cwd });
+    expect(newlyAssigned.err.join('\n')).not.toContain('phase:prototype needs an approved mock');
     writeFileSync(join(cwd, 'pr.md'), 'Closes #123');
     const build = await gm([...flags, '--phase', 'build', '--design-screen', 'Account'], { cwd });
     expect(build.err.join('\n')).toContain('phase:build needs an approved prototype');
