@@ -10,7 +10,7 @@ import type {
 } from '@ogm/contracts';
 import { schema, type Db, type Sqlite } from '@ogm/db';
 import { authorize, type Actor } from '@ogm/policy';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lte, or } from 'drizzle-orm';
 
 import { requireAuthorization } from '../accounts/families.js';
 import { allowanceRemaining, familyDayTotal, platformRemaining } from '../budget/allowance.js';
@@ -163,9 +163,24 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
           ),
         )
         .all().length;
+      // A just-freed slot belongs to the creator's older ready request in this same family and slot.
+      const earlierReady = deps.db
+        .select({ id: schema.jobs.id })
+        .from(schema.jobs)
+        .where(
+          and(
+            eq(schema.jobs.creatorId, actor.userId),
+            eq(schema.jobs.familyId, game.familyId),
+            eq(schema.jobs.slot, slot),
+            eq(schema.jobs.state, 'queued'),
+            or(eq(schema.jobs.start, 'now'), lte(schema.jobs.startAt, now.toISOString())),
+          ),
+        )
+        .get();
       const state =
         request.start === 'at_reset' ||
         held >= settings.slots[slot] ||
+        Boolean(earlierReady) ||
         creatorHoldsSlot(deps.db, actor.userId, deps.defaults.creatorJobLimit ?? 1)
           ? 'queued'
           : 'admitted';

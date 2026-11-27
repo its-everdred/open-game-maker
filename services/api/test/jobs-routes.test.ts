@@ -78,6 +78,20 @@ async function createJob(app: Awaited<ReturnType<typeof makeApp>>['app'], overri
 }
 
 describe('jobs routes', () => {
+  it('does not admit a later request ahead of the creator’s ready queued job', async () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.allowances)
+      .values({ familyId: ids.family, userId: ids.user, dailyMicroUsd: 100_000_000 })
+      .run();
+    const { app } = await makeApp(deps);
+    const first = (await (await createJob(app)).json()) as { jobId: string };
+    const older = (await (await createJob(app)).json()) as { state: string };
+    expect(older.state).toBe('queued');
+    deps.db.update(schema.jobs).set({ state: 'done' }).where(eq(schema.jobs.id, first.jobId)).run();
+    const later = (await (await createJob(app)).json()) as { state: string };
+    expect(later.state).toBe('queued');
+  });
   it('honors a configured creator limit for direct admission', async () => {
     const deps = setup();
     deps.config.creatorJobLimit = 2;
