@@ -167,6 +167,24 @@ it('reports microphone errors that arrive before dictation stops', async () => {
   await expect(session.stop()).rejects.toThrow('Microphone denied');
 });
 
+it('keeps an unconfirmed dictation from being sent or passed to voice until edited', async () => {
+  const postText = vi.fn().mockResolvedValue(undefined);
+  const { container } = render(<AiurComposer jobId="job-1" voiceTarget={voiceTarget} postText={postText} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
+  const session = await composer.adapters.dictation!.start({ onPartial: vi.fn(), onLevel: vi.fn() });
+  fake.listeners.get('error')!({ code: 'incomplete_transcript', message: 'Final words missing' });
+  await expect(session.stop()).rejects.toThrow('Final words missing');
+  await expect(composer.onSend!('partial words', [])).rejects.toThrow('Review the dictation');
+  await expect(composer.adapters.voice!.start({ onEnd: vi.fn(), initialText: 'partial words' })).rejects.toThrow(
+    'Review the dictation',
+  );
+  expect(postText).not.toHaveBeenCalled();
+  composer.shadowRoot!.querySelector('textarea')!.dispatchEvent(new Event('input', { bubbles: true }));
+  await composer.onSend!('corrected words', []);
+  expect(postText).toHaveBeenCalledWith('job-1', 'corrected words', undefined);
+});
+
 it('carries opening text into voice and keeps the session when the job refreshes', async () => {
   fake.end.mockClear();
   fake.sendText.mockClear();

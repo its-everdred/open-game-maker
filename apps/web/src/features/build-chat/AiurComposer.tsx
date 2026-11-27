@@ -103,6 +103,11 @@ export function AiurComposer({
         : '';
     element.shadowRoot?.append(style);
     const input = element.shadowRoot?.querySelector('textarea');
+    let dictationFailed = false;
+    const edited = () => {
+      dictationFailed = false;
+    };
+    input?.addEventListener('input', edited);
     const fileInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[type="file"]');
     const paste = (event: ClipboardEvent) => {
       const clipboard = event.clipboardData;
@@ -153,6 +158,7 @@ export function AiurComposer({
         ? {
             dictation: {
               start: async ({ onPartial }) => {
+                dictationFailed = false;
                 let resolveCancelled: () => void = () => {};
                 let cleanup: () => void = () => {};
                 const result = new Promise<string>((resolve, reject) => {
@@ -169,6 +175,7 @@ export function AiurComposer({
                     resolve(value.text);
                   });
                   const offError = dictation.on('error', (value) => {
+                    dictationFailed = true;
                     cleanup();
                     reject(codedError(value.code, value.message));
                   });
@@ -200,6 +207,8 @@ export function AiurComposer({
         ? {
             voice: {
               start: async ({ onEnd, initialText }) => {
+                if (dictationFailed)
+                  throw codedError('incomplete_transcript', 'Review the dictation before continuing');
                 if (!element.isConnected) throw codedError('cancelled', 'The conversation was closed');
                 if (voiceStarting.current || voiceRef.current)
                   throw codedError('starting', 'Voice is already starting');
@@ -262,6 +271,7 @@ export function AiurComposer({
         : {}),
     };
     element.onSend = async (text, attachments) => {
+      if (dictationFailed) throw codedError('incomplete_transcript', 'Review the dictation before sending');
       if (!element.isConnected) throw codedError('cancelled', 'The conversation was closed');
       const { startJob, postText, onPosted, onOptimistic, onFailed, uploadAttachment, wasAdmissionReused } =
         callbacks.current;
@@ -334,6 +344,7 @@ export function AiurComposer({
       element.removeEventListener('keydown', recording);
       element.removeEventListener('keyup', recording);
       input?.removeEventListener('paste', paste);
+      input?.removeEventListener('input', edited);
       style.remove();
     };
   }, [jobId, voiceTarget, dictationTarget, reading]);
