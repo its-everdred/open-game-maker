@@ -1,0 +1,5 @@
+.welcome-actions a {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
