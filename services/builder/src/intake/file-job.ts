@@ -13,6 +13,7 @@ import type { FileResult, IntakeAlert, IntakeDeps } from './types.js';
 
 const DEFAULT_SWEEP_MS = 60_000;
 const SPEND_CAP_RETRY_MS = 5_000;
+const CREATOR_LANE_LABELS = ['slot:creator', 'priority:1'] as const;
 
 export function createIntake(deps: IntakeDeps) {
   const now = deps.now ?? (() => new Date());
@@ -104,6 +105,7 @@ export function createIntake(deps: IntakeDeps) {
     try {
       await deps.issues.ensureLabel(repo, `feature:gm-${jobId}`, '0e8a16', 'OGM job');
       await deps.issues.ensureLabel(repo, todo, '6f42c1', 'ready to be worked');
+      for (const label of CREATOR_LANE_LABELS) await deps.issues.ensureLabel(repo, label, 'ededed', 'creator job');
       if (found.job.kind === 'feature') {
         await deps.issues.ensureLabel(repo, 'phase:mock', 'bfd4f2', 'creator review mock phase');
         await deps.issues.ensureLabel(repo, 'model:low', 'ededed', 'low reasoning effort');
@@ -222,14 +224,19 @@ export function createIntake(deps: IntakeDeps) {
         rows.set(ticket.key, row);
       }
 
-      if (row.todoAt === null) {
-        try {
-          const labels = await deps.issues.labels(repo, row.issueNumber);
-          if (!labels.includes(todo)) await deps.issues.addLabel(repo, row.issueNumber, todo);
-        } catch (error) {
-          await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
-          return { deferred: 'github' };
+      try {
+        const labels = await deps.issues.labels(repo, row.issueNumber);
+        for (const label of CREATOR_LANE_LABELS) {
+          if (!labels.includes(label)) await deps.issues.addLabel(repo, row.issueNumber, label);
         }
+        if (row.todoAt === null) {
+          if (!labels.includes(todo)) await deps.issues.addLabel(repo, row.issueNumber, todo);
+        }
+      } catch (error) {
+        await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
+        return { deferred: 'github' };
+      }
+      if (row.todoAt === null) {
         const todoAt = now().toISOString();
         deps.db
           .update(schema.jobTickets)

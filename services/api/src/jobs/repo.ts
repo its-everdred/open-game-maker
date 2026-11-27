@@ -12,6 +12,7 @@ export function toJob(
   row: JobRow,
   projection?: typeof schema.jobProjections.$inferSelect | null,
   openRequestCount = 0,
+  position?: number,
 ): Job {
   return {
     id: row.id,
@@ -43,6 +44,7 @@ export function toJob(
       ? {}
       : { progressPercent: projection.progressPercent }),
     openRequestCount,
+    ...(position === undefined ? {} : { position }),
   };
 }
 
@@ -60,7 +62,7 @@ export function findJob(db: Db, id: string): Job {
     .where(eq(schema.jobs.id, id))
     .get();
   if (!found) throw new HttpError(404, 'job_not_found');
-  return toJob(found.job, found.projection, openRequestCounts(db, [id]).get(id));
+  return toJob(found.job, found.projection, openRequestCounts(db, [id]).get(id), queuePosition(db, found.job));
 }
 
 export function listJobs(db: Db, gameIds: string | readonly string[]): Job[] {
@@ -77,7 +79,7 @@ export function listJobs(db: Db, gameIds: string | readonly string[]): Job[] {
     db,
     rows.map(({ job }) => job.id),
   );
-  return rows.map(({ job, projection }) => toJob(job, projection, requests.get(job.id)));
+  return rows.map(({ job, projection }) => toJob(job, projection, requests.get(job.id), queuePosition(db, job)));
 }
 
 function openRequestCounts(db: Db, jobIds: readonly string[]): Map<string, number> {
@@ -94,6 +96,11 @@ function openRequestCounts(db: Db, jobIds: readonly string[]): Map<string, numbe
 export function acceptedFor(db: Db, row: JobRow): CreateJobAccepted {
   const reservation = Reservation.parse(JSON.parse(row.reservation));
   if (row.state !== 'queued') return { jobId: row.id, state: 'admitted', reservation, slot: row.slot };
+  return { jobId: row.id, state: row.state, reservation, slot: row.slot, position: queuePosition(db, row) };
+}
+
+function queuePosition(db: Db, row: JobRow): number | undefined {
+  if (row.state !== 'queued') return undefined;
   const position =
     db
       .select({ id: schema.jobs.id })
@@ -109,7 +116,7 @@ export function acceptedFor(db: Db, row: JobRow): CreateJobAccepted {
       .orderBy(asc(schema.jobs.createdAt), sql`rowid`)
       .all()
       .findIndex(({ id }) => id === row.id) + 1;
-  return { jobId: row.id, state: row.state, reservation, slot: row.slot, position: Math.max(1, position) };
+  return Math.max(1, position);
 }
 
 // A daemon's ticket maps to a job through the job's game: the game's own daemon, or the registered daemon its

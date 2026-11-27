@@ -4,6 +4,7 @@ import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { AppEvents } from '../app/events.js';
 import { getBudgetSettings, type BudgetDefaults } from '../budget/settings.js';
 import { SLOT_STATES, transition } from './state.js';
+import { creatorHoldsSlot } from './creator-slot.js';
 
 export type SchedulerDeps = {
   db: Db;
@@ -48,7 +49,7 @@ export function tick(deps: SchedulerDeps, now = (deps.now ?? (() => new Date()))
             ),
           )
           .all().length;
-        if (held >= settings.slots[row.slot]) continue;
+        if (held >= settings.slots[row.slot] || creatorHoldsSlot(deps.db, row.creatorId)) continue;
         const state = transition(row.state, 'admit');
         const changed = deps.db
           .update(schema.jobs)

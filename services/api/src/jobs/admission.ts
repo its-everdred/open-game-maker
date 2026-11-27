@@ -23,6 +23,7 @@ import { energySource } from '../energy/source.js';
 import { energyBlock } from '../energy/view.js';
 import type { AppEvents } from '../app/events.js';
 import { acceptedFor } from './repo.js';
+import { creatorHoldsSlot } from './creator-slot.js';
 import { SLOT_STATES } from './state.js';
 
 export class AdmissionRefused extends Error {
@@ -162,7 +163,10 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
           ),
         )
         .all().length;
-      const state = request.start === 'at_reset' || held >= settings.slots[slot] ? 'queued' : 'admitted';
+      const state =
+        request.start === 'at_reset' || held >= settings.slots[slot] || creatorHoldsSlot(deps.db, actor.userId)
+          ? 'queued'
+          : 'admitted';
       const at = now.toISOString();
       const id = `j_${randomUUID()}`;
       deps.db

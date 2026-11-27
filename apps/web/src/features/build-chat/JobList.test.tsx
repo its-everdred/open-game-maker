@@ -16,6 +16,14 @@ afterEach(() => {
 });
 
 describe('JobList', () => {
+  it('shows a queued job position', () => {
+    render(
+      <MemoryRouter>
+        <JobList jobs={[buildChatJob({ state: 'queued', position: 2 })]} unitLabel="coin" onOpen={vi.fn()} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Queue position: 2')).toBeTruthy();
+  });
   it('surfaces a cancel failure through the existing toast feed', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     cancelJob.mockRejectedValue(new Error('offline'));

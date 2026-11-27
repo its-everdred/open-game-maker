@@ -292,8 +292,12 @@ describe('fileJob', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:castle-run:todo',
+      'ensure:slot:creator',
+      'ensure:priority:1',
       'create:1',
       'cap:1:9.000001',
+      'label:1:slot:creator',
+      'label:1:priority:1',
       'label:1:castle-run:todo',
       'nudge:1',
     ]);
@@ -311,13 +315,19 @@ describe('fileJob', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:castle-run:todo',
+      'ensure:slot:creator',
+      'ensure:priority:1',
       'ensure:phase:mock',
       'ensure:model:low',
       'create:1',
       'create:2',
       'cap:1:9.000001',
+      'label:1:slot:creator',
+      'label:1:priority:1',
       'label:1:castle-run:todo',
       'cap:2:9.000001',
+      'label:2:slot:creator',
+      'label:2:priority:1',
       'label:2:castle-run:todo',
       'nudge:1,2',
     ]);
@@ -368,9 +378,13 @@ describe('fileJob', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:castle-run:todo',
+      'ensure:slot:creator',
+      'ensure:priority:1',
       'ensure:phase:mock',
       'ensure:model:low',
       'cap:7:9.000001',
+      'label:7:slot:creator',
+      'label:7:priority:1',
       'label:7:castle-run:todo',
       'nudge:7',
     ]);
@@ -380,6 +394,22 @@ describe('fileJob', () => {
       todoAt: NOW.toISOString(),
       filedAt: NOW.toISOString(),
     });
+    close(input);
+  });
+
+  it('labels recovered creator tickets for the reserved lane before making them runnable', async () => {
+    const input = harness();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_1', key: 'T1', issueNumber: 7, repo: 'owner/game', sig: 'sig' })
+      .run();
+    await input.intake.fileJob('j_1');
+    expect(input.calls).toContain('ensure:slot:creator');
+    expect(input.calls).toContain('ensure:priority:1');
+    expect(input.calls.indexOf('label:7:slot:creator')).toBeLessThan(input.calls.indexOf('label:7:castle-run:todo'));
+    expect(input.calls.indexOf('label:7:priority:1')).toBeLessThan(input.calls.indexOf('label:7:castle-run:todo'));
+    expect(input.calls).toContain('label:7:slot:creator');
+    expect(input.calls).toContain('label:7:priority:1');
     close(input);
   });
 
@@ -394,9 +424,13 @@ describe('fileJob', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:castle-run:todo',
+      'ensure:slot:creator',
+      'ensure:priority:1',
       'ensure:phase:mock',
       'ensure:model:low',
       'cap:12:9.000001',
+      'label:12:slot:creator',
+      'label:12:priority:1',
       'label:12:castle-run:todo',
       'nudge:12',
     ]);

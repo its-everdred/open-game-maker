@@ -78,6 +78,21 @@ async function createJob(app: Awaited<ReturnType<typeof makeApp>>['app'], overri
 }
 
 describe('jobs routes', () => {
+  it('queues a second job from the same creator even in a different slot', async () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.allowances)
+      .values({ familyId: ids.family, userId: ids.user, dailyMicroUsd: 100_000_000 })
+      .run();
+    const { app } = await makeApp(deps);
+    const first = await createJob(app);
+    expect(await first.json()).toMatchObject({ state: 'admitted' });
+    const second = await createJob(app, { kind: 'new_game' });
+    const queued = (await second.json()) as { jobId: string };
+    expect(queued).toMatchObject({ state: 'queued', position: 1 });
+    const read = await app.request(`/api/v1/jobs/${queued.jobId}`, { headers: asUser(ids.user) });
+    expect(await read.json()).toMatchObject({ state: 'queued', position: 1 });
+  });
   it("serves the web app's game and active jobs query strings", async () => {
     const deps = setup();
     deps.db

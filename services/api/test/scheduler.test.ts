@@ -64,6 +64,33 @@ function queued(deps: ReturnType<typeof makeDeps>, id: string, createdAt: string
 }
 
 describe('job scheduler', () => {
+  it('starts at most one job per creator while allowing another creator to start', () => {
+    const { deps } = setup();
+    deps.db
+      .insert(schema.familyBudgetSettings)
+      .values({
+        familyId: 'f_1',
+        resetZone: defaults.resetZone,
+        unitLabel: 'energy',
+        microUsdPerUnit: 100_000,
+        platformCapMicroUsd: 50_000_000,
+        slotsNewGame: 3,
+        slotsEdit: 3,
+        hardCapMultiplier: 1,
+      })
+      .run();
+    queued(deps, 'j_first', '2026-11-01T00:00:00.000Z');
+    queued(deps, 'j_second', '2026-11-01T01:00:00.000Z');
+    queued(deps, 'j_other', '2026-11-01T02:00:00.000Z');
+    deps.db.update(schema.jobs).set({ creatorId: 'u_2' }).where(eq(schema.jobs.id, 'j_other')).run();
+
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual([
+      'j_first',
+      'j_other',
+    ]);
+    deps.db.update(schema.jobs).set({ state: 'done' }).where(eq(schema.jobs.id, 'j_first')).run();
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual(['j_second']);
+  });
   it('starts an at-reset job exactly when the family reset arrives', () => {
     const { deps, started, changed } = setup();
     queued(deps, 'j_reset', BEFORE.toISOString(), 'at_reset');
