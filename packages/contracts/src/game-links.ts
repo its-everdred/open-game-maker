@@ -11,6 +11,7 @@ export const RESERVED_GAME_SLUGS: ReadonlySet<string> = new Set([
   'assets',
   'auth',
   'connect',
+  'factory',
   'g',
   'game',
   'games',
