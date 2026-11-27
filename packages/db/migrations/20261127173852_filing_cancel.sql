@@ -1,0 +1,1 @@
+ALTER TABLE `job_tickets` ADD `cancel_requested_at` text;

@@ -17,6 +17,7 @@ export const jobTickets = sqliteTable(
     capSetAt: text('cap_set_at'),
     todoAt: text('todo_at'),
     filedAt: text('filed_at'),
+    cancelRequestedAt: text('cancel_requested_at'),
     terminalState: text('terminal_state', { enum: ['done', 'cancelled'] }),
     lifecycleSeq: integer('lifecycle_seq'),
   },

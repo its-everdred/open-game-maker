@@ -190,6 +190,50 @@ function close(input: Harness) {
 }
 
 describe('fileJob', () => {
+  it('does not finalize filing if cancellation arrives during the nudge', async () => {
+    const input = harness();
+    vi.mocked(input.aiur.nudgeTodo).mockImplementation(async () => {
+      input.db
+        .update(schema.jobTickets)
+        .set({ cancelRequestedAt: NOW.toISOString() })
+        .where(eq(schema.jobTickets.jobId, 'j_1'))
+        .run();
+    });
+    await input.intake.fileJob('j_1');
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('admitted');
+    close(input);
+  });
+  it('does not pause a job when cancellation arrives before an exhausted-cap response', async () => {
+    const input = harness();
+    vi.mocked(input.aiur.setSpendCap).mockImplementation(async () => {
+      input.db
+        .update(schema.jobTickets)
+        .set({ cancelRequestedAt: NOW.toISOString() })
+        .where(eq(schema.jobTickets.jobId, 'j_1'))
+        .run();
+      throw new AiurHttpError(409, 'spend_cap_exhausted', 'spent', 'http://127.0.0.1');
+    });
+    await input.intake.fileJob('j_1');
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('admitted');
+    close(input);
+  });
+  it('does not finish filing after cancellation is requested during the runnable-label write', async () => {
+    const input = harness();
+    vi.mocked(input.issues.addLabel).mockImplementation(async (_repo, _number, label) => {
+      if (label === 'castle-run:todo') {
+        input.db
+          .update(schema.jobTickets)
+          .set({ cancelRequestedAt: NOW.toISOString() })
+          .where(eq(schema.jobTickets.jobId, 'j_1'))
+          .run();
+      }
+    });
+
+    await input.intake.fileJob('j_1');
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('admitted');
+    expect(input.aiur.nudgeTodo).not.toHaveBeenCalled();
+    close(input);
+  });
   it('does not make a ticket runnable if cancellation arrives while reading its labels', async () => {
     const input = harness();
     vi.mocked(input.issues.labels).mockImplementation(async () => {

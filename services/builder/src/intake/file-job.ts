@@ -1,7 +1,7 @@
 import { AiurHttpError } from '@ogm/aiur-client';
 import { CompleteTriage, JobPlan, Reservation, type TriageResult } from '@ogm/contracts';
 import { schema } from '@ogm/db';
-import { and, eq, lte } from 'drizzle-orm';
+import { and, eq, isNotNull, lte, notExists } from 'drizzle-orm';
 
 import { isDaemonLabel } from '@ogm/game-repo-template';
 
@@ -27,6 +27,16 @@ export function createIntake(deps: IntakeDeps) {
     await deps.alert?.(event);
   }
 
+  function cancellationRequested(jobId: string): boolean {
+    return Boolean(
+      deps.db
+        .select({ key: schema.jobTickets.key })
+        .from(schema.jobTickets)
+        .where(and(eq(schema.jobTickets.jobId, jobId), isNotNull(schema.jobTickets.cancelRequestedAt)))
+        .get(),
+    );
+  }
+
   function fileJob(jobId: string): Promise<FileResult> {
     const current = inFlight.get(jobId);
     if (current) return current;
@@ -44,6 +54,7 @@ export function createIntake(deps: IntakeDeps) {
       .get();
     if (!found) return { skipped: 'missing' };
     if (found.job.state !== 'admitted') return { skipped: `state:${found.job.state}` };
+    if (cancellationRequested(jobId)) return { skipped: 'cancellation_requested' };
     const repairTriage = found.job.kind === 'repair' ? triageForRepair(deps.db, jobId) : undefined;
     if (found.job.kind === 'repair' && !repairTriage?.ticket) return { deferred: 'triage' };
 
@@ -194,6 +205,7 @@ export function createIntake(deps: IntakeDeps) {
         .where(eq(schema.jobs.id, jobId))
         .get()?.state;
       if (state !== 'admitted') return { skipped: `state:${state ?? 'missing'}` };
+      if (cancellationRequested(jobId)) return { skipped: 'cancellation_requested' };
     }
 
     for (const ticket of tickets) {
@@ -204,17 +216,37 @@ export function createIntake(deps: IntakeDeps) {
         .where(eq(schema.jobs.id, jobId))
         .get()?.state;
       if (state !== 'admitted') return { skipped: `state:${state ?? 'missing'}` };
+      if (cancellationRequested(jobId)) return { skipped: 'cancellation_requested' };
       if (row.capSetAt === null) {
         try {
           await setSpendCap(aiur, row.issueNumber, spendCap, sleep);
         } catch (error) {
+          const current = deps.db
+            .select({ state: schema.jobs.state })
+            .from(schema.jobs)
+            .where(eq(schema.jobs.id, jobId))
+            .get();
+          if (current?.state !== 'admitted' || cancellationRequested(jobId))
+            return { skipped: 'cancellation_requested' };
           if (error instanceof AiurHttpError && error.status === 409 && error.code === 'spend_cap_exhausted') {
             const at = now().toISOString();
-            deps.db
+            const paused = deps.db
               .update(schema.jobs)
               .set({ state: 'paused_budget', pausedReason: 'budget_exhausted', updatedAt: at })
-              .where(eq(schema.jobs.id, jobId))
+              .where(
+                and(
+                  eq(schema.jobs.id, jobId),
+                  eq(schema.jobs.state, 'admitted'),
+                  notExists(
+                    deps.db
+                      .select({ key: schema.jobTickets.key })
+                      .from(schema.jobTickets)
+                      .where(and(eq(schema.jobTickets.jobId, jobId), isNotNull(schema.jobTickets.cancelRequestedAt))),
+                  ),
+                ),
+              )
               .run();
+            if (!paused.changes) return { skipped: 'cancellation_requested' };
             deps.onJobChanged?.({
               jobId,
               gameId: found.job.gameId,
@@ -242,6 +274,7 @@ export function createIntake(deps: IntakeDeps) {
         .where(eq(schema.jobs.id, jobId))
         .get()?.state;
       if (currentState !== 'admitted') return { skipped: `state:${currentState ?? 'missing'}` };
+      if (cancellationRequested(jobId)) return { skipped: 'cancellation_requested' };
 
       try {
         const labels = await deps.issues.labels(repo, row.issueNumber);
@@ -255,6 +288,7 @@ export function createIntake(deps: IntakeDeps) {
             .where(eq(schema.jobs.id, jobId))
             .get()?.state;
           if (state !== 'admitted') return { skipped: `state:${state ?? 'missing'}` };
+          if (cancellationRequested(jobId)) return { skipped: 'cancellation_requested' };
           if (!labels.includes(todo)) await deps.issues.addLabel(repo, row.issueNumber, todo);
         }
       } catch (error) {
@@ -274,6 +308,7 @@ export function createIntake(deps: IntakeDeps) {
       issueNumbers.push(row.issueNumber);
     }
 
+    if (cancellationRequested(jobId)) return { skipped: 'cancellation_requested' };
     try {
       await aiur.nudgeTodo(issueNumbers.map(String));
     } catch (error) {
@@ -290,7 +325,18 @@ export function createIntake(deps: IntakeDeps) {
         aiurSpendCapMicroUsd: reservation.amountMicroUsd,
         updatedAt,
       })
-      .where(and(eq(schema.jobs.id, jobId), eq(schema.jobs.state, 'admitted')))
+      .where(
+        and(
+          eq(schema.jobs.id, jobId),
+          eq(schema.jobs.state, 'admitted'),
+          notExists(
+            deps.db
+              .select({ key: schema.jobTickets.key })
+              .from(schema.jobTickets)
+              .where(and(eq(schema.jobTickets.jobId, jobId), isNotNull(schema.jobTickets.cancelRequestedAt))),
+          ),
+        ),
+      )
       .run();
     if (filed.changes === 0) return { skipped: 'state:changed' };
     if (found.job.kind === 'scope') {
