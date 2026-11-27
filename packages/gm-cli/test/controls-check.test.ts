@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -93,6 +94,12 @@ it('includes TypeScript manifest failures in the main check command', async () =
     join(root, 'src', 'manifest.ts'),
     "export const manifest = { inputs: { actions: { move: 'stick' } } };",
   );
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
+  git('init', '-q');
+  git('add', '-A');
+  git('commit', '-qm', 'fixture');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
   const result = await gm(['check', '--json'], { cwd: root });
   expect(result.code).not.toBe(0);
   expect(result.out.join(' ')).toMatch(/inputs\.controls must declare a gameplay set/u);

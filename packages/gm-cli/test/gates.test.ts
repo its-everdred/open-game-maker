@@ -136,7 +136,10 @@ describe('gm check', () => {
     const git = (...args: string[]) =>
       execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
     git('init', '-q');
-    writeFileSync(join(root, 'gm.manifest.json'), '{}');
+    writeFileSync(
+      join(root, 'gm.manifest.json'),
+      JSON.stringify({ inputs: { actions: {}, controls: { gameplay: { layout: 'tap', buttons: [] } } } }),
+    );
     mkdirSync(join(root, 'shots/a'), { recursive: true });
     mkdirSync(join(root, 'shots/b'), { recursive: true });
     writeFileSync(join(root, 'shots/a/t2.png'), 'a');
@@ -167,7 +170,10 @@ describe('gm check', () => {
       execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
     git('init', '-q');
     mkdirSync(join(game, 'review'), { recursive: true });
-    writeFileSync(join(game, 'gm.manifest.json'), '{}');
+    writeFileSync(
+      join(game, 'gm.manifest.json'),
+      JSON.stringify({ inputs: { actions: {}, controls: { gameplay: { layout: 'tap', buttons: [] } } } }),
+    );
     writeFileSync(
       join(game, 'review/decisions.json'),
       JSON.stringify({ screens: { play: { provisional: { owner: 'Kevin', until: 'build' } } } }),
@@ -247,7 +253,10 @@ describe('gm check', () => {
     const git = (...args: string[]) =>
       execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: root });
     git('init', '-q');
-    writeFileSync(join(root, 'gm.manifest.json'), '{}');
+    writeFileSync(
+      join(root, 'gm.manifest.json'),
+      JSON.stringify({ inputs: { actions: {}, controls: { gameplay: { layout: 'tap', buttons: [] } } } }),
+    );
     git('add', '-A');
     git('commit', '-qm', 'fixture');
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
