@@ -101,7 +101,7 @@ export const GAME_FILE = /^\/g\/[^/]+\/[^/]+\/(.*)$/;
  * Serves the games origin from the local build: `/g/<gameId>/<buildId>/<file>` is `<file>`, and once that origin is
  * known any other path on it (a test build loads `/assets/...` from the root) is the same path in the local build.
  */
-async function routeGameToLocal(context: BrowserContext, app: AppFrame & { localUrl: string }): Promise<void> {
+export async function routeGameToLocal(context: BrowserContext, app: AppFrame & { localUrl: string }): Promise<void> {
   const appOrigin = new URL(app.url).origin;
   let gamesOrigin: string | undefined;
   await context.route(
@@ -112,6 +112,10 @@ async function routeGameToLocal(context: BrowserContext, app: AppFrame & { local
       if (file !== undefined) gamesOrigin = url.origin;
       const path = file ?? url.pathname.slice(1);
       const local = new URL(path === '' ? 'index.html' : path, app.localUrl);
+      if (local.origin !== new URL(app.localUrl).origin) {
+        await route.fulfill({ status: 403, body: 'invalid local build path' });
+        return;
+      }
       local.search = url.search;
       const response = await fetch(local);
       await route.fulfill({
@@ -140,7 +144,7 @@ function captureParams({ appOrigin, tier }: { appOrigin: string; tier: Tier }): 
 }
 
 /** The game's frame inside the app shell, once the app has mounted it. */
-async function gameFrame(page: Page, appOrigin: string, timeoutMs: number): Promise<Frame> {
+export async function gameFrame(page: Page, appOrigin: string, timeoutMs: number): Promise<Frame> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const frame = page.frames().find((candidate) => {
