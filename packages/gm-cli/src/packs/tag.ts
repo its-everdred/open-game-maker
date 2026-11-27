@@ -1,14 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createReadStream, type Dirent } from 'node:fs';
-import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
-import { previewKey, renderCollectionSheet, renderSheet, spriteSheet } from '@ogm/asset-previews';
+import { previewKey, renderCollectionSheet, spriteSheet } from '@ogm/asset-previews';
 import { checkDocuments, validateCard, type AssetCard } from '@ogm/contracts';
 
 import type { WorkerRecord } from './workers.js';
+import { ModelSourceMismatch, modelPreview } from './model-preview.js';
 
 export type TagKind = 'audio' | 'map' | 'model' | 'sprite';
 
@@ -397,6 +398,27 @@ async function writeCard(path: string, card: AssetCard): Promise<void> {
   await rename(staged, path);
 }
 
+export async function restorePreviewFailures(
+  assetsRoot: string,
+  targets: readonly TagTarget[],
+  failures: readonly WorkerRecord[],
+): Promise<void> {
+  const cards = targets.flatMap((target) => target.cards);
+  for (const failure of failures) {
+    const entry = cards.find(({ path }) => relativeKey(assetsRoot, path) === failure.card);
+    if (!entry || typeof failure.skipped !== 'string') throw new Error('invalid preview failure record');
+    const card = JSON.parse(await readFile(entry.path, 'utf8')) as AssetCard;
+    if (card.previews) delete card.previews.sheet;
+    card.provenance.preview_failure = {
+      by: 'code',
+      tool: 'gm-packs-tag',
+      at: new Date().toISOString(),
+      input: `skipped: ${failure.skipped}`,
+    };
+    await writeCard(entry.path, card);
+  }
+}
+
 function primary(card: AssetCard): NonNullable<AssetCard['source']>['files'][number] {
   const file = card.source?.files.find((candidate) => candidate.role === 'primary') ?? card.source?.files[0];
   if (!file) throw new Error(`${card.id} has no primary source file`);
@@ -444,12 +466,31 @@ export async function prepareVisualPreviews(options: {
   kind: 'model' | 'sprite';
   limit: number;
   software: boolean;
-}): Promise<{ pages: string[]; renderers: string[] }> {
+  failures?: WorkerRecord[];
+}): Promise<{ pages: string[]; renderers: string[]; failures: WorkerRecord[]; selected: number }> {
   const all = options.targets.flatMap((target) => target.cards.map((entry) => ({ target, ...entry })));
   const selected = all.slice(0, options.limit || undefined);
   const pages: string[] = [];
   const renderers: string[] = [];
+  const failures = options.failures ?? [];
   for (const { target, path, card, restrictions } of selected) {
+    const recordFailure = async (reason: string): Promise<void> => {
+      const updated = structuredClone(card);
+      if (updated.previews) delete updated.previews.sheet;
+      updated.provenance.preview_failure = {
+        by: 'code',
+        tool: 'gm-packs-tag',
+        at: new Date().toISOString(),
+        input: `skipped: ${reason}`,
+      };
+      await writeCard(path, updated);
+      failures.push({
+        card: relativeKey(options.assetsRoot, path),
+        status: updated.status,
+        flags: updated.flags ?? [],
+        skipped: reason,
+      });
+    };
     const inherited = target.collection.rights?.redistribution;
     const redistribution = narrowest(
       inherited,
@@ -473,27 +514,35 @@ export async function prepareVisualPreviews(options: {
     const sourcePath = await realpath(sourceCandidate);
     if (!inside(extractedRoot, sourcePath) || sourcePath !== sourceCandidate)
       throw new Error(`${card.id} source path resolves outside its collection or uses a symlink`);
-    const digest = createHash('sha256');
-    for await (const chunk of createReadStream(sourcePath)) digest.update(chunk as Buffer);
-    if (digest.digest('hex') !== hash) throw new Error(`${card.id}: source hash does not match card`);
-    if (existing === key && (await safeExistingPreview(options.assetsRoot, existing))) continue;
+    if (!(await stat(sourcePath)).isFile()) throw new Error(`${card.id}: source is not a regular file`);
+    const cached = existing === key && (await safeExistingPreview(options.assetsRoot, existing));
     const out = join(options.assetsRoot, key);
     if (options.kind === 'model') {
-      const result = await renderSheet(sourcePath, out, {
-        assetsRoot: options.assetsRoot,
-        executablePath: '/usr/bin/chromium',
-        software: options.software,
-      });
-      renderers.push(result.renderer);
+      try {
+        const renderer = await modelPreview(sourcePath, out, options.assetsRoot, options.software, hash, cached);
+        if (cached) continue;
+        renderers.push(renderer);
+      } catch (error) {
+        if (error instanceof ModelSourceMismatch)
+          throw new Error(`${card.id}: source hash does not match card`, { cause: error });
+        const reason = (error instanceof Error ? error.message : String(error)).slice(0, 180);
+        await recordFailure(reason);
+        continue;
+      }
     } else {
+      const digest = createHash('sha256');
+      for await (const chunk of createReadStream(sourcePath)) digest.update(chunk as Buffer);
+      if (digest.digest('hex') !== hash) throw new Error(`${card.id}: source hash does not match card`);
+      if (cached) continue;
       await spriteSheet(sourcePath, out, { assetsRoot: options.assetsRoot, pixelArt: card.image?.pixel_art === true });
     }
     const updated = structuredClone(card);
+    delete updated.provenance.preview_failure;
     updated.previews = { ...updated.previews, sheet: key };
     await writeCard(path, updated);
   }
 
-  if (selected.length === all.length) {
+  if (selected.length === all.length && failures.length === 0) {
     for (const target of options.targets) {
       if (
         target.collection.provenance['*']?.locked ||
@@ -534,7 +583,7 @@ export async function prepareVisualPreviews(options: {
       await writeCard(target.collectionPath, collection);
     }
   }
-  return { pages, renderers };
+  return { pages, renderers, failures, selected: selected.length };
 }
 
 function countKey(card: AssetCard): string | null {

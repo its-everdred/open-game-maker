@@ -54,6 +54,32 @@ export type RigInputMapping = z.infer<typeof rigInputMappingSchema>;
 export const controlsLayoutSchema = z.enum(['none', 'menu', 'gameplay']);
 export type ControlsLayout = z.infer<typeof controlsLayoutSchema>;
 
+/** The shared icons the host touch overlay draws on its buttons; a manifest maps button actions to them. */
+export const touchIconSchema = z.enum([
+  'attack',
+  'heavy-attack',
+  'block',
+  'roll',
+  'use',
+  'cast',
+  'potion',
+  'map',
+  'inventory',
+  'jump',
+  'confirm',
+  'back',
+  'rotate-cw',
+  'rotate-ccw',
+  'down',
+  'hard-drop',
+  'left',
+  'right',
+  'swap',
+  'pause',
+  'action',
+]);
+export type TouchIcon = z.infer<typeof touchIconSchema>;
+
 /** One instance per local player; implemented by OGM-025. */
 export interface CameraRig {
   id: ViewId;

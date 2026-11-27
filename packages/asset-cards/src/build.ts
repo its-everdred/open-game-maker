@@ -6,10 +6,11 @@ import process from 'node:process';
 import { validateCard, type AssetCard } from '@ogm/contracts';
 
 import { resolve } from './resolve.js';
+import { SoundSetCardSchema, type SoundSetCard } from './sound-set.js';
 import type { CardIndex, IndexError, ResolvedCard } from './types.js';
 
 export const INDEX_PATH = join('index', 'cards.index.json');
-export const CARD_INDEX_VERSION = 3;
+export const CARD_INDEX_VERSION = 4;
 const TOPS = ['packs', 'inspiration', 'sets'];
 const INDEX_IGNORE = '.indexignore';
 const PACK_ID = /^[a-z0-9][a-z0-9-]*$/;
@@ -17,8 +18,9 @@ const PACK_ID = /^[a-z0-9][a-z0-9-]*$/;
 async function entries(dir: string): Promise<string[]> {
   try {
     return await readdir(dir);
-  } catch {
-    return [];
+  } catch (error) {
+    if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) return [];
+    throw error;
   }
 }
 
@@ -30,8 +32,9 @@ async function cardFilesFor(root: string, top: string, id: string): Promise<stri
   let nested: string[];
   try {
     nested = await readdir(join(base, 'cards'), { recursive: true });
-  } catch {
-    return files;
+  } catch (error) {
+    if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) return files;
+    throw error;
   }
   for (const file of nested.filter((name) => name.endsWith('.card.json')).sort()) {
     files.push(join(base, 'cards', file));
@@ -53,18 +56,33 @@ export async function cardFiles(root: string): Promise<string[]> {
 async function buildFromFiles(root: string, files: readonly string[]): Promise<CardIndex> {
   const errors: IndexError[] = [];
   const valid: AssetCard[] = [];
+  const soundSets: SoundSetCard[] = [];
+  const roots = new WeakMap<AssetCard, string>();
   for (const file of files) {
     const path = relative(root, file);
+    const contents = await readFile(file, 'utf8');
     let doc: unknown;
     try {
-      doc = JSON.parse(await readFile(file, 'utf8'));
+      doc = JSON.parse(contents);
     } catch (error) {
       errors.push({ path, errors: [`unreadable JSON: ${error instanceof Error ? error.message : String(error)}`] });
       continue;
     }
+    if (typeof doc === 'object' && doc !== null && 'schema' in doc && doc.schema === 'ogm.sound-set-card/1.0') {
+      const result = SoundSetCardSchema.safeParse(doc);
+      if (result.success) soundSets.push(result.data);
+      else
+        errors.push({
+          path,
+          errors: result.error.issues.map((issue) => `${issue.path.join('/') || '/'} ${issue.message}`),
+        });
+      continue;
+    }
     const result = validateCard(doc);
-    if (result.ok) valid.push(result.card);
-    else errors.push({ path, errors: result.errors });
+    if (result.ok) {
+      valid.push(result.card);
+      roots.set(result.card, path.split(/[\\/]/).slice(0, 2).join('/'));
+    } else errors.push({ path, errors: result.errors });
   }
 
   const raw: Record<string, AssetCard> = {};
@@ -75,7 +93,7 @@ async function buildFromFiles(root: string, files: readonly string[]): Promise<C
   for (const card of valid) {
     let resolved: ResolvedCard;
     try {
-      resolved = resolve(card, raw);
+      resolved = { ...resolve(card, raw), library_root: roots.get(card) };
     } catch (error) {
       errors.push({ path: card.id, errors: [error instanceof Error ? error.message : String(error)] });
       continue;
@@ -89,7 +107,7 @@ async function buildFromFiles(root: string, files: readonly string[]): Promise<C
       .map((card) => card.vocab)
       .sort()
       .at(-1) ?? '';
-  return { version: CARD_INDEX_VERSION, built: new Date().toISOString(), vocab, cards, collections, errors };
+  return { version: CARD_INDEX_VERSION, built: new Date().toISOString(), vocab, cards, collections, soundSets, errors };
 }
 
 export async function buildIndex(root: string): Promise<CardIndex> {
@@ -131,6 +149,7 @@ async function freshIndex(root: string): Promise<CardIndex | null> {
       !Array.isArray(parsed.cards) ||
       typeof parsed.collections !== 'object' ||
       parsed.collections === null ||
+      !Array.isArray(parsed.soundSets) ||
       !Array.isArray(parsed.errors)
     ) {
       return null;

@@ -166,7 +166,7 @@ export function ScopeChat({
         {refusal && !waitingForAdmin ? (
           <Offers
             offers={refusal.offers}
-            message={energyRefusalText(refusal.window)}
+            message={energyRefusalText(refusal.window, refusal.resetsAt, refusal.reason)}
             disabled={submitting}
             onChoose={(offer) => void choose(offer)}
           />
@@ -223,7 +223,7 @@ export function AllowanceStatus({
       (budget.freeSlots[slot] > 0 ||
         budget.remainingMicroUsd > (fallback?.remainingMicroUsd ?? budget.remainingMicroUsd)));
   const status = energy
-    ? energyRefusalText(energy.window)
+    ? energyRefusalText(energy.window, energy.resetsAt, energy.reason)
     : budget
       ? `${formatUnits(budget.remainingMicroUsd, budget.unitLabel)} remain`
       : 'Checking your allowance…';

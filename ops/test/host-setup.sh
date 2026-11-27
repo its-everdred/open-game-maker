@@ -40,7 +40,7 @@ run_setup > "$scratch/first.out"
 unit_dir=$config_home/systemd/user
 [[ -x $repo/ops/bin/ogm-run ]] || fail "ogm-run should be executable"
 unit_count=$(find "$unit_dir" -maxdepth 1 -type f | wc -l)
-assert_eq "20" "$unit_count" "installer should render all twenty unit files"
+assert_eq "21" "$unit_count" "installer should render all twenty-one unit files"
 
 if grep -R -Fq -- '@REPO@' "$unit_dir"; then
   fail "rendered unit files still contain @REPO@"
@@ -133,7 +133,7 @@ assert_grep 'TimeoutStartSec=5min' "$unit_dir/ogm-qa-publish-review.service"
 env_mode=$(stat -c '%a' "$home/.config/ogm/env")
 assert_eq "700" "$env_mode" "environment directory should be private"
 
-expected_log=$'--user daemon-reload\n--user enable --now ogm-api ogm-review-watchdog ogm-rooms ogm-games ogm-commit ogm-voice-host ogm-intake ogm-drive-sync ogm-backup.timer ogm-core-bump.timer ogm-qa-new-game.timer ogm-qa-publish-review.timer\n--user list-units ogm-* --no-pager'
+expected_log=$'--user daemon-reload\n--user enable --now ogm-api ogm-review-watchdog ogm-rooms ogm-games ogm-commit ogm-voice-host ogm-intake ogm-drive-sync ogm-backup.timer ogm-core-bump.timer ogm-qa-new-game.timer ogm-qa-publish-review.timer ogm-telemetry-listen\n--user list-units ogm-* --no-pager'
 actual_log=$(cat "$systemctl_log")
 assert_eq "$expected_log" "$actual_log" "systemctl calls should follow the required order"
 
@@ -168,7 +168,7 @@ HOME=$home \
   OGM_SYSTEMCTL_LOG=$stop_log \
   PATH=$fake_bin:$PATH \
   "$repo/ops/bin/ogm-host-setup.sh" --stop
-expected_stop='--user disable --now ogm-api ogm-review-watchdog ogm-rooms ogm-games ogm-commit ogm-voice-host ogm-intake ogm-drive-sync ogm-backup.timer ogm-core-bump.timer ogm-qa-new-game.timer ogm-qa-publish-review.timer'
+expected_stop='--user disable --now ogm-api ogm-review-watchdog ogm-rooms ogm-games ogm-commit ogm-voice-host ogm-intake ogm-drive-sync ogm-backup.timer ogm-core-bump.timer ogm-qa-new-game.timer ogm-qa-publish-review.timer ogm-telemetry-listen'
 actual_stop=$(cat "$stop_log")
 assert_eq "$expected_stop" "$actual_stop" "stop mode should disable every enabled unit"
 

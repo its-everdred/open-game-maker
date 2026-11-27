@@ -14,6 +14,7 @@ type Member = typeof schema.familyMembers.$inferSelect;
 
 export const budgetDefaults = (deps: AppDeps): BudgetDefaults => ({
   dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+  defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
   resetZone: deps.config.resetZoneDefault,
 });
 

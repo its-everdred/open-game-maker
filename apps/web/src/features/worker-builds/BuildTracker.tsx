@@ -26,6 +26,8 @@ export type WorkerBuild = {
   elapsedSeconds?: number;
   state?: string;
   phase?: string;
+  /** One plain line on where the ticket stands (aiur's live activity or summary). */
+  last?: string;
 };
 
 export function combinedPercent(workers: readonly WorkerBuild[]): number | null {

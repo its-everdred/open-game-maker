@@ -34,7 +34,7 @@ export type DraftScopeAssistant = {
     ticket: string;
   }>;
   close(input: { repo: string; ticket?: string; draftId: string }): Promise<void>;
-  transcript(input: { ticket: string }): Promise<{ body: string; turn_id: string | null }[]>;
+  transcript(input: { repo: string; ticket: string }): Promise<{ body: string; turn_id: string | null }[]>;
 };
 // The GitHub account an App installation belongs to. A login is only answered for proof of ownership.
 export type GitHubInstallationLookup = {

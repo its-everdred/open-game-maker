@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { availableParallelism, homedir, loadavg } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson } from '../../context.js';
 import {
+  bootDeadlineFailure,
   changedShare,
   expectsHostStick,
   firstTapPath,
@@ -14,11 +15,13 @@ import {
   judgePlay,
   moveKey,
   sawFirstFrame,
+  updatePlayState,
   type PlayInput,
   type PlayManifest,
   type PlayObservation,
   type PlayTraceEntry,
 } from '../../qa-play-check.js';
+import { fetchBuildJson, loadFactor } from '../../qa-play-fetch.js';
 import { niceCapture } from '../run/index.js';
 import { readEnvFile } from '../publish/index.js';
 
@@ -41,7 +44,11 @@ export const command: GmCommand = {
     out: { type: 'string', help: 'stills and play-check.json' },
     'web-dist': { type: 'string', help: "serve the shell from this web build instead of production's (replays)" },
     stall: { type: 'number', default: 0, help: "hold the game's load reports this long, as a busy phone (replays)" },
-    timeout: { type: 'number', default: 170, help: 'total timeout in seconds' },
+    timeout: {
+      type: 'number',
+      default: 170,
+      help: 'base wall-time budget in seconds, adjusted for load (maximum 340 seconds)',
+    },
   },
   async run(ctx, args, flags) {
     if (args.length !== 2) throw new UsageError('a game id and a build id are required', 'gm help qa play-check');
@@ -78,16 +85,18 @@ export const command: GmCommand = {
 
     const build = `${games}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/`;
     const fetched = await Promise.all(
-      ['manifest.json', 'design/design.json'].map(async (name) => {
-        const response = await fetch(new URL(name, build)).catch(() => null);
-        return response?.ok ? ((await response.json()) as unknown) : null;
-      }),
+      ['manifest.json', 'design/design.json'].map((name) => fetchBuildJson(new URL(name, build))),
     );
-    const [manifest, doc] = fetched as [PlayManifest | null, unknown];
+    const [manifestResult, docResult] = fetched;
+    const manifest = manifestResult?.value as PlayManifest | undefined;
+    const doc = docResult?.value;
     const out = resolve(ctx.cwd, flags.out);
     mkdirSync(out, { recursive: true });
     const report = (observation: PlayObservation, errors: string[]) => {
       const verdict = judgePlay(observation);
+      verdict.failures = verdict.failures.map((line) =>
+        line.startsWith('the check stopped:') ? line : `game/shell problem: ${line}`,
+      );
       writeFileSync(
         join(out, 'play-check.json'),
         `${JSON.stringify({ gameId, buildId, viewport: '390x844', ...verdict, observation, errors }, null, 2)}\n`,
@@ -114,24 +123,46 @@ export const command: GmCommand = {
       expectsStick: manifest ? expectsHostStick(manifest) : false,
     };
     if (!manifest || !doc) {
-      observation.bridgeState = 'not started: the build serves no manifest.json or design/design.json';
+      const failures = fetched.flatMap((item, index) =>
+        item.error
+          ? [item.error]
+          : !item.value
+            ? [`${index === 0 ? 'manifest.json' : 'design/design.json'}: empty JSON`]
+            : [],
+      );
+      observation.stopped = `check/host problem: published build fetch failed: ${failures.join('; ')}`;
       return report(observation, []);
     }
 
     const verify = await import('@ogm/gm-verify');
     niceCapture();
-    const abort = new AbortController();
-    const slot = await verify.acquireSlot({ runtimeDir: ctx.config.runtimeDir, signal: abort.signal });
+    ctx.err('play-check: waiting for capture slot (up to 90 s)');
+    let slot: Awaited<ReturnType<typeof verify.acquireSlot>>;
+    try {
+      slot = await verify.acquireSlot({ runtimeDir: ctx.config.runtimeDir, waitMs: 90_000 });
+    } catch (error) {
+      observation.stopped = `check/host problem: capture slot: ${error instanceof Error ? error.message : String(error)}`;
+      return report(observation, []);
+    }
     // The play time starts once this check holds the capture slot; waiting for another capture is not play.
-    const deadline = Date.now() + timeout * 1000;
+    const factor = loadFactor(loadavg()[0] ?? 0, availableParallelism());
+    const deadline = Date.now() + Math.min(timeout * factor, 340) * 1000;
     const left = (cap: number) => Math.max(1_000, Math.min(cap, deadline - Date.now()));
     const errors: string[] = [];
     const started = Date.now();
     const progress = (line: string) => ctx.err(`play-check ${Math.round((Date.now() - started) / 1000)}s: ${line}`);
-    const browser = await verify.launch(ctx.config.verifySoftwareGl, false, true, BROWSER_ARGS);
+    let browser: Awaited<ReturnType<typeof verify.launch>>;
+    try {
+      progress('launching browser');
+      browser = await verify.launch(ctx.config.verifySoftwareGl, false, true, BROWSER_ARGS);
+    } catch (error) {
+      slot.release();
+      observation.stopped = `check/host problem: browser launch: ${error instanceof Error ? error.message : String(error)}`;
+      return report(observation, []);
+    }
     // Past the deadline the browser closes, every pending step throws, and the report still gets written.
     const stop = setTimeout(() => {
-      observation.stopped = `over ${timeout} s`;
+      observation.stopped = `inconclusive: exceeded ${Math.round(Math.min(timeout * factor, 340))} s wall-time budget (load factor ${factor.toFixed(2)}); game or host may be slow`;
       void browser.close();
     }, deadline - Date.now());
     try {
@@ -170,7 +201,7 @@ export const command: GmCommand = {
 
       const opened = Date.now();
       progress('opening the game');
-      await page.goto(`${app}/g/${encodeURIComponent(gameId)}?test=1`, { timeout: left(30_000) });
+      await page.goto(`${app}/g/${encodeURIComponent(gameId)}?test=1`, { timeout: left(30_000 * factor) });
       const state = () =>
         page
           .evaluate(() => {
@@ -180,23 +211,26 @@ export const command: GmCommand = {
               trace: (window as unknown as { __playTrace?: PlayTraceEntry[] }).__playTrace ?? [],
             };
           })
-          .catch(() => ({ bridge: undefined, trace: [] as PlayTraceEntry[] }));
+          .catch(() => null);
       const tryAgain = page.getByRole('button', { name: 'Try again' });
       // Boot: the bridge is ready, the game has drawn, and its load finished (or never reports one).
-      const bootEnd = Date.now() + left(BOOT_MS);
+      const bootEnd = Date.now() + left(BOOT_MS * factor);
       let errorSince: number | undefined;
       let frameAt: number | undefined;
       for (;;) {
         const now = await state();
-        observation.bridgeState = now.bridge;
-        observation.trace = now.trace;
+        if (!now) throw new Error('could not read browser bridge state');
+        updatePlayState(observation, now);
         if (sawFirstFrame(now.trace)) frameAt ??= Date.now();
         const done = now.trace.some((entry) => entry.dir === 'in' && entry.t === 'load.done');
         if (now.bridge === 'ready' && frameAt !== undefined && (done || Date.now() - frameAt > 15_000)) break;
         // A stall the shell recovers from is fine (#1267); an error that holds for 30 s is what a player sees.
         errorSince = now.bridge === 'error' ? (errorSince ?? Date.now()) : undefined;
         if (errorSince !== undefined && Date.now() - errorSince > 30_000) break;
-        if (Date.now() > bootEnd) break;
+        if (Date.now() > bootEnd) {
+          observation.stopped = bootDeadlineFailure(now.bridge, frameAt !== undefined);
+          break;
+        }
         await page.waitForTimeout(500);
       }
       progress(
@@ -212,17 +246,23 @@ export const command: GmCommand = {
             await game
               .getByText(text, { exact: true })
               .first()
-              .tap({ timeout: left(30_000) });
+              .tap({ timeout: left(30_000 * factor) });
             await page.waitForTimeout(1_200);
-          } catch {
-            observation.tapFailed = text;
+          } catch (error) {
+            if (!observation.stopped) {
+              if (Date.now() >= deadline - 1_000)
+                observation.stopped = 'inconclusive: wall-time budget expired while waiting for a tap';
+              else if (error instanceof Error && error.name === 'TimeoutError') observation.tapFailed = text;
+              else
+                observation.stopped = `check/host problem: tap failed: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`;
+            }
             break;
           }
         }
-        await page.waitForTimeout(3_000);
-        const frame = await page.locator('.game-frame').boundingBox();
+        if (!observation.stopped) await page.waitForTimeout(3_000);
+        const frame = observation.stopped ? null : await page.locator('.game-frame').boundingBox();
         if (frame && observation.tapFailed === undefined) {
-          const shot = () => page.screenshot({ clip: frame, scale: 'css', timeout: left(20_000) });
+          const shot = () => page.screenshot({ clip: frame, scale: 'css', timeout: left(20_000 * factor) });
           const before = await shot();
           writeFileSync(join(out, 'ingame.png'), before);
           observation.frameStddev = await frameStddev(before);
@@ -263,15 +303,15 @@ export const command: GmCommand = {
         }
       }
       const final = await state();
-      observation.bridgeState = final.bridge;
-      observation.trace = final.trace;
+      if (!updatePlayState(observation, final))
+        observation.stopped ??= 'check/host problem: could not read final browser bridge state';
       observation.tryAgain = await tryAgain.isVisible().catch(() => false);
       await page.screenshot({ path: join(out, 'end.png'), scale: 'css' }).catch(() => undefined);
       await context.close();
     } catch (error) {
       const message = error instanceof Error ? error.message.split('\n')[0]! : String(error);
       errors.push(`check: ${message}`);
-      observation.stopped ??= message;
+      observation.stopped ??= `check/host problem: ${message}`;
     } finally {
       clearTimeout(stop);
       await browser.close();

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { loadPhaseSchema, tierSchema } from './assets.js';
+import { GameFault } from './telemetry.js';
 import { gameManifestSchema, poseSchema, targetRefSchema } from './game.js';
 import { actionFrameSchema, controlsLayoutSchema, insetsSchema, MAX_PLAYERS } from './input.js';
 import {
@@ -386,6 +387,7 @@ export const gameToHostSchema = z
       z.looseObject({ ok: z.boolean(), value: z.unknown().optional(), error: z.string().optional() }),
     ),
     envelope('error', z.looseObject({ code: z.string().min(1).max(64), message: z.string() })),
+    envelope('fault', GameFault),
   ])
   .meta({ id: 'GameToHost' });
 export type GameToHost = z.infer<typeof gameToHostSchema>;

@@ -403,3 +403,14 @@ describe('families:coverage recompute', () => {
     expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(loadFamilies());
   });
 });
+
+it('keeps collection discovery style families aligned with the family registry', () => {
+  const schema = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../../contracts/schemas/asset-card.schema.json', import.meta.url)), 'utf8'),
+  ) as { properties: { style_family: { enum: string[] } } };
+  expect([...schema.properties.style_family.enum].sort()).toEqual(
+    loadFamilies()
+      .map((family) => family.id)
+      .sort(),
+  );
+});

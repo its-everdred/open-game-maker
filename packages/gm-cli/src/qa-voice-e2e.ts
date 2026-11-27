@@ -20,10 +20,27 @@ const VIEWPORT = { width: 390, height: 844 };
 const TITLE = 'QA voice';
 /** The vendored aiur composer's button names (apps/web/vendor/aiur-conversation); a renamed button blinds this check. */
 export const LABELS = {
-  dictate: 'Hold to dictate',
-  startVoice: 'Start voice conversation',
+  dictate: 'Dictate',
+  startVoice: 'Switch to voice conversation',
   endVoice: 'End voice conversation',
 } as const;
+
+/** Voice is offered from the active dictation row in the shared composer. */
+export async function startVoiceFromDictation(dialog: ReturnType<Page['getByRole']>): Promise<void> {
+  await dialog.getByRole('button', { name: LABELS.dictate }).click({ timeout: 20_000 });
+  await dialog.getByRole('button', { name: LABELS.startVoice }).click({ timeout: 20_000 });
+}
+
+export async function endVoiceConversation(dialog: ReturnType<Page['getByRole']>): Promise<void> {
+  await dialog.getByRole('button', { name: LABELS.endVoice }).click({ timeout: 20_000 });
+}
+
+/** Release a failed one-way attempt so it cannot hide the next attempt's microphone. */
+export async function cancelFailedDictation(page: Page, dialog: ReturnType<Page['getByRole']>): Promise<void> {
+  const cancel = dialog.getByRole('button', { name: 'Cancel dictation' });
+  if (await cancel.isVisible().catch(() => false)) await cancel.dispatchEvent('click').catch(() => undefined);
+  await page.mouse.up().catch(() => undefined);
+}
 
 export type VoiceE2eConfig = {
   origin: string;
@@ -148,6 +165,8 @@ export function costLine(cost: VoiceCost): string {
  * Replaces the page's microphone with one that is silent until `__ogmFakeMic.play(name)`, then plays that clip once.
  * The app's own capture code reads it through `getUserMedia`, exactly as it reads a phone's microphone. It also counts
  * the seconds of audio the page itself plays (`playedSeconds`), so a reply passes only once it reached the speaker path.
+ * It keeps Safari's audio-session rule, which Chromium lacks: the microphone is refused while
+ * `navigator.audioSession.type` is neither 'auto' nor 'play-and-record' (#1325: 'playback' broke voice on iPhones).
  */
 export function installFakeMic(clips: Record<string, string>): void {
   type Mic = {
@@ -195,14 +214,37 @@ export function installFakeMic(clips: Record<string, string>): void {
       },
     },
   });
-  const devices = navigator.mediaDevices;
-  if (!devices) return;
-  devices.getUserMedia = async () => {
+  // Safari also loses the microphone when the session leaves recording while a capture is open: end the open tracks.
+  const recordable = (type: string) => type === 'auto' || type === 'play-and-record';
+  const open = new Set<MediaStreamTrack>();
+  let sessionType = 'auto';
+  const emulated = {
+    get type() {
+      return sessionType;
+    },
+    set type(value: string) {
+      sessionType = value;
+      if (recordable(value)) return;
+      for (const track of open) track.stop();
+      open.clear();
+    },
+  };
+  const nav = navigator as Navigator & { audioSession?: { type: string } };
+  if (!nav.audioSession) Object.defineProperty(nav, 'audioSession', { value: emulated });
+  const session = nav.audioSession!;
+  // On the prototype: WebKit can run this before the page's navigator.mediaDevices exists (a routed document).
+  if (typeof MediaDevices === 'undefined') return;
+  MediaDevices.prototype.getUserMedia = async () => {
     mic.requested += 1;
+    if (!recordable(session.type)) {
+      throw new DOMException('AudioSession category is not compatible with audio capture.', 'InvalidStateError');
+    }
     const { context, destination } = ensure();
     await context.resume();
     // Each caller gets its own tracks: the app stops them when a capture ends, which must not mute the next capture.
-    return new MediaStream(destination.stream.getAudioTracks().map((track) => track.clone()));
+    const tracks = destination.stream.getAudioTracks().map((track) => track.clone());
+    for (const track of tracks) open.add(track);
+    return new MediaStream(tracks);
   };
 }
 
@@ -291,6 +333,7 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
     const dialog = page
       .getByRole('dialog', { name: TITLE })
       .and(page.locator('.job-conversation-dialog:not(.ticket-detail-dialog)'));
+    let reopenForVoice = false;
 
     try {
       await openChat(page, config.origin);
@@ -312,22 +355,26 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       await until(async () => dictationFailure(await textbox.inputValue()) === null, wait);
       const text = await textbox.inputValue();
       const failure = dictationFailure(text);
-      if (failure) await failed('dictation', new StepFailed(failure));
-      else {
+      if (failure) {
+        reopenForVoice = true;
+        await failed('dictation', new StepFailed(failure));
+      } else {
         await still('dictation');
         // The words stay a draft: the run never sends them.
         await textbox.fill('');
         steps.push({ name: 'dictation', ok: true, detail: text });
       }
     } catch (error) {
+      await cancelFailedDictation(page, dialog);
+      reopenForVoice = true;
       await failed('dictation', error);
     }
 
     try {
-      if (!(await dialog.isVisible())) await openChat(page, config.origin);
+      if (reopenForVoice || !(await dialog.isVisible())) await openChat(page, config.origin);
       frames.length = 0;
       callStarted = Date.now();
-      await dialog.getByRole('button', { name: LABELS.startVoice }).click({ timeout: 20_000 });
+      await startVoiceFromDictation(dialog);
       const listening = await until(() => tallyFrames(frames).states.includes('listening'), wait);
       if (!listening)
         throw new StepFailed(
@@ -342,8 +389,7 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       const playedSeconds = await played();
       await still('voice');
       // Hang up as soon as the reply is in: the call is billed by the minute.
-      const end = dialog.getByRole('button', { name: LABELS.endVoice });
-      if (await end.isVisible().catch(() => false)) await end.click();
+      await endVoiceConversation(dialog);
       cost.callSeconds = (Date.now() - callStarted) / 1000;
       callStarted = undefined;
       let stored: { actor: string; text: string | null }[] = [];

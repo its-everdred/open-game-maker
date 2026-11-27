@@ -310,7 +310,7 @@ else changes — the game appears in the games picker and opens from its play li
 
 ## Register an existing game as an operator
 
-Run `gm games register <slug> --repo <owner>/<repo> --folder games/<slug> --title "<title>"` on the API host. It reads the API token from `api.env` and the daemon port from the checkout's `.aiur/config`; the checkout defaults to `~/games/<repo>` and can be set with `--checkout`. The repository origin must match `--repo`. The owner defaults to `OGM_INSTANCE_OWNER_ID` in the API environment, or the sole family owner when only one exists. Set that value to the instance owner’s app user ID for installations with multiple families, or pass `--owner <user-id>` for a specific registration. Use `--visibility listed` to show the game in the picker (the default is private). Repeating the command updates the title, owner, visibility and daemon details for the same game; conflicting slugs or daemon registrations are refused.
+Run `gm games register <slug> --repo <owner>/<repo> --folder games/<slug> --title "<title>"` on the API host. It reads the API token from `api.env` and the daemon port from the checkout's `.aiur/config`; the checkout defaults to `~/games/<repo>` and can be set with `--checkout`. The repository origin must match `--repo`. The owner defaults to `OGM_INSTANCE_OWNER_ID` in the API environment, or the sole family owner when only one exists. Set that value to the instance owner’s app user ID for installations with multiple families, or pass `--owner <user-id>` for a specific registration. Use `--visibility listed` to show the game in the picker (the default is private). Repeating the command updates the title, owner, visibility and daemon details for the same game; conflicting slugs or daemon registrations are refused. Daemon endpoint changes are refused while an open or agreed New Game draft uses that repository; finish or abandon the draft before changing the endpoint.
 
 Operator publish can reuse a repository daemon checkout for multiple registered games. Those registrations do not create additional game daemon rows.
 
@@ -414,6 +414,11 @@ family like any player, and its state lives outside git at `~/.config/ogm/qa/sto
    in Chromium, accepts the pending invitation while the account has no family, and saves the state. It prints the
    account and its family, never the cookie.
 
+To exercise the tester journey, run `ops/bin/ogm-qa-signin --admin-state <admin-storage.json>` on the host. The
+admin storage state must contain a signed-in administrator who belongs to the target family. The QA address must be in
+`OGM_QA_EMAILS`; the command adds a fresh address as a player from Admin › Users, opens the emailed link at
+phone size, follows the title and game-selection screens, and starts Blobs Endless. The QA address must not already be on the allow list or belong to a family. The check removes the membership and allow-list entry it created, then removes its uniquely identified invitation from the local database so repeated checks do not exhaust the daily invite limit. It does not save a session state in this mode.
+
 Sessions last 7 days: run it again when a capture shows Sign in. `--origin http://127.0.0.1:5173` signs in to the local
 stack instead of `OGM_APP_ORIGIN`; `--out` writes elsewhere. Exit codes: 0 saved, 1 sign-in failed, 64 bad usage, 65 no
 address, origin or database.
@@ -436,6 +441,21 @@ If a run fails, preserve its recovery state and rerun with the same SHA; an ambi
 change stops cleanup for inspection. `--out` selects another
 evidence directory, and `--origin` and `--api` select the app and loopback API origins. The internal QA routes accept
 only the internal token.
+
+## Check interim weekly limits on prod
+
+Admin > Users sets each account’s weekly new-game and edit limits; a blank limit is unlimited. Defaults are two new
+games and twenty edits per week, with admins unlimited unless explicitly configured. The reset is Monday in the configured
+reset zone. Explicit daily and overall build-budget caps still apply; scope starts are limited separately to ten per hour.
+Settings shows reported coding-provider windows as Minerals and paid-API readings as Gas; estimates are labelled.
+Actual paid spend remains unknown when the upstream data cannot distinguish billed API use from subscriptions.
+The API checks resource readings every minute and emails allowed administrators and configured maintainers at 95% use,
+once per resource and reset period; unavailable or stale readings do not trigger mail.
+
+After deploy, run `ops/bin/ogm-qa-session`, then `ops/bin/qa-energy-budget` on the API host. The check sets the
+dedicated QA account's weekly limits to zero and verifies the draft, job and report routes return the personal interim-limit
+refusal and reset. Its fence prevents dispatch even if a limit check fails. The command restores the prior QA budget and
+removes its probe report. If the command is interrupted, run `ops/bin/qa-energy-budget --recover` before the next check.
 
 ## Check the review deck on prod
 
@@ -566,7 +586,7 @@ host's move stick, else a key bound to `move.right`, else a swipe. It fails when
 shows Try again, no first frame arrives, a tap never appears, the frame is blank, or the input changes the frame no
 more than waiting does. A swipe that moves nothing is reported as unchecked instead, unless the host should have drawn
 the game's move stick (a `move` stick without `touch: "self"`). One game plays at a time, in the capture slot, and
-each play is capped at 170 s. A game that fails is played once more and fails only when both plays fail: a loaded host
+each play has a load-adjusted wall-time budget capped at 340 s; capture-slot waiting is capped at 90 s. Published JSON fetches retry transient failures and report their final cause. A boot timeout is inconclusive. A game that fails is played once more and fails only when both plays fail: a loaded host
 can miss one boot, a broken game misses both.
 
 The QA account cannot read another family's private game, so the check answers that game's own API routes from its
@@ -582,6 +602,33 @@ fails appends one `qa-game-play failed` line to the attention file with its fail
 host's load average and its stills folder, and fails the hook; a crash of the check itself exits 70 and the hook writes
 the line instead. Replay a build against an older shell with `--web-dist <web build>`; `--stall <seconds>` holds the
 game's load reports that long after the first, the silence that left the shell on Try again (#1267).
+
+## Crash and app-open telemetry
+
+The app shell posts to `POST /api/v1/telemetry/client-events` (#1318), signed in, at most 240 batches an account an
+hour. It sends an app open on load (and again on return after 10 minutes hidden), a session end when hidden or closed,
+first-frame and in-world heartbeats per game build, and crashes: the Try again overlay, a bridge timeout, a save that
+could not be restored, a failed lazy chunk, a shell error, and what the game frame relays over the bridge's `fault`
+message (uncaught error, unhandled rejection, CSP block, failed asset, lost WebGL context). Games relay faults once
+their SDK has this change (a core bump). Each event carries the account id, a per-load session id, the origin domain,
+the user agent, the app version (`VITE_APP_VERSION`, the commit `deploy.sh` built) and, for a crash, the step reached
+(`loading`, `title`, `play`, `in-world`) with the last 20 breadcrumbs. The API stores events in `client_events`
+(pruned after 30 days) and groups crashes in `crash_groups` by game, build and signature (crash kind, normalised
+message, top stack frame, game).
+
+`ogm-telemetry-listen` (unit `ogm-telemetry-listen`) reads the database read-only every 15 s and appends one line to
+the Executor's attention file (`HS_ATTENTION`, else `OGM_QA_ATTENTION` from `qa-hook.env`; put overrides in
+`~/.config/ogm/env/telemetry.env`) for each new crash group and each app open. App opens from a headless browser (the
+play check below) are skipped. The first new crash of a signature opens an issue on `OGM_TELEMETRY_REPO` (default
+`its-everdred/open-game-maker`, label `priority:1`, since the repository has no P0 label) with the build, the release,
+tag and merged PR that published it, the message, stack, breadcrumbs and a repro path. The same signature in a new build
+comments on that issue. GitHub failures are retried on later passes. State (cursor, filed issues) is in
+`~/.local/state/ogm/telemetry-listen.json`; without it the listener starts from now. The post-deploy play check below
+drives the production shell, so its Try again failures reach the same crash groups.
+
+```bash
+ogm-telemetry-listen stats --days 7   # per game and build: sessions, crashed sessions, crashes, first frames, in-world rate
+```
 
 ## Prove the instance monorepo flow
 

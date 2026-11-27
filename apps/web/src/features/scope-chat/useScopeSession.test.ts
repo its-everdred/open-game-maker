@@ -66,6 +66,17 @@ function fakeTransport(): ScopeTransport {
 }
 
 describe('useScopeSession', () => {
+  it('explains a weekly Energy refusal and its reset', async () => {
+    const transport = fakeTransport();
+    vi.mocked(transport.createSession).mockRejectedValue(
+      new ApiError(402, { error: 'energy_limit_reached', window: 'week', resetsAt: '2026-11-30T08:00:00.000Z' }),
+    );
+    const { result } = renderHook(() => useScopeSession('g_1', choices, transport));
+    await waitFor(() => expect(result.current.status).toBe('unavailable'));
+    expect(result.current.error).toContain('The limit resets');
+    expect(result.current.error).not.toContain('builder is unavailable');
+  });
+
   it('does not overlap session polls', async () => {
     vi.useFakeTimers();
     const transport = fakeTransport();

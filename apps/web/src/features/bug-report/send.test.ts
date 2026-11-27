@@ -23,7 +23,7 @@ describe('sendReport', () => {
   it('files the report with the screen context and leaves nothing queued', async () => {
     const fetchMock = vi.fn(async () => created());
     vi.stubGlobal('fetch', fetchMock);
-    bug.setBugContext({ gameId: 'g1', releaseId: 'rel1', buildHash: 'abc' });
+    bug.setBugContext({ gameId: 'g1', releaseId: 'rel1', buildHash: 'b_1f2e3d4c' });
 
     await expect(bug.sendReport({ text: 'the door is stuck' })).resolves.toEqual({
       reportId: 'r1',
@@ -37,7 +37,7 @@ describe('sendReport', () => {
     expect(JSON.parse(init.body as string)).toEqual({
       gameId: 'g1',
       releaseId: 'rel1',
-      buildHash: 'abc',
+      buildHash: 'b_1f2e3d4c',
       text: 'the door is stuck',
     });
   });

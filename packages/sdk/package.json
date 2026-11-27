@@ -91,7 +91,12 @@
     "./scenery": {
       "types": "./dist/scenery/index.d.ts",
       "import": "./dist/scenery/index.js"
-    }
+    },
+    "./vfx": {
+      "types": "./dist/vfx/index.d.ts",
+      "import": "./dist/vfx/index.js"
+    },
+    "./vfx/effekseer.wasm": "./dist/vfx/effekseer.wasm"
   },
   "scripts": {
     "prebuild": "node scripts/list-pixelfx.mjs --check",
@@ -100,7 +105,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "node scripts/list-pixelfx.mjs --check && tsc -b",
     "test": "vitest run",
-    "test:browser": "tsx src/audio/fixture/build.ts && tsx src/camera/fixture/build.ts && tsx src/hd2d/fixture/build.ts && playwright test --config playwright.config.ts",
+    "test:browser": "tsx src/audio/fixture/build.ts && tsx src/camera/fixture/build.ts && tsx src/hd2d/fixture/build.ts && tsx src/vfx/fixture/build.ts && playwright test --config playwright.config.ts",
     "lint": "eslint src"
   },
   "dependencies": {

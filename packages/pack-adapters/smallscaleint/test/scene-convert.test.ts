@@ -95,6 +95,77 @@ function loaded(json: TiledIsoMap) {
 }
 
 describe('isoMapToScene / sceneToIsoMap', () => {
+  it('retains a draw-order offset in the scene and Tiled round trip', () => {
+    const original = richMap();
+    original.tilesets[1]!.tiles![0]!.properties!.push({ name: 'depthOffset', value: -16 });
+    const doc = isoMapToScene(original, ids);
+    expect(doc.layers.wall!.tiles!['1,1']!.props).toEqual({ depthOffset: -16 });
+    expect(loaded(sceneToIsoMap(doc))).toEqual(loaded(original));
+  });
+
+  it('preserves sprite scale in a scene document and Tiled round trip', () => {
+    const original = richMap();
+    original.tilesets[1]!.tiles![0]!.properties!.push({ name: 'scale', value: 0.4 }, { name: 'role', value: 'post' });
+    const doc = isoMapToScene(original, ids);
+    expect(doc.layers.wall!.tiles!['1,1']!.props).toEqual({ scale: 0.4, role: 'post' });
+    const roundtrip = sceneToIsoMap(doc);
+    expect(loaded(roundtrip)).toEqual(loaded(original));
+    expect(isoMapToScene(roundtrip, ids)).toEqual(doc);
+  });
+
+  it('refuses to silently drop an unsupported floor scale on import', () => {
+    const map = richMap();
+    map.tilesets[0]!.tiles![0]!.properties!.push({ name: 'scale', value: 0.4 });
+    expect(() => isoMapToScene(map, ids)).toThrow('unsupported scale');
+  });
+
+  it('preserves gate tags on just the annotated tile through a scene document', () => {
+    const map = richMap();
+    const tiles = map.tilesets[0]!.tiles!;
+    tiles.push({
+      id: 3,
+      properties: [
+        { name: 'asset', value: 'ground-h1' },
+        { name: 'tags', value: 'gate' },
+      ],
+    });
+    const floor = map.layers[0]!;
+    if (floor.type !== 'tilelayer') throw new Error('expected floor');
+    floor.data[7] = 8;
+    const doc = isoMapToScene(map, ids);
+    expect(doc.layers.floor!.tiles!['1,1']!.props).toEqual({ tags: 'gate' });
+    expect(doc.layers.floor!.tiles!['2,1']!.props).toBeUndefined();
+    const roundtrip = sceneToIsoMap(doc);
+    const layer = roundtrip.layers[0]!;
+    if (layer.type !== 'tilelayer') throw new Error('expected floor');
+    expect(layer.data[7]).not.toBe(layer.data[8]);
+    const tile = roundtrip.tilesets[0]!.tiles!.find((entry) => entry.id === layer.data[7]! - 1);
+    expect(tile?.properties).toContainEqual({ name: 'tags', value: 'gate' });
+  });
+
+  it('retains boolean checker tags together with a tags string', () => {
+    const map = richMap();
+    map.tilesets[0]!.tiles![0]!.properties!.push(
+      { name: 'tags', value: 'ruin' },
+      { name: 'gate', value: true },
+      { name: 'exit', value: false },
+    );
+    const doc = isoMapToScene(map, ids);
+    expect(doc.layers.floor!.tiles!['1,1']!.props).toEqual({ tags: 'ruin,gate' });
+    expect(isoMapToScene(sceneToIsoMap(doc), ids)).toEqual(doc);
+  });
+
+  it('matches checker handling of malformed tags and duplicate flags', () => {
+    const map = richMap();
+    map.tilesets[0]!.tiles![0]!.properties!.push(
+      { name: 'tags', value: 42 },
+      { name: 'gate', value: true },
+      { name: 'exit', value: false },
+      { name: 'exit', value: true },
+    );
+    expect(isoMapToScene(map, ids).layers.floor!.tiles!['1,1']!.props).toEqual({ tags: 'gate' });
+  });
+
   it.each([
     ['the 4x4 fixture', fixtureMap4x4() as TiledIsoMap],
     ['a map with numbered layers, elevation, margins and odd solids', richMap()],

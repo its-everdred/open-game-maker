@@ -105,14 +105,28 @@ describe('game slugs', () => {
     ).resolves.toBe(second.id);
   });
 
+  it('resolves the hyphenless spelling and reserves it for the same game', async () => {
+    const { app } = await setup();
+    const first = await createGame(app, 'Castle Game');
+    const second = await createGame(app, 'Castlegame');
+    expect(second.slug).toBe('castlegame-2');
+    expect(((await (await resolve(app, 'castlegame')).json()) as { game: { id: string } }).game.id).toBe(first.id);
+  });
+
   // A slug is the game's top-level link (`/<slug>`), so a game titled like an app screen must not take that screen's
   // address: `/new` has to keep opening the new-game screen.
   it('never hands a game a slug an app route answers to', async () => {
     const { app } = await setup();
 
-    const games = [await createGame(app, 'New'), await createGame(app, 'Settings'), await createGame(app, 'Play')];
+    const games = [
+      await createGame(app, 'New'),
+      await createGame(app, 'Settings'),
+      await createGame(app, 'Play'),
+      await createGame(app, 'Docs'),
+      await createGame(app, 'Setup'),
+    ];
 
-    expect(games.map((game) => game.slug)).toEqual(['new-2', 'settings-2', 'play-2']);
+    expect(games.map((game) => game.slug)).toEqual(['new-2', 'settings-2', 'play-2', 'docs-2', 'setup-2']);
   });
 
   it('skips a reserved slug on rename too', async () => {
@@ -144,6 +158,8 @@ describe('game slugs', () => {
     expect(current.game).toMatchObject({ id: game.id, slug: 'space-castle' });
     const retired = (await (await resolve(app, 'castle-game')).json()) as { game: { id: string; slug: string } };
     expect(retired.game).toMatchObject({ id: game.id, slug: 'space-castle' });
+    const compact = (await (await resolve(app, 'castlegame')).json()) as { game: { id: string } };
+    expect(compact.game.id).toBe(game.id);
   });
 
   it('stops handing a renamed game’s old title slug to a new game', async () => {

@@ -5,7 +5,9 @@ cells.json: {"mesh": glb, "rotz": deg, "pack": {"walk": sheet.png, "attack": she
              "finish": "base" (a base body: skin-only colour pass against pack.idle; default: pack colour match),
              "pixel": {"colours": 8, "cloth": 6, "smooth": true} (pack-style pixel finish after the colour pass;
                        "cloth" renders a cloth mask and gives the undergarments their own colours; "weapon": N
-                       gives the weapon N colours of its own from the same mask),
+                       gives the weapon N colours of its own from the same mask; "body_smooth": N an N x N median
+                       over the skin alone; omit pixel for C4, or select {"finish": "C", "variant": "C1"} (#1338): crisp
+                       render (filter=0.01), cloth and weapon masks as materials, hard bands, lines, outline),
              "render": {key: value, ...}, "cells": [{"name", "clip": "walk"|"attack", "motion": {...}, "weapon": {...}}]}
 A cell with "rigged" (rigged.py: a body that arrives rigged) skips the fit and faces itself from its feet (its own
 "rotz", default 0, turns it further); its "model", "cost_usd" and "licence" override the top level's for its recipe.
@@ -29,6 +31,15 @@ LICENCE = (('kaykit', 'CC0 (KayKit Character Animations, owned)'), ('/cmu/', 'CM
            ('handkey', 'own work (hand-keyed script)'), ('quaternius', 'CC0 (Quaternius Universal Animation Library)'))
 
 
+def uses_finish_c(spec):
+    pixel = spec.get('pixel')
+    return not pixel or pixel.get('finish') == 'C'
+
+
+def uses_own_finish(spec):
+    return uses_finish_c(spec) and (spec.get('pixel') or {}).get('variant') in (None, 'C4')
+
+
 def fmt(x):
     """Two decimals, or n/a for a metric score.py could not define (no motion, no contact frames)."""
     return 'n/a' if x is None else f'{x:.2f}'
@@ -47,7 +58,9 @@ def write_recipe(d, spec, c, scores):
            'skill': 'gm-sprite-forge (motion/)', 'arm': c.get('arm', 'A: Rigify metarig fit + bone heat'),
            'motion': {k: v for k, v in mo.items() if k != 'path'} | ({'source': Path(mo['path']).name} if 'path' in mo else {}),
            'motion_licence': lic, 'mesh': Path((c.get('rigged') or {}).get('path') or spec['mesh']).name, 'skin': fit['skin'], 'retarget': fit['motion'],
-           'finish': spec.get('finish', 'pack'), 'pixel': spec.get('pixel'), 'blender': render['blender'], 'engine': render['engine'], 'render_minutes': render['render_minutes'],
+           'finish': 'own' if uses_own_finish(spec) else spec.get('finish', 'pack'),
+           'pixel': {'finish': 'C', 'variant': 'C4'} if uses_own_finish(spec) else spec.get('pixel'),
+           'blender': render['blender'], 'engine': render['engine'], 'render_minutes': render['render_minutes'],
            'scores': {k: v for k, v in scores.items() if k != 'foot_slide'} | {'foot_slide_px': scores['foot_slide']['mean_px']}}
     (d / 'recipe.json').write_text(json.dumps(rec, indent=1, default=str))
 
@@ -102,15 +115,20 @@ def main():
         if not a.rescore:
             (d / 'spec.json').write_text(json.dumps(cell, indent=1))
             keys = [f'{k}={v}' for k, v in (spec.get('render', {}) | {'engine': a.engine}).items()]
-            if (spec.get('pixel') or {}).get('cloth'):
+            if (spec.get('pixel') or {}).get('cloth') or uses_finish_c(spec):
                 keys.append('mask=1')
-            if a.engine == 'workbench':
+            if uses_finish_c(spec):  # crisp at the cell size: gpu_bake_finish box-averages any supersample first
+                keys += [k for k in ('filter=0.01', 'supersample=1') if k.split('=')[0] not in spec.get('render', {})]
+            if uses_own_finish(spec):
+                # Its aligned albedo and colour must be at sprite resolution, without box filtering.
+                keys += ['filter=0.01', 'supersample=1', 'albedo=1']
+            if not uses_finish_c(spec) and a.engine == 'workbench':
                 keys.append('supersample=2')
             if not blender(spec, d, keys, 'render.log'):
                 rows.append((c['name'], 'render failed: see render.log'))
                 print(c['name'], 'render failed', flush=True)
                 continue
-        elif (spec.get('pixel') or {}).get('cloth') and \
+        elif ((spec.get('pixel') or {}).get('cloth') or uses_finish_c(spec)) and \
                 len(list(d.glob('mask_*_*.png'))) != len(list(d.glob('raw_*_*.png'))):  # masks only, as rendered
             params = json.loads((d / 'render.json').read_text())['params']
             keys = [f'{k}={v}' for k, v in params.items() if not k.startswith('mask')] + ['mask_only=1']
@@ -118,15 +136,24 @@ def main():
                 rows.append((c['name'], 'mask render failed: see mask.log'))
                 print(c['name'], 'mask render failed', flush=True)
                 continue
+        if uses_own_finish(spec) and {p.stem[4:] for p in d.glob('alb_*_*.png')} != \
+                {p.stem[4:] for p in d.glob('raw_*_*.png')}:
+            rows.append((c['name'], 'rescore failed: render again to generate albedo frames'))
+            print(rows[-1][1], flush=True)
+            continue
         loop = ['--loop'] if c['clip'] == 'walk' and c['motion'].get('loop', True) else []
         loop += ['--rows', str(spec.get('render', {}).get('rows', '1,2'))]  # score the rows that were rendered
         if spec.get('finish') == 'base':  # a base body: match the skin to the pack Idle, keep the undergarments white
             loop += ['--skin-ref', spec['pack']['idle']]
-        if spec.get('pixel'):
+        if uses_finish_c(spec):
+            pixel = spec.get('pixel') or {}
+            loop += ['--finish-c'] + (['--variant', pixel['variant']] if pixel.get('variant') else [])
+        elif spec.get('pixel'):
             px = spec['pixel']
             loop += ['--pixel', str(px['colours'])] + (['--smooth'] if px.get('smooth') else []) + \
                 (['--cloth', str(px['cloth'])] if px.get('cloth') else []) + \
-                (['--weapon', str(px['weapon'])] if px.get('weapon') and c.get('weapon', spec.get('weapon')) else [])
+                (['--weapon', str(px['weapon'])] if px.get('weapon') and c.get('weapon', spec.get('weapon')) else []) + \
+                (['--body-smooth', str(px['body_smooth'])] if px.get('body_smooth') else [])
         s = subprocess.run([sys.executable, '-I', str(HERE / 'score_cell.py'), str(d), spec['pack'][c['clip']], '--finish', *loop],
                            capture_output=True, text=True)
         if s.returncode:

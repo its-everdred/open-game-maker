@@ -7,6 +7,9 @@ k-means palette over the whole sheet (the same colours in every direction and fr
 become tone bands, not hue noise). No dithering or outline; alpha is untouched. With a cloth mask, cloth gets its own palette: on one palette few colours merge the white
 undergarments into pale skin (the underwear vanished). Kevin picked "B" (hero-finish1-warrior, 2026-11-22): 14 colours,
 8 skin and 6 cloth, smoothed.
+body_smooth N adds an N x N median over the skin alone (not the cloth or the weapon): the Hammer slam faces the light,
+and the base body's texture showed through the 3x3 median as stray dark and light specks over the skin (#1282, Kevin).
+More render samples did not change them; they are texture, not render noise.
 """
 import argparse
 
@@ -19,10 +22,11 @@ from skimage.color import lab2rgb, rgb2lab
 W = np.array([2.0, 1.0, 1.0])  # L, a*, b* weights for the clustering
 
 
-def pixel_finish(rgba, colours, smooth=False, seed=7, cloth=None, cloth_colours=6, weapon=None, weapon_colours=4):
+def pixel_finish(rgba, colours, smooth=False, seed=7, cloth=None, cloth_colours=6, weapon=None, weapon_colours=4,
+                 body_smooth=None):
     """rgba: uint8 (H, W, 4); cloth, weapon: optional bool (H, W) masks. Returns a copy with at most `colours` RGB
     colours inside the silhouette, plus at most `cloth_colours` on the cloth and `weapon_colours` on the weapon (on the
-    body's palette a lit steel blade turned skin)."""
+    body's palette a lit steel blade turned skin). body_smooth: optional median size for the skin alone, after smooth."""
     a = rgba.copy()
     m = a[..., 3] > 0
     cloth = np.zeros(m.shape, bool) if cloth is None else cloth & m
@@ -32,6 +36,11 @@ def pixel_finish(rgba, colours, smooth=False, seed=7, cloth=None, cloth_colours=
         for k in range(3):
             ch = lab[..., k]
             lab[..., k] = np.where(m, median_filter(np.where(m, ch, np.median(ch[m])), size=3), ch)
+    if body_smooth:  # the skin only: a median across the weapon smeared the thin haft into skin-coloured fragments
+        skin = m & ~cloth & ~weapon
+        for k in range(3):
+            ch = lab[..., k]
+            lab[..., k] = np.where(skin, median_filter(np.where(skin, ch, np.median(ch[skin])), size=body_smooth), ch)
     rng = np.random.default_rng(seed)
     idx, cents = np.full(m.shape, -1), []
     for sel, n in ((m & ~cloth & ~weapon, colours), (cloth, cloth_colours), (weapon, weapon_colours)):

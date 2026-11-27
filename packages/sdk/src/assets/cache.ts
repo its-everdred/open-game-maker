@@ -256,11 +256,15 @@ async function safeMatch(cache: Cache, url: string): Promise<Response | undefine
   }
 }
 
+/*
+ * The cache only speeds up the next launch, so no write failure may stop this one. Quota is the common case, but a
+ * game frame is a third-party iframe and WebKit's partitioned Cache API also rejects writes with other errors.
+ */
 async function putAsset(cache: Cache, url: string, response: Response): Promise<void> {
   try {
     await cache.put(url, response);
-  } catch (error) {
-    if (!isQuotaExceeded(error)) throw error;
+  } catch {
+    /* Played from the network this time. */
   }
 }
 
@@ -515,10 +519,6 @@ function isSharedAssetUrl(url: string): boolean {
   } catch {
     return false;
   }
-}
-
-function isQuotaExceeded(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'name' in error && error.name === 'QuotaExceededError';
 }
 
 function defaultNow(): number {

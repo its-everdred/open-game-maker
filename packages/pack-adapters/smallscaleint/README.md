@@ -14,6 +14,8 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
 - `IsoMap(json)`: the finite Tiled isometric subset (128×64 tiles; `floor`, `wall`, `decor`, `roof`, and `spawns`).
   Numbered sprite layers such as `wall#1` retain multiple pieces on one cell; floor remains a single layer.
   An optional tile property `elevation` moves a sprite upward in 64-pixel grid units.
+  An optional positive `scale` scales a non-floor sprite about its ground anchor. Floor scale 1 is a no-op;
+  unsupported legacy scales are ignored by the renderer, reported by scene checks and refused by scene import.
   `render(scene, loader)` anchors 128×256 and 256×256 ground images on the 128×64 cell and draws taller pieces as
   depth-sorted facing sprites. `sync()` accepts game-owned `solid` and `visible` overrides; `collisionGrid()` and
   `roofTilesAbove()` expose simulation and cutaway inputs without implementing either policy.
@@ -38,7 +40,9 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
   included) and `emptyScene(game, scene, bounds)` give the layer defaults. `autotile` rewrites nothing yet: pieces keep
   the facings they were placed with until the autotile join rules land.
 - `isoMapToScene(json, { game, scene })` / `sceneToIsoMap(doc)`: the Tiled subset ⇄ a scene document. Pieces become
-  cell-keyed tiles with an explicit facing, `props.solid` only where it differs from the layer default (`wall` blocks);
+  cell-keyed tiles with an explicit facing, `props.solid` only where it differs from the layer default (`wall` blocks),
+  and the Tiled `tags` string in `props.tags` when present; true `gate`, `exit`, `ruin` and `formal` properties are
+  included in that string;
   `wall#1` layers become `wall-1`; spawns become `spawn-<id>` objects on the `spawns` layer posed in 64 px units. Both
   directions are lossless for map data: the map loads the same pieces and spawns after a round trip (gids are
   renumbered), and a converted document comes back unchanged. `sceneToIsoMap` refuses what a map can't draw (flips,
@@ -51,21 +55,32 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
   - `edgeRun(cells | { vertices, interior: 'left' | 'right' }, 'fence' | 'stone' | 'timber', openings)` returns
     `{ placements, postVertices }`: measured facings on every boundary edge, a walkable gap at each opening, and the
     grid vertices where gate posts belong.
-  - `building(footprint, 'stone', door, walkable)` returns `{ placements, entry }`: a closed shell, a gable over a
+    Supply a fourth argument `{ asset, facing, scale }` to place gate posts; this is currently inspected only for
+    `yMax` fence openings and requires a one-cell map margin. The only supported style is Stone A14 facing E at scale
+    0.4 with elevation 0.5. The source masks establish contact with ground-level Fence B1 E at the vertices;
+    in-game depth and actor traversal still need verification. Post sprites do not block the gate cell.
+  - `building(footprint, 'stone' | 'timber', door, walkable)` returns `{ placements, entry }`: a closed shell, a gable over a
     two-row footprint, and a door on a `yMax` edge opening onto the walkable `entry` cell. Provisional until checked
-    in a game render.
+    in a game render. The timber style uses a thatched roof and per-piece depth offsets inspected in a standalone render;
+    actor occlusion and traversal remain unverified.
   - `path(from, to, { walkable, palette: [{ asset, facing }], seed })` returns stepping stones on the `decor` layer
     over the scene's own ground.
   - `scatter(region, [{ asset, facing, solid, footprint }], density, { seed, avoid, boundaries, boundaryDensity })`
     returns clustered dressing, denser near `boundaries`; pass the path, door entry and building cells in `avoid`.
     Solid items go on the `wall` layer so they block movement at their origin cell.
   - Concatenate the placements with the scene's floor and pass them to `assemblyMap(width, height, placements)`, the
-    Tiled subset `IsoMap` reads. The structural asset ids are pinned card ids; record them in the game's asset list.
-  - Not bound yet: gate posts, steps and non-stone buildings.
+    Tiled subset `IsoMap` reads. Mark an opening's floor placement with `tags: ['gate']` for scene verification.
+    A placement's optional `depthOffset` adjusts its projected sort key in pixels without changing position or collision;
+    it must be finite and is zero on floor tiles. Scene conversion and editor drawing preserve it.
+    The structural asset ids are pinned card ids; record them in the game's asset list.
+  - Not bound yet: other gate orientations, steps and other building styles.
+- `node packages/gm-cli/scripts/derive-wall-a12-steps.ts <Wall-A12-S.png> <new-directory>` rebuilds the provisional
+  shallow stair trial from the measured south view without altering the pack. Its manifest records provenance;
+  register the derived PNG with `gm assets register <derived.png> --made-by-agent --from <source-card-id>` to preserve the source rights.
 - `scripts/stage-structural-cards.mjs <library> <empty-dir>` (after `pnpm build`) writes validated card copies carrying
   the structural facts and a source-hash plan, for a host operator to apply to the shared library.
-- `structuralImageBounds`: inclusive alpha bounds for twenty-one measured structural or paving assets, keyed by asset card id.
-  Bounds do not establish an anchor or connection socket. `fenceB1Edges`, `wallF1Edges`, and `wallC1Edges` record measured fence, stone and timber wall facings.
+- `structuralImageBounds`: inclusive alpha bounds for measured structural or paving assets, keyed by asset card id.
+  Bounds do not establish an anchor or connection socket. `fenceB1Edges`, `wallF1Edges`, `wallF6Edges`, `wallC1Edges`, and `wallC6Edges` record measured fence, stone wall, stone arch, timber wall, and timber opening facings.
   `structuralCardFacts(id)` returns the known card fields without fabricating unmeasured facts.
 - `vocabulary`: canonical roles to this set's action names, and the loop set.
 

@@ -3,8 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SaveSlot } from '@ogm/contracts/browser';
 
+import { GameMenuProvider, useGameMenuControls } from '../../app/GameMenu';
 import type { GameFrameController } from '../../features/editor/frame';
 import { PlatformHud } from './PlatformHud';
+
+const EXTRAS = { actions: [], extras: [<button key="invite" type="button" aria-label="Invite" />] };
+function Extras() {
+  useGameMenuControls(EXTRAS);
+  return null;
+}
 
 function fakeFrame() {
   return {
@@ -49,17 +56,18 @@ afterEach(() => {
 });
 
 describe('PlatformHud pause panel', () => {
-  // Kevin, 2026-11-15: "waaaay too much going on … no idea what the numbers do". He picked layout C: Resume, then
-  // Restart and Leave, then round icons; saves and credits wait in Settings, everything else behind More.
-  it('shows only the picked actions, with save slots and credits off the panel', async () => {
-    const { list } = renderPaused();
+  // Kevin, 2026-11-24 (#1326): play mode is Resume, Restart, Leave, sound and File a bug; no tickets or agent context.
+  // Saves and credits still wait in Settings, and Edit stays the way into the editor.
+  it('shows only the play actions, with save slots and credits off the panel', async () => {
+    const { list } = renderPaused({ onFileBug: vi.fn() });
     await waitFor(() => expect(list).toHaveBeenCalled());
     const panel = screen.getByRole('dialog', { name: 'Paused' });
 
     const names = within(panel)
       .getAllByRole('button')
       .map((button) => button.getAttribute('aria-label') ?? button.textContent);
-    expect(names).toEqual(['Resume', 'Restart', 'Leave', 'Sound', 'Settings', 'Edit', 'More']);
+    expect(names).toEqual(['Resume', 'Restart', 'Leave', 'Mute', 'File a bug', 'Settings', 'Edit']);
+    expect(within(panel).getByRole('slider', { name: 'Volume' })).toBeInTheDocument();
     expect(within(panel).queryByRole('group', { name: 'Save slots' })).not.toBeInTheDocument();
   });
 
@@ -67,22 +75,44 @@ describe('PlatformHud pause panel', () => {
   it('styles Leave as a secondary action, never like Resume', () => {
     renderPaused();
 
-    expect(screen.getByRole('button', { name: 'Resume' })).toHaveClass('tap-primary');
-    expect(screen.getByRole('button', { name: 'Leave' })).not.toHaveClass('tap-primary');
-    expect(screen.getByRole('button', { name: 'Leave' })).toHaveClass('tap-secondary');
+    expect(screen.getByRole('button', { name: 'Resume' })).toHaveClass('is-go');
+    expect(screen.getByRole('button', { name: 'Leave' })).not.toHaveClass('is-go');
   });
 
   it('mutes and unmutes the game from the sound circle', () => {
     const { frame } = renderPaused();
-    const sound = screen.getByRole('button', { name: 'Sound' });
-    expect(sound).toHaveAttribute('aria-pressed', 'true');
 
-    fireEvent.click(sound);
+    fireEvent.click(screen.getByRole('button', { name: 'Mute' }));
 
-    expect(sound).toHaveAttribute('aria-pressed', 'false');
     expect(frame.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ mute: true }));
-    fireEvent.click(sound);
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0');
+    fireEvent.click(screen.getByRole('button', { name: 'Unmute' }));
     expect(frame.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ mute: false }));
+  });
+
+  it('sets the game volume from the slider and unmutes when it is raised', () => {
+    const { frame } = renderPaused();
+    fireEvent.click(screen.getByRole('button', { name: 'Mute' }));
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Volume' }), { target: { value: '40' } });
+
+    expect(frame.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ volume: 0.4, mute: false }));
+  });
+
+  it('files a bug with the host log and goes back to the menu', async () => {
+    const onFileBug = vi.fn().mockResolvedValue({});
+    renderPaused({ onFileBug, bugLog: () => 'game game' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'File a bug' }));
+    const page = screen.getByRole('dialog', { name: 'File a bug' });
+    fireEvent.change(within(page).getByRole('textbox', { name: 'Describe the issue' }), {
+      target: { value: 'Frozen goblin' },
+    });
+    fireEvent.click(within(page).getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(onFileBug).toHaveBeenCalledWith('Frozen goblin', 'game game', expect.any(String)));
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
+    expect(screen.getByRole('dialog', { name: 'Paused' })).toBeVisible();
   });
 
   it('runs Restart and Edit through the screen and leaves Restart out of room play', () => {
@@ -126,9 +156,30 @@ describe('PlatformHud pause panel', () => {
     await waitFor(() => expect(creditsApi).toHaveBeenCalledTimes(2));
   });
 
+  it("offers More only for the game's own extras", () => {
+    renderPaused();
+    expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
+  });
+
   it('lends its More page to the studio menu and takes it back on Back', async () => {
     const onMoreHost = vi.fn();
-    renderPaused({ onMoreHost });
+    const frame = fakeFrame();
+    render(
+      <GameMenuProvider>
+        <Extras />
+        <PlatformHud
+          build="draft"
+          frame={frame}
+          gameId="game"
+          paused
+          saves={false}
+          saveContext={saveContext}
+          saveApi={{ list: vi.fn().mockResolvedValue({ available: false }), read: vi.fn(), write: vi.fn() }}
+          onMoreHost={onMoreHost}
+          onResume={vi.fn()}
+        />
+      </GameMenuProvider>,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'More' }));
 

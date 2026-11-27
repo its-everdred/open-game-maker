@@ -8,6 +8,29 @@ export interface StructuralImageBounds {
   facings: Readonly<Record<TileFacing, AlphaBounds>>;
 }
 
+/** A visually inspected post style and approximate placement, not a measured connection socket. */
+export const inspectedGatePost: Fact<{
+  asset: string;
+  facing: TileFacing;
+  scale: number;
+  elevation: number;
+  socket: { x: number; y: number };
+  fenceAsset: string;
+  fenceEdge: 'yMax';
+}> = {
+  value: {
+    asset: 't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01',
+    facing: 'E',
+    scale: 0.4,
+    elevation: 0.5,
+    socket: { x: 0, y: 0 },
+    fenceAsset: 't1:smallscaleint-2d-hd-zombie-rural-tileset/tiles/isometric-tiles/fence-b1@2026-11-01',
+    fenceEdge: 'yMax',
+  },
+  verified:
+    'Stone A14 E has alpha 255 at its ground anchor (128,208); Fence B1 E has alpha 3 and 12 at its yMax vertices and opaque pixels within 2 px. The scaled, half-elevation post anchor aligns with a vertex. Game depth remains unverified (2026-11-26).',
+};
+
 /**
  * Pixel bounds only: these do not establish an origin, connection socket, or footprint.
  * The source images remain in the local pack and are not shipped with this data.
@@ -33,6 +56,10 @@ export const structuralImageBounds: Fact<Readonly<Record<string, StructuralImage
     't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/roof-d1@2026-11-01': {
       size: [256, 256],
       facings: { E: [62, 92, 203, 239], N: [62, 124, 204, 207], S: [52, 93, 193, 239], W: [51, 124, 193, 207] },
+    },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/roof-a1@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [43, 103, 209, 253], N: [42, 134, 210, 219], S: [46, 103, 213, 255], W: [46, 134, 212, 221] },
     },
     't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/roof-d5@2026-11-01': {
       size: [256, 256],
@@ -70,6 +97,10 @@ export const structuralImageBounds: Fact<Readonly<Record<string, StructuralImage
       size: [256, 256],
       facings: { E: [112, 73, 194, 239], N: [110, 51, 192, 215], S: [63, 75, 145, 240], W: [61, 51, 144, 215] },
     },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-c6@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [107, 73, 194, 161], N: [108, 51, 195, 138], S: [60, 75, 147, 161], W: [61, 51, 148, 137] },
+    },
     't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-b8@2026-11-01': {
       size: [256, 256],
       facings: { E: [102, 151, 193, 245], N: [102, 128, 197, 220], S: [52, 151, 143, 243], W: [56, 129, 143, 220] },
@@ -98,9 +129,13 @@ export const structuralImageBounds: Fact<Readonly<Record<string, StructuralImage
       size: [256, 256],
       facings: { E: [64, 176, 191, 240], N: [64, 176, 191, 240], S: [64, 176, 191, 240], W: [64, 176, 191, 240] },
     },
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01': {
+      size: [256, 256],
+      facings: { E: [69, 9, 174, 236], N: [69, 9, 174, 236], S: [69, 9, 174, 236], W: [70, 9, 174, 236] },
+    },
   },
   verified:
-    'Decoded each named source PNG with sharp and scanned every nonzero alpha pixel; bounds are inclusive (2026-11-21).',
+    'Decoded each named source PNG with sharp and scanned every nonzero alpha pixel; bounds are inclusive (2026-11-21 to 2026-11-27).',
 };
 
 /** Grid edge occupied by the rural Fence B1 sprite for each facing. */
@@ -130,4 +165,21 @@ export const wallC1Edges: Fact<Readonly<Record<TileFacing, 'xMin' | 'xMax' | 'yM
     'N/S overlap 1688/1679 pixels along x versus 874/986 along y, ' +
     'E/W overlap 1535/1522 along y versus 878/818 along x. ' +
     'Facing positions and a local 3x2 timber wall-loop diagnostic distinguish each side.',
+};
+
+/** Grid edge occupied by the timber arch header, compared with the matching wall facing. */
+export const wallC6Edges: Fact<Readonly<Record<TileFacing, 'xMin' | 'xMax' | 'yMin' | 'yMax'>>> = {
+  value: { E: 'xMax', N: 'yMin', S: 'yMax', W: 'xMin' },
+  verified:
+    'For E/N/S/W, 3143/3367, 3195/3426, 3144/3344 and 3149/3349 C6 pixels with alpha > 32 overlap C1 at the same anchor; the S-facing pairing was also rendered as a timber doorway (2026-11-27).',
+};
+
+/** Grid edge occupied by the fantasy Wall F6 arch for each facing. */
+export const wallF6Edges: Fact<Readonly<Record<TileFacing, 'xMin' | 'xMax' | 'yMin' | 'yMax'>>> = {
+  value: { E: 'xMax', N: 'yMin', S: 'yMax', W: 'xMin' },
+  verified:
+    'Source PNG alpha-mask overlap at a 128x64 tile displacement on 2026-11-21: ' +
+    'N/S overlap 809/795 pixels along x and zero along y; ' +
+    'E/W overlap 780/772 along y and zero along x. ' +
+    'Facing positions and the local stone-shell door diagnostic distinguish each side.',
 };

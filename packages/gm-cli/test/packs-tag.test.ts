@@ -73,6 +73,22 @@ beforeEach(() => {
 });
 
 describe('gm packs tag', () => {
+  it('reports worker progress before the cards are committed', async () => {
+    const assetsRoot = tagLibrary();
+    worker.run.mockImplementation(async (options: RunJsonWorkerOptions) => {
+      if (options.label === 'audio analysis') options.onRecord({ progress: { done: 16, total: 32 } });
+      if (options.label === 'audio cards') emitMusic(options);
+      return { stderr: '', stderrTruncated: false };
+    });
+
+    const result = await gm(['packs', 'tag', '--kind', 'audio', '--only', 'kenney-music-loops'], {
+      env: { OGM_ASSETS_ROOT: assetsRoot },
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.err).toContain('audio analysis: 16/32 card previews encoded');
+  });
+
   it('runs bounded offline stages, validates cards, reconciles counts, and emits once', async () => {
     successfulWorkers();
     const assetsRoot = tagLibrary();

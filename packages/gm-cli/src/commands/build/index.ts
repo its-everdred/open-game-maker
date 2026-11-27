@@ -6,12 +6,21 @@ import { DesignDocSchema, gameManifestSchema } from '@ogm/contracts';
 
 import { checkPublishDist } from '../../dist-validation.js';
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
+import { touchIconWarnings } from '../../touch-icons-check.js';
 
 /* The publisher (#283) copies dist/ into the games host; the API reads these two files with these schemas. */
 const ARTIFACTS = [
   { file: 'manifest.json', schema: gameManifestSchema },
   { file: 'design/design.json', schema: DesignDocSchema },
 ] as const;
+
+function readJson(path: string): unknown {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
 
 /** One problem line per missing or invalid publish file in a build dir; empty when the dir can be published. */
 export function checkBuildDir(dir: string): string[] {
@@ -60,15 +69,18 @@ export const command: GmCommand = {
       const tail = `${result.stdout}${result.stderr}`.trimEnd().split('\n').slice(-20);
       for (const line of tail) ctx.err(line);
       const problem = `pnpm build failed with exit ${result.status ?? result.signal}`;
-      if (ctx.json) ctx.out(JSON.stringify({ ok: false, problems: [problem] }));
+      if (ctx.json) ctx.out(JSON.stringify({ ok: false, problems: [problem], warnings: [] }));
       else ctx.err(problem);
       return EXIT.failed;
     }
 
     const problems = [...checkBuildDir(dist), ...checkPublishDist(dist)];
-    if (ctx.json) ctx.out(JSON.stringify({ ok: problems.length === 0, problems }));
+    const manifest = gameManifestSchema.safeParse(readJson(join(dist, 'manifest.json')));
+    const warnings = manifest.success ? touchIconWarnings(manifest.data) : [];
+    if (ctx.json) ctx.out(JSON.stringify({ ok: problems.length === 0, problems, warnings }));
     else if (problems.length === 0) ctx.out('dist/ ok: manifest.json, design/design.json');
     for (const problem of ctx.json ? [] : problems) ctx.err(problem);
+    for (const warning of ctx.json ? [] : warnings) ctx.err(`warning ${warning}`);
     return problems.length === 0 ? EXIT.ok : EXIT.failed;
   },
 };

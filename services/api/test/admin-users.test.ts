@@ -4,9 +4,10 @@ import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
 
 import { ALLOW_LIST_SEEDED_KEY, listAllowedUsers, seedAllowList, setAllowedRole } from '../src/auth/allow-list.js';
+import { authContextFor } from '../src/auth/routes.js';
 import { NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { signIn } from './auth-helpers.js';
-import { makeApp } from './helpers.js';
+import { INTERNAL_TOKEN, makeApp } from './helpers.js';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -30,6 +31,16 @@ const body = (value: unknown, init: RequestInit = {}): RequestInit => ({
 async function adminSession(made: Made, email = 'kevin@example.com') {
   const { session } = await signIn(made.app, outbox(made.deps), email);
   setAllowedRole(made.deps.db, email, 'admin');
+  const owner = made.deps.db.select().from(schema.user).where(eq(schema.user.email, email)).get()!;
+  const now = new Date().toISOString();
+  made.deps.db
+    .insert(schema.families)
+    .values({ id: 'family-admin', name: 'Admin family', ownerUserId: owner.id, createdAt: now })
+    .run();
+  made.deps.db
+    .insert(schema.familyMembers)
+    .values({ familyId: 'family-admin', userId: owner.id, role: 'owner', capability: 'creator', joinedAt: now })
+    .run();
   return session;
 }
 
@@ -168,6 +179,84 @@ describe('/api/v1/admin/users', () => {
     expect(unlisted.status).toBe(404);
   });
 
+  it('sends a family-bound first-run link to a newly invited maker', async () => {
+    const made = await makeApp();
+    const admin = await adminSession(made);
+    const response = await made.app.request('/api/v1/admin/users', {
+      ...body({ email: 'new-maker@example.com', role: 'maker' }),
+      headers: { cookie: admin, 'x-ogm-qa-run': '12345678-1234-1234-1234-123456789abc' },
+    });
+    expect(response.status).toBe(201);
+    expect(listAllowedUsers(made.deps.db).find((row) => row.email === 'new-maker@example.com')?.addedBy).toMatch(
+      /:qa:12345678-1234-1234-1234-123456789abc$/,
+    );
+    const mail = outbox(made.deps)().find((entry) => entry.to === 'new-maker@example.com')!;
+    const url = new URL(/https:\/\/\S+/.exec(mail.text)![0]);
+    const callback = new URL(url.searchParams.get('callbackURL')!);
+    expect(callback.pathname).toBe('/welcome');
+    const token = callback.searchParams.get('invite');
+    expect(token).toBeTruthy();
+    const verified = await made.app.request(url.pathname + url.search);
+    const cookie = verified.headers
+      .getSetCookie()
+      .map((line) => line.split(';')[0])
+      .join('; ');
+    const accepted = await made.app.request(`/api/v1/invites/${token}/accept`, { method: 'POST', headers: { cookie } });
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toMatchObject({ kind: 'member', familyId: 'family-admin', capability: 'creator' });
+  });
+
+  it('preserves instance-wide invitations for an admin without a family', async () => {
+    const made = await makeApp();
+    const admin = await adminSession(made);
+    made.deps.db.delete(schema.familyMembers).where(eq(schema.familyMembers.familyId, 'family-admin')).run();
+    const response = await made.app.request('/api/v1/admin/users', {
+      ...body({ email: 'no-family@example.com', role: 'maker' }),
+      headers: { cookie: admin },
+    });
+    expect(response.status).toBe(201);
+    const mail = outbox(made.deps)().find((entry) => entry.to === 'no-family@example.com')!;
+    const link = new URL(/https:\/\/\S+/.exec(mail.text)![0]);
+    expect(new URL(link.searchParams.get('callbackURL')!).pathname).toBe('/games');
+  });
+
+  it('revokes an outstanding family invite when an address is removed', async () => {
+    const made = await makeApp();
+    const admin = await adminSession(made);
+    const headers = { cookie: admin };
+    await made.app.request('/api/v1/admin/users', { ...body({ email: 'retry@example.com', role: 'maker' }), headers });
+    const first = outbox(made.deps)().find((mail) => mail.to === 'retry@example.com')!;
+    const link = new URL(/https:\/\/\S+/.exec(first.text)![0]);
+    const token = new URL(link.searchParams.get('callbackURL')!).searchParams.get('invite');
+    expect(
+      (await made.app.request('/api/v1/admin/users/retry%40example.com', { method: 'DELETE', headers })).status,
+    ).toBe(204);
+    await made.app.request('/api/v1/admin/users', { ...body({ email: 'retry@example.com', role: 'maker' }), headers });
+    const verified = await made.app.request(link.pathname + link.search);
+    const cookie = verified.headers
+      .getSetCookie()
+      .map((line) => line.split(';')[0])
+      .join('; ');
+    expect(
+      (await made.app.request(`/api/v1/invites/${token}/accept`, { method: 'POST', headers: { cookie } })).status,
+    ).toBe(410);
+  });
+
+  it('removes a newly minted invitation when the sign-in request fails', async () => {
+    const made = await makeApp();
+    const admin = await adminSession(made);
+    const auth = authContextFor(made.deps)!.auth;
+    const handler = vi.spyOn(auth, 'handler').mockResolvedValueOnce(new Response('', { status: 429 }));
+    const result = await made.app.request('/api/v1/admin/users', {
+      ...body({ email: 'failure@example.com', role: 'maker' }),
+      headers: { cookie: admin },
+    });
+    expect(result.status).toBe(502);
+    expect(made.deps.db.select().from(schema.invitations).all()).toHaveLength(0);
+    expect(listAllowedUsers(made.deps.db).some((row) => row.email === 'failure@example.com')).toBe(false);
+    handler.mockRestore();
+  });
+
   it('ends the removed user’s session and refuses to remove the caller', async () => {
     const made = await makeApp();
     const admin = await adminSession(made);
@@ -223,3 +312,55 @@ describe('roles at the API boundary', () => {
     ]);
   });
 });
+
+describe('weekly user budgets', () => {
+  it('lets an admin set limits before first sign-in and refuses a player', async () => {
+    const made = await makeApp();
+    const admin = await adminSession(made);
+    const player = await signIn(made.app, outbox(made.deps), 'kim@example.com');
+    const url = '/api/v1/admin/users/sam%40example.com/weekly-budget';
+    const update = { newGames: 0, edits: null };
+    const denied = await made.app.request(url, {
+      ...body(update, { method: 'PUT' }),
+      headers: { cookie: player.session },
+    });
+    expect(denied.status).toBe(403);
+    const saved = await made.app.request(url, { ...body(update, { method: 'PUT' }), headers: { cookie: admin } });
+    expect(saved.status).toBe(200);
+    const listed = await made.app.request('/api/v1/admin/users', { headers: { cookie: admin } });
+    const result = (await listed.json()) as { users: { email: string; weeklyBudget: typeof update }[] };
+    expect(result.users.find((user) => user.email === 'sam@example.com')?.weeklyBudget).toEqual(update);
+  });
+});
+
+it('prevents changing or removing the QA user while its probe is active', async () => {
+  const made = await makeApp();
+  const admin = await adminSession(made);
+  const internal = { 'x-ogm-internal': INTERNAL_TOKEN, 'content-type': 'application/json' };
+  const session = await made.app.request('/internal/qa/session', {
+    method: 'POST',
+    headers: internal,
+    body: JSON.stringify({ email: 'qa@example.test' }),
+  });
+  expect(session.status).toBe(200);
+  const begun = await made.app.request('/internal/qa/energy-budget/begin', { method: 'POST', headers: internal });
+  const { id } = (await begun.json()) as { id: string };
+  const budget = await made.app.request('/api/v1/admin/users/qa%40example.test/weekly-budget', {
+    ...body({ newGames: 1, edits: 1 }, { method: 'PUT' }),
+    headers: { cookie: admin, 'content-type': 'application/json' },
+  });
+  const remove = await made.app.request('/api/v1/admin/users/qa%40example.test', {
+    method: 'DELETE',
+    headers: { cookie: admin },
+  });
+  expect([budget.status, remove.status]).toEqual([409, 409]);
+  expect(
+    (
+      await made.app.request('/internal/qa/energy-budget/end', {
+        method: 'POST',
+        headers: internal,
+        body: JSON.stringify({ id }),
+      })
+    ).status,
+  ).toBe(204);
+}, 120_000);

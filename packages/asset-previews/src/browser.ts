@@ -1,4 +1,7 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +11,6 @@ import { loadEnv } from '@ogm/config';
 
 import { PREVIEW_PAGE, type View } from './page.js';
 
-const PREVIEW_ORIGIN = 'http://asset-previews.local';
 const GPU_ARGS = ['--use-angle=gl-egl', '--enable-gpu', '--ignore-gpu-blocklist'];
 const SOFTWARE_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 
@@ -52,6 +54,7 @@ export function previewContextStats(reset = false): { active: number; peak: numb
 export type BrowserRenderOptions = {
   software?: boolean;
   executablePath?: string;
+  runtimeRoot?: string;
 };
 
 export type BrowserRenderResult = {
@@ -60,26 +63,50 @@ export type BrowserRenderResult = {
   software: boolean;
 };
 
-async function fulfillRoute(route: Route, asset: Buffer, modules: Record<string, Buffer>): Promise<void> {
-  const url = new URL(route.request().url());
-  if (url.origin !== PREVIEW_ORIGIN) {
-    await route.abort('blockedbyclient');
-    return;
-  }
-  if (url.pathname === '/') {
-    await route.fulfill({ status: 200, contentType: 'text/html', body: PREVIEW_PAGE });
-    return;
-  }
-  if (url.pathname === '/asset.glb') {
-    await route.fulfill({ status: 200, contentType: 'model/gltf-binary', body: asset });
-    return;
-  }
-  const module = modules[url.pathname];
-  if (module) {
-    await route.fulfill({ status: 200, contentType: 'text/javascript', body: module });
-    return;
-  }
-  await route.abort('blockedbyclient');
+type PreviewFiles = { page: string; modules: Record<string, Buffer>; glb: string };
+
+/**
+ * Serve the preview page, its modules and the model from a loopback HTTP server. The model is streamed from disk:
+ * routing it through Playwright's route.fulfill sent the whole file over the DevTools pipe, and a GLB over Chromium's
+ * 100 MB DevTools buffer closed the pipe and hung the render (leartes 122 MB and 140 MB models, core #1353).
+ */
+async function servePreview(files: PreviewFiles): Promise<{ server: Server; origin: string }> {
+  const glbSize = (await stat(files.glb)).size;
+  const server = createServer((request, response) => {
+    const path = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
+    if (request.method !== 'GET') {
+      response.writeHead(405).end();
+      return;
+    }
+    if (path === '/') {
+      response.writeHead(200, { 'content-type': 'text/html' }).end(files.page);
+      return;
+    }
+    if (path === '/asset.glb') {
+      response.writeHead(200, { 'content-type': 'model/gltf-binary', 'content-length': glbSize });
+      createReadStream(files.glb)
+        .on('error', () => response.destroy())
+        .pipe(response);
+      return;
+    }
+    const module = files.modules[path];
+    if (module) {
+      response.writeHead(200, { 'content-type': 'text/javascript' }).end(module);
+      return;
+    }
+    response.writeHead(404).end();
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const { port } = server.address() as AddressInfo;
+  return { server, origin: `http://127.0.0.1:${port}` };
+}
+
+async function allowOnly(route: Route, origin: string): Promise<void> {
+  if (new URL(route.request().url()).origin === origin) await route.continue();
+  else await route.abort('blockedbyclient');
 }
 
 async function close(context: BrowserContext | undefined): Promise<void> {
@@ -97,8 +124,7 @@ export async function renderModelViews(
     });
     const software = options.software ?? environment.GM_VERIFY_SOFTWARE_GL;
     const threePath = fileURLToPath(import.meta.resolve('three'));
-    const [asset, three, threeCore, loader, bufferGeometryUtils, skeletonUtils, meshopt] = await Promise.all([
-      readFile(glb),
+    const [three, threeCore, loader, bufferGeometryUtils, skeletonUtils, meshopt] = await Promise.all([
       readFile(threePath),
       readFile(join(dirname(threePath), 'three.core.js')),
       readFile(fileURLToPath(import.meta.resolve('three/examples/jsm/loaders/GLTFLoader.js'))),
@@ -106,10 +132,24 @@ export async function renderModelViews(
       readFile(fileURLToPath(import.meta.resolve('three/examples/jsm/utils/SkeletonUtils.js'))),
       readFile(fileURLToPath(import.meta.resolve('three/examples/jsm/libs/meshopt_decoder.module.js'))),
     ]);
-    const runtime = await mkdtemp(join(tmpdir(), 'ogm-asset-preview-'));
+    const runtime = await mkdtemp(join(options.runtimeRoot ?? tmpdir(), 'ogm-asset-preview-'));
     let browser: Browser | undefined;
     let context: BrowserContext | undefined;
+    let served: { server: Server; origin: string } | undefined;
     try {
+      served = await servePreview({
+        page: PREVIEW_PAGE,
+        glb,
+        modules: {
+          '/three.module.js': three,
+          '/three.core.js': threeCore,
+          '/GLTFLoader.js': loader,
+          '/utils/BufferGeometryUtils.js': bufferGeometryUtils,
+          '/utils/SkeletonUtils.js': skeletonUtils,
+          '/meshopt_decoder.module.js': meshopt,
+        },
+      });
+      const origin = served.origin;
       browser = await chromium.launch({
         headless: true,
         args: software ? SOFTWARE_ARGS : GPU_ARGS,
@@ -128,20 +168,12 @@ export async function renderModelViews(
       page.on('console', (message) => {
         if (message.type() === 'error') failEarly(new Error(`preview page: ${message.text()}`));
       });
+      browser.on('disconnected', () => failEarly(new Error('preview browser disconnected')));
       page.on('requestfailed', (request) =>
         failEarly(new Error(`preview request failed: ${request.url()} (${request.failure()?.errorText ?? 'unknown'})`)),
       );
-      await page.route('**/*', (route) =>
-        fulfillRoute(route, asset, {
-          '/three.module.js': three,
-          '/three.core.js': threeCore,
-          '/GLTFLoader.js': loader,
-          '/utils/BufferGeometryUtils.js': bufferGeometryUtils,
-          '/utils/SkeletonUtils.js': skeletonUtils,
-          '/meshopt_decoder.module.js': meshopt,
-        }),
-      );
-      await page.goto(`${PREVIEW_ORIGIN}/`, { waitUntil: 'commit' });
+      await page.route('**/*', (route) => allowOnly(route, origin));
+      await page.goto(`${origin}/`, { waitUntil: 'commit' });
       await Promise.race([
         page.waitForFunction(
           () => {
@@ -173,6 +205,7 @@ export async function renderModelViews(
     } finally {
       await close(context);
       await browser?.close();
+      if (served) await new Promise<void>((resolve) => served?.server.close(() => resolve()));
       await rm(runtime, { recursive: true, force: true });
     }
   });

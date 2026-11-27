@@ -24,8 +24,11 @@ export {
 export {
   fenceB1Edges,
   wallF1Edges,
+  wallF6Edges,
   wallC1Edges,
+  wallC6Edges,
   structuralImageBounds,
+  inspectedGatePost,
   type AlphaBounds,
   type StructuralImageBounds,
 } from './structural-bounds.js';
@@ -43,6 +46,7 @@ export {
   type DressingStyle,
   type EdgeKind,
   type EdgePolyline,
+  type GatePostStyle,
   type ScatterRules,
   type SteppingStyle,
 } from './assemblers.js';

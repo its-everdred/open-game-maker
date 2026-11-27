@@ -8,6 +8,7 @@ export * from './jobs.js';
 export * from './budget.js';
 export * from './analytics.js';
 export * from './reports.js';
+export * from './telemetry.js';
 export * from './notifications.js';
 export * from './room.js';
 export * from './net.js';

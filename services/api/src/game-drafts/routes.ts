@@ -16,6 +16,10 @@ import { parseBody } from '../app/validate.js';
 import { insertChatRow } from '../build-chat/store.js';
 import { gameDrafts } from '../new-game/drafts.js';
 import { discardGameDraft } from './cleanup.js';
+import { weeklyJobs } from '../budget/weekly-jobs.js';
+import { AdmissionRefused } from '../jobs/admission.js';
+import { isEnergyProbe } from '../qa/energy-probe.js';
+import { allowScopeStart } from '../scope/rate-limit.js';
 
 export const prefix = '/api/v1/game-drafts';
 
@@ -42,12 +46,36 @@ const routes = new Hono<ApiBindings>()
     const deps = c.get('deps');
     const assistant = deps.registry.draftScopeAssistant;
     if (!assistant) throw new HttpError(503, 'draft_scope_unavailable');
-    const draft = gameDrafts.create(deps.db, {
-      familyId: principal.familyId,
-      creatorId: principal.userId,
-      choices: body.choices,
-      allowAiGeneratedAssets: body.allowAiGeneratedAssets,
-    });
+    let draft: ReturnType<typeof gameDrafts.create>;
+    try {
+      draft = deps.sqlite
+        .transaction(() => {
+          const now = new Date();
+          const weekly = weeklyJobs(deps.db, principal.userId, now, deps.config.resetZoneDefault);
+          if (weekly.remaining.newGames === 0) {
+            throw new AdmissionRefused({
+              error: 'energy_limit_reached',
+              reason: 'weekly_user',
+              remainingMicroUsd: 0,
+              resetsAt: weekly.resetsAt,
+              offers: ['ask_admin'],
+              window: 'week',
+            });
+          }
+          if (isEnergyProbe(c, principal.userId)) throw new HttpError(409, 'qa_energy_probe_fenced');
+          if (!allowScopeStart(deps, principal.userId)) throw new HttpError(429, 'scope_rate_limited');
+          return gameDrafts.create(deps.db, {
+            familyId: principal.familyId,
+            creatorId: principal.userId,
+            choices: body.choices,
+            allowAiGeneratedAssets: body.allowAiGeneratedAssets,
+          });
+        })
+        .immediate();
+    } catch (error) {
+      if (error instanceof AdmissionRefused) return c.json(error.body, 402);
+      throw error;
+    }
     const repo = `${deps.config.instanceRepo.owner}/${deps.config.instanceRepo.name}`;
     gameDrafts.attachTicket(deps.db, draft.id, repo, null);
     try {
@@ -62,7 +90,9 @@ const routes = new Hono<ApiBindings>()
       } catch (closeError) {
         deps.log({ event: 'draft-scope-orphan-close-failed', draftId: draft.id, error: (closeError as Error).name });
       }
-      if (closed) gameDrafts.delete(deps.db, draft.id);
+      if (closed) {
+        gameDrafts.delete(deps.db, draft.id);
+      }
       deps.log({ event: 'draft-scope-create-failed', draftId: draft.id, error: (error as Error).name });
       throw new HttpError(503, 'draft_scope_unavailable');
     }
@@ -71,9 +101,12 @@ const routes = new Hono<ApiBindings>()
     const principal = requirePrincipal(c, ['user']);
     const deps = c.get('deps');
     const draft = requireOwner(gameDrafts.get(deps.db, c.req.param('id')), principal);
-    if (draft.status === 'open' && draft.ticketNumber !== null) {
+    if (draft.status === 'open' && draft.ticketRepo !== null && draft.ticketNumber !== null) {
       try {
-        const transcript = await deps.registry.draftScopeAssistant?.transcript({ ticket: String(draft.ticketNumber) });
+        const transcript = await deps.registry.draftScopeAssistant?.transcript({
+          repo: draft.ticketRepo,
+          ticket: String(draft.ticketNumber),
+        });
         for (const [index, event] of (transcript ?? []).entries()) {
           const id = `m_${createHash('sha256')
             .update(`${draft.id}\0${event.turn_id ?? index}\0${event.body}`)

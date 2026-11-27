@@ -38,7 +38,7 @@ missing or unreadable, or a card's files will not load, stop asset work and tell
 workpad) the path and the error. Never present procedural stand-ins, primitives or placeholders as options for a
 creator's choice; a choice shown with stand-ins is not a choice.
 
-Set `IMPECCABLE_BIN="$HOME/.impeccable/bin/0.1.25/impeccable"` and `DO_NOT_TRACK=1` in the worker environment; if unavailable, the skill continues in degraded mode. For DOM/CSS UI (shell, menus, HUD overlays, review pages), load [impeccable](../vendor/impeccable/impeccable/SKILL.md) and use critique, audit, polish, layout, typeset or adapt; GM rules win: keep the prototype palette, avoid needless text, never stretch images or cover the board, and target Kevin’s concept. In-canvas art keeps its own skills; Catalog rolls and card images are allowed with tracking off; workers must not use live, generate, login or health, or re-enable tracking or update checks.
+Set `IMPECCABLE_BIN="$HOME/.impeccable/bin/0.1.25/impeccable"` and `DO_NOT_TRACK=1` in the worker environment; if unavailable, the skill continues in degraded mode. For DOM/CSS UI (shell, menus, HUD overlays, review pages), load [impeccable](../vendor/impeccable/impeccable/SKILL.md) and use critique, audit, polish, layout, typeset or adapt; GM rules win: keep the prototype palette, avoid needless text, never stretch images or cover the board, and target Kevin’s concept. Approved OGM UI: `prototypes/ogm-glass/` (open `index.html`); match it exactly. In-canvas art keeps its own skills; Catalog rolls and card images are allowed with tracking off; workers must not use live, generate, login or health, or re-enable tracking or update checks.
 
 ## Build loop
 
@@ -66,8 +66,7 @@ Wrap long work in the Agent Workpad with these exact markers:
 <!-- gm-activity: <activity> end -->
 ```
 
-Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animation_and_vfx`, `audio`,
-`ui_and_hud`, `playtesting_and_verification`, `deploy_and_release`, `writing`.
+Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animation_and_vfx`, `audio`, `ui_and_hud`, `playtesting_and_verification`, `deploy_and_release`, `writing`.
 
 ## `gm` cheat sheet
 
@@ -94,6 +93,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-video | Rendering a short deterministic title card, trailer beat, or motion graphic locally. |
 | gm-voiceover | Making a short consented local voice draft and caption timing. |
 | gm-hd2d | Turning on HD-2D lighting, focus or particles, or editing an HD-2D scene document. |
+| gm-vfx | Adding or authoring an effect: fire, torch, cast, hit, aura; or tuning the effects budget. |
 | gm-3d | Authoring or checking offline 3D assets with Blender before Three.js runtime work. |
 | gm-dream-loop | Matching a game render to approved concept art. |
 | gm-reference-qa | Reviewing a 3D asset against its reference. |

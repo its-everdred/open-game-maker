@@ -26,11 +26,11 @@ describe('Netlify static configuration', () => {
     ]);
   });
 
-  it('publishes the custom domain as the canonical and Open Graph URL', () => {
+  it('publishes the app domain, not the marketing site at the bare domain, as the canonical and Open Graph URL', () => {
     const index = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
 
-    expect(index).toContain('<link rel="canonical" href="https://makeopen.games/" />');
-    expect(index).toContain('<meta property="og:url" content="https://makeopen.games/" />');
+    expect(index).toContain('<link rel="canonical" href="https://weaver.makeopen.games/" />');
+    expect(index).toContain('<meta property="og:url" content="https://weaver.makeopen.games/" />');
   });
 
   // The host is a deploy-time value (#317): the repo keeps no _redirects of its own.

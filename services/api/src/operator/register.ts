@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 
 import { daemonPaths, unitName } from '@ogm/builder';
 import { schema } from '@ogm/db';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { RegisterGameBody } from '../admin/shapes.js';
@@ -66,6 +66,26 @@ export function registerOperatorGame(deps: AppDeps, body: Input) {
       .all();
     if (rows.length !== 1) throw new HttpError(409, 'repo_daemon_ambiguous');
     const current = rows[0]!;
+    const endpointChanged =
+      current.port !== daemon.port ||
+      current.checkoutPath !== daemon.checkoutPath ||
+      current.unit !== daemon.unit ||
+      current.envFile !== daemon.envFile;
+    if (endpointChanged) {
+      const repo = `${body.repo.owner}/${body.repo.name}`.toLowerCase();
+      const activeDraft = db
+        .select({ id: schema.gameDrafts.id })
+        .from(schema.gameDrafts)
+        .where(
+          and(
+            sql`lower(${schema.gameDrafts.ticketRepo}) = ${repo}`,
+            inArray(schema.gameDrafts.status, ['open', 'agreed']),
+          ),
+        )
+        .get();
+      if (activeDraft) throw new HttpError(409, 'draft_daemon_in_use');
+    }
+
     const portOwner = db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.port, daemon.port)).get();
     if (portOwner && portOwner.slug !== current.slug) throw new HttpError(409, 'daemon_port_taken');
     db.transaction((tx) => {

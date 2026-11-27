@@ -1,6 +1,9 @@
 import { build } from 'esbuild';
+import { copyFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { EFFEKSEER_WASM, effekseerRuntime } from './effekseer-runtime.mjs';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -27,6 +30,7 @@ await build({
     'scenery/index': 'src/scenery/index.ts',
     'test/index': 'src/test/index.ts',
     'three/index': 'src/three/index.ts',
+    'vfx/index': 'src/vfx/index.ts',
   },
   outdir: 'dist',
   bundle: true,
@@ -39,6 +43,9 @@ await build({
   alias: {
     pixelfx: resolve(packageRoot, '../../third_party/pixelfx/src'),
   },
+  plugins: [effekseerRuntime],
   chunkNames: 'chunks/[name]-[hash]',
   logLevel: 'info',
 });
+
+copyFileSync(EFFEKSEER_WASM, resolve(packageRoot, 'dist/vfx/effekseer.wasm'));

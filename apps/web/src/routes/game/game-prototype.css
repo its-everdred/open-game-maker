@@ -481,7 +481,7 @@
 }
 
 .game-screen .update-indicator,
-.game-screen .platform-pause-dialog,
+.game-screen .platform-pause-dialog:not(.game-menu),
 .game-screen .room-phase-card,
 .game-screen .reapply-card {
   border-color: var(--ink);

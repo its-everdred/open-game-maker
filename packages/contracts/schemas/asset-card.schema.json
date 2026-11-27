@@ -40,6 +40,11 @@
     "vfx": { "$ref": "#/$defs/vfx" },
     "map": { "$ref": "#/$defs/map" },
     "collection_info": { "$ref": "#/$defs/collectionInfo" },
+    "style_family": { "enum": ["chunky-low-poly", "detailed-low-poly", "simple-low-poly", "pixel-art", "flat-cartoon", "isometric-2d", "sketch"] },
+    "cameras": { "type": "array", "items": { "enum": ["isometric", "top-down", "third-person", "first-person", "side"] }, "uniqueItems": true },
+    "settings": { "$ref": "#/$defs/packSettings" },
+    "scenes": { "type": "array", "items": { "$ref": "#/$defs/packScene" } },
+    "prefabs": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
     "proposed_tags": { "type": "array", "items": { "$ref": "#/$defs/proposedTag" } },
     "provenance": { "$ref": "#/$defs/provenanceMap" },
     "flags": { "type": "array", "items": { "$ref": "#/$defs/vocab/flag" }, "uniqueItems": true },
@@ -55,7 +60,7 @@
       "if": { "properties": { "card_type": { "const": "asset" } } },
       "then": {
         "required": ["kind", "subkind", "collection", "source"],
-        "properties": { "id": { "$ref": "#/$defs/assetId" }, "collection_info": false }
+        "properties": { "id": { "$ref": "#/$defs/assetId" }, "collection_info": false, "style_family": false, "cameras": false, "settings": false, "scenes": false, "prefabs": false }
       }
     },
     {
@@ -121,6 +126,22 @@
     }
   ],
   "$defs": {
+    "packSettings": {
+      "type": "array",
+      "items": { "enum": ["medieval-village", "tavern", "castle", "crypt", "cave", "dungeon", "ruins", "forest", "desert", "modern-city", "sci-fi"] },
+      "uniqueItems": true
+    },
+    "packScene": {
+      "type": "object",
+      "required": ["path", "engine", "settings", "preview"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "engine": { "enum": ["unity", "unreal", "glb"] },
+        "settings": { "$ref": "#/$defs/packSettings" },
+        "preview": { "type": ["string", "null"], "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
     "structuralFacing": {
       "type": "object", "minProperties": 1,
       "properties": {

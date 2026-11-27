@@ -211,6 +211,34 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
+  it('includes the running build id in player bug reports', async () => {
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return new Response(JSON.stringify({ reportId: 'r1', signature: 's', route: 'platform' }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar', ownerId: 'another-player' });
+    renderGame();
+    await readyPlayFrame();
+    await waitFor(() => expect(host.mountGameFrame.mock.calls.at(-1)?.[0]).toMatchObject({ buildId: 'build' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'File a bug' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Describe the issue' }), {
+      target: { value: 'The door is stuck' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith('/api/v1/reports', expect.anything()));
+    const request = fetchSpy.mock.calls.find(([url]) => url === '/api/v1/reports')?.[1] as RequestInit | undefined;
+    expect(JSON.parse(String(request?.body))).toMatchObject({ gameId: 'game', buildHash: 'build' });
+    vi.unstubAllGlobals();
+  });
+
   it('does not record play when opening a nested screen', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(new Response('{}', { headers: { 'content-type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchSpy);
@@ -641,6 +669,20 @@ describe('GameScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
     await waitFor(() => expect(host.controller.resume).toHaveBeenCalledOnce());
     expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  // #1326: the editor's menu is a paused modal too, so a solo game must not keep running behind it.
+  it('pauses a solo game behind the editor menu and resumes it when the menu closes', async () => {
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(host.mountGameFrame).toHaveBeenCalled());
+    host.controller.pause.mockClear();
+    host.controller.resume.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    await waitFor(() => expect(host.controller.pause).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    await waitFor(() => expect(host.controller.resume).toHaveBeenCalledOnce());
   });
 
   it('opens the menu without pausing a room game', async () => {

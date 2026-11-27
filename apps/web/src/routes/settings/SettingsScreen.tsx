@@ -1,5 +1,7 @@
 import { Link, Outlet } from 'react-router';
 
+import { currentBuild } from '../../app/app-version';
+
 import './settings.css';
 
 export function SettingsScreen() {
@@ -9,7 +11,7 @@ export function SettingsScreen() {
         <h1>Settings</h1>
         <nav>
           <Link className="tap-secondary" to="/settings/energy">
-            Energy
+            Minerals and Gas
           </Link>
           <Link className="tap-secondary" to="/settings/credits">
             Credits
@@ -17,6 +19,7 @@ export function SettingsScreen() {
         </nav>
       </header>
       <Outlet />
+      <p className="settings-build">{currentBuild() ?? 'dev'}</p>
     </div>
   );
 }

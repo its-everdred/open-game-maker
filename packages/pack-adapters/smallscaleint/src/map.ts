@@ -73,6 +73,10 @@ export interface IsoPiece {
   depth: number;
   /** Height above the tile in 64-pixel grid units. */
   elevation?: number;
+  /** Uniform scale about the asset's ground point. */
+  scale?: number;
+  /** Adjustment to the projected draw-order key, in screen pixels. */
+  depthOffset?: number;
   solid: boolean;
   visible: boolean;
 }
@@ -227,6 +231,14 @@ export class IsoMap {
           throw new Error(`tile gid ${storedGid} solid must be a boolean`);
         }
         const elevation = property(tile.properties, 'elevation');
+        const scale = property(tile.properties, 'scale');
+        const depthOffset = property(tile.properties, 'depthOffset');
+        if (
+          depthOffset !== undefined &&
+          (typeof depthOffset !== 'number' || !Number.isFinite(depthOffset) || (name === 'floor' && depthOffset !== 0))
+        )
+          throw new Error(`tile gid ${storedGid} depthOffset must be finite and 0 on floor`);
+        const validScale = typeof scale === 'number' && Number.isFinite(scale) && scale > 0;
         if (
           elevation !== undefined &&
           (typeof elevation !== 'number' || !Number.isFinite(elevation) || elevation < 0)
@@ -247,8 +259,10 @@ export class IsoMap {
           gid: storedGid,
           asset,
           facing: facingOf(property(tile.properties, 'rotation'), storedGid),
-          depth: this.depthOf(x, y, name),
+          depth: this.depthOf(x, y, name) + (typeof depthOffset === 'number' ? depthOffset : 0),
           ...(typeof elevation === 'number' ? { elevation } : {}),
+          ...(validScale && (name !== 'floor' || scale === 1) ? { scale } : {}),
+          ...(typeof depthOffset === 'number' ? { depthOffset } : {}),
           solid,
           visible: true,
         });
@@ -428,6 +442,7 @@ export class IsoMap {
           .setOrigin(0.5, 208 / scene.textures.get(`${piece.asset}:${piece.facing}`).getSourceImage().height)
           .setDepth(piece.depth)
           .setVisible(piece.visible);
+        if (piece.scale !== undefined) object.setScale(piece.scale);
         this.#rendered.set(piece.key, object);
         return { key: piece.key, object };
       });

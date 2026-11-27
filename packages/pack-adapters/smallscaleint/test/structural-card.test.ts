@@ -31,6 +31,29 @@ it('supplies measured card metadata without inventing anchors or sockets', () =>
     ['yMax'],
     ['xMin'],
   ]);
+  const timberArch = structuralCardFacts(
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-c6@2026-11-01',
+  )!;
+  expect(timberArch.S?.edges?.value).toEqual(['yMax']);
+  expect(timberArch.S?.alpha_bounds?.value).toEqual([60, 75, 147, 161]);
+  const thatch = structuralCardFacts(
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/roof-a1@2026-11-01',
+  )!;
+  expect(thatch.S?.alpha_bounds?.value).toEqual([46, 103, 213, 255]);
+  const arch = structuralCardFacts(
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-f6@2026-11-01',
+  )!;
+  expect([arch.E?.edges?.value, arch.N?.edges?.value, arch.S?.edges?.value, arch.W?.edges?.value]).toEqual([
+    ['xMax'],
+    ['yMin'],
+    ['yMax'],
+    ['xMin'],
+  ]);
+  const pillar = structuralCardFacts(
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01',
+  )!;
+  expect(pillar.E?.alpha_bounds?.value).toEqual([69, 9, 174, 236]);
+  expect(pillar.W?.alpha_bounds?.value).toEqual([70, 9, 174, 236]);
   expect(structuralCardFacts('unknown')).toBeUndefined();
   expect(structuralCardFacts('toString')).toBeUndefined();
 });

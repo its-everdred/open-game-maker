@@ -44,6 +44,8 @@ import {
   type Intake,
 } from './store.js';
 import { completeTriage, DIAGNOSTICS_MAX_BYTES, storeDiagnostics } from './triage.js';
+import { activeEnergyProbe, isEnergyProbe } from '../qa/energy-probe.js';
+import { cleanupEnergyProbeReport } from '../qa/energy-report.js';
 
 const BUNDLE_TYPES = new Set(['application/octet-stream', 'application/json', 'application/gzip']);
 const BUNDLE_URL_TTL_MS = 5 * 60 * 1000;
@@ -98,7 +100,14 @@ async function routeRepair(
   deps: AppDeps,
   { report, signature: sig }: Intake,
   game: { id: string; ownerId: string; familyId: string },
-): Promise<{ route?: ReportRoute; jobId?: string; pendingBudget?: true }> {
+  qaEnergyProbe = false,
+): Promise<{
+  route?: ReportRoute;
+  jobId?: string;
+  pendingBudget?: true;
+  resetsAt?: string;
+  budgetReason?: 'weekly_user';
+}> {
   const previousJobId = sig.openJobId;
   const previousState = previousJobId ? jobState(deps.db, previousJobId) : undefined;
   if (previousJobId && previousState && LIVE_JOB_STATES.has(previousState)) {
@@ -117,8 +126,10 @@ async function routeRepair(
         db: deps.db,
         sqlite: deps.sqlite,
         events: deps.events,
+        qaEnergyProbe,
         defaults: {
           dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+          defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
           resetZone: deps.config.resetZoneDefault,
         },
       },
@@ -146,7 +157,12 @@ async function routeRepair(
     deps.log({ event: 'report-repair-attempts-exhausted', reportId: report.id, signature: sig.signature });
     return { route: 'stored' };
   }
-  return { route: 'stored', pendingBudget: true };
+  return {
+    route: 'stored',
+    pendingBudget: true,
+    resetsAt: 'resetsAt' in outcome ? outcome.resetsAt : undefined,
+    budgetReason: 'budgetReason' in outcome ? outcome.budgetReason : undefined,
+  };
 }
 
 const listQuery = z.object({ gameId: Id }).strict();
@@ -176,33 +192,46 @@ const routes = new Hono<ApiBindings>()
     requireAuthorization(authorize(actor, 'game.play', resource));
     requireAuthorization(authorize(actor, 'report.file', resource));
 
-    // A client-supplied bundleKey is ignored: bundles arrive through POST /:id/bundle only.
-    const intake = recordReport(deps, {
-      body: { ...body, bundleKey: undefined },
-      reporterId: actor.userId,
-      now: new Date(),
-    });
-    const { report, signature: sig } = intake;
-    const response: CreateReportResponse & { pendingBudget?: true } = {
-      reportId: report.id,
-      signature: sig.signature,
-      route: report.route,
-    };
-
-    if (report.route === 'game_repair') {
-      Object.assign(response, await routeRepair(deps, intake, game));
-    } else if (report.route === 'platform' && body.error && claimPlatformFiling(deps.db, sig.signature)) {
-      try {
-        const { ref } = await context(deps).issueWriter.file(platformIssue(deps, intake, body.error));
-        setPlatformRef(deps.db, sig.signature, ref);
-      } catch (error) {
-        // Release the claim so the next matching report files again.
-        releasePlatformFiling(deps.db, sig.signature);
-        deps.log({ event: 'report-platform-issue-failed', reportId: report.id, error: String(error) });
-      }
+    const probe = isEnergyProbe(c, principal.userId);
+    const probeId = probe ? c.req.header('x-ogm-qa-energy-probe') : undefined;
+    if (probe && activeEnergyProbe(deps.db)?.id !== probeId) throw new HttpError(409, 'qa_energy_probe_stale');
+    if (
+      probe &&
+      (!probeId ||
+        !z.uuid().safeParse(probeId).success ||
+        game.ownerId !== principal.userId ||
+        body.text !== `qa-energy-probe:${probeId}` ||
+        body.error?.type !== 'QaEnergyProbe' ||
+        body.error.frames.length !== 1 ||
+        body.error.frames[0]?.file !== `/g/${game.id}/qa/probe-${probeId}.js`)
+    ) {
+      throw new HttpError(400, 'qa_energy_probe_invalid');
     }
-
-    return c.json(response, 201);
+    try {
+      // A client-supplied bundleKey is ignored: bundles arrive through POST /:id/bundle only.
+      const intake = recordReport(deps, {
+        body: { ...body, bundleKey: undefined },
+        reporterId: actor.userId,
+        now: new Date(),
+      });
+      const { report, signature: sig } = intake;
+      if (probe && report.route !== 'game_repair') throw new HttpError(409, 'qa_energy_probe_wrong_route');
+      const response: CreateReportResponse = { reportId: report.id, signature: sig.signature, route: report.route };
+      if (report.route === 'game_repair') {
+        Object.assign(response, await routeRepair(deps, intake, game, probe));
+      } else if (report.route === 'platform' && body.error && claimPlatformFiling(deps.db, sig.signature)) {
+        try {
+          const { ref } = await context(deps).issueWriter.file(platformIssue(deps, intake, body.error));
+          setPlatformRef(deps.db, sig.signature, ref);
+        } catch (error) {
+          releasePlatformFiling(deps.db, sig.signature);
+          deps.log({ event: 'report-platform-issue-failed', reportId: report.id, error: String(error) });
+        }
+      }
+      return c.json(response, 201);
+    } finally {
+      if (probeId) cleanupEnergyProbeReport(deps.db, probeId);
+    }
   })
   .get('/', (c) => {
     const principal = requirePrincipal(c, ['user']);

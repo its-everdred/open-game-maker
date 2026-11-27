@@ -435,14 +435,14 @@ test('rings Energy in the menu and opens its windows, then its settings', async 
   await page.goto('/all');
 
   await page.locator('.studio-library-volume button').click({ button: 'right' });
-  await page.getByRole('button', { name: 'Energy: Limited' }).click();
-  const detail = page.getByRole('link', { name: 'Energy settings' });
+  await page.getByRole('button', { name: 'Minerals and Gas: Limited' }).click();
+  const detail = page.getByRole('link', { name: 'Minerals and Gas settings' });
   await expect(detail).toContainText('20% left');
   await capturePhone(page, testInfo, 'games-menu-energy');
 
   await detail.click();
   await expect(page).toHaveURL(/\/settings\/energy$/);
-  await expect(page.getByRole('heading', { name: 'Energy: Limited' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Minerals and Gas: Limited' })).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Balanced' })).toBeChecked();
   await capturePhone(page, testInfo, 'settings-energy');
 });
@@ -482,19 +482,17 @@ for (const [orientation, viewport] of [
   });
 }
 
-for (const mode of ['play', 'edit'] as const) {
-  test(`opens game actions in ${mode} context`, async ({ page }) => {
-    await installAuthRoutes(page, { signedIn: true });
-    await installGameApi(page);
-    await page.goto(`/g/game?mode=${mode}`);
-    await page.getByRole('button', { name: 'Menu' }).click();
-    if (mode === 'play')
-      await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'More' }).click();
-    await expect(page.getByRole('link', { name: 'Versions' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Publish' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Rollback' })).toBeVisible();
-  });
-}
+// Game actions live behind the editor menu's More row (#1326); play mode keeps only the game's own extras.
+test('opens game actions from the editor menu', async ({ page }) => {
+  await installAuthRoutes(page, { signedIn: true });
+  await installGameApi(page);
+  await page.goto('/g/game?mode=edit');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'More' }).click();
+  await expect(page.getByRole('link', { name: 'Versions' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Publish' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Rollback' })).toBeVisible();
+});
 
 test('keeps the phone menu row clear of style media', async ({ page, isMobile }, testInfo) => {
   testInfo.setTimeout(90_000);

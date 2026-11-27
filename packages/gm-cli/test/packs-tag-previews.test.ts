@@ -7,13 +7,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { previewKey } from '@ogm/asset-previews';
 
 import { discoverTagTargets, prepareVisualPreviews, type TagTarget } from '../src/packs/tag.js';
-import { library, tempDir } from './helpers.js';
+import { gm, library, tempDir } from './helpers.js';
 
 const previews = vi.hoisted(() => ({ renderSheet: vi.fn(), renderCollectionSheet: vi.fn(), spriteSheet: vi.fn() }));
+const worker = vi.hoisted(() => vi.fn());
 
 vi.mock('@ogm/asset-previews', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@ogm/asset-previews')>();
   return { ...actual, ...previews };
+});
+vi.mock('../src/packs/model-preview.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/packs/model-preview.js')>();
+  return { ...actual, modelPreview: previews.renderSheet };
+});
+vi.mock('../src/packs/workers.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/packs/workers.js')>();
+  return { ...actual, runJsonWorker: worker, resolvePython: async () => '/python' };
 });
 
 function tagLibrary(): string {
@@ -81,7 +90,8 @@ async function sheetOf(assetsRoot: string, file: string): Promise<string | undef
 }
 
 beforeEach(() => {
-  previews.renderSheet.mockReset().mockResolvedValue({ key: '', width: 1, height: 1, renderer: 'stub' });
+  worker.mockReset();
+  previews.renderSheet.mockReset().mockResolvedValue('stub');
   previews.renderCollectionSheet.mockReset().mockImplementation(async (_thumbs: string[], out: string) => ({
     key: out,
     pages: [out],
@@ -89,6 +99,124 @@ beforeEach(() => {
 });
 
 describe('prepareVisualPreviews', () => {
+  it('records a failed model and continues to the next', async () => {
+    const { assetsRoot, targets } = await modelLibrary();
+    previews.renderSheet.mockRejectedValueOnce(new Error('preview timed out')).mockResolvedValueOnce('stub');
+    const result = await prepareVisualPreviews({ assetsRoot, targets, kind: 'model', limit: 0, software: true });
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]).toMatchObject({ skipped: 'preview timed out' });
+    expect(previews.renderSheet).toHaveBeenCalledTimes(2);
+    const failedPath = join(assetsRoot, String(result.failures[0]?.card));
+    const failed = JSON.parse(await readFile(failedPath, 'utf8')) as {
+      provenance: { preview_failure: { input: string } };
+    };
+    expect(failed.provenance.preview_failure.input).toContain('skipped: preview timed out');
+  });
+
+  it('returns a nonzero summary while retaining the failed card and continuing', async () => {
+    const { assetsRoot } = await modelLibrary();
+    previews.renderSheet.mockRejectedValueOnce(new Error('browser disconnected')).mockResolvedValueOnce('stub');
+    worker.mockImplementation(async (options: { onRecord: (record: object) => void }) => {
+      const path = `${PACK}/cards/wall.card.json`;
+      const card = JSON.parse(await readFile(join(assetsRoot, path), 'utf8')) as { status: string; flags?: string[] };
+      options.onRecord({ card: path, status: card.status, flags: card.flags ?? [] });
+      return { stderr: '', stderrTruncated: false };
+    });
+    const result = await gm(['packs', 'tag', '--kind', 'model', '--only', 'kenney-mini-dungeon', '--json'], {
+      env: { OGM_ASSETS_ROOT: assetsRoot },
+    });
+    expect(result.code, result.err.join('\n')).toBe(1);
+    const summary = JSON.parse(result.out.at(-1) ?? '{}') as { summary: { failures: string[] } };
+    expect(summary.summary.failures).toEqual([expect.stringContaining('browser disconnected')]);
+    expect(previews.renderSheet).toHaveBeenCalledTimes(2);
+    const failed = JSON.parse(await readFile(join(assetsRoot, PACK, 'cards/character-orc.card.json'), 'utf8')) as {
+      provenance: { preview_failure: { input: string } };
+    };
+    expect(failed.provenance.preview_failure.input).toContain('browser disconnected');
+  });
+
+  it('records all failures when no model preview succeeds', async () => {
+    const { assetsRoot } = await modelLibrary();
+    worker.mockReset();
+    previews.renderSheet.mockRejectedValue(new Error('preview timed out'));
+    const result = await gm(['packs', 'tag', '--kind', 'model', '--only', 'kenney-mini-dungeon', '--json'], {
+      env: { OGM_ASSETS_ROOT: assetsRoot },
+    });
+    expect(result.code, result.err.join('\n')).toBe(1);
+    const summary = JSON.parse(result.out.at(-1) ?? '{}') as {
+      summary: { cards: number; skipped: number; failures: string[] };
+    };
+    expect(summary.summary).toMatchObject({ cards: 0, skipped: 2 });
+    expect(summary.summary.failures).toHaveLength(2);
+    expect(worker).not.toHaveBeenCalled();
+  });
+
+  it('keeps a preview skip when the subsequent tagging worker fails', async () => {
+    const { assetsRoot } = await modelLibrary();
+    previews.renderSheet.mockRejectedValueOnce(new Error('preview timed out')).mockResolvedValueOnce('stub');
+    worker.mockRejectedValueOnce(new Error('CLIP unavailable'));
+    const result = await gm(['packs', 'tag', '--kind', 'model', '--only', 'kenney-mini-dungeon', '--json'], {
+      env: { OGM_ASSETS_ROOT: assetsRoot },
+    });
+    expect(result.code).toBe(1);
+    expect(result.err.join('\n')).toContain('1 preview skip(s) recorded');
+    const output = result.out.map((line) => JSON.parse(line));
+    expect(output.some((record) => String(record.card).endsWith('character-orc.card.json') && record.skipped)).toBe(
+      true,
+    );
+    expect(output.at(-1).summary).toMatchObject({ cards: 0, skipped: 1, rolledBack: true });
+    expect(output.at(-1).summary.failures).toContain('CLIP unavailable');
+    const failed = JSON.parse(await readFile(join(assetsRoot, PACK, 'cards/character-orc.card.json'), 'utf8')) as {
+      provenance: { preview_failure: { input: string } };
+    };
+    expect(failed.provenance.preview_failure.input).toBe('skipped: preview timed out');
+  });
+
+  it('counts a skipped preview against the requested limit', async () => {
+    const { assetsRoot } = await modelLibrary();
+    worker.mockReset();
+    previews.renderSheet.mockRejectedValueOnce(new Error('preview timed out'));
+    const result = await gm(
+      ['packs', 'tag', '--kind', 'model', '--only', 'kenney-mini-dungeon', '--limit', '1', '--json'],
+      {
+        env: { OGM_ASSETS_ROOT: assetsRoot },
+      },
+    );
+    expect(result.code).toBe(1);
+    const summary = JSON.parse(result.out.at(-1) ?? '{}') as { summary: { skipped: number } };
+    expect(summary.summary.skipped).toBe(1);
+    expect(previews.renderSheet).toHaveBeenCalledTimes(1);
+    expect(worker).not.toHaveBeenCalled();
+  });
+
+  it('reduces the tagging worker limit after a preview skip', async () => {
+    const { assetsRoot } = await modelLibrary();
+    const cards = join(assetsRoot, PACK, 'cards');
+    const extraPath = join(cards, 'z-extra.card.json');
+    const extra = JSON.parse(await readFile(join(cards, 'wall.card.json'), 'utf8')) as { id: string };
+    extra.id = 't1:kenney-mini-dungeon/extra-wall@2.0';
+    await writeFile(extraPath, JSON.stringify(extra));
+    const before = await readFile(extraPath);
+    previews.renderSheet.mockRejectedValueOnce(new Error('preview timed out')).mockResolvedValueOnce('stub');
+    worker.mockImplementationOnce(async (options: { args: string[]; onRecord: (record: object) => void }) => {
+      expect(options.args[options.args.indexOf('--limit') + 1]).toBe('1');
+      const card = JSON.parse(await readFile(join(cards, 'wall.card.json'), 'utf8')) as {
+        status: string;
+        flags?: string[];
+      };
+      options.onRecord({ card: `${PACK}/cards/wall.card.json`, status: card.status, flags: card.flags ?? [] });
+      return { stderr: '', stderrTruncated: false };
+    });
+    const result = await gm(
+      ['packs', 'tag', '--kind', 'model', '--only', 'kenney-mini-dungeon', '--limit', '2', '--json'],
+      {
+        env: { OGM_ASSETS_ROOT: assetsRoot },
+      },
+    );
+    expect(result.code, result.err.join('\n')).toBe(1);
+    expect(worker).toHaveBeenCalledTimes(1);
+    expect(await readFile(extraPath)).toEqual(before);
+  });
   it('keeps a card that narrows redistribution, and its collection sheet, out of public previews', async () => {
     const { assetsRoot } = await modelLibrary();
     await narrowCard(assetsRoot, 'character-orc.card.json');
@@ -189,13 +317,15 @@ describe('prepareVisualPreviews', () => {
   });
 
   it('refuses a source whose bytes do not match its card hash', async () => {
+    const { ModelSourceMismatch } = await import('../src/packs/model-preview.js');
     const { assetsRoot, targets } = await modelLibrary();
     const source = targets[0]!.cards[0]!.card.source!.files[0]!;
     await writeFile(join(assetsRoot, PACK, 'v1/extracted', source.path), 'different bytes');
+    previews.renderSheet.mockRejectedValueOnce(new ModelSourceMismatch('source hash does not match card'));
     await expect(
       prepareVisualPreviews({ assetsRoot, targets, kind: 'model', limit: 1, software: true }),
     ).rejects.toThrow('source hash does not match');
-    expect(previews.renderSheet).not.toHaveBeenCalled();
+    expect(previews.renderSheet).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a source file that resolves outside the extracted collection', async () => {

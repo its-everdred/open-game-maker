@@ -17,6 +17,7 @@ test-py:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/py/audio/test_style_montages.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-trailer/scripts/test_trailer.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/py/maps/test_layout_fields.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I scripts/py/maps/test_search_clip.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_fal3d.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_sampling.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_posekey.py
@@ -24,6 +25,7 @@ test-py:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_trim_bvh.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_blade.py
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-sprite-forge/tests/test_recipe.py
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I skills/gm-vfx/tests/test_efkgen.py
 	$(MAKE) py-compile
 
 test-py-models:

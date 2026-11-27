@@ -2,6 +2,7 @@ import { loadMapIndex } from '@ogm/asset-cards';
 
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson, requireAssetsRoot } from '../../context.js';
+import { clipScores } from '../../maps/clip.js';
 import {
   FLOWS,
   GRIDS,
@@ -59,12 +60,34 @@ export const command: GmCommand = {
       ctx.emit('maps.search', { args, rows: 0, built: false });
       return EXIT.failed;
     }
-    const matched: { row: (typeof index.rows)[number]; score: number }[] = [];
+    const matched: { row: (typeof index.rows)[number]; score: number; semantic?: number }[] = [];
     for (const row of index.rows) {
       const { hard, score } = matchRow(row, q);
       if (hard) matched.push({ row, score });
     }
-    matched.sort((a, b) => b.score - a.score || (a.row.id < b.row.id ? -1 : 1));
+    if (flags.maps === true && args.length > 0) {
+      const scores = await clipScores(
+        root,
+        args.join(' '),
+        matched.map(({ row }) => row),
+        ctx.home,
+      );
+      if (scores === null || scores.size === 0) ctx.err('CLIP search unavailable; ranking by indexed text only');
+      else
+        for (const match of matched) {
+          const semantic = scores.get(match.row.id);
+          if (semantic !== undefined) {
+            match.semantic = semantic;
+            match.score += (semantic + 1) * 1.5;
+          }
+        }
+    }
+    matched.sort(
+      (a, b) =>
+        b.score - a.score ||
+        Number(b.semantic !== undefined) - Number(a.semantic !== undefined) ||
+        (a.row.id < b.row.id ? -1 : 1),
+    );
     const shown = matched.slice(0, ctx.limit);
     for (const { row } of shown) {
       if (ctx.json) printJson(ctx, row);

@@ -337,6 +337,20 @@
       "when": 1795460259120,
       "tag": "20261123185739_scene_store",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1795489393818,
+      "tag": "20261124030313_client_telemetry",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1795738870790,
+      "tag": "20261127002110_fixed_roughhouse",
+      "breakpoints": true
     }
   ]
 }

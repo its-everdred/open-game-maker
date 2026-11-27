@@ -3232,6 +3232,40 @@
                         "touch": {
                           "type": "string",
                           "const": "self"
+                        },
+                        "icons": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 32
+                          },
+                          "additionalProperties": {
+                            "type": "string",
+                            "enum": [
+                              "attack",
+                              "heavy-attack",
+                              "block",
+                              "roll",
+                              "use",
+                              "cast",
+                              "potion",
+                              "map",
+                              "inventory",
+                              "jump",
+                              "confirm",
+                              "back",
+                              "rotate-cw",
+                              "rotate-ccw",
+                              "down",
+                              "hard-drop",
+                              "left",
+                              "right",
+                              "swap",
+                              "pause",
+                              "action"
+                            ]
+                          }
                         }
                       },
                       "required": [
@@ -5684,6 +5718,64 @@
               },
               "required": [
                 "code",
+                "message"
+              ],
+              "additionalProperties": {}
+            },
+            "replyTo": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "v",
+            "id",
+            "t",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "t": {
+              "type": "string",
+              "const": "fault"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "error",
+                    "rejection",
+                    "csp",
+                    "asset",
+                    "webgl"
+                  ]
+                },
+                "message": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "stack": {
+                  "type": "string",
+                  "maxLength": 4000
+                }
+              },
+              "required": [
+                "kind",
                 "message"
               ],
               "additionalProperties": {}

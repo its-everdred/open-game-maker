@@ -44,7 +44,8 @@ export const notify = () => listeners.forEach((f) => f(status()));
 export function unlock(): void {
   try {
     const nav = navigator as AudioSessionNavigator;
-    if (nav.audioSession) nav.audioSession.type = 'playback';
+    // Voice capture holds 'play-and-record' while the mic is open (@ogm/voice-client); 'playback' would cut it off.
+    if (nav.audioSession && nav.audioSession.type !== 'play-and-record') nav.audioSession.type = 'playback';
   } catch {
     /* older iOS throws on the setter */
   }

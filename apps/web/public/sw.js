@@ -28,7 +28,8 @@ self.addEventListener('fetch', (event) => {
     url.origin !== location.origin ||
     url.pathname.endsWith('/sw.js') ||
     url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/auth/')
+    url.pathname.startsWith('/auth/') ||
+    url.searchParams.has('ogm-version')
   ) {
     return;
   }

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import type { Patch } from './bridge.js';
 import type { ActionFrame, ActionValue, ControlsLayout, Insets, Vec3 } from './input.js';
-import { vec3Schema, viewIdSchema } from './input.js';
+import { touchIconSchema, vec3Schema, viewIdSchema } from './input.js';
 import { netManifestSchema } from './net.js';
 
 /* Manifest strings are rendered as text by consumers (A4 §4 rule 3); caps keep them bounded. */
@@ -145,6 +145,8 @@ export const gameManifestSchema = z.looseObject({
     actions: z.record(z.string().min(1).max(32), z.enum(['button', 'axis', 'stick'])),
     /** The game draws its own touch controls instead of using the host overlay. */
     touch: z.literal('self').optional(),
+    /** The icon each host touch button shows; an undeclared button gets one picked from its action's name. */
+    icons: z.record(z.string().min(1).max(32), touchIconSchema).optional(),
   }),
   presentation: z.looseObject({
     orientation: z.enum(['landscape', 'portrait', 'any']),

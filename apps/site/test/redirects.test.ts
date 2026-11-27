@@ -1,10 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { renderRedirects } from '../tools/redirects.mjs';
+import { isReservedGameSlug } from '../../../packages/contracts/src/game-links';
 
 const cli = fileURLToPath(new URL('../tools/redirects.mjs', import.meta.url));
 const scratch: string[] = [];
@@ -19,6 +20,15 @@ function envDir(contents: string): string {
 }
 
 describe('marketing-site redirects', () => {
+  it('reserves every top-level site directory against game slugs', () => {
+    const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
+    const directories = readdirSync(publicDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+    for (const entry of directories) expect(isReservedGameSlug(entry.name), entry.name).toBe(true);
+    for (const page of ['docs', 'setup']) expect(isReservedGameSlug(page), page).toBe(true);
+  });
+  it.each(['docs-prototype', 'docsprototype'])('reserves the site path and its alias: %s', (page) => {
+    expect(isReservedGameSlug(page)).toBe(true);
+  });
   it('sends every app-shaped path to the configured try-it instance and preserves nested paths', () => {
     expect(renderRedirects('https://app.example').split('\n').filter(Boolean)).toEqual([
       '/games  https://app.example/games  302!',
@@ -27,6 +37,8 @@ describe('marketing-site redirects', () => {
       '/signin  https://app.example/signin  302!',
       '/auth/*  https://app.example/auth/:splat  302!',
       '/api/*  https://app.example/api/:splat  302!',
+      '/docs  /docs/index.html  200',
+      '/:slug  https://app.example/play/:slug  302',
     ]);
   });
 

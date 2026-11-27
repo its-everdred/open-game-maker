@@ -6,7 +6,7 @@ import { and, eq } from 'drizzle-orm';
 
 import { HttpError } from '../app/errors.js';
 import { findGame, type GameRow } from './games.js';
-import { findGameBySlugOrId } from './slug.js';
+import { isSlugAvailable } from './slug.js';
 
 // Registering a game whose repository already exists — a game living in an Open-Games monorepo, say — writes the
 // registry row and its daemon row and nothing else. `provisionGame` would create a repository and a `games/<slug>/`
@@ -63,9 +63,11 @@ export function registerExistingGame(db: Db, input: RegisterGameInput): GameRow 
   const repo = `${input.repo.owner}/${input.repo.name}`.toLowerCase();
   // The slug is the game's identity everywhere else (play link, daemon row, aiur grants), so a taken slug is a
   // conflict rather than a rename: registering `games/blobs` twice would give two games one link.
-  if (findGameBySlugOrId(db, slug)) throw new HttpError(409, 'game_slug_taken');
   // The slug is also the game's top-level link (`/<slug>`), so a folder named like an app route cannot register (#591).
-  if (isReservedGameSlug(slug)) throw new HttpError(422, 'game_slug_reserved');
+  if (isReservedGameSlug(slug)) {
+    throw new HttpError(422, 'game_slug_reserved');
+  }
+  if (!isSlugAvailable(db, slug)) throw new HttpError(409, 'game_slug_taken');
   const registered = db
     .select({ id: schema.games.id })
     .from(schema.games)

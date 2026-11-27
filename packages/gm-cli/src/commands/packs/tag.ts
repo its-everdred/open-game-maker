@@ -10,6 +10,7 @@ import {
   prepareVisualPreviews,
   reconcileCounts,
   restoreSnapshot,
+  restorePreviewFailures,
   snapshotTargets,
   validateWorkerCards,
   type TagKind,
@@ -68,7 +69,12 @@ function stages(kind: TagKind, assetsRoot: string, slugs: readonly string[], wor
 
 function visibleRecord(ctx: GmContext, stage: string, record: WorkerRecord): void {
   if (ctx.json) printJson(ctx, { stage, ...record });
-  else if (record.card) ctx.out(`${record.card}  ${String(record.status)}`);
+  else if (record.card)
+    ctx.out(`${record.card}  ${record.skipped ? `skipped: ${String(record.skipped)}` : String(record.status)}`);
+  else if (record.progress && typeof record.progress === 'object') {
+    const progress = record.progress as { done?: unknown; total?: unknown };
+    ctx.err(`${stage}: ${String(progress.done)}/${String(progress.total)} card previews encoded`);
+  }
 }
 
 async function executeStages(options: {
@@ -146,28 +152,45 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
     const records: WorkerRecord[] = [];
     let pages: string[] = [];
     let renderers: string[] = [];
+    let previewFailures: WorkerRecord[] = [];
+    let selectedPreviews = 0;
     let committed = false;
     try {
       if (kind === 'model' || kind === 'sprite') {
-        ({ pages, renderers } = await prepareVisualPreviews({
+        ({
+          pages,
+          renderers,
+          failures: previewFailures,
+          selected: selectedPreviews,
+        } = await prepareVisualPreviews({
           assetsRoot,
           targets,
           kind,
           limit,
           software: ctx.config.verifySoftwareGl,
+          failures: previewFailures,
         }));
       }
       const slugs = targets.map((target) => target.slug);
-      await executeStages({ ctx, assetsRoot, kind, slugs, workers, limit, records });
-      const cards = await validateWorkerCards(assetsRoot, targets, records, snapshot);
-      if (cards === 0) throw new Error('worker completed without reporting a card');
+      if (selectedPreviews === 0 || previewFailures.length < selectedPreviews) {
+        const workerLimit = limit > 0 ? limit - previewFailures.length : 0;
+        await executeStages({ ctx, assetsRoot, kind, slugs, workers, limit: workerLimit, records });
+      }
+      records.push(...previewFailures);
+      const validated = await validateWorkerCards(assetsRoot, targets, records, snapshot);
+      if (validated === 0) throw new Error('worker completed without reporting a card');
+      const cards = validated - previewFailures.length;
       await reconcileCounts(targets, kind);
       const summary = {
         kind,
         only,
         collections: targets.length,
         cards,
-        failures: discovery.failures,
+        skipped: previewFailures.length,
+        failures: [
+          ...discovery.failures,
+          ...previewFailures.map((record) => `${String(record.card)}: ${String(record.skipped)}`),
+        ],
         workers: { requested: requestedWorkers, effective: workers },
         pages,
         renderers: [...new Set(renderers)].sort(),
@@ -176,21 +199,45 @@ async function run(ctx: GmContext, args: string[], flags: Record<string, unknown
       committed = true;
       for (const record of records) if (record.card) visibleRecord(ctx, kind, record);
       if (ctx.json) printJson(ctx, { summary });
-      else ctx.out(`${cards} ${kind} card(s) tagged across ${targets.length} collection(s); workers ${workers}`);
-      return discovery.failures.length > 0 ? EXIT.failed : EXIT.ok;
+      else
+        ctx.out(
+          `${cards} ${kind} card(s) tagged, ${previewFailures.length} skipped across ${targets.length} collection(s); workers ${workers}`,
+        );
+      return discovery.failures.length > 0 || previewFailures.length > 0 ? EXIT.failed : EXIT.ok;
     } catch (error) {
       if (committed) {
         throw new CommandError(`tagging completed but output failed: ${String(error)}`);
       }
       try {
         await restoreSnapshot(snapshot);
+        await restorePreviewFailures(assetsRoot, targets, previewFailures);
       } catch (restoreError) {
         throw new CommandError(
           `tagging failed and card restoration also failed: ${String(error)}; restore: ${String(restoreError)}`,
         );
       }
+      if (previewFailures.length > 0) {
+        for (const record of previewFailures) visibleRecord(ctx, kind, record);
+        if (ctx.json) {
+          printJson(ctx, {
+            summary: {
+              kind,
+              only,
+              collections: targets.length,
+              cards: 0,
+              skipped: previewFailures.length,
+              failures: [
+                ...discovery.failures,
+                ...previewFailures.map((record) => `${String(record.card)}: ${String(record.skipped)}`),
+                error instanceof Error ? error.message : String(error),
+              ],
+              rolledBack: true,
+            },
+          });
+        }
+      }
       throw new CommandError(
-        `tagging failed; prior cards restored: ${error instanceof Error ? error.message : String(error)}`,
+        `tagging failed; prior cards restored${previewFailures.length ? `; ${previewFailures.length} preview skip(s) recorded` : ''}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   } finally {

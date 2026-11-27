@@ -24,6 +24,7 @@ worn gear that bends with the body is not built yet.
 | `scripts/motion/fit_rig.py`, `retarget.py`, `handkey.py` | Blender (modules) | Reached through `render_motion.py`; not commands |
 | `scripts/motion/score_cell.py` | `gm py --` | Finish frames, `score.py` metrics, loop phase, foot slide -> `scores.json` |
 | `scripts/pixel_finish.py` | `gm py --` | Pack-style pixel finish (few colours, cloth on its own ramp); `score_cell.py` runs it for `pixel` |
+| `scripts/pixel_finish_c.py` | `gm py --` | Finish C (#1338): hard bands per material, separation lines, darkened outline; `score_cell.py --finish-c` for `pixel.finish: "C"` |
 | `scripts/motion/matrix_media.py` | `gm py --` (needs ffmpeg with libx264) | Review matrix: pack column plus at most 10 cells, GIF + MP4, 1x and 4x |
 | `scripts/motion/strip.py` | `gm py --` | Quick zoomed strip for looking: `strip.py <cell_dir> <out.png> [rows=1,2] [zoom=3] [ref=<pack sheet>]` |
 | `scripts/motion/fit_accuracy.py` | Blender | Landmark error against rigged characters; exits 1 if any case fails |
@@ -106,10 +107,18 @@ loop, none for an attack, in pixels at the pack cell.
   rendered: on the body's palette the Warrior's lit axe blade and wooden haft turned skin and read as a flesh stick
   (#1282 round 2). Masks rendered before this change have no red: delete a cell's `mask_*.png` and `--rescore`. The sheet before it is kept as
   `out/sheet_colour.png`. `render` keys `mask_s` and `mask_v` (0.16, 0.5) set the cloth thresholds; stricter ones
-  lose the briefs.
+  lose the briefs. `"body_smooth": 5` adds a 5x5 median over the skin alone (not the cloth or the weapon): on the
+  Hammer slam, which faces the light, the base body's texture showed through as stray dark and light specks (#1282
+  round 5; specks per frame 33 to 21). More Cycles samples (128) did not change them: they are texture, not render
+  noise. A median across the weapon as well smeared the haft into skin-coloured fragments.
+  `{"finish": "C", "variant": "C1"}` gives the colour pass finish C instead (#1338; `scripts/pixel_finish_c.py`,
+  `presets/finish-c.json`): the cell renders crisp (`filter=0.01` and `supersample=1` are added unless `render` sets them: `gpu_bake_finish.py` would box-average a supersample first) with the
+  cloth and weapon masks, which become its materials; hard bands per material, 1 px lines where they meet, a darkened
+  outline, the clip's pack sheet as the `ssi_tone` colour reference. C4 is the default when `pixel` is omitted; it preserves model albedo hue, keeps detail and omits internal lines. It renders an aligned albedo pass. Old renders need a fresh render before C4 can be scored.
 - `render` keys: `rows` (default `1,2`; scoring follows it), `frames` (15), `cell` (128), `height_px`, `origin_row`,
-  `samples`, `supersample`, `threads`, `sun_elev`, `sun_az`, `sun_energy`, `sky`, `mask_s`, `mask_v` (`mask=1` is added
-  for you when `pixel.cloth` is set). Use the pack class's Stage 1 values
+  `samples`, `supersample`, `threads`, `filter` (Cycles pixel filter width, 1.5; 0.01 renders without anti-aliasing),
+  `sun_elev`, `sun_az`, `sun_energy`, `sky`, `mask_s`, `mask_v` (`mask=1` is added for you when `pixel.cloth` is set or
+  `pixel.finish` is `C`). Use the pack class's Stage 1 values
   for `height_px` and `origin_row` (Warrior 43 and 88).
 - `motion`: `kind` is `kaykit`, `bvh`, `handkey` or `none` (`own` and `copy` for a rigged cell, below). `loop` defaults to true for a walk and false for an attack.
   `foot_ik` defaults to true (false copies rotations only). `frames: [f0, f1]` overrides the automatic cut. For an
@@ -380,7 +389,7 @@ base bodies, not on those meshes:
   from 0.37 to 0.21, because the pack Wizard walks with its casting arm raised ahead. Give such a clip its own layer
   in the cell's `motion` (`"stance": "ssi-wizard-walk"`).
 - Base bodies set `"finish": "base"` with `pack.idle`, and `"pixel": {"colours": 8, "cloth": 6, "smooth": true}`:
-  Kevin's finish "B" (hero-finish1-warrior) carries to every hero cell and every later rung. The attack is scored against the class's own clip: Warrior
+  This records the earlier finish B recipe for comparison; omit `pixel` for the current C4 default. The attack is scored against the class's own clip: Warrior
   Attack1 (`chop`), Wizard CastSpell (`cast`), Ranger QuickShot (`bow`).
 - The class weapon goes in `weapon` on the hand bone, never fused into the body. With nothing fused, the fit's
   weapon cut-off does nothing. Size it to the pack clip, not the default: the Warrior's KayKit `axe_1handed` needs
@@ -396,7 +405,7 @@ gait on every body.
 Kevin rejected every cell of the round: hand-keyed, KayKit, Bandai and CMU, walks and attacks, on all six bodies
 ("none move like humans at all"). No rig or motion source in this step is approved, and its correlation and foot-slide
 scores did not predict his verdict. Do not post another round from these tools; the next step is the dedicated
-rigging and animation bake-off in #1282, which waits on his approval. The static base bodies and finish B stay approved.
+rigging and animation bake-off in #1282, which waits on his approval. The static base bodies remain approved; finish B is retained for historical comparison.
 
 ## Creator verdict on round 3 (2026-11-24): the first approved motion
 
