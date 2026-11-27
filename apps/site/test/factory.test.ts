@@ -30,6 +30,7 @@ describe('factory landing page', () => {
   it('preserves both destinations and marks the unfinished recording', () => {
     expect(page.querySelector('a[href="/setup"]')).not.toBeNull();
     expect(page.querySelector('a[href="/signin"]')).not.toBeNull();
+    expect(page.querySelector('.hero')?.textContent).toContain('Invite only. Request access.');
     expect(page.body.textContent).toContain('Mobile editor loop pending');
   });
 });

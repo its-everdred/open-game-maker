@@ -276,6 +276,11 @@ nav .links a.go:hover {
 .btn:active {
   transform: translateY(1px);
 }
+.hero .access-note {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 20px;
+}
 .crate {
   position: relative;
   justify-self: center;
