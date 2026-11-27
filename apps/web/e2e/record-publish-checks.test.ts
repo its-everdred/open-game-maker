@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { env } from 'node:process';
 import { expect, it } from 'vitest';
 
 it('posts app evidence to the local API with the internal credential', async () => {
@@ -38,7 +39,7 @@ it('posts app evidence to the local API with the internal credential', async () 
     const run = () =>
       new Promise<number | null>((done, reject) => {
         const child = spawn(process.execPath, [resolve('tools/record-publish-checks.mjs'), join(dir, 'record.json')], {
-          env: { ...process.env, OGM_ENV_DIR: dir, HOME: dir, OGM_API_PORT: '', OGM_INTERNAL_TOKEN: '' },
+          env: { ...env, OGM_ENV_DIR: dir, HOME: dir, OGM_API_PORT: '', OGM_INTERNAL_TOKEN: '' },
           stdio: 'ignore',
         });
         child.on('error', reject);
