@@ -18,7 +18,9 @@ n=0; ex=""; for f in $(find "$REV" -name run.log -mmin -$M 2>/dev/null); do
 grep -h "exit=1" "$E"/host-steps.log 2>/dev/null | tail -500 | sed -E 's/[0-9a-f]{7,}//g; s/#[0-9]+//g' | sort | uniq -c | sort -rn | awk '$1>=3' | head -3 | sed 's/^ */HOST-STEP-REPEAT x/'
 
 # 3. Loops whose log went quiet (a dead loop stops everything downstream).
-for l in host-steps.log automerge.log auto-update.log; do f="$E/$l"; [ -f "$f" ] && [ $(( ($(date +%s) - $(stat -c %Y "$f")) / 60 )) -gt 45 ] && echo "LOOP-QUIET $l last write $(( ($(date +%s) - $(stat -c %Y "$f")) / 60 )) min ago"; done
+for l in host-steps.log auto-update.log; do  # automerge.log only logs events; check its pid instead
+pgrep -f "^bash .*executor/automerge.sh" >/dev/null || echo "LOOP-DEAD automerge.sh not running"
+ f="$E/$l"; [ -f "$f" ] && [ $(( ($(date +%s) - $(stat -c %Y "$f")) / 60 )) -gt 45 ] && echo "LOOP-QUIET $l last write $(( ($(date +%s) - $(stat -c %Y "$f")) / 60 )) min ago"; done
 
 # 4. Long-lived preview or dev servers (orphans hold ports).
 for p in $(pgrep -f 'vite.*preview|http.server' 2>/dev/null); do t=$(ps -o etimes= -p $p 2>/dev/null); [ "${t:-0}" -gt 7200 ] && echo "ORPHAN-SERVER pid $p up $((t/3600))h: $(tr '\0' ' ' < /proc/$p/cmdline | cut -c1-100)"; done
