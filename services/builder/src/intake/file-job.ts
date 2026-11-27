@@ -1,7 +1,7 @@
 import { AiurHttpError } from '@ogm/aiur-client';
 import { CompleteTriage, JobPlan, Reservation, type TriageResult } from '@ogm/contracts';
 import { schema } from '@ogm/db';
-import { and, eq, isNotNull, lte, notExists } from 'drizzle-orm';
+import { and, eq, isNotNull, lte, notExists, sql } from 'drizzle-orm';
 
 import { isDaemonLabel } from '@ogm/game-repo-template';
 
@@ -190,7 +190,14 @@ export function createIntake(deps: IntakeDeps) {
         }
         deps.db
           .insert(schema.jobTickets)
-          .values({ jobId, key: ticket.key, issueNumber: issue.number, repo, sig: rendered.sig })
+          .values({
+            jobId,
+            key: ticket.key,
+            issueNumber: issue.number,
+            repo,
+            sig: rendered.sig,
+            terminalState: sql`(SELECT CASE WHEN ${schema.jobs.state} = 'cancelled' THEN 'cancelled' ELSE NULL END FROM ${schema.jobs} WHERE ${schema.jobs.id} = ${jobId})`,
+          })
           .run();
         row = deps.db
           .select()

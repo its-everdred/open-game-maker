@@ -1,6 +1,6 @@
 import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   applyAiurEvent,
@@ -248,6 +248,16 @@ describe('multi-ticket job lifecycle', () => {
     const done = createTicketRecovery(projection, async () => ['agent:done']);
     await done('game', '11');
     expect(transitions).toEqual(['done']);
+  });
+  it('uses the recorded ticket repository when filing has not recorded the job repository', async () => {
+    const { deps, projection } = setup();
+    deps.db.update(schema.jobs).set({ aiurRepo: null, state: 'paused_budget' }).where(eq(schema.jobs.id, 'j_1')).run();
+    const labels = vi.fn().mockResolvedValue(['agent:done']);
+    await createTicketRecovery(projection, labels)('game', '10');
+    expect(labels).toHaveBeenCalledWith('owner/game', 10);
+    expect(
+      deps.db.select().from(schema.jobTickets).where(eq(schema.jobTickets.issueNumber, 10)).get()?.terminalState,
+    ).toBe('done');
   });
   it('does not trust conflicting tracker states or a snapshot overtaken by a feed event', async () => {
     const { deps, projection, transitions } = setup();

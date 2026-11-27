@@ -268,6 +268,7 @@ describe('fileJob', () => {
 
     await input.intake.fileJob('j_1');
     expect(input.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+    expect(input.db.select().from(schema.jobTickets).get()?.terminalState).toBe('cancelled');
     expect(input.calls).not.toContain('label:1:castle-run:todo');
     close(input);
   });

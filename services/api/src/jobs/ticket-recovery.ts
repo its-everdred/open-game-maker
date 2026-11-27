@@ -1,5 +1,5 @@
 import { schema, type Db } from '@ogm/db';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { activeJobs, byTicket } from './repo.js';
 import { applyTerminalSnapshot, type ProjectionDeps } from './projection.js';
@@ -20,16 +20,22 @@ export function createTicketRecovery(
   return async (daemonSlug: string, ticket: string): Promise<void> => {
     const job = byTicket(deps.db, daemonSlug, ticket);
     if (!job) return;
+    const ticketRow = deps.db
+      .select({ repo: schema.jobTickets.repo })
+      .from(schema.jobTickets)
+      .where(and(eq(schema.jobTickets.jobId, job.id), eq(schema.jobTickets.issueNumber, Number(ticket))))
+      .get();
     const row = deps.db
       .select({ repo: schema.jobs.aiurRepo })
       .from(schema.jobs)
       .where(eq(schema.jobs.id, job.id))
       .get();
-    if (!row?.repo) return;
+    const repo = ticketRow?.repo ?? row?.repo;
+    if (!repo) return;
     const cursor = () =>
       deps.db.select().from(schema.aiurCursors).where(eq(schema.aiurCursors.daemonSlug, daemonSlug)).get();
     const before = cursor();
-    const current = await labels(row.repo, Number(ticket));
+    const current = await labels(repo, Number(ticket));
     const after = cursor();
     if (before?.lastSeq !== after?.lastSeq || before?.epoch !== after?.epoch) return;
     const prefix = [daemonSlug.toLowerCase(), 'agent'];

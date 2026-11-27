@@ -154,6 +154,7 @@ describe('job controls', () => {
       state: 'cancelled',
       releasedAt: expect.any(String),
     });
+    expect(deps.db.select().from(schema.jobTickets).get()?.terminalState).toBe('cancelled');
   });
   it('does not cancel an admitted New Game request while its parent may be in flight', async () => {
     const deps = setup('queued');

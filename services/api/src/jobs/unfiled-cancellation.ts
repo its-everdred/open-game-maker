@@ -31,6 +31,11 @@ export function cancelBeforeFiling<T>(deps: AppDeps, jobId: string, cancel: (job
         )
         .get();
       if (ticket) throw new HttpError(409, 'job_filing');
+      deps.db
+        .update(schema.jobTickets)
+        .set({ terminalState: 'cancelled' })
+        .where(eq(schema.jobTickets.jobId, jobId))
+        .run();
       return cancel(job);
     })
     .immediate();

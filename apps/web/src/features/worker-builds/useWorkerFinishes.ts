@@ -3,7 +3,7 @@ import type { WorkerBuild } from './BuildTracker';
 import type { WorkerFeed } from './useWorkers';
 
 export type FinishedWorker = { ticket: string; title: string };
-type SeenWorker = FinishedWorker & { gameId: string; rawTicket: string; cursor: number; startedAt?: string };
+type SeenWorker = FinishedWorker & { gameId: string; rawTicket: string; startedAt?: string };
 
 export function useWorkerFinishes(workers: readonly WorkerBuild[], feeds: readonly WorkerFeed[], scope = '') {
   const seen = useRef(new Map<string, SeenWorker>());
@@ -22,16 +22,11 @@ export function useWorkerFinishes(workers: readonly WorkerBuild[], feeds: readon
       const feed = feeds.find(({ gameId }) => worker.ticket.startsWith(`${gameId}:`));
       if (!feed) continue;
       const rawTicket = worker.ticket.slice(feed.gameId.length + 1);
-      const start = Date.parse(worker.startedAt ?? '');
-      const completion = feed.completed.find(
-        (event) => event.ticket === rawTicket && Number.isFinite(start) && Date.parse(event.at) >= start,
-      );
       if (!prior && seen.current.size >= 200) seen.current.delete(seen.current.keys().next().value!);
       seen.current.set(worker.ticket, {
         ...worker,
         gameId: feed.gameId,
         rawTicket,
-        cursor: completion?.seq ?? feed.cursor,
       });
     }
     const newlyFinished: FinishedWorker[] = [];
@@ -43,10 +38,7 @@ export function useWorkerFinishes(workers: readonly WorkerBuild[], feeds: readon
         !Number.isFinite(start) ||
         !feed?.completed.some(
           (event) =>
-            event.ticket === prior.rawTicket &&
-            event.seq >= prior.cursor &&
-            Number.isFinite(Date.parse(event.at)) &&
-            Date.parse(event.at) >= start,
+            event.ticket === prior.rawTicket && Number.isFinite(Date.parse(event.at)) && Date.parse(event.at) >= start,
         )
       )
         continue;
