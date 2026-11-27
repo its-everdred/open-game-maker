@@ -24,7 +24,7 @@ export type PlannedUnitySurface = Omit<UnitySurface, 'blends' | 'products' | 'sc
   texturePaths: string[];
   textureSrgb: boolean[];
   products?: PlannedUnitySurface[];
-  scalarMask?: { term: PlannedUnitySurface; channel: number };
+  scalarMask?: WeightExpression<PlannedUnitySurface>;
   blends?: Array<{
     a: PlannedUnitySurface;
     b: PlannedUnitySurface;
@@ -151,7 +151,7 @@ export async function planUnityAssembly(
           texturePaths,
           textureSrgb,
           ...(products ? { products: products.map(resolveSurface) } : {}),
-          ...(scalarMask ? { scalarMask: { ...scalarMask, term: resolveSurface(scalarMask.term) } } : {}),
+          ...(scalarMask !== undefined ? { scalarMask: mapWeightExpression(scalarMask, resolveSurface) } : {}),
           ...(blends
             ? {
                 blends: blends.map(({ a, b, weight }) => ({

@@ -54,6 +54,48 @@ Material:
     'unsupported Unity shader graph interpolation input',
   );
   expect(() => shaderGraphBase(source())).toThrow('unsupported Unity shader graph interpolation input');
+  Object.assign(docs[3]!, { m_Slots: [{ m_Id: 'default-a' }, { m_Id: 'lerp-out' }] });
+  docs.push(
+    {
+      m_ObjectId: 'default-a',
+      m_Type: 'UnityEditor.ShaderGraph.DynamicVectorMaterialSlot',
+      m_Id: 0,
+      m_SlotType: 0,
+      m_Value: { x: 1, y: 0, z: 0, w: 0 },
+    } as (typeof docs)[number],
+    {
+      m_ObjectId: 'lerp-out',
+      m_Type: 'UnityEditor.ShaderGraph.DynamicVectorMaterialSlot',
+      m_Id: 3,
+      m_SlotType: 1,
+    } as (typeof docs)[number],
+  );
+  const extrapolated = shaderGraphBase(source(), new Map([['_Weight', 5]]));
+  expect(parseUnitySurface(material, extrapolated)).toMatchObject({
+    products: [
+      { textures: [{ guid: 'aaaaaa' }] },
+      {
+        scalarMask: {
+          op: 'add',
+          args: [
+            1,
+            {
+              op: 'multiply',
+              args: [{ op: 'subtract', args: [{ term: { textures: [{ guid: 'bbbbbb' }] }, channel: 0 }, 1] }, 5],
+            },
+          ],
+        },
+      },
+    ],
+  });
+  expect(() =>
+    parseUnitySurface(material, {
+      textures: [],
+      factors: [],
+      products: [extrapolated],
+      adjustment: { op: 'power', amount: { kind: 'constant', key: '', defaultValue: 2 } },
+    }),
+  ).toThrow('unsupported Unity power input');
   docs[5]!.m_TextureType = 1;
   expect(() => shaderGraphBase(source(), new Map([['_Weight', 1]]))).toThrow('unsupported Unity texture sample type');
 });

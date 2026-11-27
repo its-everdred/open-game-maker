@@ -302,6 +302,38 @@ it('resolves texture paths inside blended graph terms', async () => {
       { texturePaths: [join(root, 'a.png')] },
       { scalarMask: { channel: 0, term: { texturePaths: [join(root, 'b.png')], textureSrgb: [true] } } },
     ]);
+    await writeFile(materialPath, (await readFile(materialPath, 'utf8')).replace('_Weight: 1', '_Weight: 5'));
+    Object.assign(
+      docs.find((doc) => doc.m_ObjectId === 'partial')!,
+      { m_Slots: [{ m_Id: 'partial-a' }, { m_Id: 'partial-out' }] },
+    );
+    docs.push(
+      {
+        m_ObjectId: 'partial-a',
+        m_Type: 'UnityEditor.ShaderGraph.DynamicVectorMaterialSlot',
+        m_Id: 0,
+        m_SlotType: 0,
+        m_Value: { x: 1, y: 0, z: 0, w: 0 },
+      } as (typeof docs)[number],
+      {
+        m_ObjectId: 'partial-out',
+        m_Type: 'UnityEditor.ShaderGraph.DynamicVectorMaterialSlot',
+        m_Id: 3,
+        m_SlotType: 1,
+      } as (typeof docs)[number],
+    );
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const extrapolatedPlan = await planUnityAssembly(root, prefab);
+    expect(extrapolatedPlan[0]?.surfaces[0]?.products?.[1]?.scalarMask).toMatchObject({
+      op: 'add',
+      args: [
+        1,
+        {
+          op: 'multiply',
+          args: [{ op: 'subtract', args: [{ term: { texturePaths: [join(root, 'b.png')] }, channel: 0 }, 1] }, 5],
+        },
+      ],
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

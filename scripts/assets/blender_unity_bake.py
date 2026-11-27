@@ -110,7 +110,7 @@ def expression_material(surface, uv_names):
             channels = [math_node('MULTIPLY', left, right) for left, right in zip(channels, rgba)]
         for product in value.get('products', []):
             channels = [math_node('MULTIPLY', left, right) for left, right in zip(channels, term(product))]
-        if value.get('scalarMask'):
+        if 'scalarMask' in value:
             channels = [math_node('MULTIPLY', left, right) for left, right in zip(channels, weight(value['scalarMask']))]
         for blend in value.get('blends', []):
             if isinstance(blend['weight'], (int, float)) and not 0 <= blend['weight'] <= 1:
@@ -157,7 +157,7 @@ def requires_mesh_bake(surfaces):
         result = list(term['textures'])
         for product in term.get('products', []):
             result.extend(layers(product))
-        if term.get('scalarMask'):
+        if 'scalarMask' in term:
             result.extend(weight_layers(term['scalarMask']))
         for blend in term.get('blends', []):
             result.extend(layers(blend['a']))

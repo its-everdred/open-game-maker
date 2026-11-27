@@ -43,6 +43,7 @@ for loop in mesh.loops:
  mesh.uv_layers['uv0'].data[loop.index].uv=(x,y); mesh.uv_layers['uv1'].data[loop.index].uv=(1-x,1-y)
 mesh.materials.append(bpy.data.materials.new('source'))
 obj2=obj.copy(); obj2.data=mesh.copy(); bpy.context.scene.collection.objects.link(obj2)
+obj3=obj.copy(); obj3.data=mesh.copy(); bpy.context.scene.collection.objects.link(obj3)
 paths=[]
 for layer in range(2):
  image=bpy.data.images.new('gradient',width=16,height=16,alpha=True); image.colorspace_settings.name='Non-Color'
@@ -55,7 +56,7 @@ surface['textures'][1]['uvTransform']=[0,1,0,-1,0,1]
 constant=lambda value: {'path':'test.mat','textures':[],'texturePaths':[],'textureSrgb':[],'color':[value,value,value,1]}
 mask={'path':'test.mat','textures':[surface['textures'][1]],'texturePaths':[paths[1]],'textureSrgb':[False],'color':[1,1,1,1]}
 surface['blends']=[{'a':constant(1),'b':constant(.5),'weight':{'term':mask,'channel':'rgb'}}]
-surface['scalarMask']={'term':mask,'channel':1}
+surface['scalarMask']={'op':'add','args':[1,{'op':'multiply','args':[{'op':'subtract','args':[{'term':mask,'channel':1},1]},2]}]}
 assert requires_mesh_bake([surface]); bake_mesh(obj,[surface])
 assert len(mesh.uv_layers)==1 and mesh.uv_layers[0].name=='OGM baked UV'
 assert not any(material.name.startswith('Unity bake source') for material in bpy.data.materials)
@@ -65,7 +66,8 @@ for loop in mesh.loops:
  x=min(size-1,int(u*size)); y=min(size-1,int(v*size)); ix=(y*size+x)*4
  vx,vy,_=mesh.vertices[loop.vertex_index].co
  green=.8*vx+.1; blend=1-.5*green
- for i,expected in [(0,(.8*vx+.1)*.5*green),(1,green*blend*green),(2,.5*green)]:
+ factor=2*green-1
+ for i,expected in [(0,max(0,(.8*vx+.1)*.5*factor)),(1,max(0,green*blend*factor)),(2,max(0,.5*factor))]:
   expected=expected*12.92 if expected<=.0031308 else 1.055*expected**(1/2.4)-.055
   assert abs(pixels[ix+i]-expected)<.12, (loop.vertex_index,i,pixels[ix+i],expected)
 adjustedSource={'path':'test.mat','textures':surface['textures'],'texturePaths':paths,'textureSrgb':[False,False],'color':[1,1,1,1],'adjustment':{'op':'saturation','amount':.5}}
@@ -80,6 +82,10 @@ for loop in mesh2.loops:
   expected=min(1,(1.1*(luma+.5*(component-luma)))**2)
   expected=expected*12.92 if expected<=.0031308 else 1.055*expected**(1/2.4)-.055
   assert abs(pixels2[ix+i]-expected)<.12, (loop.vertex_index,i,pixels2[ix+i],expected)
+zero={'path':'test.mat','textures':surface['textures'],'texturePaths':paths,'textureSrgb':[False,False],'color':[1,1,1,1],'scalarMask':0}
+bake_mesh(obj3,[zero])
+image3=next(n.image for n in obj3.data.materials[0].node_tree.nodes if n.type=='TEX_IMAGE')
+assert max(list(image3.pixels)[0::4]) < .01
 for index in range(7): mesh.uv_layers.new(name=f'extra-{index}')
 try:
  bake_mesh(obj,[surface])

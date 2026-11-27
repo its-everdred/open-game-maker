@@ -376,17 +376,48 @@ it.skipIf(!available)(
         textureSrgb: [],
         color: [1, 1, 1, 1],
         scalarMask: {
-          channel: 1,
-          term: {
-            path: 'scalar.mat',
-            textures: [{ guid: 'rgb', scale: [1, 1], offset: [0, 0] }],
-            texturePaths: [rgbMask],
-            textureSrgb: [false],
-            color: [1, 1, 1, 1],
-          },
+          op: 'add',
+          args: [
+            1,
+            {
+              op: 'multiply',
+              args: [
+                {
+                  op: 'subtract',
+                  args: [
+                    {
+                      channel: 1,
+                      term: {
+                        path: 'scalar.mat',
+                        textures: [{ guid: 'rgb', scale: [1, 1], offset: [0, 0] }],
+                        texturePaths: [rgbMask],
+                        textureSrgb: [false],
+                        color: [1, 1, 1, 1],
+                      },
+                    },
+                    1,
+                  ],
+                },
+                2,
+              ],
+            },
+          ],
         },
       };
       rgbPlan.push(scalarNode);
+      const zeroNode = structuredClone(plan[3]!);
+      zeroNode.name = 'Zero mask';
+      zeroNode.transformId = 'root/zero';
+      zeroNode.parentId = null;
+      zeroNode.surfaces[0] = {
+        path: 'zero.mat',
+        textures: [],
+        texturePaths: [],
+        textureSrgb: [],
+        color: [1, 1, 1, 1],
+        scalarMask: 0,
+      };
+      rgbPlan.push(zeroNode);
       const rgbOutput = join(root, 'rgb.glb');
       await exportUnityAssembly(rgbPlan, rgbOutput);
       const rgbDocument = await new NodeIO()
@@ -412,9 +443,17 @@ it.skipIf(!available)(
       expect(scalarImage).toBeTruthy();
       const scalarPixels = await sharp(scalarImage!).ensureAlpha().raw().toBuffer();
       for (const channel of [0, 1, 2]) {
-        expect(scalarPixels[channel]).toBeGreaterThan(185);
-        expect(scalarPixels[channel]).toBeLessThan(191);
+        expect(scalarPixels[channel]).toBeGreaterThan(10);
+        expect(scalarPixels[channel]).toBeLessThan(16);
       }
+      expect(
+        rgbDocument
+          .getRoot()
+          .listMaterials()
+          .find((entry) => entry.getName() === 'zero')
+          ?.getBaseColorFactor()
+          .slice(0, 3),
+      ).toEqual([0, 0, 0]);
       const adjustedPlan = [structuredClone(plan[3]!)];
       adjustedPlan[0]!.parentId = null;
       adjustedPlan[0]!.surfaces[0] = {

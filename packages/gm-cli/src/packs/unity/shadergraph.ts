@@ -53,7 +53,7 @@ export type ShaderGraphBase = {
   textureUvTransforms?: Array<UvAffine | null>;
   factors: ShaderGraphFactor[];
   products?: ShaderGraphBase[];
-  scalarMask?: { term: ShaderGraphBase; channel: number };
+  scalarMask?: WeightExpression<ShaderGraphBase>;
   adjustment?: { op: 'power' | 'saturation'; amount: ShaderGraphFactor };
   blends?: Array<{
     a: ShaderGraphBase;
@@ -302,9 +302,55 @@ export function shaderGraphBase(
       if ((typeof raw !== 'string' && typeof raw !== 'number') || String(raw).trim() === '')
         throw new Error('unsupported Unity shader graph interpolation amount');
       const weight = Number(raw);
-      if (!Number.isFinite(weight) || weight < 0 || weight > 1)
-        throw new Error('unsupported Unity shader graph interpolation amount');
+      if (!Number.isFinite(weight)) throw new Error('unsupported Unity shader graph interpolation amount');
       if (weight === 0 || weight === 1) return resolveInput(weight);
+      const missing = [0, 1].filter((slot) => !inputs.some((input) => input.inputSlot === slot));
+      if (missing.length === 1 && Array.isArray(node.m_Slots)) {
+        const slots = node.m_Slots.map((entry) => byId.get(nodeId(entry)));
+        const fallback = slots.filter((slot) => slot?.m_Id === missing[0] && slot.m_SlotType === 0);
+        const output = slots.filter((slot) => slot?.m_Id === 3 && slot.m_SlotType === 1);
+        const connected = inputs.find((input) => input.inputSlot === 1 - missing[0]!)!;
+        const source = byId.get(connected.node);
+        if (
+          fallback.length !== 1 ||
+          output.length !== 1 ||
+          ![
+            'UnityEditor.ShaderGraph.DynamicVectorMaterialSlot',
+            'UnityEditor.ShaderGraph.Vector1MaterialSlot',
+          ].includes(String(fallback[0]!.m_Type)) ||
+          ![
+            'UnityEditor.ShaderGraph.DynamicVectorMaterialSlot',
+            'UnityEditor.ShaderGraph.Vector1MaterialSlot',
+          ].includes(String(output[0]!.m_Type)) ||
+          source?.m_Type !== 'UnityEditor.ShaderGraph.SampleTexture2DNode' ||
+          ![4, 5, 6, 7].includes(connected.outputSlot)
+        )
+          throw new Error('unsupported Unity scalar interpolation input');
+        const rawDefault = fallback[0]!.m_Value;
+        const defaultValue = typeof rawDefault === 'number' ? rawDefault : object(rawDefault).x;
+        if (typeof defaultValue !== 'number' || !Number.isFinite(defaultValue))
+          throw new Error('invalid Unity scalar interpolation default');
+        const selected = resolveSource(connected);
+        const constant =
+          selected.textures.length === 0 &&
+          !selected.products &&
+          !selected.adjustment &&
+          selected.factors.length === 1 &&
+          selected.factors[0]!.kind === 'constant' &&
+          typeof selected.factors[0]!.defaultValue === 'number'
+            ? selected.factors[0]!.defaultValue
+            : undefined;
+        const expression = selected.scalarMask ?? constant;
+        if (expression === undefined) throw new Error('unsupported Unity scalar interpolation input');
+        const a: WeightExpression<ShaderGraphBase> = missing[0] === 0 ? defaultValue : expression;
+        const b: WeightExpression<ShaderGraphBase> = missing[0] === 1 ? defaultValue : expression;
+        return {
+          textures: [],
+          factors: [],
+          scalarMask: { op: 'add', args: [a, { op: 'multiply', args: [{ op: 'subtract', args: [b, a] }, weight] }] },
+        };
+      }
+      if (weight < 0 || weight > 1) throw new Error('unsupported Unity shader graph interpolation amount');
       return { textures: [], factors: [], blends: [{ a: resolveInput(0), b: resolveInput(1), weight }] };
     }
     if (type === 'UnityEditor.ShaderGraph.BranchNode') {
