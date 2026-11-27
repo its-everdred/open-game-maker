@@ -36,6 +36,10 @@ describe('classify', () => {
 describe('estimate', () => {
   it('answers the worked estimate from the seeded table', () => {
     const deps = worked();
+    deps.db
+      .insert(schema.allowances)
+      .values({ familyId: ids.family, userId: ids.creator, dailyMicroUsd: 5_000_000 })
+      .run();
     expect(
       estimate(
         { db: deps.db, defaults, now: () => NOW },

@@ -21,7 +21,11 @@ import { ids, insertJob, NOW, worked } from '../budget/fixture.js';
 import { makeApiEnv } from '../env-fixture.js';
 
 const SECRET = 'voice-internal-secret-for-tests';
-const defaults = { dailyAllowanceMicroUsd: 5_000_000, resetZone: 'America/Los_Angeles' };
+const defaults = {
+  dailyAllowanceMicroUsd: 5_000_000,
+  defaultAllowanceConfigured: true,
+  resetZone: 'America/Los_Angeles',
+};
 const scope: VoiceTarget = { kind: 'scope', game_id: ids.game, session_id: 's_1', creator_id: ids.creator };
 const build: VoiceTarget = {
   kind: 'build',
@@ -107,7 +111,9 @@ describe('buildBriefing', () => {
     expect(briefing.target_key).toBe('scope:s_1');
     expect(briefing.extra[0].title).toBe('Budget');
     expect(text).toBe(
-      'Remaining today: 20.0 energy (40%). Resets at 12:00 am. ' + 'Free slots: 1 new game, 2 edits. Queued: none.',
+      'Interim weekly limit remaining: 2 new games, 19 edits. Resets Nov 2 at 12:00 am. ' +
+        'Remaining today: 20.0 energy (40%). Resets at 12:00 am. ' +
+        'Free slots: 1 new game, 2 edits. Queued: none.',
     );
     expect(briefing.sections.map((section) => section.id)).toEqual(['budget', 'progress', 'estimate']);
     expect(briefing.sections[0].text).toBe(
@@ -119,6 +125,19 @@ describe('buildBriefing', () => {
     expect(JSON.stringify(briefing)).not.toMatch(/\$|usd|dollar/i);
   });
 
+  it('shows weekly units without an inactive daily allowance', async () => {
+    const deps = worked();
+    const briefing = await buildBriefing(
+      { db: deps.db, defaults: { ...defaults, defaultAllowanceConfigured: false }, now: () => NOW },
+      scope,
+    );
+    expect(briefing.extra[0].text).toContain(
+      'Interim weekly limit remaining: 2 new games, 19 edits. Resets Nov 2 at 12:00 am.',
+    );
+    expect(briefing.extra[0].text).not.toContain('Remaining today');
+    expect(briefing.sections[2].text).toBe('The interim limit counts each new game and each edit or fix.');
+  });
+
   it('reports a build waiting on an admin with its stage words', async () => {
     const deps = worked();
     deps.db.update(schema.jobs).set({ state: 'paused_budget' }).where(eq(schema.jobs.id, ids.running)).run();
@@ -128,7 +147,7 @@ describe('buildBriefing', () => {
       waiting_on: 'Build paused at its reservation: ask an admin to raise it, or trim',
       summary: 'Goblin camp',
     });
-    expect(paused.extra[0].text).toMatch(/^Build paused at its reservation\. Remaining today:/);
+    expect(paused.extra[0].text).toMatch(/^Build paused at its reservation\. Interim weekly limit remaining:/);
     expect(paused.current_task).toBe('paused_budget');
 
     deps.db

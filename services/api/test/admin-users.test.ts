@@ -7,7 +7,7 @@ import { ALLOW_LIST_SEEDED_KEY, listAllowedUsers, seedAllowList, setAllowedRole 
 import { authContextFor } from '../src/auth/routes.js';
 import { NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { signIn } from './auth-helpers.js';
-import { makeApp } from './helpers.js';
+import { INTERNAL_TOKEN, makeApp } from './helpers.js';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -312,3 +312,55 @@ describe('roles at the API boundary', () => {
     ]);
   });
 });
+
+describe('weekly user budgets', () => {
+  it('lets an admin set limits before first sign-in and refuses a player', async () => {
+    const made = await makeApp();
+    const admin = await adminSession(made);
+    const player = await signIn(made.app, outbox(made.deps), 'kim@example.com');
+    const url = '/api/v1/admin/users/sam%40example.com/weekly-budget';
+    const update = { newGames: 0, edits: null };
+    const denied = await made.app.request(url, {
+      ...body(update, { method: 'PUT' }),
+      headers: { cookie: player.session },
+    });
+    expect(denied.status).toBe(403);
+    const saved = await made.app.request(url, { ...body(update, { method: 'PUT' }), headers: { cookie: admin } });
+    expect(saved.status).toBe(200);
+    const listed = await made.app.request('/api/v1/admin/users', { headers: { cookie: admin } });
+    const result = (await listed.json()) as { users: { email: string; weeklyBudget: typeof update }[] };
+    expect(result.users.find((user) => user.email === 'sam@example.com')?.weeklyBudget).toEqual(update);
+  });
+});
+
+it('prevents changing or removing the QA user while its probe is active', async () => {
+  const made = await makeApp();
+  const admin = await adminSession(made);
+  const internal = { 'x-ogm-internal': INTERNAL_TOKEN, 'content-type': 'application/json' };
+  const session = await made.app.request('/internal/qa/session', {
+    method: 'POST',
+    headers: internal,
+    body: JSON.stringify({ email: 'qa@example.test' }),
+  });
+  expect(session.status).toBe(200);
+  const begun = await made.app.request('/internal/qa/energy-budget/begin', { method: 'POST', headers: internal });
+  const { id } = (await begun.json()) as { id: string };
+  const budget = await made.app.request('/api/v1/admin/users/qa%40example.test/weekly-budget', {
+    ...body({ newGames: 1, edits: 1 }, { method: 'PUT' }),
+    headers: { cookie: admin, 'content-type': 'application/json' },
+  });
+  const remove = await made.app.request('/api/v1/admin/users/qa%40example.test', {
+    method: 'DELETE',
+    headers: { cookie: admin },
+  });
+  expect([budget.status, remove.status]).toEqual([409, 409]);
+  expect(
+    (
+      await made.app.request('/internal/qa/energy-budget/end', {
+        method: 'POST',
+        headers: internal,
+        body: JSON.stringify({ id }),
+      })
+    ).status,
+  ).toBe(204);
+}, 120_000);

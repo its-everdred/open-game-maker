@@ -5,7 +5,7 @@ import { EnergyWindows, LEVEL_LABELS } from './EnergyWindows';
 import './energy.css';
 
 const PREFERENCES: { value: EnergyPreference; label: string }[] = [
-  { value: 'save', label: 'Save Energy' },
+  { value: 'save', label: 'Save resources' },
   { value: 'balanced', label: 'Balanced' },
   { value: 'best', label: 'Best Quality' },
 ];
@@ -20,9 +20,9 @@ export function EnergyScreen() {
 
   return (
     <section className="energy-screen">
-      <h2>Energy: {LEVEL_LABELS[view.level]}</h2>
+      <h2>Minerals and Gas: {LEVEL_LABELS[view.level]}</h2>
       <EnergyWindows view={view} services />
-      <fieldset aria-label="Energy preference" disabled={setPreference.isPending}>
+      <fieldset aria-label="Resource preference" disabled={setPreference.isPending}>
         {PREFERENCES.map(({ value, label }) => (
           <label key={value}>
             <input

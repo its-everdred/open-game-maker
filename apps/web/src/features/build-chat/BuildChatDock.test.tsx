@@ -230,11 +230,11 @@ describe('BuildChatDock', () => {
     act(() => useDock.getState().startEdit({ gameId: 'g_1', branchId: 'main', title: 'Goblin Cellar' }));
     await send('Make the door glow');
 
-    expect(await screen.findByText('This build needs more Energy than is left this week.')).toBeInTheDocument();
+    expect(await screen.findByText(/This build exceeds the overall build budget this week\./)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Queue for the reset' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Ask an admin' }));
     const status = await screen.findByRole('region', { name: 'Allowance status' });
-    expect(status).toHaveTextContent('This build needs more Energy than is left this week.');
+    expect(status).toHaveTextContent('This build exceeds the overall build budget this week.');
     expect(status).toHaveTextContent(new Date('2026-11-09T08:00:00.000Z').toLocaleString());
     expect(status).not.toHaveTextContent(/remain/);
     // The admin may raise the limit at any time; admission re-checks on retry.

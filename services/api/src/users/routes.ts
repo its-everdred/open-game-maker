@@ -20,6 +20,8 @@ import {
   setAllowedRole,
 } from '../auth/allow-list.js';
 import { authContextFor } from '../auth/routes.js';
+import { weeklyLimits } from '../budget/weekly-jobs.js';
+import { energyProbeOwnsEmail } from '../qa/energy-probe.js';
 import { createInvitation } from '../invites/invites.js';
 
 // The instance sign-in allow list and its roles. Every route is admin-only, so a player cannot
@@ -31,6 +33,9 @@ const role = z.enum(['player', 'maker', 'admin']);
 
 const AddUserBody = z.object({ email, role, gameId: z.string().min(1).optional() }).strict();
 const PatchUserBody = z.object({ role }).strict();
+const WeeklyBudgetBody = z
+  .object({ newGames: z.number().int().nonnegative().nullable(), edits: z.number().int().nonnegative().nullable() })
+  .strict();
 const InviteBody = z.object({ gameId: z.string().min(1).optional() }).strict();
 
 type Caller = { actor: Actor; email: string };
@@ -114,7 +119,10 @@ function requireFamilyGame(deps: AppDeps, familyId: string, gameId: string): voi
 const routes = new Hono<ApiBindings>()
   .get('/', (c) => {
     admin(c);
-    return c.json({ users: listAllowedUsers(c.get('deps').db) });
+    const db = c.get('deps').db;
+    return c.json({
+      users: listAllowedUsers(db).map((user) => ({ ...user, weeklyBudget: weeklyLimits(db, user.email, user.role) })),
+    });
   })
   .post('/', async (c) => {
     const { actor } = admin(c);
@@ -142,10 +150,24 @@ const routes = new Hono<ApiBindings>()
     if (!setAllowedRole(deps.db, address, body.role)) throw new HttpError(404, 'user_not_found');
     return c.json({ user: listAllowedUsers(deps.db).find((row) => row.email === address) });
   })
+  .put('/:email/weekly-budget', async (c) => {
+    admin(c);
+    const db = c.get('deps').db;
+    const address = normalizeEmail(c.req.param('email'));
+    if (roleForEmail(db, address) === null) throw new HttpError(404, 'user_not_found');
+    const budget = await parseBody(c, WeeklyBudgetBody);
+    if (energyProbeOwnsEmail(db, address)) throw new HttpError(409, 'qa_energy_probe_active');
+    db.insert(schema.weeklyJobBudgets)
+      .values({ email: address, ...budget })
+      .onConflictDoUpdate({ target: schema.weeklyJobBudgets.email, set: budget })
+      .run();
+    return c.json({ weeklyBudget: budget });
+  })
   .delete('/:email', (c) => {
     const { email: callerEmail } = admin(c);
     const address = normalizeEmail(c.req.param('email'));
     if (address === callerEmail) throw new HttpError(409, 'self_remove');
+    if (energyProbeOwnsEmail(c.get('deps').db, address)) throw new HttpError(409, 'qa_energy_probe_active');
     if (!removeAllowedUser(c.get('deps').db, address)) throw new HttpError(404, 'user_not_found');
     return c.body(null, 204);
   })
