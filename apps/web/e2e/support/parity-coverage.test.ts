@@ -4,8 +4,8 @@ import { missingParityCoverage } from './parity-coverage';
 it('requires every reference and selected capture before all-artboard parity can pass', () => {
   const required = ['Title-780x1688', 'Home-780x1688'];
   const captures = [
-    { name: 'Title-780x1688', screen: 'Title' },
-    { name: 'Home-780x1688', screen: 'Home' },
+    { name: 'Title-780x1688', screen: 'Title', width: 390, height: 844, scale: 2 },
+    { name: 'Home-780x1688', screen: 'Home', width: 390, height: 844, scale: 2 },
   ];
   expect(missingParityCoverage(required, ['Title-780x1688.png'], captures, new Set(['Title']))).toEqual({
     missingReferences: ['Home-780x1688'],
@@ -22,4 +22,15 @@ it('requires every reference and selected capture before all-artboard parity can
       new Set(['Title', 'Home']),
     ),
   ).toEqual({ missingReferences: [], missingCaptures: ['New-780x1688'] });
+});
+
+it('does not count a capture whose viewport or scale differs from its reference', () => {
+  const reference = ['Home-780x1688.png'];
+  const target = { name: 'Home-780x1688', screen: 'Home', width: 390, height: 844, scale: 2 };
+  for (const wrong of [{ width: 391 }, { height: 845 }, { scale: 1 }]) {
+    expect(missingParityCoverage(['Home-780x1688'], reference, [{ ...target, ...wrong }], new Set(['Home']))).toEqual({
+      missingReferences: [],
+      missingCaptures: ['Home-780x1688'],
+    });
+  }
 });

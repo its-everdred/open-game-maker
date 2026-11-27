@@ -35,7 +35,7 @@ export const requiredParityArtboards = [
   'BuildOrderDesktop-1440x900',
 ] as const;
 
-type Capture = { name: string; screen: string };
+type Capture = { name: string; screen: string; width: number; height: number; scale: number };
 
 /** A reference is covered only when a selected capture actually targets it. */
 export function missingParityCoverage(
@@ -47,7 +47,17 @@ export function missingParityCoverage(
   const names = new Set(references.map((file) => file.replace(/\.png$/, '')));
   const expected = new Set([...required, ...names]);
   const captured = new Set(
-    captures.filter((target) => selectedScreens.has(target.screen)).map((target) => target.name),
+    captures
+      .filter((target) => {
+        const size = /-(\d+)x(\d+)$/.exec(target.name);
+        return (
+          selectedScreens.has(target.screen) &&
+          size !== null &&
+          target.width * target.scale === Number(size[1]) &&
+          target.height * target.scale === Number(size[2])
+        );
+      })
+      .map((target) => target.name),
   );
   return {
     missingReferences: [...expected].filter((name) => !names.has(name)).sort(),
