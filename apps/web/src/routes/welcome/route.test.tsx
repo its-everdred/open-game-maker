@@ -12,17 +12,17 @@ afterEach(() => {
 });
 
 describe('first run', { timeout: 20_000 }, () => {
-  it('accepts the invitation before offering Blobs and New Game', async () => {
+  it('accepts the invitation before returning to the title', async () => {
     vi.mocked(api).mockResolvedValueOnce({ kind: 'member' });
     render(
       <MemoryRouter initialEntries={['/welcome?invite=test-token']}>
         <Routes>
           <Route path="/welcome" element={<WelcomeScreen />} />
+          <Route path="/" element={<h1>Title screen</h1>} />
         </Routes>
       </MemoryRouter>,
     );
-    expect(await screen.findByRole('link', { name: 'Play Blobs' })).toHaveAttribute('href', '/play/blobs');
-    expect(screen.getByRole('link', { name: 'New Game' })).toHaveAttribute('href', '/new');
+    expect(await screen.findByRole('heading', { name: 'Title screen' }, { timeout: 10000 })).toBeInTheDocument();
     expect(api).toHaveBeenCalledWith('/invites/test-token/accept', { method: 'POST' });
   });
   it('checks the invitation again when reopened by another session', async () => {
@@ -31,16 +31,18 @@ describe('first run', { timeout: 20_000 }, () => {
       <MemoryRouter initialEntries={['/welcome?invite=reopened']}>
         <Routes>
           <Route path="/welcome" element={<WelcomeScreen />} />
+          <Route path="/" element={<h1>Title screen</h1>} />
         </Routes>
       </MemoryRouter>,
     );
-    await screen.findByRole('link', { name: 'Play Blobs' });
+    await screen.findByRole('heading', { name: 'Title screen' }, { timeout: 10000 });
     view.unmount();
     vi.mocked(api).mockRejectedValueOnce(new Error('wrong account'));
     render(
       <MemoryRouter initialEntries={['/welcome?invite=reopened']}>
         <Routes>
           <Route path="/welcome" element={<WelcomeScreen />} />
+          <Route path="/" element={<h1>Title screen</h1>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -53,6 +55,7 @@ describe('first run', { timeout: 20_000 }, () => {
       <MemoryRouter initialEntries={['/welcome?invite=bad-token']}>
         <Routes>
           <Route path="/welcome" element={<WelcomeScreen />} />
+          <Route path="/" element={<h1>Title screen</h1>} />
         </Routes>
       </MemoryRouter>,
     );

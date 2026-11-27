@@ -125,7 +125,7 @@ try {
     const row = adminPage.getByRole('row').filter({ hasText: email });
     if (await row.count()) fail('invite-to-play requires a fresh QA address not already on the allow list');
     await adminPage.getByLabel('Email', { exact: true }).fill(email);
-    await adminPage.locator('form select').selectOption('maker');
+    await adminPage.locator('form select').selectOption('player');
     attempted = true;
     const [response] = await Promise.all([adminPage.waitForResponse((r) => r.url().endsWith('/api/v1/admin/users') && r.request().method() === 'POST', { timeout: 10_000 }), adminPage.getByRole('button', { name: 'Add user' }).click()]);
     if (!response.ok()) fail(`admin invitation failed (${response.status()})`);
@@ -160,9 +160,10 @@ try {
     return me.json();
   };
   if (adminState) {
-    await page.getByRole('link', { name: 'Play Blobs' }).waitFor({ timeout: 60_000 });
-    if (!(await page.getByRole('link', { name: 'New Game' }).isVisible())) fail('New Game is missing from first run');
-    await page.getByRole('link', { name: 'Play Blobs' }).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click({ timeout: 60_000 });
+    await page.waitForURL(/\/all/, { timeout: 60_000 });
+    await page.getByRole('button', { name: /^Blobs/ }).first().click({ timeout: 60_000 });
+    await page.getByRole('button', { name: /^Play Blobs/ }).click({ timeout: 60_000 });
     await page.waitForURL(/\/g\//, { timeout: 60_000 });
     await page.locator('.game-frame iframe').waitFor({ state: 'attached', timeout: 60_000 });
     const game = page.frameLocator('.game-frame iframe');

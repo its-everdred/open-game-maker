@@ -147,7 +147,7 @@ export function SignInScreen() {
       <main className="auth-screen signin-screen">
         <section className="auth-card">
           <h1>Sign in</h1>
-          <p>Access is by invitation. Ask an administrator for access.</p>
+          <p>Access is by invitation. Request access.</p>
           <div className="auth-methods">
             <button
               className="auth-primary"
@@ -184,7 +184,7 @@ export function SignInScreen() {
     <main className="auth-screen signin-screen">
       <section className="auth-card">
         <h1>Sign in</h1>
-        <p>Access is by invitation. Ask an administrator for access.</p>
+        <p>Access is by invitation. Request access.</p>
         <form className="signin-form" onSubmit={(event) => void sendMagicLink(event)}>
           <label>
             <span>Email</span>

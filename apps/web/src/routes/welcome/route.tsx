@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 
 import type { ScreenRoute } from '../../app/screen';
 import { api, ApiError } from '../../lib/api/client';
 import '../signin/signin.css';
-import './welcome.css';
 
 const pending = new Map<string, Promise<void>>();
 
@@ -30,16 +29,17 @@ export function WelcomeScreen() {
   const token = params.get('invite');
   const navigate = useNavigate();
   const [error, setError] = useState('');
-  const [ready, setReady] = useState(!token);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      navigate('/', { replace: true });
+      return;
+    }
     let active = true;
     void accept(token)
       .then(() => {
         if (!active) return;
-        setReady(true);
-        navigate('/welcome', { replace: true });
+        navigate('/', { replace: true });
       })
       .catch((reason: unknown) => {
         if (!active) return;
@@ -58,20 +58,7 @@ export function WelcomeScreen() {
     <main className="auth-screen">
       <section className="auth-card">
         <h1>Welcome</h1>
-        {error ? (
-          <p role="alert">{error}</p>
-        ) : ready ? (
-          <div className="auth-methods welcome-actions">
-            <Link className="auth-primary" to="/play/blobs">
-              Play Blobs
-            </Link>
-            <Link className="auth-method" to="/new">
-              New Game
-            </Link>
-          </div>
-        ) : (
-          <p role="status">Joining…</p>
-        )}
+        {error ? <p role="alert">{error}</p> : <p role="status">Joining…</p>}
       </section>
     </main>
   );

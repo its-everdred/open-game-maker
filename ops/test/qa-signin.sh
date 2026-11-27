@@ -83,7 +83,7 @@ const server = createServer((req, res) => {
   } else if (req.url === '/api/v1/me' && (req.headers.cookie ?? '').includes('admin=1')) {
     res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ user: { id: 'admin' }, family: { id: 'f_1' } }));
   } else if (req.url === '/admin/users') {
-    res.writeHead(200, { 'content-type': 'text/html' }).end(`<h2>Users</h2><form><label>Email<input required type="email"></label><label>Role<select><option value="maker">Maker</option></select></label><button>Add user</button></form><script>document.querySelector('form').onsubmit = async (event) => { event.preventDefault(); await fetch('/api/v1/admin/users', { method: 'POST' }); };</script>`);
+    res.writeHead(200, { 'content-type': 'text/html' }).end(`<h2>Users</h2><form><label>Email<input required type="email"></label><label>Role<select><option value="player">Player</option></select></label><button>Add user</button></form><script>document.querySelector('form').onsubmit = async (event) => { event.preventDefault(); await fetch('/api/v1/admin/users', { method: 'POST' }); };</script>`);
   } else if (req.method === 'POST' && req.url === '/api/v1/admin/users') {
     if (db.prepare('SELECT email FROM allowed_users WHERE email = ?').get('qa@example.com')) { res.writeHead(409).end(); return; }
     family = null;
@@ -96,7 +96,11 @@ const server = createServer((req, res) => {
   } else if (req.url.startsWith('/auth/magic-link/verify?token=t2')) {
     res.writeHead(302, { 'set-cookie': 'better-auth.session_token=qa-session; Path=/; HttpOnly', location: '/welcome?invite=inv_token' }).end();
   } else if (req.url === '/welcome?invite=inv_token') {
-    res.writeHead(200, { 'content-type': 'text/html' }).end(`<script>fetch('/api/v1/invites/inv_token/accept', {method:'POST'}).then(r => { if (r.ok) document.body.innerHTML = '<a href="/play/blobs">Play Blobs</a><a href="/new">New Game</a>'; });</script>`);
+    res.writeHead(200, { 'content-type': 'text/html' }).end(`<script>fetch('/api/v1/invites/inv_token/accept', {method:'POST'}).then(r => { if (r.ok) location.href = '/?from-invite'; });</script>`);
+  } else if (req.url === '/?from-invite') {
+    res.writeHead(200, { 'content-type': 'text/html' }).end(`<button id="start">Start</button><script>document.querySelector('#start').onclick=()=>location.href='/all';</script>`);
+  } else if (req.url === '/all') {
+    res.writeHead(200, { 'content-type': 'text/html' }).end(`<button id="blobs">Blobs</button><button id="play" hidden>Play Blobs</button><script>document.querySelector('#blobs').onclick=()=>document.querySelector('#play').hidden=false;document.querySelector('#play').onclick=()=>location.href='/play/blobs';</script>`);
   } else if (req.url === '/play/blobs') {
     res.writeHead(302, { location: '/g/blobs' }).end();
   } else if (req.url === '/g/blobs') {

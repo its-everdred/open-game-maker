@@ -52,7 +52,7 @@ describe('splash page', () => {
       content.line,
       content.cta.setup,
       content.cta.sign_in,
-      'Invite only. Request access from an administrator.',
+      'Invite only. Request access.',
       ...content.captures.map((capture) => capture.heading),
       content.footer.licence,
     ]);
