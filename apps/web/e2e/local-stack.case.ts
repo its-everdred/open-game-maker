@@ -152,8 +152,11 @@ test('real local API and web reach New Game onboarding', async ({ browser }) => 
     try {
       await api?.close();
     } finally {
-      instance?.cleanup();
-      rmSync(root, { recursive: true, force: true });
+      try {
+        instance?.cleanup();
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     }
   }
   expect(existsSync(root)).toBe(false);
