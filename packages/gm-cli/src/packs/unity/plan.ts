@@ -13,7 +13,7 @@ import {
   type UnitySurface,
 } from './material.js';
 import { shaderGraphBase } from './shadergraph.js';
-import { shaderGraphAlpha } from './shader-alpha.js';
+import { shaderGraphAlpha, shaderGraphClipThreshold } from './shader-alpha.js';
 import { mapWeightExpression, type WeightExpression } from './weight-expression.js';
 import { inlineUnitySubgraphs } from './subgraphs.js';
 import { selectUnityBuilding, selectUnityPieces } from './select.js';
@@ -80,6 +80,7 @@ export async function planUnityAssembly(
       ? selectUnityBuilding(nodes, objectName)
       : nodes;
   const byId = new Map(selected.map((node) => [node.transformId, node]));
+  const warnedClip = new Set<string>();
   const visible = (node: UnityMeshNode): boolean => {
     let current: UnityMeshNode | undefined = node;
     while (current) {
@@ -130,6 +131,7 @@ export async function planUnityAssembly(
             materialIsTransparent(contents)
               ? shaderGraphAlpha(shaderSource, loadSubgraph, floats, colors, textures)
               : undefined,
+            Number(floats.get('_AlphaClip') ?? 0) === 1 ? shaderGraphClipThreshold(shaderSource) : undefined,
           );
         } catch (error) {
           throw new Error(`material ${path}: ${error instanceof Error ? error.message : String(error)}`, {
@@ -175,6 +177,10 @@ export async function planUnityAssembly(
         const texturePath = file({ fileId: '0', guid: mask.term.textures[0]!.guid }, ['.png', '.tga', '.tif', '.tiff']);
         if (!textureHasSourceAlpha(readFileSync(`${texturePath}.meta`, 'utf8')))
           throw new Error(`material ${path}: unsupported Unity opacity texture alpha`);
+      }
+      if (surface.alphaCutoff !== undefined && !warnedClip.has(path)) {
+        warnedClip.add(path);
+        onWarning?.(`alpha clipping approximated per texel for ${path}; inspect filtered edges and alpha-to-coverage`);
       }
       return resolveSurface(surface);
     });

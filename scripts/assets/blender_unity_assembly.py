@@ -261,6 +261,11 @@ def build_blended_material(material, surface, uv_names):
     pixels = evaluate(surface)
     if surface.get("opacity"):
         pixels[:, 3] = np.clip(evaluate(surface["opacity"])[:, 0], 0, 1)
+        if "alphaCutoff" in surface:
+            cutoff = surface["alphaCutoff"]
+            if not isinstance(cutoff, (int, float)) or not math.isfinite(cutoff) or not 0 <= cutoff <= 1:
+                raise ValueError("invalid Unity alpha clip threshold")
+            pixels[:, 3] = np.where(pixels[:, 3] < cutoff, 0, pixels[:, 3])
     if not np.all(np.isfinite(pixels)):
         raise ValueError("non-finite shader blend result")
     rgb = np.clip(pixels[:, :3], 0, 1)

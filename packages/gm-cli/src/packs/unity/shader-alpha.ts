@@ -1,7 +1,42 @@
 import { shaderGraphBase, shaderGraphDocuments, type ShaderGraphBase } from './shadergraph.js';
 import { inlineUnitySubgraphs } from './subgraphs.js';
 
-/** Resolve a directly connected texture alpha; reject other opacity graphs. */
+/** Read a constant, unconnected clip threshold. */
+export function shaderGraphClipThreshold(source: string): number {
+  const docs = shaderGraphDocuments(source);
+  const graph = docs.find((doc) => doc.m_Type === 'UnityEditor.ShaderGraph.GraphData');
+  const block = docs.find((doc) => doc.m_SerializedDescriptor === 'SurfaceDescription.AlphaClipThreshold');
+  if (
+    !graph ||
+    !block ||
+    typeof block.m_ObjectId !== 'string' ||
+    !Array.isArray(graph.m_Edges) ||
+    !Array.isArray(block.m_Slots) ||
+    block.m_Slots.length !== 1
+  )
+    throw new Error('unsupported Unity alpha clip threshold');
+  const connected = graph.m_Edges.some((edge) => {
+    const input = (edge as { m_InputSlot?: { m_Node?: { m_Id?: string } } }).m_InputSlot;
+    return input?.m_Node?.m_Id === block.m_ObjectId;
+  });
+  const ref = block.m_Slots[0] as { m_Id?: string };
+  const slot = docs.find((doc) => doc.m_ObjectId === ref.m_Id);
+  const value = slot?.m_Value;
+  if (
+    connected ||
+    slot?.m_Type !== 'UnityEditor.ShaderGraph.Vector1MaterialSlot' ||
+    slot.m_Id !== 0 ||
+    slot.m_SlotType !== 0 ||
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > 1
+  )
+    throw new Error('unsupported Unity alpha clip threshold');
+  return value;
+}
+
+/** Resolve sampled texture alpha, optionally multiplied by an exact unit property. */
 export function shaderGraphAlpha(
   source: string,
   load: (guid: string) => string,
@@ -19,7 +54,31 @@ export function shaderGraphAlpha(
     m_OutputSlot?: { m_Node?: { m_Id?: string }; m_SlotId?: number };
   }>;
   const input = edges.filter((edge) => edge.m_InputSlot?.m_Node?.m_Id === alpha.m_ObjectId);
-  const output = input[0]?.m_OutputSlot;
+  let output = input[0]?.m_OutputSlot;
+  const sourceNode = docs.find((doc) => doc.m_ObjectId === output?.m_Node?.m_Id);
+  if (sourceNode?.m_Type === 'UnityEditor.ShaderGraph.MultiplyNode' && output?.m_SlotId === 2) {
+    const factors = edges.filter((edge) => edge.m_InputSlot?.m_Node?.m_Id === sourceNode.m_ObjectId);
+    const sampleEdge = factors.find((edge) => edge.m_OutputSlot?.m_SlotId === 7);
+    const propertyEdge = factors.find((edge) => edge !== sampleEdge);
+    const propertyNode = docs.find((doc) => doc.m_ObjectId === propertyEdge?.m_OutputSlot?.m_Node?.m_Id);
+    const propertyRef = propertyNode?.m_Property as { m_Id?: string } | undefined;
+    const property = docs.find((doc) => doc.m_ObjectId === propertyRef?.m_Id);
+    const key = property?.m_OverrideReferenceName || property?.m_DefaultReferenceName;
+    if (
+      factors.length !== 2 ||
+      new Set(factors.map((edge) => edge.m_InputSlot?.m_SlotId)).size !== 2 ||
+      factors.some((edge) => ![0, 1].includes(edge.m_InputSlot?.m_SlotId ?? -1)) ||
+      propertyEdge?.m_OutputSlot?.m_SlotId !== 0 ||
+      propertyNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode' ||
+      property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty' ||
+      typeof key !== 'string' ||
+      Number(floats.get(key) ?? property.m_Value) !== 1 ||
+      !sampleEdge?.m_OutputSlot
+    )
+      throw new Error('unsupported Unity opacity graph');
+    output = { ...sampleEdge.m_OutputSlot, m_Node: { ...sampleEdge.m_OutputSlot.m_Node } };
+    input[0]!.m_OutputSlot = output;
+  }
   const sample = docs.find((doc) => doc.m_ObjectId === output?.m_Node?.m_Id);
   if (
     input.length !== 1 ||

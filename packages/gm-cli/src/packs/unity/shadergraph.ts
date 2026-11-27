@@ -486,6 +486,26 @@ export function shaderGraphBase(
       }
       throw new Error(`unsupported Unity shader graph property ${String(property.m_Type)}`);
     }
+    if (type === 'UnityEditor.ShaderGraph.BlockNode' && id === base.m_ObjectId && inputs.length === 0) {
+      const slots = Array.isArray(node.m_Slots) ? node.m_Slots.map((entry) => byId.get(nodeId(entry))) : [];
+      const slot = slots[0];
+      if (
+        slots.length !== 1 ||
+        slot?.m_Type !== 'UnityEditor.ShaderGraph.ColorRGBMaterialSlot' ||
+        slot.m_Id !== 0 ||
+        slot.m_SlotType !== 0 ||
+        slot.m_ColorMode !== 0
+      )
+        throw new Error('unsupported Unity shader graph base color default');
+      const value = object(slot.m_Value);
+      const components = ['x', 'y', 'z'].map((key) => value[key]);
+      if (components.some((component) => typeof component !== 'number' || !Number.isFinite(component) || component < 0))
+        throw new Error('unsupported Unity shader graph base color default');
+      return {
+        textures: [],
+        factors: [{ kind: 'constant', key: '', defaultValue: [...components, 1] as [number, number, number, number] }],
+      };
+    }
     const expected =
       type === 'UnityEditor.ShaderGraph.BlockNode' ? 1 : type === 'UnityEditor.ShaderGraph.MultiplyNode' ? 2 : -1;
     const expectedSlots = expected === 1 ? [0] : expected === 2 ? [0, 1] : [];

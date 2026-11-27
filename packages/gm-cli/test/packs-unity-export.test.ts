@@ -452,6 +452,12 @@ it.skipIf(!available)(
         },
       };
       rgbPlan.push(alphaNode);
+      const clippedNode = structuredClone(alphaNode);
+      clippedNode.name = 'Clipped';
+      clippedNode.transformId = 'root/clipped';
+      clippedNode.surfaces[0]!.path = 'clipped.mat';
+      clippedNode.surfaces[0]!.alphaCutoff = 0.8;
+      rgbPlan.push(clippedNode);
       const rgbOutput = join(root, 'rgb.glb');
       await exportUnityAssembly(rgbPlan, rgbOutput);
       const rgbDocument = await new NodeIO()
@@ -470,6 +476,13 @@ it.skipIf(!available)(
       }
       expect(alphaPixels[3]).toBeGreaterThan(150);
       expect(alphaPixels[3]).toBeLessThan(156);
+      const clipped = rgbDocument
+        .getRoot()
+        .listMaterials()
+        .find((entry) => entry.getName() === 'clipped')!;
+      expect(clipped.getAlphaMode()).toBe('BLEND');
+      const clippedPixels = await sharp(clipped.getBaseColorTexture()!.getImage()!).ensureAlpha().raw().toBuffer();
+      expect(clippedPixels[3]).toBe(0);
       const rgbImage = rgbDocument
         .getRoot()
         .listMaterials()

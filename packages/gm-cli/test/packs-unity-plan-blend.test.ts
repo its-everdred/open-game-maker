@@ -360,6 +360,34 @@ it('resolves texture paths inside blended graph terms', async () => {
       doubleSided: true,
       opacity: { scalarMask: { channel: 3, term: { texturePaths: [join(root, 'b.png')] } } },
     });
+    docs.push(
+      {
+        m_ObjectId: 'clip',
+        m_SerializedDescriptor: 'SurfaceDescription.AlphaClipThreshold',
+        m_Slots: [{ m_Id: 'threshold' }],
+      } as (typeof docs)[number],
+      {
+        m_ObjectId: 'threshold',
+        m_Type: 'UnityEditor.ShaderGraph.Vector1MaterialSlot',
+        m_Id: 0,
+        m_SlotType: 0,
+        m_Value: 0.5,
+      } as (typeof docs)[number],
+    );
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const transparentMaterial = await readFile(materialPath, 'utf8');
+    await writeFile(
+      materialPath,
+      transparentMaterial.replace(
+        '    - _SurfaceType: 1',
+        '    - _AlphaClip: 1\n    - _AlphaCutoffEnable: 1\n    - _SurfaceType: 1',
+      ),
+    );
+    const warnings: string[] = [];
+    const clipPlan = await planUnityAssembly(root, prefab, (warning) => warnings.push(warning));
+    expect(clipPlan[0]?.surfaces[0]?.alphaCutoff).toBe(0.5);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('alpha clipping approximated per texel');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

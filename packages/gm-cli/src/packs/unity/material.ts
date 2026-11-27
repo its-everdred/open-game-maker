@@ -13,6 +13,7 @@ export type UnitySurface = {
   textures: UnityTexture[];
   color: [number, number, number, number];
   opacity?: UnitySurface;
+  alphaCutoff?: number;
   doubleSided?: boolean;
   products?: UnitySurface[];
   scalarMask?: WeightExpression<UnitySurface>;
@@ -71,12 +72,21 @@ export function materialTextureProperties(source: string): Map<string, unknown> 
 }
 
 /** Interpret standard base-color properties or explicit graph-resolved texture slots. */
-export function parseUnitySurface(source: string, graph?: ShaderGraphBase, alpha?: ShaderGraphBase): UnitySurface {
+export function parseUnitySurface(
+  source: string,
+  graph?: ShaderGraphBase,
+  alpha?: ShaderGraphBase,
+  clip?: number,
+): UnitySurface {
   const materialData = material(source);
   const saved = object(materialData.m_SavedProperties);
   const floats = properties(saved.m_Floats);
   const tags = object(materialData.stringTagMap ?? {});
   const transparent = tags.RenderType === 'Transparent';
+  const clipEnabled =
+    Number(floats.get('_AlphaClip') ?? 0) === 1 && Number(floats.get('_AlphaCutoffEnable') ?? 0) === 1;
+  const clipSupported =
+    transparent && clipEnabled && clip !== undefined && Number.isFinite(clip) && clip >= 0 && clip <= 1;
   const supportsTransparent =
     transparent &&
     alpha &&
@@ -87,7 +97,8 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase, alpha
     [0, 1].includes(Number(floats.get('_DoubleSidedEnable')));
   if (
     (transparent ? !supportsTransparent : tags.RenderType !== undefined && tags.RenderType !== 'Opaque') ||
-    ['_AlphaClip', '_AlphaCutoffEnable'].some((key) => floats.has(key) && Number(floats.get(key)) !== 0) ||
+    (['_AlphaClip', '_AlphaCutoffEnable'].some((key) => floats.has(key) && Number(floats.get(key)) !== 0) &&
+      !clipSupported) ||
     (!transparent && floats.has('_SurfaceType') && Number(floats.get('_SurfaceType')) !== 0)
   ) {
     throw new Error('unsupported transparent or alpha-clipped Unity material');
@@ -218,5 +229,6 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase, alpha
     ...(transparent && alpha
       ? { opacity: resolve(alpha), doubleSided: Number(floats.get('_DoubleSidedEnable')) === 1 }
       : {}),
+    ...(clipSupported ? { alphaCutoff: clip } : {}),
   };
 }
