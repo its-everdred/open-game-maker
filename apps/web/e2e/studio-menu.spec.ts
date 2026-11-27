@@ -13,6 +13,7 @@ import { swipeReviewMedia } from '../../../packages/gm-cli/src/qa-review-touch';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installNewRoutes } from './fixtures/new-routes';
 import { installGameApi } from './support/mock-game-api';
+import { isGameLaunch } from './support/game-launch';
 
 const gameId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
 const runningJob = {
@@ -520,6 +521,7 @@ async function installGamesMenuApi(page: Page, decisions: ReturnType<typeof blob
   const open = [...decisions];
   const answered: Array<{ decision: string; option: string }> = [];
   await page.route('**/api/v1/**', async (route) => {
+    if (isGameLaunch(route.request().url())) return route.fallback();
     const url = new URL(route.request().url());
     if (url.pathname === '/api/v1/me/commands') return json(route, { commands: open, sessions: [] });
     if (url.pathname === '/api/v1/me/core-commands') return json(route, { commands: [], targets: [] });

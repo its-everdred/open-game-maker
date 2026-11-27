@@ -2,6 +2,7 @@ import { expect, test, type Page, type Route, type TestInfo } from '@playwright/
 import { resolve } from 'node:path';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
+import { isGameLaunch } from './support/game-launch';
 
 // #854: the instance owner talks to the Executor inside the app. aiur's thread (aiur-team/aiur#8034) is mocked behind
 // the app's own `/api/v1/me/executor/thread/*` until it ships.
@@ -27,6 +28,7 @@ test('asks the Executor from a game, reads the reply with media, and sees each g
   ];
   const sent: Array<Record<string, unknown>> = [];
   await page.route('**/api/v1/**', async (route) => {
+    if (isGameLaunch(route.request().url())) return route.fallback();
     const url = new URL(route.request().url());
     const method = route.request().method();
     const files: Record<string, [string, string]> = {

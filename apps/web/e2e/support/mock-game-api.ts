@@ -5,6 +5,7 @@ import type { Page, Route } from '@playwright/test';
 import type { DesignDoc, Patch } from '@ogm/contracts/browser';
 
 import type { TransactionBody } from '../../src/features/editor/api';
+import { isGameLaunch } from './game-launch';
 
 export type ScriptedTransactionResult = 'conflict' | 'lease-lost' | 'success';
 
@@ -36,6 +37,7 @@ export async function installGameApi(
   });
 
   await page.route('**/api/v1/**', async (route) => {
+    if (isGameLaunch(route.request().url())) return route.fallback();
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname.slice('/api/v1'.length);

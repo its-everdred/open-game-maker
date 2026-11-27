@@ -150,7 +150,12 @@ test('two SDK clients stop and resume on the same per-seat tick', async ({ brows
         }),
       );
       await page.route('http://127.0.0.1:10001/g/game/**/per-seat-game.js', (route) =>
-        route.fulfill({ contentType: 'text/javascript', body: bundle }),
+        /* The game runs as an opaque document, so its module script needs CORS. */
+        route.fulfill({
+          contentType: 'text/javascript',
+          headers: { 'access-control-allow-origin': '*' },
+          body: bundle,
+        }),
       );
       await page.goto(`/g/game?room=${room.roomId}&test`);
       await expect.poll(() => roomState(page), { timeout: 30_000 }).toBe('connected');

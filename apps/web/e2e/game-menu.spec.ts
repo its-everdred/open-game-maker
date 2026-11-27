@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installGameApi } from './support/mock-game-api';
+import { isGameLaunch } from './support/game-launch';
 
 type GameHook = { bridgeState: string };
 type FixtureHook = { messages: Array<{ t: string }>; send(type: string, payload: object): void };
@@ -48,6 +49,7 @@ const workers = [
 /** The game's tickets, a review ready with a still, a decision waiting on #969, and Energy readings. */
 async function installMenuData(page: Page) {
   await page.route('**/api/v1/**', async (route) => {
+    if (isGameLaunch(route.request().url())) return route.fallback();
     const url = new URL(route.request().url());
     const path = url.pathname.slice('/api/v1'.length);
     const json = (body: unknown) =>

@@ -22,6 +22,17 @@ createServer(async (request, response) => {
     response.writeHead(204).end();
     return;
   }
+  /* The app proxies /api here in e2e. A launch sends the frame to the build, as the API's redirect does. It navigates
+     in the page rather than with a 302 because Playwright routes miss a redirect's target, and specs route builds. */
+  const launch = /^\/api\/v1\/games\/([^/]+)\/launch\/([^/]+)$/u.exec(pathname);
+  if (launch) {
+    const target = new URL(`/g/${launch[1]}/${launch[2]}/index.html`, `http://${host}:${port}`);
+    target.search = new URL(request.url ?? '/', target).search;
+    response
+      .writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+      .end(`<script>location.replace(${JSON.stringify(target.href)})</script>`);
+    return;
+  }
   if (pathname === '/studio' || pathname.startsWith('/studio/') || pathname === '/ui' || pathname.startsWith('/ui/')) {
     servePrototype(request, response);
     return;
@@ -32,6 +43,8 @@ createServer(async (request, response) => {
     return;
   }
   response.writeHead(200, {
+    /* Launched games run as opaque documents, so their own fetches arrive from origin null. */
+    'access-control-allow-origin': '*',
     'cache-control': 'no-store',
     'content-type': files[file],
   });

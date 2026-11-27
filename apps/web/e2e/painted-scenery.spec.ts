@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installGameApi } from './support/mock-game-api';
+import { isGameLaunch } from './support/game-launch';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -22,6 +23,7 @@ test('edits a painted backdrop and its cut-out items', async ({ page }, testInfo
     url: '/api/v1/games/game/scenery/assets/3/hash/unused.glb',
   });
   await page.route('**/api/v1/**', async (route) => {
+    if (isGameLaunch(route.request().url())) return route.fallback();
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/v1/games/game/editor/previews') return route.fulfill({ json: { previews: [] } });
     if (path === '/api/v1/games/game/editor/stage') return route.fulfill({ json: { stage: null } });

@@ -38,7 +38,8 @@ test.beforeEach(async ({ page }, testInfo) => {
     }),
   );
   await page.route(`${bridgeOrigin}/g/game/**/solo-sdk-game.js`, (route) =>
-    route.fulfill({ contentType: 'text/javascript', body: bundle }),
+    /* The game runs as an opaque document, so its module script needs CORS. */
+    route.fulfill({ contentType: 'text/javascript', headers: { 'access-control-allow-origin': '*' }, body: bundle }),
   );
 });
 

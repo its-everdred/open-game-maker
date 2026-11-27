@@ -3,6 +3,7 @@ import { expect, test, type Page, type Route, type TestInfo } from '@playwright/
 import type { GameCommand } from '@ogm/contracts';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
+import { isGameLaunch } from './support/game-launch';
 
 // The Blobs character voices deck Kevin judged on his iPhone (#631): eight cards, each a character's portrait with its
 // voice. He heard nothing, had to press Send, and the card did not fit his screen. Each card must play its voice, the
@@ -176,6 +177,7 @@ test('fits the whole card on every phone, portrait and landscape, with nothing t
 async function openDeck(page: Page) {
   await installAuthRoutes(page, { signedIn: true });
   await page.route('**/api/v1/**', async (route) => {
+    if (isGameLaunch(route.request().url())) return route.fallback();
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/v1/notifications/stream') {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });

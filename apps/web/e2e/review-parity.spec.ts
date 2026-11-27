@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 import { openReviewDeck, openReviewItem } from '../../../packages/gm-cli/src/qa-review-checks';
 import { installAuthRoutes } from './fixtures/auth-routes';
+import { isGameLaunch } from './support/game-launch';
 
 // #1133: the in-app Needs Review deck against the review page Kevin used until now (#1124 items 1-9). One fixture per
 // kind of card the page shows: a game's like/dislike Command, an inventory decision, a NUC core matrix with an
@@ -501,6 +502,7 @@ async function install(page: Page): Promise<Api> {
     return route.fulfill({ contentType: 'image/svg+xml', body: svg(name) });
   });
   await page.route('**/api/v1/**', async (route) => {
+    if (isGameLaunch(route.request().url())) return route.fallback();
     const url = new URL(route.request().url());
     const path = url.pathname;
     const post = route.request().method() === 'POST';

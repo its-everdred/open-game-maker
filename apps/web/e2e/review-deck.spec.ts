@@ -3,6 +3,7 @@ import { expect, test, type Page, type Route, type TestInfo } from '@playwright/
 import type { GameCommand } from '@ogm/contracts';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
+import { isGameLaunch } from './support/game-launch';
 
 // The review deck's first real decks (A3): the Blobs' six voice samples (Open-Games #53) and the 3x3 image-mock matrix
 // (Open-Games games/blobs/review/mock-matrix). Each Command opens as one link on a phone and judges its cards one at a
@@ -450,6 +451,7 @@ async function installReviewApi(page: Page, options: ReviewApiOptions = {}) {
     updatedAt: '2026-11-07T17:40:00.000Z',
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (isGameLaunch(route.request().url())) return route.fallback();
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (path === '/api/v1/notifications/stream') {
