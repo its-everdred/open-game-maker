@@ -36,32 +36,32 @@ it('finds changed screen files from the repository root', async () => {
     await writeFile(join(root, 'apps/web/src/routes/games/View.tsx'), 'export {}');
     git('add', '.');
     git('commit', '-qm', 'screen');
-    expect(glassScreens(changedGlassFiles(root))).toEqual(['Home']);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Home']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     git('rm', 'apps/web/src/routes/games/View.tsx');
     git('commit', '-qm', 'remove screen');
-    expect(glassScreens(changedGlassFiles(root))).toEqual(['Home']);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Home']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     await mkdir(join(root, 'apps/web/src'), { recursive: true });
     await writeFile(join(root, 'apps/web/src/glass-tokens.css'), ':root {}');
     git('add', '.');
     git('commit', '-qm', 'add tokens');
-    expect(glassScreens(changedGlassFiles(root))).toEqual([]);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual([]);
     await mkdir(join(root, 'apps/web/src/components/glass'), { recursive: true });
     await writeFile(join(root, 'apps/web/src/components/glass/Glass.tsx'), 'export {}');
     git('add', '.');
     git('commit', '-qm', 'add library');
-    expect(glassScreens(changedGlassFiles(root))).toEqual([]);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual([]);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     await writeFile(join(root, 'apps/web/src/components/glass/Glass.tsx'), 'export const changed = true');
     git('add', '.');
     git('commit', '-qm', 'change library');
-    expect(glassScreens(changedGlassFiles(root))).toEqual(['Unmapped']);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Unmapped']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     await writeFile(join(root, 'apps/web/src/glass-tokens.css'), ':root { color: red }');
     git('add', '.');
     git('commit', '-qm', 'change tokens');
-    expect(glassScreens(changedGlassFiles(root))).toEqual(['Unmapped']);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Unmapped']);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

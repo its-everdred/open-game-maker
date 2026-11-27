@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
+import { glassDiffBase } from './glass-git-base.mjs';
 
-export function changedGlassFiles(root, base = 'origin/main') {
+export function changedGlassFiles(root, base) {
   const fields = execFileSync(
     'git',
     [
@@ -9,7 +10,7 @@ export function changedGlassFiles(root, base = 'origin/main') {
       '-z',
       '--no-renames',
       '--diff-filter=ACMRD',
-      `${base}...HEAD`,
+      base ? `${base}...HEAD` : glassDiffBase(root),
       '--',
       'apps/web/src',
       'apps/web/public',
