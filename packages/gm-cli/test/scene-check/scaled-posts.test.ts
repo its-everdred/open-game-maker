@@ -22,9 +22,48 @@ it('recognizes assembled gate posts and checks their scaled alpha bounds', () =>
   const posts = scene.pieces.filter((piece) => piece.role === 'post');
   expect(posts).toHaveLength(2);
   expect(posts.map((piece) => piece.scale)).toEqual([0.4, 0.4]);
-  expect([...terminals(posts)]).toEqual([]);
-  expect(connectedRuns(new Grid(scene))).toContainEqual(expect.objectContaining({ id: 'connected-runs/open-end' }));
-  expect(unmeasured(new Grid(scene))).toContainEqual(expect.objectContaining({ id: 'facts/scaled-post' }));
+  expect([...terminals(scene.pieces)].sort()).toEqual(['3,5', '4,5']);
+  expect([
+    ...terminals(
+      scene.pieces.map((piece) => (piece.role === 'fence' ? { ...piece, asset: 'unmeasured-fence' } : piece)),
+    ),
+  ]).toEqual([]);
+  expect([
+    ...terminals(scene.pieces.map((piece) => (piece.role === 'fence' ? { ...piece, elevation: 1 } : piece))),
+  ]).toEqual([]);
+  expect(connectedRuns(new Grid(scene)).filter((finding) => finding.id === 'connected-runs/open-end')).toEqual([]);
+  expect(unmeasured(new Grid(scene)).filter((finding) => finding.id === 'facts/scaled-post')).toEqual([]);
+  const raisedFence = adapter.assemblyMap(6, 6, gate.placements);
+  for (const tile of raisedFence.tilesets[0]!.tiles!) {
+    if (
+      tile.properties?.some((property) => property.name === 'asset' && String(property.value).includes('fence-b1')) &&
+      tile.properties.some((property) => property.name === 'rotation' && property.value === 0)
+    )
+      tile.properties.push({ name: 'elevation', value: 1 });
+  }
+  const raisedScene = readTiledScene([{ json: raisedFence }], smallScaleIntFacts(adapter), {});
+  expect(connectedRuns(new Grid(raisedScene))).toContainEqual(
+    expect.objectContaining({ id: 'connected-runs/open-end' }),
+  );
+  for (const layer of raisedFence.layers) {
+    if (layer.name === 'wall') layer.name = 'roof';
+    else if (layer.name.startsWith('wall#')) layer.name = layer.name.replace('wall#', 'roof#');
+  }
+  const roofFence = readTiledScene([{ json: raisedFence }], smallScaleIntFacts(adapter), {});
+  expect(connectedRuns(new Grid(roofFence))).toContainEqual(expect.objectContaining({ id: 'connected-runs/open-end' }));
+  const malformed = adapter.assemblyMap(6, 6, gate.placements);
+  for (const layer of malformed.layers) if (layer.name === 'wall') layer.name = 'wall#0';
+  const malformedScene = readTiledScene([{ json: malformed }], smallScaleIntFacts(adapter), {});
+  expect(malformedScene.notes).toContainEqual(
+    expect.objectContaining({ id: 'facts/unsupported-layer', severity: 'high' }),
+  );
+  const malformedPost = adapter.assemblyMap(6, 6, gate.placements);
+  for (const layer of malformedPost.layers) if (layer.name === 'decor') layer.name = 'decor#0';
+  const malformedPostScene = readTiledScene([{ json: malformedPost }], smallScaleIntFacts(adapter), {});
+  expect(unmeasured(new Grid(malformedPostScene))).toContainEqual(expect.objectContaining({ id: 'facts/scaled-post' }));
+  expect(malformedPostScene.notes).toContainEqual(
+    expect.objectContaining({ id: 'facts/unsupported-layer', severity: 'high' }),
+  );
   const scaled = screenBox(scene, posts[0]!)!;
   const full = screenBox(scene, { ...posts[0]!, scale: 1 })!;
   for (const [actual, expected] of scaled.map(
@@ -42,6 +81,29 @@ it('recognizes assembled gate posts and checks their scaled alpha bounds', () =>
   expect(readTiledScene([{ json: bad }], smallScaleIntFacts(adapter), {}).notes).toContainEqual(
     expect.objectContaining({ id: 'facts/unsupported-scale', severity: 'high' }),
   );
+});
+
+it.each([
+  ['rotation', 90],
+  ['scale', 0.5],
+  ['elevation', 1],
+] as const)('rejects a measured gate post with a different %s', (name, value) => {
+  const cells = Array.from({ length: 9 }, (_, i) => ({ x: 2 + (i % 3), y: 2 + Math.floor(i / 3) }));
+  const asset = 't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01';
+  const gate = adapter.edgeRun(cells, 'fence', [{ cell: { x: 3, y: 4 }, edge: 'yMax' }], {
+    asset,
+    facing: 'E',
+    scale: 0.4,
+  });
+  const json = adapter.assemblyMap(6, 6, gate.placements);
+  const post = json.tilesets[0]!.tiles!.find((tile) =>
+    tile.properties?.some((property) => property.name === 'role' && property.value === 'post'),
+  )!;
+  post.properties!.find((property) => property.name === name)!.value = value;
+  const scene = readTiledScene([{ json }], smallScaleIntFacts(adapter), {});
+  expect(scene.pieces.filter((piece) => piece.role === 'post').every((piece) => !piece.postSocket)).toBe(true);
+  expect(connectedRuns(new Grid(scene))).toContainEqual(expect.objectContaining({ id: 'connected-runs/open-end' }));
+  expect(unmeasured(new Grid(scene))).toContainEqual(expect.objectContaining({ id: 'facts/scaled-post' }));
 });
 
 it('accepts a unit-scaled floor and reports an unsupported floor scale without aborting', () => {

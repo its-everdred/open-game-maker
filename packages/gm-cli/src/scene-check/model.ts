@@ -27,6 +27,8 @@ export interface Piece {
   elevation: number;
   /** Uniform scale about the pack's image anchor. */
   scale?: number;
+  /** Measured terminal offset for this exact scaled post placement. */
+  postSocket?: Cell & { fenceAsset: string; fenceEdge: CellEdge };
   /** Drawn by a map beneath the scene (a surround): it closes the frame but is not the scene's own dressing. */
   under: boolean;
   /** The grid edge this piece draws, when its pack measured it. */

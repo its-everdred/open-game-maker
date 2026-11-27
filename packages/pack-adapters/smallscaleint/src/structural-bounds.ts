@@ -14,15 +14,21 @@ export const inspectedGatePost: Fact<{
   facing: TileFacing;
   scale: number;
   elevation: number;
+  socket: { x: number; y: number };
+  fenceAsset: string;
+  fenceEdge: 'yMax';
 }> = {
   value: {
     asset: 't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01',
     facing: 'E',
     scale: 0.4,
     elevation: 0.5,
+    socket: { x: 0, y: 0 },
+    fenceAsset: 't1:smallscaleint-2d-hd-zombie-rural-tileset/tiles/isometric-tiles/fence-b1@2026-11-01',
+    fenceEdge: 'yMax',
   },
   verified:
-    'Stone A14 alpha bounds scanned and a vertex-aligned scaled position inspected in a standalone render; game depth, collision and the fence connection remain unverified (2026-11-26).',
+    'Stone A14 E has alpha 255 at its ground anchor (128,208); Fence B1 E has alpha 3 and 12 at its yMax vertices and opaque pixels within 2 px. The scaled, half-elevation post anchor aligns with a vertex. Game depth remains unverified (2026-11-26).',
 };
 
 /**

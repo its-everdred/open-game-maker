@@ -28,7 +28,7 @@ export function unmeasured(grid: Grid): Finding[] {
       if (!scaledRoofs.has(piece.asset)) scaledRoofs.set(piece.asset, []);
       scaledRoofs.get(piece.asset)!.push({ x: piece.x, y: piece.y });
     }
-    if (piece.role === 'post' && piece.scale !== undefined && piece.scale !== 1) {
+    if (piece.role === 'post' && piece.scale !== undefined && piece.scale !== 1 && !piece.postSocket) {
       if (!scaledPosts.has(piece.asset)) scaledPosts.set(piece.asset, []);
       scaledPosts.get(piece.asset)!.push({ x: piece.x, y: piece.y });
     }

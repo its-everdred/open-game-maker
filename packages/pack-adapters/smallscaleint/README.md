@@ -57,8 +57,8 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
     grid vertices where gate posts belong.
     Supply a fourth argument `{ asset, facing, scale }` to place gate posts; this is currently inspected only for
     `yMax` fence openings and requires a one-cell map margin. The only supported style is Stone A14 facing E at scale
-    0.4, as inspected in the churchyard diagnostic. This places approximate sprites, not verified fence connections;
-    the scene checker reports their scaled sockets as unmeasured. Post sprites do not block the gate cell.
+    0.4 with elevation 0.5. The source masks establish contact with ground-level Fence B1 E at the vertices;
+    in-game depth and actor traversal still need verification. Post sprites do not block the gate cell.
   - `building(footprint, 'stone', door, walkable)` returns `{ placements, entry }`: a closed shell, a gable over a
     two-row footprint, and a door on a `yMax` edge opening onto the walkable `entry` cell. Provisional until checked
     in a game render.

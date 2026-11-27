@@ -17,8 +17,26 @@ const TERMINATES: ReadonlySet<Role> = new Set(['post', 'roof', 'door', 'opening'
 /** Grid vertices where a run may legally end: corners of posts, buildings, doors and declared gates. */
 export function terminals(pieces: readonly Piece[]): Set<string> {
   const ends = new Set<string>();
+  const runs = segments(pieces, RUN);
   for (const piece of pieces) {
     if (piece.role === 'post' && piece.scale !== undefined && piece.scale !== 1) {
+      if (piece.postSocket) {
+        const key = cellKey({ x: piece.x + piece.postSocket.x, y: piece.y + piece.postSocket.y });
+        const touching = runs.filter(({ a, b }) => cellKey(a) === key || cellKey(b) === key);
+        if (
+          touching.length &&
+          touching.every(
+            ({ piece: run }) =>
+              run.role === 'fence' &&
+              run.asset === piece.postSocket!.fenceAsset &&
+              run.facing === 'E' &&
+              run.edge === piece.postSocket!.fenceEdge &&
+              /^wall(?:#[1-9]\d*)?$/.test(run.layer) &&
+              run.elevation === 0,
+          )
+        )
+          ends.add(key);
+      }
       if (!piece.tags.has('gate')) continue;
     }
     const usable = !(RUN.has(piece.role) && piece.scale !== undefined && piece.scale !== 1);

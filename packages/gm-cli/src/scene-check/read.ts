@@ -124,6 +124,19 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
         }
         continue;
       }
+      if (
+        pack.set === 'smallscaleint' &&
+        !/^(?:floor|wall|decor|roof|(?:wall|decor|roof)#[1-9]\d*)$/.test(layer.name)
+      ) {
+        notes.push({
+          check: 'facts',
+          id: 'facts/unsupported-layer',
+          severity: 'high',
+          message: `tile layer ${prefix}${layer.name} is not supported by the pack renderer`,
+          cells: [],
+          objects: [`${prefix}${layer.name}`],
+        });
+      }
       layer.data.forEach((stored, index) => {
         if (stored === 0) return;
         const gid = stored & GID_MASK;
@@ -149,6 +162,7 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
           unsupportedScales.get(key)!.cells.push({ x, y });
         }
         const facts = assetFacts(pack, lock, asset);
+        const post = pack.asset(asset)?.postSocket;
         const facings = shippedFacings(lock, asset);
         pieces.push({
           key: `${prefix}${layer.name}:${x},${y}`,
@@ -163,6 +177,14 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
           under: source.under === true,
           elevation: typeof elevation === 'number' && layer.name !== 'roof' ? elevation : 0,
           ...(validScale && (layer.name !== 'floor' || scale === 1) ? { scale } : {}),
+          ...(role === 'post' &&
+          post &&
+          post.facing === facing &&
+          post.scale === scale &&
+          /^decor(?:#[1-9]\d*)?$/.test(layer.name) &&
+          post.elevation === elevation
+            ? { postSocket: { x: post.x, y: post.y, fenceAsset: post.fenceAsset, fenceEdge: post.fenceEdge } }
+            : {}),
           ...(facts?.edges?.[facing] ? { edge: facts.edges[facing], edges: facts.edges } : {}),
           ...(facts?.alpha?.[facing] ? { alpha: facts.alpha[facing] } : {}),
           ...(facts?.size ? { size: facts.size } : {}),
