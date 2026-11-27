@@ -8,6 +8,9 @@ import { CommandReviewCard } from './CommandReviewCard';
 import { AnsweredReviewCard } from './AnsweredReviewCard';
 import { useWorkerReviews } from './useWorkerReviews';
 import './review-inbox.css';
+import '../commands-inbox/review-deck.css';
+import '../commands-inbox/review-glass.css';
+import '../commands-inbox/decision-deck.css';
 
 export function ConversationReviews({
   gameId,
