@@ -35,6 +35,7 @@ export class VoiceClient {
   private socket: WebSocket | undefined;
   private startPromise: Promise<void> | undefined;
   private capture: CaptureHandle | undefined;
+  private muted = false;
   private textEnabled = false;
   private startedAt: number | undefined;
   private stoppedAt: number | undefined;
@@ -56,6 +57,7 @@ export class VoiceClient {
   private async start(): Promise<void> {
     this.ended = false;
     this.endRequested = false;
+    this.muted = false;
     const playbackReady = this.player.unlock();
     const captureReady = startCapture((chunk) => this.sendAudio(chunk));
 
@@ -67,6 +69,7 @@ export class VoiceClient {
         return;
       }
       this.capture = capture;
+      if (this.muted) capture.setMuted(true);
       await playbackReady;
       if (this.endRequested) return;
       await this.connect();
@@ -92,6 +95,11 @@ export class VoiceClient {
     this.ended = true;
     this.finishSession(true);
     this.emit({ v: 1, type: 'ended', reason: 'user_end' });
+  }
+
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    this.capture?.setMuted(muted);
   }
 
   sendText(text: string): void {
@@ -225,6 +233,7 @@ export class VoiceClient {
   }
 
   private sendAudio(dataBase64: string): void {
+    if (this.muted) return;
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.send({ type: 'audio', data_b64: dataBase64 });
     }

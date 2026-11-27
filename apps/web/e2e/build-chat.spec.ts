@@ -458,3 +458,83 @@ function media(url: string) {
 async function json(route: Route, body: unknown, status = 200) {
   await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
+
+test('build composer keeps voice controls at the right through dictation and live voice', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'The review stills use the phone portrait layout.');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installAuthRoutes(page, { signedIn: true });
+  await installBuildRoutes(page);
+  await page.goto('/all?test');
+  await openBuildChat(page);
+  const composer = page.locator('aiur-composer');
+  const mic = composer.locator('[part="mic"]');
+  const send = composer.locator('[part="send"]');
+  const input = composer.locator('[part="input"]');
+
+  await composer.evaluate((node) => {
+    const element = node as HTMLElement & {
+      adapters: {
+        upload: () => Promise<{ name: string }>;
+        dictation: {
+          start: (callbacks: { onPartial: (text: string) => void }) => Promise<{ stop: () => Promise<string> }>;
+        };
+        voice: { start: (options: { initialText: string }) => Promise<{ stop: () => Promise<void> }> };
+      };
+    };
+    element.adapters = {
+      upload: async () => ({ name: 'file' }),
+      dictation: {
+        start: async ({ onPartial }) => {
+          onPartial('Make the moonlight warmer');
+          return { stop: async () => 'Make the moonlight warmer' };
+        },
+      },
+      voice: {
+        start: async ({ initialText }) => {
+          (window as Window & { __ogmVoiceOpening?: string }).__ogmVoiceOpening = initialText;
+          return { stop: async () => {} };
+        },
+      },
+    };
+  });
+
+  const idleMic = await mic.boundingBox();
+  const idleSend = await send.boundingBox();
+  expect(idleMic).not.toBeNull();
+  expect(idleSend).not.toBeNull();
+  expect(idleMic!.x).toBeLessThan(idleSend!.x);
+  expect(idleMic!.width).toBe(40);
+  expect(idleSend!.width).toBe(40);
+  expect(
+    await composer.evaluate(
+      (node) => getComputedStyle((node as HTMLElement).shadowRoot!.querySelector('[part="card"]')!).borderRadius,
+    ),
+  ).toBe('28px');
+  await composer.screenshot({ path: 'e2e/screenshots/1087/composer-idle.png' });
+
+  await mic.click();
+  await expect(composer).toHaveAttribute('data-recording', '');
+  await expect(mic).toBeVisible();
+  await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
+  expect(await input.inputValue()).toBe('Make the moonlight warmer');
+  const recordingMic = await mic.boundingBox();
+  const recordingSend = await send.boundingBox();
+  expect(Math.abs(recordingMic!.x - idleMic!.x)).toBeLessThan(1);
+  expect(Math.abs(recordingSend!.x - idleSend!.x)).toBeLessThan(1);
+  await composer.screenshot({ path: 'e2e/screenshots/1087/composer-dictating.png' });
+
+  await mic.click();
+  await expect(mic).toHaveAttribute('aria-label', 'Unmute microphone');
+  await composer.locator('[part="voice"]').click();
+  await expect(composer).toHaveAttribute('data-voice-live', '');
+  await expect(composer.locator('[part="voice"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(mic).toBeVisible();
+  await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
+  await expect
+    .poll(() => page.evaluate(() => (window as Window & { __ogmVoiceOpening?: string }).__ogmVoiceOpening))
+    .toBe('Make the moonlight warmer');
+  await composer.screenshot({ path: 'e2e/screenshots/1087/composer-two-way-voice.png' });
+  await composer.locator('[part="voice"]').click();
+});

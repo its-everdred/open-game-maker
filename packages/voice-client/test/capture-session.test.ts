@@ -8,12 +8,12 @@ import { PcmPlayer } from '../src/audio/playback.js';
 // on Kevin's iPhone (#1325).
 function safariNavigator(type: string) {
   const audioSession = { type };
-  const tracks = [{ stop: vi.fn() }];
+  const tracks = [{ enabled: true, stop: vi.fn() }];
   const getUserMedia = vi.fn(async () => {
     if (audioSession.type !== 'auto' && audioSession.type !== 'play-and-record') {
       throw new DOMException('AudioSession category is not compatible with audio capture.', 'InvalidStateError');
     }
-    return { getTracks: () => tracks };
+    return { getTracks: () => tracks, getAudioTracks: () => tracks };
   });
   return { audioSession, mediaDevices: { getUserMedia }, tracks };
 }
@@ -67,6 +67,17 @@ describe('capture audio session', () => {
     await new PcmPlayer(() => new FakeContext() as unknown as AudioContext).unlock();
 
     expect(nav.audioSession.type).toBe('play-and-record');
+    capture.stop();
+  });
+
+  it('mutes the microphone track without ending the audio session', async () => {
+    const capture = await startCapture(() => undefined);
+    capture.setMuted(true);
+    expect(nav.tracks[0]!.enabled).toBe(false);
+    expect(nav.audioSession.type).toBe('play-and-record');
+
+    capture.setMuted(false);
+    expect(nav.tracks[0]!.enabled).toBe(true);
     capture.stop();
   });
 

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const audio = vi.hoisted(() => ({
   startCapture: vi.fn(),
   captureStop: vi.fn(),
+  captureMute: vi.fn(),
   onChunk: undefined as ((chunk: string) => void) | undefined,
   players: [] as Array<{ enqueue: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }>,
 }));
@@ -99,10 +100,11 @@ describe('VoiceClient', () => {
     audio.players.length = 0;
     audio.onChunk = undefined;
     audio.captureStop.mockClear();
+    audio.captureMute.mockClear();
     audio.startCapture.mockReset();
     audio.startCapture.mockImplementation(async (onChunk: (chunk: string) => void) => {
       audio.onChunk = onChunk;
-      return { stop: audio.captureStop, context: {} };
+      return { stop: audio.captureStop, setMuted: audio.captureMute, context: {} };
     });
     vi.stubGlobal('WebSocket', FakeWebSocket);
     visibility = new EventTarget() as EventTarget & { visibilityState: string };
@@ -123,6 +125,19 @@ describe('VoiceClient', () => {
 
     audio.onChunk?.('AA==');
     expect(JSON.parse(socket.sent[1]!)).toEqual({ v: 1, type: 'audio', data_b64: 'AA==' });
+  });
+
+  it('mutes and resumes microphone audio during a live conversation', async () => {
+    const { client, socket } = await startedClient();
+    client.setMuted(true);
+    audio.onChunk?.('muted');
+    client.setMuted(false);
+    audio.onChunk?.('heard');
+
+    expect(audio.captureMute.mock.calls).toEqual([[true], [false]]);
+    expect(socket.sent.map((frame) => JSON.parse(frame).type)).toEqual(['start', 'audio']);
+    expect(JSON.parse(socket.sent[1]!)).toMatchObject({ data_b64: 'heard' });
+    client.end();
   });
 
   it('shares one capture and socket across concurrent starts', async () => {

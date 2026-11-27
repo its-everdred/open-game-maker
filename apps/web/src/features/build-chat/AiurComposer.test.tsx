@@ -8,35 +8,43 @@ const fake = vi.hoisted(() => ({
   end: vi.fn(),
   sendText: vi.fn(),
   start: vi.fn().mockResolvedValue(undefined),
+  dictationMuted: vi.fn(),
+  voiceMuted: vi.fn(),
   defaultUpload: vi.fn(),
 }));
 vi.mock('./attachments', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./attachments')>()),
   uploadChatAttachment: fake.defaultUpload,
 }));
-vi.mock('@ogm/voice-client', () => ({
-  Dictation: class {
-    static isSupported() {
-      return true;
-    }
-    on(name: string, callback: (value: unknown) => void) {
-      fake.listeners.set(name, callback);
-      return () => fake.listeners.delete(name);
-    }
-    pressStart() {}
-    pressEnd() {}
-    cancel() {}
-  },
-  VoiceClient: class {
-    on(name: string, callback: (value: unknown) => void) {
-      fake.listeners.set(`voice:${name}`, callback);
-      return () => fake.listeners.delete(`voice:${name}`);
-    }
-    startFromGesture = fake.start;
-    end = fake.end;
-    sendText = fake.sendText;
-  },
-}));
+vi.mock('@ogm/voice-client', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@ogm/voice-client')>();
+  return {
+    ...original,
+    Dictation: class {
+      static isSupported() {
+        return true;
+      }
+      on(name: string, callback: (value: unknown) => void) {
+        fake.listeners.set(name, callback);
+        return () => fake.listeners.delete(name);
+      }
+      pressStart() {}
+      pressEnd() {}
+      setMuted = fake.dictationMuted;
+      cancel() {}
+    },
+    VoiceClient: class {
+      on(name: string, callback: (value: unknown) => void) {
+        fake.listeners.set(`voice:${name}`, callback);
+        return () => fake.listeners.delete(`voice:${name}`);
+      }
+      startFromGesture = fake.start;
+      end = fake.end;
+      sendText = fake.sendText;
+      setMuted = fake.voiceMuted;
+    },
+  };
+});
 vi.mock('./voice', () => ({
   connectDictation: vi.fn(),
   voiceProbeFailure: (error: unknown) => ({ available: false, code: String(error) }),
@@ -202,6 +210,59 @@ it('sends the dictated opening when switching to voice and keeps the end control
   expect(voiceButton.hidden).toBe(false);
   voiceButton.click();
   await waitFor(() => expect(fake.end).toHaveBeenCalled());
+});
+
+it('keeps the microphone as a mute control and shows both live voice transcripts', async () => {
+  fake.dictationMuted.mockClear();
+  fake.voiceMuted.mockClear();
+  const { container } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
+  const mic = composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="mic"]')!;
+  mic.click();
+  await waitFor(() => expect(composer.hasAttribute('data-recording')).toBe(true));
+  await waitFor(() => expect(mic.getAttribute('aria-label')).toBe('Mute microphone'));
+  expect(mic.hidden).toBe(false);
+
+  mic.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, button: 0 }));
+  expect(fake.dictationMuted).toHaveBeenCalledWith(true);
+  expect(mic.getAttribute('aria-label')).toBe('Unmute microphone');
+
+  composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="voice"]')!.click();
+  fake.listeners.get('transcript')!({ kind: 'final', text: 'Start run' });
+  await waitFor(() => expect(composer.hasAttribute('data-voice-live')).toBe(true));
+  await waitFor(() => expect(mic.getAttribute('aria-label')).toBe('Mute microphone'));
+  expect(mic.hidden).toBe(false);
+
+  mic.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, button: 0 }));
+  expect(fake.voiceMuted).toHaveBeenCalledWith(true);
+  fake.listeners.get('voice:transcript')!({ type: 'transcript', kind: 'final', text: 'Start run' });
+  fake.listeners.get('voice:agent_text')!({ type: 'agent_text', turn_id: 'turn-1', text: 'Run started.', final: true });
+  await waitFor(() => expect(container.querySelector('[aria-label="Live voice conversation"]')).not.toBeNull());
+  expect(container).toHaveTextContent('Start run');
+  expect(container).toHaveTextContent('Run started.');
+});
+
+it.each(['Enter', 'Space'])('starts dictation on idle microphone %s and mutes on the next activation', async (code) => {
+  fake.dictationMuted.mockClear();
+  const { container } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
+  const mic = composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="mic"]')!;
+  mic.focus();
+  const activate = () => {
+    mic.dispatchEvent(
+      new KeyboardEvent('keydown', { key: code === 'Space' ? ' ' : 'Enter', code, bubbles: true, composed: true }),
+    );
+    mic.dispatchEvent(new MouseEvent('click', { detail: 0, bubbles: true, composed: true }));
+  };
+
+  activate();
+  await waitFor(() => expect(composer.hasAttribute('data-recording')).toBe(true));
+  expect(fake.dictationMuted).not.toHaveBeenCalled();
+
+  activate();
+  expect(fake.dictationMuted).toHaveBeenCalledWith(true);
 });
 
 it('restores unsent opening words when voice ends before text is available', async () => {

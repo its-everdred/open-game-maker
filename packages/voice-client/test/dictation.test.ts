@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const audio = vi.hoisted(() => ({
   startCapture: vi.fn(),
   stop: vi.fn(),
+  setMuted: vi.fn(),
   onChunk: undefined as ((chunk: string) => void) | undefined,
 }));
 
@@ -68,10 +69,11 @@ describe('Dictation', () => {
   beforeEach(() => {
     FakeWebSocket.instances = [];
     audio.stop.mockClear();
+    audio.setMuted.mockClear();
     audio.startCapture.mockReset();
     audio.startCapture.mockImplementation(async (onChunk: (chunk: string) => void) => {
       audio.onChunk = onChunk;
-      return { stop: audio.stop, context: {} };
+      return { stop: audio.stop, setMuted: audio.setMuted, context: {} };
     });
     vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.stubGlobal('AudioContext', class {});
@@ -139,6 +141,67 @@ describe('Dictation', () => {
       { v: 1, type: 'commit' },
     ]);
     expect(audio.stop).toHaveBeenCalledOnce();
+  });
+
+  it('mutes and resumes audio without ending the dictation session', async () => {
+    const dictation = new Dictation({
+      connection: async () => ({ token: 'token', url: 'ws://127.0.0.1/ws/voice?mode=dictate' }),
+    });
+    dictation.pressStart();
+    await vi.waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+
+    dictation.setMuted(true);
+    audio.onChunk?.('muted');
+    dictation.setMuted(false);
+    audio.onChunk?.('heard');
+
+    expect(audio.setMuted.mock.calls).toEqual([[true], [false]]);
+    expect(socket.sent.map((frame) => JSON.parse(frame))).toEqual([{ v: 1, type: 'audio', data_b64: 'heard' }]);
+    dictation.pressEnd();
+    socket.message({ v: 1, type: 'transcript', kind: 'final', text: 'heard' });
+  });
+
+  it('mutes a capture that resolves after the user already muted', async () => {
+    const capture = deferred<{ stop: typeof audio.stop; setMuted: typeof audio.setMuted; context: object }>();
+    audio.startCapture.mockImplementationOnce(async (onChunk: (chunk: string) => void) => {
+      audio.onChunk = onChunk;
+      return capture.promise;
+    });
+    const dictation = new Dictation({
+      connection: async () => ({ token: 'token', url: 'ws://127.0.0.1/ws/voice?mode=dictate' }),
+    });
+
+    dictation.pressStart();
+    await vi.waitFor(() => expect(audio.startCapture).toHaveBeenCalledOnce());
+    dictation.setMuted(true);
+    capture.resolve({ stop: audio.stop, setMuted: audio.setMuted, context: {} });
+    await vi.waitFor(() => expect(audio.setMuted).toHaveBeenCalledWith(true));
+
+    audio.onChunk?.('muted');
+    await vi.waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    expect(socket.sent).toEqual([]);
+    dictation.cancel();
+  });
+
+  it('discards audio buffered before the socket connects when muted', async () => {
+    const connection = deferred<{ token: string; url: string }>();
+    const dictation = new Dictation({ connection: () => connection.promise });
+
+    dictation.pressStart();
+    await vi.waitFor(() => expect(audio.startCapture).toHaveBeenCalledOnce());
+    audio.onChunk?.('buffered');
+    dictation.setMuted(true);
+    connection.resolve({ token: 'token', url: 'ws://127.0.0.1/ws/voice?mode=dictate' });
+    await vi.waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+
+    expect(socket.sent).toEqual([]);
+    dictation.cancel();
   });
 
   it('maps microphone denial and releases resources on connection failure', async () => {

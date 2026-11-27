@@ -4,6 +4,7 @@ const TARGET_RATE = 16_000;
 
 export interface CaptureHandle {
   context: AudioContext;
+  setMuted(muted: boolean): void;
   stop(): void;
 }
 
@@ -95,6 +96,9 @@ export async function startCapture(onChunk: (dataBase64: string) => void): Promi
 
   return {
     context,
+    setMuted(muted) {
+      for (const track of stream.getAudioTracks()) track.enabled = !muted;
+    },
     stop() {
       if (stopped) return;
       stopped = true;
