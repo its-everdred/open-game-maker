@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { Icon } from '../../components/Icon';
 import { MenuRing } from '../../components/MenuCircle';
@@ -27,18 +27,33 @@ export type BugDraft = ReturnType<typeof useBugDraft>;
 export function useBugDraft() {
   const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'failed'>('idle');
-  return { text, setText, state, setState };
+  const [energyReset, setEnergyReset] = useState<string>();
+  return { text, setText, state, setState, energyReset, setEnergyReset };
 }
 
 export function BugSheet({ draft, close }: { draft: BugDraft; close(): void }) {
-  const { text, setText, state, setState } = draft;
+  const { text, setText, state, setState, energyReset, setEnergyReset } = draft;
+  const resetRef = useRef(energyReset);
+  resetRef.current = energyReset;
+  useEffect(
+    () => () => {
+      if (resetRef.current !== undefined) setEnergyReset(undefined);
+    },
+    [setEnergyReset],
+  );
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setState('sending');
     try {
-      await sendReport({ text: text.trim() || undefined });
+      const result = await sendReport({ text: text.trim() || undefined });
       setText('');
+      if ('pendingBudget' in result && result.pendingBudget) {
+        setEnergyReset(result.resetsAt ?? '');
+        setState('idle');
+        return;
+      }
+      setEnergyReset(undefined);
       setState('idle');
       close();
     } catch {
@@ -48,11 +63,22 @@ export function BugSheet({ draft, close }: { draft: BugDraft; close(): void }) {
 
   return (
     <form id="bug-sheet" className="bug-sheet" aria-label="Report a problem" onSubmit={submit}>
+      {energyReset !== undefined ? (
+        <p role="status">
+          Report saved. The fix needs more Energy.
+          {energyReset
+            ? ` Energy resets ${new Date(energyReset).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.`
+            : ''}
+        </p>
+      ) : null}
       <textarea
         aria-label="What went wrong?"
         aria-invalid={state === 'failed'}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          setEnergyReset(undefined);
+        }}
         rows={4}
         autoFocus
       />

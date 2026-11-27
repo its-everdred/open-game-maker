@@ -5,6 +5,7 @@ import type { AgreedScope, ScopeChoices } from '@ogm/contracts';
 import { ApiError } from '../../lib/api/client';
 import { reduceMessages, type StreamedChatMessage } from '../build-chat/stream';
 import { scopeTransport, type ScopeTransport } from './transport';
+import { energyRefusalText } from '../energy/api';
 
 export type ScopeTurn = { id: string; who: 'you' | 'builder'; text: string };
 export type ScopeStatus = 'connecting' | 'open' | 'agreed' | 'unavailable' | 'error';
@@ -78,7 +79,19 @@ export function useScopeSession(
 
     function handleError(cause: unknown) {
       if (!current) return;
-      if (cause instanceof ApiError && (cause.status === 402 || cause.status === 404 || cause.status === 503)) {
+      if (
+        cause instanceof ApiError &&
+        cause.status === 402 &&
+        cause.body &&
+        typeof cause.body === 'object' &&
+        'window' in cause.body &&
+        cause.body.window === 'week' &&
+        'resetsAt' in cause.body &&
+        typeof cause.body.resetsAt === 'string'
+      ) {
+        setStatus('unavailable');
+        setError(energyRefusalText('week', cause.body.resetsAt) ?? 'Energy is empty.');
+      } else if (cause instanceof ApiError && (cause.status === 402 || cause.status === 404 || cause.status === 503)) {
         setStatus('unavailable');
         setError('The builder is unavailable right now. Try again later.');
       } else {

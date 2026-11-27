@@ -12,6 +12,7 @@ import { readHistory } from './samples.js';
 import { readEnergySnapshot } from './source.js';
 import { readPreference, writeCaps, writeLimits, writePreference } from './store.js';
 import { adminView, playerView } from './view.js';
+import { weeklyJobs } from '../budget/weekly-jobs.js';
 
 function snapshot(c: Context<ApiBindings>) {
   const { db, config, registry } = c.get('deps');
@@ -27,6 +28,40 @@ async function admin(c: Context<ApiBindings>, userId: string) {
   return adminView(await snapshot(c), readPreference(db, userId), readHistory(db, now));
 }
 
+async function creatorView(c: Context<ApiBindings>, userId: string, preference: Parameters<typeof playerView>[1]) {
+  const deps = c.get('deps');
+  const weekly = weeklyJobs(deps.db, userId, new Date(), deps.config.resetZoneDefault);
+  const view = playerView(await snapshot(c), preference);
+  const remaining = weekly.remaining;
+  const shares = (['newGames', 'edits'] as const).flatMap((kind) => {
+    const limit = weekly.limits[kind];
+    const left = remaining[kind];
+    return limit === null || left === null ? [] : [limit === 0 ? 0 : left / limit];
+  });
+  const lowest = shares.length ? Math.min(...shares) : null;
+  const level =
+    lowest === null
+      ? view.level
+      : lowest <= 0
+        ? 'critical'
+        : lowest < 0.25
+          ? view.level === 'critical'
+            ? 'critical'
+            : 'limited'
+          : view.level === 'unknown'
+            ? 'healthy'
+            : view.level;
+  return {
+    ...view,
+    level,
+    weeklyJobs: {
+      newGames: { limit: weekly.limits.newGames, remaining: remaining.newGames },
+      edits: { limit: weekly.limits.edits, remaining: weekly.remaining.edits },
+      resetsAt: weekly.resetsAt,
+    },
+  };
+}
+
 // Energy limits are instance-wide, so only a platform admin (no family scope) may read costs or set them.
 function platformAdmin(c: Context<ApiBindings>) {
   const actor = actorFromPrincipal(requirePrincipal(c, ['user']));
@@ -37,14 +72,14 @@ function platformAdmin(c: Context<ApiBindings>) {
 const routes = new Hono<ApiBindings>()
   .get('/', async (c) => {
     const actor = actorFromPrincipal(requirePrincipal(c, ['user']));
-    return c.json(playerView(await snapshot(c), readPreference(c.get('deps').db, actor.userId)));
+    return c.json(await creatorView(c, actor.userId, readPreference(c.get('deps').db, actor.userId)));
   })
   .put('/preference', async (c) => {
     const actor = actorFromPrincipal(requirePrincipal(c, ['user']));
     const { preference } = await parseBody(c, EnergyPreferenceUpdate);
     const { db } = c.get('deps');
     writePreference(db, actor.userId, preference, new Date());
-    return c.json(playerView(await snapshot(c), preference));
+    return c.json(await creatorView(c, actor.userId, preference));
   })
   .get('/admin', async (c) => {
     const actor = platformAdmin(c);

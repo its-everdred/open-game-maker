@@ -22,6 +22,7 @@ import { AdmissionRefused, admit } from '../jobs/admission.js';
 import { findJobRow } from '../jobs/repo.js';
 import { markTerminal } from '../jobs/spend-cap.js';
 import { scopeSessions } from './store.js';
+import { allowScopeStart } from './rate-limit.js';
 
 export const prefix = '/api/v1/games';
 export const MAX_CREATOR_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -35,6 +36,7 @@ type UserPrincipal = Extract<Principal, { kind: 'user' }>;
 function defaults(deps: AppDeps) {
   return {
     dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+    defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
     resetZone: deps.config.resetZoneDefault,
   };
 }
@@ -96,6 +98,7 @@ const routes = new Hono<ApiBindings>()
         return { session: active, created: false };
       }
 
+      if (!allowScopeStart(deps, principal.userId)) throw new HttpError(429, 'scope_rate_limited');
       const sessionId = `s_${randomUUID()}`;
       const accepted = await admit(
         { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults: defaults(deps) },

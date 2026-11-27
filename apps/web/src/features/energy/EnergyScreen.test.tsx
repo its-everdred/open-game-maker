@@ -136,3 +136,19 @@ describe('energy limits and refusals', () => {
     expect(energyRefusalText(undefined)).toBeUndefined();
   });
 });
+
+describe('weekly job Energy', () => {
+  it('includes the tighter weekly job allowance in the ring', async () => {
+    const { energyLeftPercent } = await import('./api');
+    expect(
+      energyLeftPercent({
+        ...baseView,
+        weeklyJobs: {
+          newGames: { limit: 2, remaining: 1 },
+          edits: { limit: 20, remaining: 2 },
+          resetsAt: '2026-11-09T08:00:00.000Z',
+        },
+      }),
+    ).toBe(10);
+  });
+});

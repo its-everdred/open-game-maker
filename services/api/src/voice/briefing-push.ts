@@ -94,15 +94,34 @@ function budgetText(
   const large = [units(rows.large.p50MicroUsd), units(rows.large.p80MicroUsd)] as const;
   const huge = units(rows.huge.p50MicroUsd);
   const remainingUnits = units(status.remainingMicroUsd);
+  const weekly = status.weeklyJobs!;
+  const count = (value: number | null) => (value === null ? 'unlimited' : String(value));
+  let resetDate: string;
+  try {
+    resetDate = new Intl.DateTimeFormat('en-US', {
+      timeZone: deps.defaults.resetZone,
+      month: 'short',
+      day: 'numeric',
+    }).format(new Date(weekly.resetsAt));
+  } catch {
+    resetDate = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }).format(
+      new Date(weekly.resetsAt),
+    );
+  }
+  const weeklyText = `Remaining this week: ${count(weekly.newGames)} new games, ${count(weekly.edits)} edits. Resets ${resetDate} at ${localTime(weekly.resetsAt, deps.defaults.resetZone)}. `;
+  const dailyText = status.dailyLimitActive
+    ? `Remaining today: ${remainingUnits.toFixed(1)} ${unitLabel(settings.unitLabel, remainingUnits)} (${status.remainingPercent}%). Resets at ${localTime(status.resetsAt, settings.resetZone)}. `
+    : '';
   const remaining =
-    `Remaining today: ${remainingUnits.toFixed(1)} ${unitLabel(settings.unitLabel, remainingUnits)} ` +
-    `(${status.remainingPercent}%). Resets at ${localTime(status.resetsAt, settings.resetZone)}. ` +
+    weeklyText +
+    dailyText +
     `Free slots: ${status.freeSlots.new_game} new game${status.freeSlots.new_game === 1 ? '' : 's'}, ` +
     `${status.freeSlots.edit} edit${status.freeSlots.edit === 1 ? '' : 's'}. ` +
     `Queued: ${status.queued.length === 0 ? 'none' : status.queued.length}.`;
-  const sizes =
-    `Rough sizes: small ≈ ${range(...small)} ${unitLabel(settings.unitLabel, small[1])}, ` +
-    `medium ≈ ${range(...medium)}, large ≈ ${range(...large)}, huge ≈ ${huge}+ (low confidence).`;
+  const sizes = status.dailyLimitActive
+    ? `Rough sizes: small ≈ ${range(...small)} ${unitLabel(settings.unitLabel, small[1])}, ` +
+      `medium ≈ ${range(...medium)}, large ≈ ${range(...large)}, huge ≈ ${huge}+ (low confidence).`
+    : 'Each new game uses one new-game unit; each edit or fix uses one edit unit.';
   return { remaining, sizes };
 }
 

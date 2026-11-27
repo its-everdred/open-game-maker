@@ -168,7 +168,7 @@ export function Chat({
       {refusal && !waitingForAdmin ? (
         <Offers
           offers={refusal.offers}
-          message={energyRefusalText(refusal.window)}
+          message={energyRefusalText(refusal.window, refusal.resetsAt)}
           disabled={submitting}
           onChoose={(offer) => void choose(offer)}
         />

@@ -344,6 +344,13 @@
       "when": 1795489393818,
       "tag": "20261124030313_client_telemetry",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1795736846333,
+      "tag": "20261126234726_weekly_job_budgets",
+      "breakpoints": true
     }
   ]
 }

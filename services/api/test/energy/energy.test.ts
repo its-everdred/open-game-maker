@@ -105,6 +105,11 @@ describe('energy routes', () => {
     expect(body).toEqual({
       level: 'healthy',
       preference: 'balanced',
+      weeklyJobs: {
+        newGames: { limit: 2, remaining: 2 },
+        edits: { limit: 20, remaining: 19 },
+        resetsAt: '2026-11-02T08:00:00.000Z',
+      },
       windows: [
         { window: 'day', usedPercent: 75, resetsAt: RESETS_AT },
         { window: 'week', usedPercent: null, resetsAt: '2026-11-02T08:00:00.000Z' },
@@ -115,6 +120,32 @@ describe('energy routes', () => {
         { service: 'images', usedPercent: null },
       ],
       sources: [],
+    });
+  });
+
+  it('marks the creator Energy critical when the weekly job limit is empty', async () => {
+    const deps = worked();
+    const date = new Date();
+    deps.db
+      .insert(schema.user)
+      .values({
+        id: ids.creator,
+        name: 'Tester',
+        email: 'energy@example.test',
+        emailVerified: true,
+        createdAt: date,
+        updatedAt: date,
+      })
+      .run();
+    deps.db
+      .insert(schema.allowedUsers)
+      .values({ email: 'energy@example.test', role: 'maker', addedBy: 'env', addedAt: date.toISOString() })
+      .run();
+    deps.db.insert(schema.weeklyJobBudgets).values({ email: 'energy@example.test', newGames: 2, edits: 0 }).run();
+    const { app } = await makeApp(deps);
+    expect(await (await app.request('/api/v1/energy', { headers: asUser(ids.creator) })).json()).toMatchObject({
+      level: 'critical',
+      weeklyJobs: { edits: { limit: 0, remaining: 0 } },
     });
   });
 

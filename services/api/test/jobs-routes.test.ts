@@ -78,6 +78,12 @@ async function createJob(app: Awaited<ReturnType<typeof makeApp>>['app'], overri
 }
 
 describe('jobs routes', () => {
+  it('rejects arbitrary scope jobs on the public job route', async () => {
+    const { app } = await makeApp(setup());
+    const response = await createJob(app, { kind: 'scope' });
+    expect(response.status).toBe(403);
+  });
+
   it("serves the web app's game and active jobs query strings", async () => {
     const deps = setup();
     deps.db

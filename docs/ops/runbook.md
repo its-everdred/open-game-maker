@@ -437,6 +437,17 @@ change stops cleanup for inspection. `--out` selects another
 evidence directory, and `--origin` and `--api` select the app and loopback API origins. The internal QA routes accept
 only the internal token.
 
+## Check weekly Energy on prod
+
+Admin > Users sets each account’s weekly new-game and edit limits; a blank limit is unlimited. Defaults are two new
+games and twenty edits per week, with admins unlimited unless explicitly configured. The reset is Monday in the configured
+reset zone. Explicit daily and instance Energy caps still apply; scope starts are limited separately to ten per hour.
+
+After deploy, run `ops/bin/ogm-qa-session`, then `ops/bin/qa-energy-budget` on the API host. The check sets the
+dedicated QA account's weekly limits to zero and verifies the draft, job and report routes return the personal Energy
+refusal and reset. Its fence prevents dispatch even if a limit check fails. The command restores the prior QA budget and
+removes its probe report. If the command is interrupted, run `ops/bin/qa-energy-budget --recover` before the next check.
+
 ## Check the review deck on prod
 
 `gm qa review-e2e` completes a review round and a three-option Command in the deployed app as the QA creator, so a

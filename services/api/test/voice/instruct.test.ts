@@ -193,7 +193,9 @@ describe('POST /internal/voice/instruct', () => {
     expect(await response.json()).toEqual({ delivery_id: expect.any(String), status: 'needs_choice' });
     const briefing = await buildBriefing({ db: deps.db, defaults, now: () => NOW }, scope);
     // The draft alone outgrows the weekly ceiling, so queueing for the reset would not help.
-    expect(briefing.waiting_on).toBe('Needs more Energy than is left this week: ask an admin');
+    expect(briefing.waiting_on).toBe(
+      'Needs more Energy than is left this week: resets Nov 2 at 12:00 am, or ask an admin',
+    );
   });
 
   it('returns failed without caching it so confirmation can retry', async () => {
