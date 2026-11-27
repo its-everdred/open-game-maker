@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
-import sharp from 'sharp';
+import { makeWallA12Steps } from './wall-a12-steps.ts';
 
 const [sourceArg, outputArg] = process.argv.slice(2);
 if (!sourceArg || !outputArg || process.argv.length !== 4) {
@@ -31,21 +31,7 @@ const sourceSha256 = createHash('sha256').update(sourceBytes).digest('hex');
 if (sourceSha256 !== 'bbe9293b1e6b8595986c350dedfe1c975527bfd5fde25595a875fa1ab9ba6560') {
   throw new Error('Source hash does not match the measured Wall A12 south view');
 }
-const { data, info } = await sharp(sourceBytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-if (info.width !== 256 || info.height !== 256 || info.channels !== 4) throw new Error('Unexpected source dimensions');
-for (let y = 0; y < 256; y++) {
-  for (let x = 0; x < 256; x++) {
-    if (y < 196 + (x - 128) * 0.5) data[(y * 256 + x) * 4 + 3] = 0;
-  }
-}
-const trimmed = await sharp(data, { raw: { width: 256, height: 256, channels: 4 } })
-  .png()
-  .toBuffer();
-const shifted = await sharp(trimmed).extract({ left: 5, top: 0, width: 251, height: 256 }).png().toBuffer();
-const png = await sharp({ create: { width: 256, height: 288, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
-  .composite([{ input: shifted, left: 0, top: 28 }])
-  .png()
-  .toBuffer();
+const png = await makeWallA12Steps(sourceBytes);
 await mkdir(output);
 await writeFile(join(output, 'chapel-steps-s.png'), png, { flag: 'wx' });
 await writeFile(
