@@ -69,7 +69,7 @@ Only aiur main runs on the NUC: fixes reach us by ticket → branch → PR → m
 Kevin 2026-11-27: "treating symptoms is a very common problem". Every recovery (relabel, requeue, reset-budget, park, restart, fresh-thread) is paired in the same turn with its named root cause and a fix or a filed owner issue (aiur → the PC aiur agent over Khala; our scripts → fix them). A second occurrence means file it now, with the count. Reports lead with the root cause and owner.
 
 ## Hourly pass
-Run `meta-improve`. Each pass:
+Run `meta-improve`. **First run `scripts/meta/host-pipeline-health.sh`** (capture failures, repeated host-step failures, quiet loops, orphan servers, waiting media, unread HS_ATTENTION lines, repeat errors) and act on every line that pass. Kevin 11-27: the pass is "to review the full current state of work" and "to ensure nothing falls through the cracks"; 25 rounds lost their stills for 3 days and 471 attention lines went unread while passes only logged what I did. Each pass:
 - measures the review loop;
 - checks prod freshness and repeated `qa-game-play` failures (a repeat is P0);
 - checks the queue order and agrees with Kevin's latest priorities;
