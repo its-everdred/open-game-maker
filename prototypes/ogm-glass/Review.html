@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Review question</title>
+<link rel="stylesheet" href="./glass.css">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&amp;family=Nunito:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0f0e16}a{color:#74c8ed}a:hover{color:#f2ead6}
+.choice{position:relative;display:block;width:100%;border-radius:20px;overflow:hidden;padding:0;border:0;background:#000;height:236px}
+.choice img{width:100%;height:100%;object-fit:cover;display:block}
+.choice .k{position:absolute;left:12px;top:12px;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font:700 18px Fredoka;color:#1d1b16;background:var(--gloss),#f2ead6}
+.choice[aria-pressed="true"]{box-shadow:0 0 0 3px #ff9133,0 16px 40px -12px #ff9133}
+.choice[aria-pressed="true"] .k{background:var(--gloss),#ff9133}
+.choice .fs{position:absolute;right:10px;top:10px}</style>
+</head>
+<body>
+<div class="g phone">
+<div class="glows" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<div class="top">
+<a class="orb sm" href="EditMenu.html" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></a>
+<div class="sp" style="text-align:center;padding-top:2px"><div class="h3">Dusk and torch</div><div class="sub" style="font-size:12px">1 of 2</div></div>
+<a class="orb sm" href="TicketChat.html" aria-label="Open conversation"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-5 4v-4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"></path></svg></a>
+</div>
+<div style="position:absolute;left:14px;right:14px;top:76px;display:flex;flex-direction:column;gap:12px">
+<h1 class="h2" style="text-align:center">Warmer torch or cooler dusk?</h1>
+<button class="choice" aria-pressed="false" aria-label="A, warmer torch"><img src="../../assets-local/review/design-ogm-glass/img/land-bg.jpg" alt="" style="filter:sepia(.3) saturate(1.25)"><span class="k">A</span></button>
+<button class="choice" aria-pressed="true" aria-label="B, cooler dusk"><img src="../../assets-local/review/design-ogm-glass/img/land-bg.jpg" alt="" style="filter:hue-rotate(15deg) brightness(.8) saturate(.9)"><span class="k">B</span></button>
+</div>
+<div style="position:absolute;left:12px;right:12px;bottom:18px;display:flex;flex-direction:column;gap:10px">
+<div class="composer pane">
+<span class="in">Add a note</span>
+<button class="orb sm" aria-label="Dictate"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"></path></svg></button>
+</div>
+<div style="display:flex;gap:10px">
+<button class="btn ghost" style="flex:1">Skip</button>
+<button class="btn warn" style="flex:2">Send B</button>
+</div>
+</div>
+</div>
+<script src="fallback.js"></script>
+</body>
+</html>
