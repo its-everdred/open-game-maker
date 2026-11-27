@@ -29,7 +29,19 @@ it('creates a disposable local instance repository and removes it', () => {
       ],
       { stdio: 'ignore' },
     );
-    execFileSync('git', ['-C', instance.checkout, 'push', '--quiet', 'origin', 'main']);
+    execFileSync('git', [
+      '-C',
+      instance.bare,
+      '-c',
+      'protocol.allow=never',
+      '-c',
+      'protocol.file.allow=always',
+      'fetch',
+      '--quiet',
+      '--no-tags',
+      instance.checkout,
+      'main:refs/heads/main',
+    ]);
     expect(execFileSync('git', ['--git-dir', instance.bare, 'show', 'main:game.txt'], { encoding: 'utf8' })).toBe(
       'test game',
     );

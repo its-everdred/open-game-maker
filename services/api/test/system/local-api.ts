@@ -7,7 +7,12 @@ import { FsBlobStore } from '@ogm/blob-store';
 import { migrate, openDb, schema } from '@ogm/db';
 
 import { createAppEvents } from '../../src/app/events.js';
-import { createRegistry, type DraftScopeAssistant, type RepoProvisioner } from '../../src/app/registry.js';
+import {
+  createRegistry,
+  type AiurClientResolver,
+  type DraftScopeAssistant,
+  type RepoProvisioner,
+} from '../../src/app/registry.js';
 import type { AppDeps } from '../../src/app/types.js';
 import { createChatJobDirectory } from '../../src/build-chat/job-directory.js';
 import { BLOB_KEY, installUsers, INTERNAL_TOKEN, JOB_SECRET, makeApp } from '../helpers.js';
@@ -24,7 +29,11 @@ const user = {
 /** Start the real API with the existing test principal resolver and isolated disk state. */
 export async function startLocalApi(
   root: string,
-  options: { repoProvisioner?: RepoProvisioner; draftScopeAssistant?: DraftScopeAssistant } = {},
+  options: {
+    repoProvisioner?: RepoProvisioner;
+    draftScopeAssistant?: DraftScopeAssistant;
+    aiurClientFor?: AiurClientResolver;
+  } = {},
 ) {
   mkdirSync(root, { recursive: true });
   const { sqlite, db } = openDb(join(root, 'api.sqlite'));
@@ -78,6 +87,7 @@ export async function startLocalApi(
       .run();
     installUsers(deps, [user]);
     deps.registry.chatJobs = createChatJobDirectory(db);
+    deps.registry.aiurClientFor = options.aiurClientFor ?? null;
     deps.registry.repoProvisioner = options.repoProvisioner ?? null;
     deps.registry.draftScopeAssistant = options.draftScopeAssistant ?? null;
     const { app } = await makeApp(deps);

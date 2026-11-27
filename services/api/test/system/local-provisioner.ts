@@ -44,7 +44,19 @@ export function localProvisioner(checkout: string, bare: string): RepoProvisione
         ],
         { stdio: 'ignore' },
       );
-      execFileSync('git', ['-C', checkout, 'push', '--quiet', 'origin', 'main']);
+      execFileSync('git', [
+        '-C',
+        bare,
+        '-c',
+        'protocol.allow=never',
+        '-c',
+        'protocol.file.allow=always',
+        'fetch',
+        '--quiet',
+        '--no-tags',
+        checkout,
+        'main:refs/heads/main',
+      ]);
       return { owner: 'instance', repo: 'games', url: 'https://github.com/instance/games', path: folder };
     },
   };

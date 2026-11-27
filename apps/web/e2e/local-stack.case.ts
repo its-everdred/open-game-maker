@@ -62,11 +62,32 @@ test('real local API and web reach New Game onboarding', async ({ browser }) => 
   try {
     instance = createLocalInstance();
     let draftId = '';
+    const delivered: string[] = [];
+    const scopeMessage = 'A small forest game with a helpful owl.';
     const agreed = JSON.parse(
       readFileSync(new URL('../../../packages/contracts/fixtures/scope/agreed.json', import.meta.url), 'utf8'),
     ) as Record<string, unknown>;
     api = await startLocalApi(root, {
       repoProvisioner: localProvisioner(instance.checkout, instance.bare),
+      aiurClientFor: () => ({
+        async message(ticket, text) {
+          if (ticket !== '42') throw new Error('unexpected scope ticket');
+          delivered.push(text);
+          return { request_id: 'system-test' };
+        },
+        async progress() {
+          throw new Error('unexpected progress request');
+        },
+        async decisions() {
+          throw new Error('unexpected decisions request');
+        },
+        async decision() {
+          throw new Error('unexpected decision request');
+        },
+        async decide() {
+          throw new Error('unexpected decide request');
+        },
+      }),
       draftScopeAssistant: {
         async create(input) {
           draftId = input.draftId;
@@ -74,15 +95,13 @@ test('real local API and web reach New Game onboarding', async ({ browser }) => 
         },
         async close() {},
         async transcript() {
-          const count = api!.deps.sqlite
-            .prepare("SELECT count(*) AS n FROM build_chat_messages WHERE job_id = ? AND actor = 'creator'")
-            .get(`draft:${draftId}`) as { n: number };
+          const hasMessage = delivered.includes(scopeMessage);
           return [
             {
-              body: count.n
+              body: hasMessage
                 ? `Agreed.\n\`\`\`ogm-scope\n${JSON.stringify({ ...agreed, session_id: draftId })}\n\`\`\``
                 : 'Tell me about the game.',
-              turn_id: count.n ? 'agreed' : 'initial',
+              turn_id: hasMessage ? 'agreed' : 'initial',
             },
           ];
         },
@@ -124,13 +143,14 @@ test('real local API and web reach New Game onboarding', async ({ browser }) => 
       await tap('Next');
       const message = page.getByRole('textbox', { name: 'Message the builder' });
       await expect(message).toBeVisible({ timeout: 90_000 });
-      await message.fill('A small forest game with a helpful owl.');
+      await message.fill(scopeMessage);
       const sent = page.waitForResponse(
         (response) => response.url().includes('/chat') && response.request().method() === 'POST',
       );
       await tap('Send');
       expect((await sent).status()).toBe(201);
-      await expect(page.getByText('A small forest game with a helpful owl.')).toBeVisible();
+      await expect(page.getByText(scopeMessage)).toBeVisible();
+      await expect.poll(() => delivered).toContain(scopeMessage);
       await expect(page.getByRole('button', { name: 'Finish', exact: true })).toBeEnabled({ timeout: 90_000 });
       const admission = page.waitForResponse(
         (response) => new URL(response.url()).pathname === '/api/v1/jobs' && response.request().method() === 'POST',

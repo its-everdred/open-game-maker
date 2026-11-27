@@ -10,7 +10,11 @@ export function createLocalInstance() {
   const checkout = join(root, 'checkout');
   try {
     execFileSync('git', ['init', '--bare', '--initial-branch=main', bare], { stdio: 'ignore' });
-    execFileSync('git', ['clone', '--quiet', bare, checkout], { stdio: 'ignore' });
+    execFileSync(
+      'git',
+      ['-c', 'protocol.allow=never', '-c', 'protocol.file.allow=always', 'clone', '--quiet', bare, checkout],
+      { stdio: 'ignore' },
+    );
     execFileSync(
       'git',
       [
@@ -27,7 +31,23 @@ export function createLocalInstance() {
       ],
       { stdio: 'ignore' },
     );
-    execFileSync('git', ['-C', checkout, 'push', '--quiet', 'origin', 'main'], { stdio: 'ignore' });
+    execFileSync(
+      'git',
+      [
+        '-C',
+        bare,
+        '-c',
+        'protocol.allow=never',
+        '-c',
+        'protocol.file.allow=always',
+        'fetch',
+        '--quiet',
+        '--no-tags',
+        checkout,
+        'main:refs/heads/main',
+      ],
+      { stdio: 'ignore' },
+    );
     return { root, bare, checkout, cleanup: () => rmSync(root, { recursive: true, force: true }) };
   } catch (error) {
     rmSync(root, { recursive: true, force: true });
