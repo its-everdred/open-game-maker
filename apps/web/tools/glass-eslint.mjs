@@ -47,6 +47,7 @@ export const glassComponentsRule = {
       control: 'Use a shared Glass component for {{name}}.',
       style: 'Use a generated design token for {{name}}.',
       dynamicStyle: 'Inline style properties must be statically inspectable.',
+      dynamicProps: 'Spread props must be statically inspectable.',
     },
   },
   create(context) {
@@ -85,12 +86,44 @@ export const glassComponentsRule = {
         if (rawDesignValue(property.value)) context.report({ node: property, messageId: 'style', data: { name } });
       }
     }
+    function checkSpread(expression, intrinsic) {
+      if (expression.type !== 'ObjectExpression') {
+        context.report({ node: expression, messageId: 'dynamicProps' });
+        return;
+      }
+      for (const property of expression.properties) {
+        if (property.type === 'SpreadElement') {
+          checkSpread(property.argument, intrinsic);
+          continue;
+        }
+        if (property.type !== 'Property') continue;
+        const name =
+          property.key.type === 'Literal'
+            ? property.key.value
+            : !property.computed && property.key.type === 'Identifier'
+              ? property.key.name
+              : undefined;
+        if (typeof name !== 'string') {
+          context.report({ node: property, messageId: 'dynamicProps' });
+        } else if (name === 'style') {
+          checkStyleObject(property.value);
+        } else if (intrinsic && name === 'role' && hasControlRole(property.value)) {
+          context.report({ node: property, messageId: 'control', data: { name } });
+        } else if (intrinsic && name === 'className' && hasControlClass(property.value)) {
+          context.report({ node: property, messageId: 'control', data: { name } });
+        }
+      }
+    }
     return {
       JSXOpeningElement(node) {
         if (node.name.type === 'JSXIdentifier' && intrinsicControls.has(node.name.name))
           context.report({ node, messageId: 'control', data: { name: node.name.name } });
         const intrinsic = node.name.type === 'JSXIdentifier' && /^[a-z]/.test(node.name.name);
         for (const attr of node.attributes) {
+          if (attr.type === 'JSXSpreadAttribute') {
+            checkSpread(attr.argument, intrinsic);
+            continue;
+          }
           if (
             intrinsic &&
             attr.type === 'JSXAttribute' &&

@@ -148,6 +148,19 @@ it('rejects uninspectable style objects while checking conditional inline styles
   expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(4);
 }, 30_000);
 
+it('checks statically spread JSX props and rejects unknown spreads', async () => {
+  const eslint = new ESLint({
+    overrideConfig: [
+      { plugins: { glass: { rules: { components: glassComponentsRule } } }, rules: { 'glass/components': 'error' } },
+    ],
+  });
+  const [result] = await eslint.lintText(
+    'const Screen = ({ props }) => <><div {...{ role: "switch", className: "settings-panel", style: { color: "#fff" } }} /><div {...props} /><GlassPane {...{ style: { color: "var(--ink)" } }} /></>;',
+    { filePath: 'src/Screen.tsx' },
+  );
+  expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(4);
+}, 30_000);
+
 it('rejects ad-hoc controls in conditional and template class names', async () => {
   const eslint = new ESLint({
     overrideConfig: [

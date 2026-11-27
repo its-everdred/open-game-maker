@@ -23,9 +23,21 @@ it('selects affected screens and fails closed on other visible routes', () => {
   expect(glassScreens(['apps/web/src/components/GlassButton.tsx'])).toEqual(['Unmapped']);
   expect(glassScreens(['apps/web/public/new-image.png'])).toEqual(['Unmapped']);
   expect(glassScreens(['apps/web/src/glass-tokens.css'])).toEqual(['Unmapped']);
-  expect(glassScreens(['apps/web/src/routes/games/GamesScreen.test.tsx', 'apps/web/e2e/glass-parity.spec.ts'])).toEqual(
-    [],
-  );
+  expect(glassScreens(['apps/web/src/routes/games/GamesScreen.test.tsx'])).toEqual([]);
+  expect(glassScreens(['tests/design-baselines/ogm-glass/HomeDesktop-1440x900.png'])).toEqual(['Home']);
+  expect(glassScreens(['tests/design-baselines/ogm-glass/Join-780x1688.png'])).toEqual(['Unmapped']);
+  expect(glassScreens(['tests/design-baselines/ogm-glass/__proto__-1x1.png'])).toEqual(['Unmapped']);
+  for (const file of [
+    'apps/web/e2e/glass-parity.spec.ts',
+    'apps/web/e2e/fixtures/glass/blobs-thumbnail.png',
+    'apps/web/tools/glass-parity-ci.mjs',
+    'apps/web/playwright.config.ts',
+    'packages/gm-cli/src/design-parity/metrics.ts',
+    'tests/design-baselines/ogm-glass/masks.json',
+  ]) {
+    expect(glassScreens([file])).toContain('Unmapped');
+    expect(glassScreens([file])).toContain('Home');
+  }
 });
 
 it('finds changed screen files from the repository root', async () => {
@@ -88,6 +100,12 @@ it('finds changed screen files from the repository root', async () => {
     git('add', '.');
     git('commit', '-qm', 'restore tokens');
     expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Unmapped']);
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    await mkdir(join(root, 'tests/design-baselines/ogm-glass'), { recursive: true });
+    await writeFile(join(root, 'tests/design-baselines/ogm-glass/Home-780x1688.png'), 'reference');
+    git('add', '.');
+    git('commit', '-qm', 'add parity reference');
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Home']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     await mkdir(join(root, 'apps/web/title-town'), { recursive: true });
     await writeFile(join(root, 'apps/web/title-town/city.js'), 'export {}');

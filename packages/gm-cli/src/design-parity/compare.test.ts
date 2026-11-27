@@ -31,3 +31,25 @@ it('writes evidence and enforces the parity thresholds', async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+it('requires both the SSIM and colour thresholds independently', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ogm-glass-thresholds-'));
+  try {
+    const make = (color: string) =>
+      sharp({ create: { width: 8, height: 8, channels: 3, background: color } })
+        .png()
+        .toBuffer();
+    const colourOnly = await compareGlass(await make('#808080'), await make('#8c8c8c'), dir, []);
+    expect(colourOnly.ssim).toBeGreaterThanOrEqual(0.97);
+    expect(colourOnly.deltaEOver3Percent).toBeGreaterThan(1);
+    expect(colourOnly.pass).toBe(false);
+    expect(JSON.parse(await readFile(join(dir, 'score.json'), 'utf8')).pass).toBe(false);
+    const structureOnly = await compareGlass(await make('#000000'), await make('#080808'), dir, []);
+    expect(structureOnly.ssim).toBeLessThan(0.97);
+    expect(structureOnly.deltaEOver3Percent).toBeLessThanOrEqual(1);
+    expect(structureOnly.pass).toBe(false);
+    expect(JSON.parse(await readFile(join(dir, 'score.json'), 'utf8')).pass).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

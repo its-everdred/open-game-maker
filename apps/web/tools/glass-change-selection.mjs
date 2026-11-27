@@ -1,6 +1,23 @@
 import { execFileSync } from 'node:child_process';
 import { glassDiffBase } from './glass-git-base.mjs';
 
+const coveredScreens = ['Title', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet', 'Admin', 'Activity'];
+const references = {
+  Title: 'Title',
+  SignIn: 'SignIn',
+  NewGame: 'NewGame',
+  GameSheet: 'GameSheet',
+  Admin: 'Admin',
+  Activity: 'Activity',
+  Home: 'Home',
+  HomeLandscape: 'Home',
+  HomeDesktop: 'Home',
+  Editor: 'Editor',
+  EditorLandscape: 'Editor',
+  EditorDesktop: 'Editor',
+  Settings: 'Settings',
+};
+
 export function changedGlassFiles(root, base) {
   const range = base ? `${base}...HEAD` : glassDiffBase(root);
   const baseRef = range.split('..')[0];
@@ -27,6 +44,22 @@ export function changedGlassFiles(root, base) {
       'apps/web/src',
       'apps/web/public',
       'apps/web/title-town',
+      'apps/web/package.json',
+      'apps/web/playwright.config.ts',
+      'apps/web/tools',
+      'apps/web/e2e/fixtures/glass',
+      'apps/web/e2e/glass-parity.spec.ts',
+      'apps/web/e2e/support/parity-bridge.ts',
+      'apps/web/e2e/support/parity-editor-route.ts',
+      'apps/web/e2e/support/parity-viewport.ts',
+      'apps/web/e2e/support/shell-capture-files.ts',
+      'apps/web/e2e/support/mock-game-api.ts',
+      'apps/web/e2e/support/stage-prototype-fixture.mjs',
+      'apps/web/e2e/fixtures/auth-routes.ts',
+      'apps/web/e2e/fixtures/games-routes.ts',
+      'apps/web/e2e/fixtures/new-routes.ts',
+      'packages/gm-cli/src/design-parity',
+      'tests/design-baselines/ogm-glass',
     ],
     {
       cwd: root,
@@ -57,6 +90,28 @@ export function changedGlassFiles(root, base) {
 export function glassScreens(files) {
   const screens = new Set();
   for (const file of files) {
+    if (file.startsWith('tests/design-baselines/ogm-glass/') && file.endsWith('.png')) {
+      const artboard = file.slice(file.lastIndexOf('/') + 1).split('-')[0];
+      screens.add(Object.hasOwn(references, artboard) ? references[artboard] : 'Unmapped');
+      continue;
+    }
+    if (
+      file === 'apps/web/e2e/glass-parity.spec.ts' ||
+      file === 'apps/web/package.json' ||
+      file === 'apps/web/playwright.config.ts' ||
+      file.startsWith('apps/web/e2e/fixtures/glass/') ||
+      /^apps\/web\/tools\/(?:glass-|generate-glass-tokens|import-glass-exports)/.test(file) ||
+      /^apps\/web\/e2e\/support\/(?:mock-game-api\.ts|stage-prototype-fixture\.mjs)$/.test(file) ||
+      /^apps\/web\/e2e\/(?:support\/(?:parity-(?:bridge|editor-route|viewport)|shell-capture-files)|fixtures\/(?:auth|games|new)-routes)\.ts$/.test(
+        file,
+      ) ||
+      (file.startsWith('packages/gm-cli/src/design-parity/') && !/\.test\.ts$/.test(file)) ||
+      /^tests\/design-baselines\/ogm-glass\/(?:manifest|masks)\.json$/.test(file)
+    ) {
+      for (const screen of coveredScreens) screens.add(screen);
+      screens.add('Unmapped');
+      continue;
+    }
     if (/\.(?:test|spec)\.[^.]+$/.test(file)) continue;
     if (file.startsWith('apps/web/src/routes/title/') || file.startsWith('apps/web/title-town/')) {
       screens.add('Title');
