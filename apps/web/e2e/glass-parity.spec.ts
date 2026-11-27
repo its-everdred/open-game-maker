@@ -20,7 +20,7 @@ const selected = process.env.OGM_GLASS_PARITY_SCREEN;
 const gameDist = process.env.OGM_GLASS_GAME_DIST;
 // eslint-disable-next-line no-restricted-properties
 const bridgePort = process.env.OGM_WEB_BRIDGE_PORT ?? '43176';
-if (selected && !['all', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame'].includes(selected)) {
+if (selected && !['all', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet'].includes(selected)) {
   throw new Error(`Unknown glass parity screen: ${selected}`);
 }
 const root = resolve(process.cwd(), '../..');
@@ -31,6 +31,7 @@ test.setTimeout(180_000);
 const screens = [
   { screen: 'SignIn', name: 'SignIn-780x1688', width: 390, height: 844, scale: 2, route: '/signin?test' },
   { screen: 'NewGame', name: 'NewGame-780x1688', width: 390, height: 844, scale: 2, route: '/new?test&step=genre' },
+  { screen: 'GameSheet', name: 'GameSheet-780x1688', width: 390, height: 844, scale: 2, route: '/all?test' },
   { screen: 'Home', name: 'Home-780x1688', width: 390, height: 844, scale: 2, route: '/all?test' },
   { screen: 'Home', name: 'HomeLandscape-844x390', width: 844, height: 390, scale: 1, route: '/all?test' },
   { screen: 'Home', name: 'HomeDesktop-1440x900', width: 1440, height: 900, scale: 1, route: '/all?test' },
@@ -98,36 +99,39 @@ for (const target of screens) {
         );
         await page.route('**/api/v1/notifications?*', (route) => route.fulfill({ json: { notifications: [] } }));
         await page.route('**/api/v1/budget/status', (route) => route.fulfill({ json: { unitLabel: 'coins' } }));
-        if (target.screen === 'Home') {
+        if (target.screen === 'Home' || target.screen === 'GameSheet') {
           await page.route('**/api/v1/jobs?state=active', (route) =>
             route.fulfill({
               json: {
-                jobs: [
-                  {
-                    id: 'job-1',
-                    gameId: 'blobs',
-                    kind: 'edit',
-                    state: 'running',
-                    title: 'Forest road',
-                    progressPercent: 55,
-                  },
-                  {
-                    id: 'job-2',
-                    gameId: 'blobs',
-                    kind: 'edit',
-                    state: 'running',
-                    title: 'Forest road',
-                    progressPercent: 55,
-                  },
-                  {
-                    id: 'job-3',
-                    gameId: 'blobs',
-                    kind: 'edit',
-                    state: 'running',
-                    title: 'Forest road',
-                    progressPercent: 55,
-                  },
-                ],
+                jobs:
+                  target.screen === 'GameSheet'
+                    ? []
+                    : [
+                        {
+                          id: 'job-1',
+                          gameId: 'blobs',
+                          kind: 'edit',
+                          state: 'running',
+                          title: 'Forest road',
+                          progressPercent: 55,
+                        },
+                        {
+                          id: 'job-2',
+                          gameId: 'blobs',
+                          kind: 'edit',
+                          state: 'running',
+                          title: 'Forest road',
+                          progressPercent: 55,
+                        },
+                        {
+                          id: 'job-3',
+                          gameId: 'blobs',
+                          kind: 'edit',
+                          state: 'running',
+                          title: 'Forest road',
+                          progressPercent: 55,
+                        },
+                      ],
               },
             }),
           );
@@ -147,6 +151,8 @@ for (const target of screens) {
                     id: 'blobs',
                     coverUrl: 'https://example.test/glass/blobs.png',
                     title: 'Blobs VS Blocks',
+                    tags: ['Puzzle', 'Versus', 'Bots', 'Online'],
+                    stats: { version: '14' },
                     ownerId: 'u1',
                     familyId: 'f1',
                     visibility: 'listed',
@@ -178,16 +184,22 @@ for (const target of screens) {
       }
       await page.goto(target.route, { waitUntil: 'domcontentloaded' });
       const selector =
-        target.screen === 'NewGame'
-          ? '.new-game-head'
-          : target.screen === 'SignIn'
-            ? '.signin-screen'
-            : target.screen === 'Editor'
-              ? '.edit-workspace'
-              : target.screen === 'Home'
-                ? '[data-game-id]'
-                : '.settings-screen';
+        target.screen === 'GameSheet'
+          ? '[data-game-id="blobs"] .game-tile'
+          : target.screen === 'NewGame'
+            ? '.new-game-head'
+            : target.screen === 'SignIn'
+              ? '.signin-screen'
+              : target.screen === 'Editor'
+                ? '.edit-workspace'
+                : target.screen === 'Home'
+                  ? '[data-game-id]'
+                  : '.settings-screen';
       await expect(page.locator(selector).first()).toBeVisible({ timeout: 30_000 });
+      if (target.screen === 'GameSheet') {
+        await page.locator(selector).first().click();
+        await expect(page.locator('.games-spotlight')).toBeVisible();
+      }
       if (target.screen === 'NewGame') {
         for (const name of ['Adventure', 'RPG']) {
           const option = page.getByRole('button', { name });

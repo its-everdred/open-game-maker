@@ -4,13 +4,13 @@ import { glassScreens } from '../../tools/glass-change-selection.mjs';
 it('selects affected screens and fails closed on other visible routes', () => {
   expect(
     glassScreens(['apps/web/src/routes/games/GamesScreen.tsx', 'apps/web/src/routes/settings/settings.css']),
-  ).toEqual(['Home', 'Settings']);
+  ).toEqual(['GameSheet', 'Home', 'Settings']);
   expect(glassScreens(['apps/web/src/features/editor/EditorChrome.tsx'])).toEqual(['Editor']);
   expect(glassScreens(['apps/web/src/routes/signin/SignInScreen.tsx'])).toEqual(['SignIn']);
   expect(glassScreens(['apps/web/src/routes/new/NewGameScreen.tsx'])).toEqual(['NewGame']);
   expect(glassScreens(['apps/web/src/routes/auth.css'])).toEqual(['SignIn', 'Unmapped']);
   expect(glassScreens(['apps/web/src/routes/title/TitleScreen.tsx'])).toEqual(['Unmapped']);
-  expect(glassScreens(['apps/web/src/routes/games/GameDetail.tsx'])).toEqual(['Home', 'Unmapped']);
+  expect(glassScreens(['apps/web/src/routes/games/GameDetail.tsx'])).toEqual(['GameSheet', 'Home']);
   expect(glassScreens(['apps/web/src/components/GlassButton.tsx'])).toEqual(['Unmapped']);
   expect(glassScreens(['apps/web/public/new-image.png'])).toEqual(['Unmapped']);
   expect(glassScreens(['apps/web/src/glass-tokens.css'])).toEqual(['Unmapped']);
@@ -39,11 +39,11 @@ it('finds changed screen files from the repository root', async () => {
     await writeFile(join(root, 'apps/web/src/routes/games/View.tsx'), 'export {}');
     git('add', '.');
     git('commit', '-qm', 'screen');
-    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Home']);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['GameSheet', 'Home']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     git('rm', 'apps/web/src/routes/games/View.tsx');
     git('commit', '-qm', 'remove screen');
-    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Home']);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['GameSheet', 'Home']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     await mkdir(join(root, 'apps/web/src'), { recursive: true });
     await writeFile(join(root, 'apps/web/src/glass-tokens.css'), ':root {}');
@@ -83,6 +83,7 @@ it('runs covered screens even when another screen is missing, and reports manual
     }),
   ).toBe(1);
   expect(run).toHaveBeenCalledWith('Home');
+  expect(run).toHaveBeenCalledWith('GameSheet');
   expect(error).toHaveBeenCalledOnce();
   run.mockClear();
   expect(runGlassScreens(['apps/web/src/features/editor/EditorChrome.tsx'], { run, log, error })).toBe(0);

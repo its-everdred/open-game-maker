@@ -54,7 +54,7 @@ export function glassScreens(files) {
       screens.add('Unmapped');
     } else if (file.startsWith('apps/web/src/routes/games/')) {
       screens.add('Home');
-      if (/GameDetail|games-responsive\.css/.test(file)) screens.add('Unmapped');
+      screens.add('GameSheet');
     } else if (file.startsWith('apps/web/src/routes/settings/')) {
       screens.add('Settings');
       if (/CreditsScreen|CreditsList/.test(file)) screens.add('Unmapped');
