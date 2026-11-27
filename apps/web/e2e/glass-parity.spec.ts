@@ -391,6 +391,10 @@ for (const target of screens) {
           await expect(game.locator('html')).toHaveAttribute('data-scenario', 'sandbox', { timeout: 30_000 });
           expect(pageErrors, 'Game errors during capture setup').toEqual([]);
         }
+        await page.getByLabel('Game editor', { exact: true }).click();
+        await page.locator('.palette-items .palette-item').first().click({ timeout: 30_000 });
+        await expect(page.locator('.editor-canvas-surface')).toBeVisible({ timeout: 30_000 });
+        await expect(page.locator('.editor-tools button[aria-pressed="true"]')).toHaveText('place');
       }
       for (const placeholder of await page.locator('[data-game-id^="showcase:"]:visible').all()) {
         if (intersectsViewport(await placeholder.boundingBox(), target))
