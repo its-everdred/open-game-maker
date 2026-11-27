@@ -28,7 +28,7 @@ import { sendResourceThresholdMail } from './energy/threshold-mail.js';
 import { parseEmailList } from './auth/access.js';
 import { loadAuthEnv } from './auth/env.js';
 import { createChatJobDirectory } from './build-chat/job-directory.js';
-import { createDraftScopeTicket } from './new-game/draft-assistant.js';
+import { createDraftScopeAssistant } from './new-game/draft-assistant.js';
 import { startDraftCleanup } from './game-drafts/cleanup.js';
 import { finishRun, startBuildSweep } from './builds/publish.js';
 import { createDaemonDirectory, daemonRowForGame } from './jobs/daemons.js';
@@ -163,30 +163,12 @@ if (env.OGM_CORE_PC_AIUR_URL && env.OGM_CORE_PC_AIUR_TOKEN) {
     repo: deps.config.pcCoreRepo,
   });
 }
-deps.registry.draftScopeAssistant = {
-  async create({ draftId, choices }) {
-    const aiur = deps.registry.coreAiurClient;
-    if (!aiur) throw new Error('shared_aiur_unavailable');
-    return createDraftScopeTicket({
-      repo: `${deps.config.instanceRepo.owner}/${deps.config.instanceRepo.name}`,
-      draftId,
-      choices,
-      issues,
-      aiur,
-    });
-  },
-  async close({ repo, ticket, draftId }) {
-    if (!issues.close) throw new Error('draft_ticket_close_unavailable');
-    const issue = ticket ? { number: Number(ticket) } : await issues.findByMarkers(repo, draftId, 'scope');
-    if (issue) await issues.close(repo, issue.number);
-  },
-  async transcript({ ticket }) {
-    const aiur = deps.registry.coreAiurClient;
-    if (!aiur) return [];
-    const transcript = await aiur.ticketTranscript(ticket);
-    return transcript.events;
-  },
-};
+deps.registry.draftScopeAssistant = createDraftScopeAssistant({
+  db,
+  repo: `${deps.config.instanceRepo.owner}/${deps.config.instanceRepo.name}`,
+  issues,
+  clientForSlug: daemonDirectory.clientForSlug,
+});
 deps.registry.workerWorkpad = createWorkpadReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.workerTitle = createTicketTitleReader(deps.config.instanceRepo, env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.trackerTickets = createTrackerReader(env.OGM_INTAKE_GITHUB_TOKEN);

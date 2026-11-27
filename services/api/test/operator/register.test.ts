@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { seededApp, X, Y } from '../admin-fixture.js';
 import { INTERNAL_TOKEN } from '../helpers.js';
+import { gameDrafts } from '../../src/new-game/drafts.js';
 
 const body = {
   slug: 'fixture',
@@ -62,6 +63,38 @@ describe('operator game registration', () => {
       expect((await send({ ...fourth, ownerId: undefined })).status).toBe(409);
       expect((await send({ ...fourth, ownerId: X.owner.userId })).status).toBe(201);
     }
+  });
+
+  it('keeps a draft daemon endpoint stable until its conversation is closed', async () => {
+    const { app, deps } = await seededApp();
+    const send = (payload: unknown) =>
+      app.request('/internal/operator/games', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-ogm-internal': INTERNAL_TOKEN },
+        body: JSON.stringify(payload),
+      });
+    expect((await send(body)).status).toBe(201);
+    const draft = gameDrafts.create(deps.db, {
+      familyId: X.family,
+      creatorId: X.owner.userId,
+      choices: {
+        genre: 'platformer',
+        vibe: 'cozy',
+        family: 'pixel',
+        world: 'island',
+        players: 'single',
+        pov: 'isometric',
+      },
+      allowAiGeneratedAssets: true,
+    });
+    gameDrafts.attachTicket(deps.db, draft.id, 'example/games', null);
+    const changed = { ...body, daemon: { port: 4012, checkoutPath: '/srv/new' } };
+    expect((await send(changed)).status).toBe(409);
+    gameDrafts.attachTicket(deps.db, draft.id, 'example/games', 42);
+    expect((await send({ ...body, title: 'Updated' })).status).toBe(200);
+    expect((await send(changed)).status).toBe(409);
+    deps.db.update(schema.gameDrafts).set({ status: 'abandoned' }).where(eq(schema.gameDrafts.id, draft.id)).run();
+    expect((await send(changed)).status).toBe(200);
   });
 
   it('requires the internal token and registers, updates, and exposes the game to publish', async () => {
