@@ -10,8 +10,10 @@ it('rejects literal design values and accepts generated token references', async
     '.a { background: rgb(1 2 3) }',
     '.a { border-radius: 8px }',
     '.a { box-shadow: 0 2px black }',
+    '.a { box-shadow: var(--shadow), 0 2px black }',
     '.a { font-size: 16px }',
     '.a { transition: opacity 200ms }',
+    '.a { transition: opacity var(--duration) ease-in }',
     '.a { opacity: .5 }',
   ]) {
     expect((await stylelint.lint({ code: css, config: glassStylelintConfig })).errored, css).toBe(true);
