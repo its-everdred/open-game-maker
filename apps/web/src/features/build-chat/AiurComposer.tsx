@@ -153,21 +153,27 @@ export function AiurComposer({
       ...(dictation
         ? {
             dictation: {
-              start: async () => {
+              start: async ({ onPartial }) => {
                 let resolveCancelled: () => void = () => {};
+                let cleanup: () => void = () => {};
                 const result = new Promise<string>((resolve, reject) => {
-                  resolveCancelled = () => resolve('');
+                  resolveCancelled = () => {
+                    cleanup();
+                    resolve('');
+                  };
                   const offTranscript = dictation.on('transcript', (value) => {
                     if (value.kind !== 'final') return;
-                    offTranscript();
-                    offError();
+                    cleanup();
                     resolve(value.text);
                   });
                   const offError = dictation.on('error', (value) => {
-                    offTranscript();
-                    offError();
+                    cleanup();
                     reject(codedError(value.code, value.message));
                   });
+                  cleanup = () => {
+                    offTranscript();
+                    offError();
+                  };
                 });
                 // The microphone or token can fail before the user releases the button.
                 void result.catch(() => {});
@@ -176,13 +182,18 @@ export function AiurComposer({
                   dictation.cancel();
                   resolveCancelled();
                 };
+                const offPartial = dictation.on('transcript', (value) => onPartial(value.text));
                 dictation.pressStart();
                 return {
                   stop: () => {
+                    offPartial();
                     dictation.pressEnd();
                     return result;
                   },
-                  cancel: () => cancelDictation.current?.(),
+                  cancel: () => {
+                    offPartial();
+                    cancelDictation.current?.();
+                  },
                 };
               },
             },
@@ -191,7 +202,7 @@ export function AiurComposer({
       ...(voiceTarget
         ? {
             voice: {
-              start: async ({ onEnd }) => {
+              start: async ({ onEnd, initialText }) => {
                 if (voiceStarting.current || voiceRef.current)
                   throw codedError('starting', 'Voice is already starting');
                 if (
@@ -212,24 +223,17 @@ export function AiurComposer({
                   element.removeAttribute('data-recording');
                   onEnd();
                 });
+                const openingText = initialText.trim();
                 const offState = voice.on('state', (frame) => {
                   const capabilities = (frame as unknown as { capabilities?: { text?: boolean } }).capabilities;
                   if (!capabilities?.text) return;
                   offState();
-                  void Promise.resolve(dictationResult.current)
-                    .catch(() => undefined)
-                    .then(async () => {
-                      // Let the upstream composer insert the final transcript before reading it.
-                      await Promise.resolve();
-                      const openingText = element.value.trim();
-                      if (!openingText || voiceRef.current !== voice) return;
-                      voice.sendText(openingText);
-                      if (element.value.trim() === openingText) element.value = '';
-                    });
+                  if (openingText && voiceRef.current === voice) voice.sendText(openingText);
                 });
                 try {
                   await voice.startFromGesture();
                 } catch (error) {
+                  offState();
                   voice.end();
                   if (voiceRef.current === voice) voiceRef.current = undefined;
                   throw error;

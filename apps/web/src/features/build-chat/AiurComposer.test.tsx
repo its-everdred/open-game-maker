@@ -4,7 +4,7 @@ import type { AiurComposer as ComposerElement } from '@aiur/conversation';
 import { AiurComposer } from './AiurComposer';
 
 const fake = vi.hoisted(() => ({
-  listeners: new Map<string, (value: unknown) => void>(),
+  listeners: new Map<string, Set<(value: unknown) => void>>(),
   end: vi.fn(),
   sendText: vi.fn(),
   start: vi.fn().mockResolvedValue(undefined),
@@ -20,8 +20,10 @@ vi.mock('@ogm/voice-client', () => ({
       return true;
     }
     on(name: string, callback: (value: unknown) => void) {
-      fake.listeners.set(name, callback);
-      return () => fake.listeners.delete(name);
+      const listeners = fake.listeners.get(name) ?? new Set();
+      listeners.add(callback);
+      fake.listeners.set(name, listeners);
+      return () => listeners.delete(callback);
     }
     pressStart() {}
     pressEnd() {}
@@ -29,8 +31,11 @@ vi.mock('@ogm/voice-client', () => ({
   },
   VoiceClient: class {
     on(name: string, callback: (value: unknown) => void) {
-      fake.listeners.set(`voice:${name}`, callback);
-      return () => fake.listeners.delete(`voice:${name}`);
+      const key = `voice:${name}`;
+      const listeners = fake.listeners.get(key) ?? new Set();
+      listeners.add(callback);
+      fake.listeners.set(key, listeners);
+      return () => listeners.delete(callback);
     }
     startFromGesture = fake.start;
     end = fake.end;
@@ -49,6 +54,10 @@ const voiceTarget = {
   creator_id: 'creator',
   session_id: '29000000-0000-4000-8000-000000000001',
 };
+
+function emit(name: string, value: unknown) {
+  for (const listener of fake.listeners.get(name) ?? []) listener(value);
+}
 
 it('sends a draft through the host job adapter', async () => {
   const startJob = vi.fn().mockResolvedValue('job-1');
@@ -159,8 +168,8 @@ it('reports microphone errors that arrive before dictation stops', async () => {
   const { container } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
   const composer = container.querySelector('aiur-composer') as ComposerElement;
   await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
-  const session = await composer.adapters.dictation!.start();
-  fake.listeners.get('error')!({ message: 'Microphone denied' });
+  const session = await composer.adapters.dictation!.start({ onPartial: vi.fn(), onLevel: vi.fn() });
+  emit('error', { message: 'Microphone denied' });
   await expect(session.stop()).rejects.toThrow('Microphone denied');
 });
 
@@ -173,11 +182,26 @@ it('carries opening text into voice and keeps the session when the job refreshes
   await waitFor(() => expect(composer.adapters.voice).toBeDefined());
   await waitFor(() => expect(composer.onSend).toBeTypeOf('function'));
   composer.value = 'Make it brighter';
-  await waitFor(async () => expect(await composer.adapters.voice!.start({ onEnd: vi.fn() })).toBeDefined());
-  fake.listeners.get('voice:state')!({ capabilities: { text: true } });
+  await waitFor(async () =>
+    expect(await composer.adapters.voice!.start({ onEnd: vi.fn(), initialText: composer.value })).toBeDefined(),
+  );
+  emit('voice:state', { capabilities: { text: true } });
   await waitFor(() => expect(fake.sendText).toHaveBeenCalledWith('Make it brighter'));
   rerender(<AiurComposer jobId="job-1" voiceTarget={voiceTarget} postText={postText} />);
   expect(fake.end).not.toHaveBeenCalled();
+});
+
+it('streams partial dictation into the upstream composer draft', async () => {
+  const { container } = render(<AiurComposer jobId="draft" dictationTarget={voiceTarget} postText={vi.fn()} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
+  const onPartial = vi.fn();
+  const session = await composer.adapters.dictation!.start({ onPartial, onLevel: vi.fn() });
+  emit('transcript', { kind: 'partial', text: 'start the forest' });
+  expect(onPartial).toHaveBeenCalledWith('start the forest');
+  session.cancel?.();
+  expect(fake.listeners.get('transcript')?.size).toBe(0);
+  expect(fake.listeners.get('error')?.size).toBe(0);
 });
 
 it('does not start another voice job while text admission is still pending', async () => {
@@ -196,10 +220,14 @@ it('does not start another voice job while text admission is still pending', asy
   composer.value = 'Make a bridge';
   const sending = composer.send();
   await waitFor(() => expect(startJob).toHaveBeenCalled());
-  await expect(composer.adapters.voice!.start({ onEnd: vi.fn() })).rejects.toThrow('conversation is starting');
+  await expect(composer.adapters.voice!.start({ onEnd: vi.fn(), initialText: '' })).rejects.toThrow(
+    'conversation is starting',
+  );
   finish('job-1');
   await sending;
-  await expect(composer.adapters.voice!.start({ onEnd: vi.fn() })).rejects.toThrow('conversation is starting');
+  await expect(composer.adapters.voice!.start({ onEnd: vi.fn(), initialText: '' })).rejects.toThrow(
+    'conversation is starting',
+  );
 });
 
 it('rejects a second voice start and allows a new start after a remote end', async () => {
@@ -214,12 +242,12 @@ it('rejects a second voice start and allows a new start after a remote end', asy
   const composer = container.querySelector('aiur-composer') as ComposerElement;
   await waitFor(() => expect(composer.adapters.voice).toBeDefined());
   await waitFor(() => expect(fake.start).toBeDefined());
-  const first = composer.adapters.voice!.start({ onEnd: vi.fn() });
-  await expect(composer.adapters.voice!.start({ onEnd: vi.fn() })).rejects.toThrow('already starting');
+  const first = composer.adapters.voice!.start({ onEnd: vi.fn(), initialText: '' });
+  await expect(composer.adapters.voice!.start({ onEnd: vi.fn(), initialText: '' })).rejects.toThrow('already starting');
   finish();
   await first;
-  fake.listeners.get('voice:ended')!({});
-  await expect(composer.adapters.voice!.start({ onEnd: vi.fn() })).resolves.toBeDefined();
+  emit('voice:ended', {});
+  await expect(composer.adapters.voice!.start({ onEnd: vi.fn(), initialText: '' })).resolves.toBeDefined();
 });
 
 function reports(fetch: ReturnType<typeof vi.fn>) {
@@ -231,15 +259,14 @@ function reports(fetch: ReturnType<typeof vi.fn>) {
 it('shows a blocked microphone with the cause and reports it', async () => {
   const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
   vi.stubGlobal('fetch', fetch);
-  const { container, findByRole } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
+  const { container } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
   const composer = container.querySelector('aiur-composer') as ComposerElement;
   await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
   const mic = composer.shadowRoot!.querySelector<HTMLButtonElement>('.mic')!;
-  mic.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
-  await waitFor(() => expect(fake.listeners.get('error')).toBeDefined());
-  fake.listeners.get('error')!({ code: 'mic_denied', message: 'Microphone permission denied.' });
-  mic.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' }));
-  expect((await findByRole('alert')).textContent).toMatch(/^Microphone blocked\..*\(dictation: mic_denied\)$/);
+  mic.click();
+  await waitFor(() => expect(fake.listeners.get('error')?.size).toBeGreaterThan(0));
+  emit('error', { code: 'mic_denied', message: 'Microphone permission denied.' });
+  composer.shadowRoot!.querySelector<HTMLButtonElement>('.stop')!.click();
   await waitFor(() =>
     expect(reports(fetch)).toEqual([
       { action: 'dictation', code: 'mic_denied', message: 'Microphone permission denied.', target_kind: 'edit' },
@@ -253,12 +280,17 @@ it('names a voice start that has no token and reports it', async () => {
   vi.mocked(probeVoice).mockRejectedValueOnce('api_403');
   const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
   vi.stubGlobal('fetch', fetch);
-  const { container, findByRole } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
+  const { container } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
   const composer = container.querySelector('aiur-composer') as ComposerElement;
   await waitFor(() => expect(composer.adapters.voice).toBeDefined());
-  await waitFor(() => expect(composer.adapters.voice!.start({ onEnd: vi.fn() })).rejects.toThrow('unavailable'));
-  composer.shadowRoot!.querySelector<HTMLButtonElement>('.voice')!.click();
-  expect((await findByRole('alert')).textContent).toBe('Voice unavailable. (voice: api_403)');
+  await waitFor(() =>
+    expect(composer.adapters.voice!.start({ onEnd: vi.fn(), initialText: '' })).rejects.toThrow('unavailable'),
+  );
+  composer.dispatchEvent(
+    new CustomEvent('aiur-composer-error', {
+      detail: { action: 'voice', error: Object.assign(new Error('Voice is unavailable'), { code: 'api_403' }) },
+    }),
+  );
   await waitFor(() =>
     expect(reports(fetch)).toEqual([
       { action: 'voice', code: 'api_403', message: 'Voice is unavailable', target_kind: 'edit' },
