@@ -102,3 +102,15 @@ it('places scaled posts at the inspected gate ends without blocking the entry', 
   expect(() => edgeRun(cells, 'fence', [{ cell: { x: 3, y: 2 }, edge: 'yMin' }], style)).toThrow('only inspected');
   expect(() => edgeRun(cells, 'fence', [gate], { ...style, scale: 0.5 })).toThrow('only inspected');
 });
+
+it('explains the required margin when gate posts fall beyond the map edge', () => {
+  const cells = Array.from({ length: 16 }, (_, i) => ({ x: i % 4, y: Math.floor(i / 4) }));
+  const gate = { cell: { x: 1, y: 3 }, edge: 'yMax' as const };
+  const style = {
+    asset: 't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01',
+    facing: 'E' as const,
+    scale: 0.4,
+  };
+  const run = edgeRun(cells, 'fence', [gate], style);
+  expect(() => assemblyMap(4, 4, run.placements)).toThrow('gate posts need a one-cell map margin');
+});
