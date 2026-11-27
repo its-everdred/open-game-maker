@@ -139,13 +139,18 @@ export function createScalarFactor(
       const channel = edge.outputSlot - 1;
       if (
         property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.ColorShaderProperty' ||
-        (property.m_ColorMode !== undefined && property.m_ColorMode !== 0) ||
         typeof key !== 'string' ||
         !key
       )
         throw new Error('unsupported Unity color adjustment property');
       const value = Number(object(property.m_Value)[['r', 'g', 'b', 'a'][channel]!]);
       if (!Number.isFinite(value)) throw new Error('invalid Unity color adjustment property');
+      if (property.m_ColorMode !== undefined && property.m_ColorMode !== 0) {
+        const selected = Number(object(colors.get(key) ?? property.m_Value)[['r', 'g', 'b', 'a'][channel]!]);
+        if (property.m_ColorMode !== 1 || ![1, 3].includes(Number(property.m_SGVersion)) || !Number.isFinite(selected))
+          throw new Error('unsupported Unity color adjustment property');
+        return { key: '', kind: 'constant', defaultValue: selected };
+      }
       return { key, kind: 'component', channel, defaultValue: value };
     }
     if (node?.m_Type === 'UnityEditor.ShaderGraph.PropertyNode' && edge.outputSlot === 0 && !inputs.length) {

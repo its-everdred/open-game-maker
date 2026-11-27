@@ -123,6 +123,22 @@ export function compileUvAffine(
       const value = object(node.m_Value);
       return { components: [constant(number(value.x)), constant(number(value.y))] };
     }
+    if (
+      (type === 'UnityEditor.ShaderGraph.SineNode' || type === 'UnityEditor.ShaderGraph.CosineNode') &&
+      edge.outputSlot === 1 &&
+      linked.every((item) => item.inputSlot === 0)
+    ) {
+      const value = input(0);
+      let components = value.components;
+      if (!linked.length && components.length > 1) {
+        const first = constantValue(components[0]!);
+        if (components.some((component) => constantValue(component) !== first))
+          throw new Error('unsupported Unity UV trigonometric default');
+        components = [components[0]!];
+      }
+      const fn = type === 'UnityEditor.ShaderGraph.SineNode' ? Math.sin : Math.cos;
+      return { components: components.map((component) => constant(fn(constantValue(component)))) };
+    }
     if (type === 'UnityEditor.ShaderGraph.UVNode' && edge.outputSlot === 0 && !linked.length) {
       const channel = node.m_OutputChannel ?? 0;
       if (!Number.isInteger(channel) || (channel as number) < 0 || (channel as number) > 7)
@@ -196,6 +212,22 @@ export function compileUvAffine(
     const op = typeof type === 'string' ? ops[type] : undefined;
     if (op && edge.outputSlot === 2 && linked.every((item) => [0, 1].includes(item.inputSlot)))
       return arithmetic(input(0), input(1), op);
+    if (
+      type === 'UnityEditor.ShaderGraph.DotProductNode' &&
+      edge.outputSlot === 2 &&
+      linked.every((item) => [0, 1].includes(item.inputSlot))
+    ) {
+      const left = input(0),
+        right = input(1);
+      if (left.components.length !== right.components.length || !left.components.length)
+        throw new Error('unsupported Unity UV dot product width');
+      const product = arithmetic(left, right, 'multiply');
+      const result = product.components.reduce(
+        (sum, component): Component => [sum[0] + component[0], sum[1] + component[1], sum[2] + component[2]],
+        [0, 0, 0] as Component,
+      );
+      return { channel: product.channel, components: [result] };
+    }
     if (
       type === 'UnityEditor.ShaderGraph.RotateNode' &&
       edge.outputSlot === 3 &&

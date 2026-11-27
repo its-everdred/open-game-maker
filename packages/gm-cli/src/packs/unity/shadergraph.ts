@@ -67,6 +67,7 @@ function graphOutputSlot(node: GraphObject | undefined): number {
     case 'UnityEditor.ShaderGraph.MultiplyNode':
     case 'UnityEditor.ShaderGraph.PowerNode':
     case 'UnityEditor.ShaderGraph.SaturationNode':
+    case 'UnityEditor.ShaderGraph.ContrastNode':
       return 2;
     case 'UnityEditor.ShaderGraph.BranchNode':
     case 'UnityEditor.ShaderGraph.LerpNode':
@@ -178,7 +179,11 @@ export function shaderGraphBase(
         factors: [{ key: '', kind: 'constant', defaultValue: color as [number, number, number, number] }],
       };
     }
-    if (type === 'UnityEditor.ShaderGraph.PowerNode' || type === 'UnityEditor.ShaderGraph.SaturationNode') {
+    if (
+      type === 'UnityEditor.ShaderGraph.PowerNode' ||
+      type === 'UnityEditor.ShaderGraph.SaturationNode' ||
+      type === 'UnityEditor.ShaderGraph.ContrastNode'
+    ) {
       if (
         inputs.length !== 2 ||
         new Set(inputs.map((input) => input.inputSlot)).size !== 2 ||
@@ -187,6 +192,12 @@ export function shaderGraphBase(
         throw new Error('unsupported Unity color adjustment');
       const source = inputs.find((input) => input.inputSlot === 0)!;
       const amount = inputs.find((input) => input.inputSlot === 1)!;
+      if (type === 'UnityEditor.ShaderGraph.ContrastNode') {
+        const factor = scalarFactor(amount);
+        if (factor.kind !== 'constant' || factor.defaultValue !== 1)
+          throw new Error('unsupported Unity color contrast');
+        return resolveSource(source);
+      }
       return {
         textures: [],
         factors: [],
