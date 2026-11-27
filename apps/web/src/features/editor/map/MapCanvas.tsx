@@ -285,8 +285,8 @@ export function MapCanvas({
   const selectedCenter =
     selected && view
       ? (() => {
-          const center = pack.cellCenter(doc, parseCell(selected.cell));
           const piece = pieces.find((candidate) => candidate.unit === `tile:${selected.layer}:${selected.cell}`);
+          const center = piece?.center ?? pack.cellCenter(doc, parseCell(selected.cell));
           const url = piece ? urlOf(sprites, piece) : undefined;
           const img = url ? images.get(url) : undefined;
           /* Just above the piece's visible top, or the cell's diamond when its picture has not loaded. */
