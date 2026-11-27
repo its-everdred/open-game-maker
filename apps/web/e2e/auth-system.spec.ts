@@ -27,8 +27,11 @@ const test = base.extend<{ system: System }>({
         }
         try {
           await route.fulfill({ response: await route.fetch({ url: target.href, maxRedirects: 0 }) });
-        } catch (error) {
-          if (!closing && !page.isClosed()) throw error;
+        } catch {
+          if (!closing && !page.isClosed()) {
+            // Let the browser observe a failed request, including navigation-cancelled background reads.
+            await route.abort('failed').catch(() => undefined);
+          }
         }
       });
       await use(system);
@@ -178,6 +181,12 @@ for (const viewport of [
       await page.getByRole('button', { name: 'Light', exact: true }).tap();
       await page.getByRole('button', { name: 'Night', exact: true }).tap();
       await expect.poll(() => system.editorTransactions(), { timeout: 30_000 }).not.toEqual([]);
+      await page.getByRole('button', { name: 'Play', exact: true }).tap();
+      await page.getByRole('button', { name: 'Menu', exact: true }).tap();
+      const paused = page.getByRole('dialog', { name: 'Paused' });
+      await expect(paused).toBeVisible();
+      await paused.getByRole('button', { name: 'Resume' }).tap();
+      await expect(paused).toBeHidden();
     });
   });
 }
