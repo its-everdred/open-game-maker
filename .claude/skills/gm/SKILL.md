@@ -35,6 +35,7 @@ description: Run Open Game Maker's agent fleet as its Executor. The OGM layer ov
 - **Stale lists** (old phases fully held) get cleared or re-ordered when a new priority set arrives.
 - **Lists start serially by default:** `start on pr_merged` makes each item wait for the previous item's merge, which idled the games fleet at 0/4 on 2026-11-26. Create lists with `--start-on pr_opened`, or fix them with `queue set <name> --start-on pr_opened` (positional name; `--queue` is refused for `set`).
 - **Scripted loops of `aiur-main` must use `</dev/null`,** or the first call eats the rest of a heredoc.
+- **Pin a ticket to Claude** (e.g. when Codex refuses its content) with the `model:claude` label plus `--todo`; `redispatch --backend` needs a live worker.
 - **If queue writes fail** (an allowlist or authorization error): report it to the PC aiur session with the exact error, record the blocker in the handoff, and only then fall back to `--todo` plus pause/park.
 
 ## Planning shape (core #1399)
