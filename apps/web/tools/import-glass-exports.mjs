@@ -52,13 +52,15 @@ for (const name of names) {
   const { width, height } = await image.metadata();
   if (!width || !height) throw new Error(`Missing dimensions for ${name}`);
   const file = `${name}-${width}x${height}.png`;
-  await writeFile(join(destination, file), await image.png().toBuffer());
+  const png = await image.png().toBuffer();
+  await writeFile(join(destination, file), png);
   manifest.push({
     artboard: name,
     file,
     width,
     height,
     sourceSha256: createHash('sha256').update(input).digest('hex'),
+    pngSha256: createHash('sha256').update(png).digest('hex'),
   });
 }
 await writeFile(join(destination, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);

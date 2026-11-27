@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { glassMetrics, type PixelMask } from './metrics.js';
 import { readMasks } from './masks.js';
+import { glassChecklist } from './checklist.js';
 
 /** Compare native-pixel captures and write review artifacts even on a failed score. */
 export async function compareGlass(reference: Buffer, actual: Buffer, output: string, masks: PixelMask[]) {
@@ -58,5 +59,7 @@ export async function compareGlassScreen(
   masksFile: string,
   screen: string,
 ) {
-  return compareGlass(reference, actual, output, await readMasks(masksFile, screen));
+  const result = await compareGlass(reference, actual, output, await readMasks(masksFile, screen));
+  await writeFile(join(output, 'checklist.md'), glassChecklist(screen));
+  return result;
 }

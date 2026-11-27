@@ -13,7 +13,6 @@ import { flushQueue, installErrorCapture } from './features/bug-report';
 import { installTelemetry } from './features/telemetry/telemetry';
 import { initFocus, startGamepadPoller } from './lib/input';
 import './tokens.css';
-import './glass-tokens.css';
 import './app/chrome.css';
 
 applyHashRedirect();

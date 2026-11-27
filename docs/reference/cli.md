@@ -253,6 +253,10 @@ Add `--out <new-sheet.png>` for reference, warped render and 50% overlay side by
 magenta in the render panel. The command refuses to overwrite an existing file. The sheet is a ground-plane
 diagnostic, so elevated objects may not align.
 
+`gm design parity [--screen Home|Editor|Settings|all] [--dist <real-game-dist>]` builds the web app and compares seeded screens against the approved OGM Glass exports. Run it from the core repository; `--web` selects another web-app directory. The Editor run requires `--dist` pointing to a real built game, never a test fixture. `all` refuses to pass until every artboard has capture coverage. It writes a side-by-side, heatmap, score and detail-review checklist under `assets-local/review/design-parity/<head>/<run>/<artboard>/` (`<head>-dirty` for uncommitted work). It fails below SSIM 0.97 or above 1% of pixels with CIE76 ΔE greater than 3. Only regions in the reviewed mask registry are excluded. The supplied exports cover Home and Editor in portrait, landscape and desktop, and Settings in portrait; a Settings landscape reference is not yet available. `--port` and `--bridge-port` select strict local ports.
+
+Browser CI selects affected Home, Editor and Settings screens from changed paths; other changed UI areas fail until their capture is added. If CI has no real game build, the editor comparison is a post-deploy phone check rather than synthetic-game evidence. The current Settings export has no landscape counterpart.
+
 `gm look score <target.png> <candidate.png>` compares images locally and prints JSON. It writes `look-score.png` (or
 `--out <path>`) with target, candidate, difference heatmap and 50% overlay, plus a provenance sidecar. The crop applied to both inputs
 `--crop x,y,w,h` and repeatable `--region name=x,y,w,h` use pixel coordinates; regions refer to the cropped target. When none are named, a 3-by-3 grid supplies the worst five regions.

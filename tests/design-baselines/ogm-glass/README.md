@@ -1,6 +1,6 @@
 # OGM Glass references
 
-These are lossless PNG conversions of the design agent's approved JPEG artboard exports. The canvas could not be opened by the headless web tool, so these exports are the fallback. They are retained at their native pixel dimensions: phone portrait exports are 780 × 1688 (390 × 844 at 2×), while the landscape and desktop exports use their own native dimensions. The manifest records the SHA-256 of each original JPEG.
+These are lossless PNG conversions of the design agent's approved JPEG artboard exports. The canvas could not be opened by the headless web tool, so these exports are the fallback. They are retained at their native pixel dimensions: phone portrait exports are 780 × 1688 (390 × 844 at 2×), while the landscape and desktop exports use their own native dimensions. The manifest records the SHA-256 of each original JPEG and its converted PNG; parity checks reject PNGs that do not match it.
 
 Regenerate from the approved export directory at the repository root:
 

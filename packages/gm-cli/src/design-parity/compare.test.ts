@@ -18,6 +18,7 @@ it('writes evidence and enforces the parity thresholds', async () => {
     await writeFile(masks, JSON.stringify({ Home: [] }));
     await expect(compareGlassScreen(black, black, dir, masks, 'Settings')).rejects.toThrow('No reviewed mask entry');
     expect((await compareGlassScreen(black, black, dir, masks, 'Home')).pass).toBe(true);
+    expect(await readFile(join(dir, 'checklist.md'), 'utf8')).toContain('- [ ] Safe areas — crop: _required_');
     expect((await compareGlass(black, black, dir, [])).pass).toBe(true);
     expect((await compareGlass(black, white, dir, [])).pass).toBe(false);
     expect(JSON.parse(await readFile(join(dir, 'score.json'), 'utf8')).deltaEOver3Percent).toBe(100);
