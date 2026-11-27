@@ -106,6 +106,23 @@ export function compileUvAffine(
       return found ? resolve(found, next) : inputDefault(node, slot);
     };
     const type = node.m_Type;
+    if (
+      type === 'UnityEditor.ShaderGraph.UvVector2Conversion' &&
+      edge.outputSlot === 0 &&
+      linked.length === 1 &&
+      linked[0]?.inputSlot === 0
+    ) {
+      const value = input(0);
+      if (!value.components.length) throw new Error('unsupported Unity UV vector width');
+      return {
+        channel: value.channel,
+        components: [value.components[0]!, value.components[value.components.length === 1 ? 0 : 1]!],
+      };
+    }
+    if (type === 'UnityEditor.ShaderGraph.Vector2Node' && edge.outputSlot === 0 && !linked.length) {
+      const value = object(node.m_Value);
+      return { components: [constant(number(value.x)), constant(number(value.y))] };
+    }
     if (type === 'UnityEditor.ShaderGraph.UVNode' && edge.outputSlot === 0 && !linked.length) {
       const channel = node.m_OutputChannel ?? 0;
       if (!Number.isInteger(channel) || (channel as number) < 0 || (channel as number) > 7)

@@ -110,11 +110,15 @@ it('does not silently treat a vector subgraph result as a scalar', () => {
 
 it('refuses vector widths that the material evaluator cannot represent', () => {
   expect(() =>
-    inlineUnitySubgraphs(outer(), () => subgraph.replace('Vector4MaterialSlot', 'Vector2MaterialSlot')),
-  ).toThrow('unsupported Unity subgraph output type');
+    shaderGraphBase(
+      inlineUnitySubgraphs(outer(), () => subgraph.replace('Vector4MaterialSlot', 'Vector2MaterialSlot')),
+    ),
+  ).toThrow('UvVector2Conversion');
   expect(() =>
-    inlineUnitySubgraphs(outer(), () => subgraph.replace('Vector3ShaderProperty', 'Vector2ShaderProperty')),
-  ).toThrow('unsupported Unity subgraph vector input');
+    shaderGraphBase(
+      inlineUnitySubgraphs(outer(), () => subgraph.replace('Vector3ShaderProperty', 'Vector2ShaderProperty')),
+    ),
+  ).toThrow('UvVector2Conversion');
 });
 
 it('does not load subgraphs outside the requested base-color path', () => {

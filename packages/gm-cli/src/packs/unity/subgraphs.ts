@@ -139,11 +139,6 @@ export function inlineUnitySubgraphs(source: string, load: (guid: string) => str
         const property = childById.get(ref(item.m_Property));
         const propertyGuid = property ? object(property.m_Guid).m_GuidSerialized : undefined;
         if (typeof propertyGuid !== 'string') throw new Error('invalid Unity subgraph property GUID');
-        if (
-          property?.m_Type === 'UnityEditor.ShaderGraph.Internal.Vector2ShaderProperty' &&
-          childEdges.some((edge) => edge.m_OutputSlot.m_Node.m_Id === item.m_ObjectId)
-        )
-          throw new Error('unsupported Unity subgraph vector input');
         let sourceEndpoint = inputByGuid.get(propertyGuid);
         if (!sourceEndpoint && childEdges.some((edge) => edge.m_OutputSlot.m_Node.m_Id === item.m_ObjectId)) {
           const slotId = slotByGuid.get(propertyGuid);
@@ -152,16 +147,41 @@ export function inlineUnitySubgraphs(source: string, load: (guid: string) => str
           const slots = docs.filter((doc) => typeof doc.m_ObjectId === 'string' && slotRefs.includes(doc.m_ObjectId));
           const matches = slots.filter((slot) => slot.m_Id === slotId && slot.m_SlotType === 0);
           const slot = matches.length === 1 ? matches[0] : undefined;
-          if (
-            property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty' ||
-            typeof slot?.m_Value !== 'number' ||
-            !Number.isFinite(slot.m_Value)
-          )
-            throw new Error('unsupported unconnected Unity subgraph input');
           const constantId = `${prefix}default-${slotId}`;
           if (docs.some((doc) => doc.m_ObjectId === constantId)) throw new Error('duplicate Unity subgraph default');
-          docs.push({ m_ObjectId: constantId, m_Type: 'UnityEditor.ShaderGraph.Vector1Node', m_Value: slot.m_Value });
+          if (
+            property?.m_Type === 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty' &&
+            typeof slot?.m_Value === 'number' &&
+            Number.isFinite(slot.m_Value)
+          ) {
+            docs.push({ m_ObjectId: constantId, m_Type: 'UnityEditor.ShaderGraph.Vector1Node', m_Value: slot.m_Value });
+          } else if (
+            property?.m_Type === 'UnityEditor.ShaderGraph.Internal.Vector2ShaderProperty' &&
+            slot?.m_Type === 'UnityEditor.ShaderGraph.Vector2MaterialSlot'
+          ) {
+            const value = object(slot.m_Value);
+            if (
+              typeof value.x !== 'number' ||
+              !Number.isFinite(value.x) ||
+              typeof value.y !== 'number' ||
+              !Number.isFinite(value.y)
+            )
+              throw new Error('unsupported unconnected Unity subgraph input');
+            docs.push({
+              m_ObjectId: constantId,
+              m_Type: 'UnityEditor.ShaderGraph.Vector2Node',
+              m_Value: { x: value.x, y: value.y },
+            });
+          } else throw new Error('unsupported unconnected Unity subgraph input');
           sourceEndpoint = { m_Node: { m_Id: constantId }, m_SlotId: 0 };
+          inputByGuid.set(propertyGuid, sourceEndpoint);
+        }
+        if (sourceEndpoint && property?.m_Type === 'UnityEditor.ShaderGraph.Internal.Vector2ShaderProperty') {
+          const castId = `${prefix}vector2-${slotByGuid.get(propertyGuid)}`;
+          if (docs.some((doc) => doc.m_ObjectId === castId)) throw new Error('duplicate Unity subgraph conversion');
+          docs.push({ m_ObjectId: castId, m_Type: 'UnityEditor.ShaderGraph.UvVector2Conversion' });
+          coercionEdges.push({ m_InputSlot: { m_Node: { m_Id: castId }, m_SlotId: 0 }, m_OutputSlot: sourceEndpoint });
+          sourceEndpoint = { m_Node: { m_Id: castId }, m_SlotId: 0 };
           inputByGuid.set(propertyGuid, sourceEndpoint);
         }
         if (
@@ -208,12 +228,20 @@ export function inlineUnitySubgraphs(source: string, load: (guid: string) => str
         if (
           ![
             'UnityEditor.ShaderGraph.Vector1MaterialSlot',
+            'UnityEditor.ShaderGraph.Vector2MaterialSlot',
             'UnityEditor.ShaderGraph.Vector3MaterialSlot',
             'UnityEditor.ShaderGraph.Vector4MaterialSlot',
           ].includes(String(slots[0]!.m_Type))
         )
           throw new Error('unsupported Unity subgraph output type');
         let output = sourceFor(edge.m_OutputSlot);
+        if (slots[0]!.m_Type === 'UnityEditor.ShaderGraph.Vector2MaterialSlot') {
+          const castId = `${prefix}output-vector2-${edge.m_InputSlot.m_SlotId}`;
+          if (docs.some((doc) => doc.m_ObjectId === castId)) throw new Error('duplicate Unity subgraph conversion');
+          docs.push({ m_ObjectId: castId, m_Type: 'UnityEditor.ShaderGraph.UvVector2Conversion' });
+          coercionEdges.push({ m_InputSlot: { m_Node: { m_Id: castId }, m_SlotId: 0 }, m_OutputSlot: output });
+          output = { m_Node: { m_Id: castId }, m_SlotId: 0 };
+        }
         if (slots[0]!.m_Type === 'UnityEditor.ShaderGraph.Vector1MaterialSlot') {
           const childSource = childById.get(edge.m_OutputSlot.m_Node.m_Id);
           const knownScalar =
