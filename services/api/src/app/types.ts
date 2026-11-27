@@ -54,6 +54,8 @@ export interface AppDeps {
     reportBundleMaxBytes: number;
     blobPutMaxBytes: number;
   };
+  /** Override the review feed log destination for an isolated host. */
+  reviewLogPath?: string;
   blobStore: BlobStore;
   events: AppEvents;
   registry: Registry;

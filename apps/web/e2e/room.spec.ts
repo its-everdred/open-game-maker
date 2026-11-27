@@ -17,7 +17,6 @@ type FakeRoomHook = {
 test.use({ serviceWorkers: 'block' });
 
 test('scripts watcher catch-up, phases, and host-left through the fake session', async ({ page }, testInfo) => {
-  test.fixme(testInfo.project.name === 'desktop', 'Quarantined: intermittent 500ms phase transition timeout (#350)');
   await installAuthRoutes(page, { signedIn: true });
   await installGameApi(page);
   await page.route('**/api/v1/games/game/branches/main', (route) =>
@@ -120,7 +119,11 @@ test('scripts watcher catch-up, phases, and host-left through the fake session',
 
   await free.click();
   await roomFake(page, 'setState', { phase: 'playing', phaseAt: Date.now() });
-  await expect.poll(() => gameState(page).then((state) => state?.mode), { timeout: 500 }).toBe('play');
+  // Wait in the browser for the React transition; cross-process polling with a
+  // 500 ms deadline can miss a completed transition when the runner is busy.
+  await page.waitForFunction(
+    () => (window as Window & { __ogmHost?: { game?: GameHook } }).__ogmHost?.game?.mode === 'play',
+  );
   await expect(free).toBeHidden();
   /* The game keeps Free through a play round, so the toggle must still show Free when editing resumes. */
   await roomFake(page, 'setState', { phase: 'editing', phaseAt: Date.now() });
