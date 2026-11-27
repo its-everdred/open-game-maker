@@ -1,7 +1,6 @@
 import { JOB_STAGE_WORDS, type EnergyView, type Job } from '@ogm/contracts/browser';
 
 import { isTerminal } from '../build-chat/jobs';
-import { WINDOW_LABELS } from '../energy/api';
 import type { WorkerBuild } from '../worker-builds/BuildTracker';
 import { commandSource, type ReviewCommand, type ReviewTarget } from '../worker-builds/review-command';
 import type { WorkerReview } from '../worker-builds/useWorkerReviews';
@@ -165,11 +164,11 @@ function jobLast(job: Job): string | undefined {
   return job.stageText ?? (job.stage ? JOB_STAGE_WORDS[job.stage] : undefined);
 }
 
-/** Provider readings (Claude, Codex, …) when the API has them, else the day/week/month windows. */
+/** Only readings representing coding-agent usage or metered API spending. */
 export function energyCards(view: EnergyView | undefined): EnergyCard[] {
   if (!view) return [];
   /* Bundles written before #1217 carry no sources, and the client doesn't parse the response. */
-  const sources = view.sources ?? [];
+  const sources = (view.sources ?? []).filter((source) => /^(claude|codex):/.test(source.id) || source.id === 'fal');
   if (sources.length > 0)
     return sources.map((source) => ({
       key: source.id,
@@ -177,12 +176,7 @@ export function energyCards(view: EnergyView | undefined): EnergyCard[] {
       usedPercent: source.stale ? null : source.usedPercent,
       resetsAt: source.resetsAt,
     }));
-  return (view.windows ?? []).map((window) => ({
-    key: window.window,
-    name: WINDOW_LABELS[window.window],
-    usedPercent: window.usedPercent,
-    resetsAt: window.resetsAt,
-  }));
+  return [];
 }
 
 /** "Resets Thu 09:00" within a week, else "Resets 3 Dec". */

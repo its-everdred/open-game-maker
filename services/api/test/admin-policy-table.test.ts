@@ -88,6 +88,12 @@ const ROUTES: Row[] = [
   },
   { method: 'DELETE', path: '/users/guest@example.com', expect: ok(404, 404) },
   {
+    method: 'PUT',
+    path: '/users/guest@example.com/weekly-budget',
+    body: { newGames: 2, edits: 20 },
+    expect: ok(404, 404),
+  },
+  {
     method: 'POST',
     path: '/users/guest@example.com/invite',
     body: {},

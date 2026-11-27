@@ -113,7 +113,7 @@ const iso = (value: unknown): string | null => {
   return text !== null && !Number.isNaN(Date.parse(text)) ? new Date(text).toISOString() : null;
 };
 const percent = (value: unknown): number | null =>
-  typeof value === 'number' && Number.isFinite(value) ? Math.min(100, Math.max(0, Math.round(value))) : null;
+  typeof value === 'number' && Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : null;
 
 // `aiur.usage` v1: one reading per rate-limit window. A window that isn't fresh is unknown, with its age kept.
 export function aiurReadings(provider: string, label: string, body: unknown): ProviderReading[] {

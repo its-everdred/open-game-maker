@@ -42,6 +42,7 @@ export type AdminAllowedUser = {
   addedBy: string;
   addedAt: string;
   lastSignInAt: string | null;
+  weeklyBudget?: { newGames: number | null; edits: number | null };
 };
 
 export type AdminInvitation = {

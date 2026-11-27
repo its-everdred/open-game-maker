@@ -47,6 +47,19 @@ export const EnergyView = z
   .object({
     level: EnergyLevel,
     preference: EnergyPreference,
+    weeklyJobs: z
+      .object({
+        newGames: z.object({
+          limit: z.number().int().nonnegative().nullable(),
+          remaining: z.number().int().nonnegative().nullable(),
+        }),
+        edits: z.object({
+          limit: z.number().int().nonnegative().nullable(),
+          remaining: z.number().int().nonnegative().nullable(),
+        }),
+        resetsAt: IsoTime,
+      })
+      .optional(),
     windows: z.array(z.object({ window: EnergyWindowName, usedPercent: Percent, resetsAt: IsoTime }).strict()),
     services: z.array(z.object({ service: EnergyServiceName, usedPercent: Percent }).strict()),
     // Bundles written before #1217 carry no sources.

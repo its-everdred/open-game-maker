@@ -429,7 +429,14 @@ describe('StudioMenu', () => {
     const trigger = screen.getByRole('button', { name: 'Menu' });
 
     fireEvent.click(trigger);
-    expect(circleNames()).toEqual(['Jobs: 42%', 'Energy: Unknown', 'Mute', 'Report a problem', 'Credits', 'Sign out']);
+    expect(circleNames()).toEqual([
+      'Jobs: 42%',
+      'Minerals and Gas: Unknown',
+      'Mute',
+      'Report a problem',
+      'Credits',
+      'Sign out',
+    ]);
     expect(document.querySelector('.studio-menu-sheet')).toBeNull();
 
     fireEvent.click(trigger);
@@ -581,7 +588,7 @@ describe('StudioMenu', () => {
     expect(screen.queryByRole('group', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
-  it('rings what is left of the tightest Energy window and opens the windows, then settings', () => {
+  it('leaves the resource ring unknown when only build budget windows are available', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.energy = {
       data: {
@@ -602,12 +609,12 @@ describe('StudioMenu', () => {
 
     renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    const energy = screen.getByRole('button', { name: 'Energy: Limited' });
-    expect(energy.querySelector('circle:last-child')).toHaveAttribute('stroke-dasharray', '20 100');
-    expect(screen.queryByRole('link', { name: 'Energy settings' })).not.toBeInTheDocument();
+    const energy = screen.getByRole('button', { name: 'Minerals and Gas: Limited' });
+    expect(energy.querySelector('circle:last-child')).toHaveAttribute('stroke-dasharray', '0 100');
+    expect(screen.queryByRole('link', { name: 'Minerals and Gas settings' })).not.toBeInTheDocument();
 
     fireEvent.click(energy);
-    const detail = screen.getByRole('link', { name: 'Energy settings' });
+    const detail = screen.getByRole('link', { name: 'Minerals and Gas settings' });
     expect(detail).toHaveAttribute('href', '/settings/energy');
     expect(detail).toHaveTextContent(/Today.*60% left.*This week.*20% left.*This month.*Unknown/);
   });
@@ -636,16 +643,19 @@ describe('StudioMenu', () => {
           { service: 'voice', usedPercent: null },
           { service: 'images', usedPercent: null },
         ],
-        sources: [source('Codex', null), source('Claude', 90)],
+        sources: [
+          { ...source('codex:primary', null), label: 'Codex' },
+          { ...source('claude:week', 90), label: 'Claude' },
+        ],
       },
     };
 
     renderMenu('/games');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    const energy = screen.getByRole('button', { name: 'Energy: Limited' });
+    const energy = screen.getByRole('button', { name: 'Minerals and Gas: Limited' });
     expect(energy.querySelector('circle:last-child')).toHaveAttribute('stroke-dasharray', '10 100');
     fireEvent.click(energy);
-    expect(screen.getByRole('link', { name: 'Energy settings' })).toHaveTextContent(
+    expect(screen.getByRole('link', { name: 'Minerals and Gas settings' })).toHaveTextContent(
       /Codex\s*Unknown.*Claude\s*10% left/,
     );
   });
@@ -1124,7 +1134,7 @@ describe('StudioMenu', () => {
   });
 
   it('opens the problem report under the row, sends it and folds the sheet, or closes it unsent', async () => {
-    report.sendReport.mockResolvedValueOnce(undefined);
+    report.sendReport.mockResolvedValueOnce({ reportId: 'report' });
     renderMenu('/');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
 
@@ -1144,7 +1154,9 @@ describe('StudioMenu', () => {
   // A slow report must not close the sheet of the circle the creator tapped while it was sending.
   it('keeps another circle’s sheet open when a slow report finishes', async () => {
     let finish: () => void = () => undefined;
-    report.sendReport.mockReturnValueOnce(new Promise<void>((resolve) => (finish = resolve)));
+    report.sendReport.mockReturnValueOnce(
+      new Promise<{ reportId: string }>((resolve) => (finish = () => resolve({ reportId: 'report' }))),
+    );
     renderMenu('/');
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     fireEvent.click(screen.getByRole('button', { name: 'Report a problem' }));
@@ -1172,7 +1184,7 @@ describe('StudioMenu', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'What went wrong?' }), { target: { value: 'Gate stuck' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Energy/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Minerals and Gas/ }));
     await act(async () => fail());
     fireEvent.click(screen.getByRole('button', { name: 'Report a problem' }));
 

@@ -22,7 +22,13 @@ export type RepairInput = {
 
 export type RepairOutcome =
   | { jobId: string; pendingBudget?: undefined; attemptsExhausted?: undefined }
-  | { jobId?: undefined; pendingBudget: true; attemptsExhausted?: undefined }
+  | {
+      jobId?: undefined;
+      pendingBudget: true;
+      attemptsExhausted?: undefined;
+      resetsAt?: string;
+      budgetReason?: 'weekly_user';
+    }
   | { jobId?: undefined; pendingBudget?: undefined; attemptsExhausted: true };
 
 // Redacted metadata only: no report text, no frames, no bundle key. The repair agent resolves
@@ -98,7 +104,12 @@ export async function admitRepair(deps: AdmissionDeps, input: RepairInput): Prom
   try {
     accepted = await admit(deps, request, ownerActor(deps, input));
   } catch (error) {
-    if (error instanceof AdmissionRefused) return { pendingBudget: true };
+    if (error instanceof AdmissionRefused)
+      return {
+        pendingBudget: true,
+        ...(error.body.error === 'energy_limit_reached' ? { resetsAt: error.body.resetsAt } : {}),
+        ...(error.body.reason === 'weekly_user' ? { budgetReason: 'weekly_user' as const } : {}),
+      };
     throw error;
   }
   return { jobId: accepted.jobId };

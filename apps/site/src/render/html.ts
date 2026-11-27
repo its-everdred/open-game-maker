@@ -1,5 +1,4 @@
 import type { SetupContent, SetupStep, SetupSubstep } from '../schema.js';
-import type { SplashContent } from '../splash.js';
 import { renderAgentPrompt } from './markdown.js';
 
 export const PLACEHOLDER_TOKENS = ['<user>', '<tailnet-host>', '<app-origin>', '<github-owner>'] as const;
@@ -112,43 +111,4 @@ ${renderPlaceholderForm()}
 ${content.steps.map(renderStep).join('\n')}
 </main>`;
   return renderPage({ title: 'Set up Open Game Maker 2000', script: '/page/setup.js', body });
-}
-
-const githubIcon =
-  '<svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.09 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>';
-
-/* `asset` maps a public path to its URL; the build appends a content hash so the immutable cache in _headers still
-   picks up a re-recorded clip */
-export function renderSplashHtml(content: SplashContent, asset: (path: string) => string = (path) => path): string {
-  const e = escapeHtml;
-  const features = content.captures
-    .map(
-      (capture) => `      <section class="s-feature">
-        <h2>${e(capture.heading)}</h2>
-        <video src="${e(asset(capture.path))}" poster="${e(asset(capture.poster))}" muted loop playsinline autoplay preload="none"></video>
-      </section>`,
-    )
-    .join('\n');
-
-  const body = `    <main class="splash">
-      <section class="s-hero">
-        <picture class="s-poster">
-          <source media="(orientation: portrait)" srcset="${e(asset('/hero/poster-portrait.webp'))}" />
-          <img alt="" src="${e(asset('/hero/poster-landscape.webp'))}" fetchpriority="high" />
-        </picture>
-        <h1 class="s-logo"><img src="${e(asset('/hero/logo.webp'))}" alt="Open Game Maker 2000" width="1400" height="788" /></h1>
-        <div class="s-menu">
-          <p class="s-line">${e(content.line)}</p>
-          <a class="s-cta" href="/setup">${e(content.cta.setup)}</a>
-          <a class="s-cta" href="/signin">${e(content.cta.sign_in)}</a>
-        </div>
-      </section>
-${features}
-    </main>
-    <footer class="s-footer">
-      <a href="${e(content.footer.repo)}" aria-label="Source on GitHub">${githubIcon}</a>
-      <small>${e(content.footer.licence)}</small>
-    </footer>`;
-
-  return renderPage({ title: 'Open Game Maker 2000', body });
 }

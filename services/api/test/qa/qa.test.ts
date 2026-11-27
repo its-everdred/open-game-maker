@@ -282,3 +282,105 @@ describe('QA review fixtures (#859)', () => {
     expect(await lookup('g_other')).toBe(real);
   });
 });
+
+describe('QA Energy budget probe', () => {
+  it('exercises real admission routes, fences side effects and restores the QA budget', async () => {
+    const { app, deps, internal } = await qaApp();
+    const { body: qa } = await session(internal);
+    const assistantCreate = vi.fn().mockResolvedValue({ repo: 'qa/test', ticket: '1' });
+    deps.registry.draftScopeAssistant = { create: assistantCreate, close: vi.fn(), transcript: vi.fn() };
+    deps.db.insert(schema.weeklyJobBudgets).values({ email: QA_EMAIL, newGames: 3, edits: 4 }).run();
+    expect((await app.request('/internal/qa/energy-budget/begin', { method: 'POST' })).status).toBe(401);
+    const begun = await internal('/internal/qa/energy-budget/begin', { method: 'POST' });
+    expect(begun.status).toBe(200);
+    const { id } = (await begun.json()) as { id: string };
+    expect((await internal('/internal/qa/energy-budget/begin', { method: 'POST' })).status).toBe(409);
+    const headers = {
+      cookie: `${qa.cookie.name}=${qa.cookie.value}`,
+      'content-type': 'application/json',
+      'x-ogm-internal': INTERNAL_TOKEN,
+      'x-ogm-qa-energy-probe': id,
+    };
+    const choices = {
+      genre: 'platformer',
+      vibe: 'cozy',
+      family: 'chunky-low-poly',
+      world: 'floating islands',
+      players: 'single',
+      pov: 'isometric',
+    };
+    const draft = () =>
+      app.request('/api/v1/game-drafts', { method: 'POST', headers, body: JSON.stringify({ choices }) });
+    const result = await draft();
+    expect(result.status).toBe(402);
+    expect(await result.json()).toMatchObject({ reason: 'weekly_user', window: 'week', resetsAt: expect.any(String) });
+    const plan = {
+      title: 'Probe',
+      summary: 'Probe',
+      scope: { included: [], excluded: [] },
+      tickets: [{ key: 'qa', skills: [], dependsOn: [], acceptanceCriteria: ['refused'] }],
+    };
+    for (const kind of ['new_game', 'feature', 'repair']) {
+      const response = await app.request('/api/v1/jobs', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ gameId: qa.gameId, branchId: 'main', kind, complexity: 1, start: 'now', plan }),
+      });
+      expect(response.status).toBe(402);
+      expect(await response.json()).toMatchObject({ reason: 'weekly_user', window: 'week' });
+    }
+    const report = {
+      gameId: qa.gameId,
+      buildHash: '0'.repeat(64),
+      text: `qa-energy-probe:${id}`,
+      error: {
+        type: 'QaEnergyProbe',
+        message: 'Energy probe',
+        frames: [{ file: `/g/${qa.gameId}/qa/probe-${id}.js`, line: 1, fn: id }],
+      },
+    };
+    const reportResponse = await app.request('/api/v1/reports', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(report),
+    });
+    expect(reportResponse.status).toBe(201);
+    expect(await reportResponse.json()).toMatchObject({
+      pendingBudget: true,
+      budgetReason: 'weekly_user',
+      resetsAt: expect.any(String),
+    });
+    expect(deps.db.select().from(schema.reports).all()).toEqual([]);
+    expect(deps.db.select().from(schema.reportSignatures).all()).toEqual([]);
+    // Simulate a missing personal guard: the independent fence still prevents dispatch.
+    deps.db.update(schema.weeklyJobBudgets).set({ newGames: null, edits: null }).run();
+    expect((await draft()).status).toBe(409);
+    const fencedReport = await app.request('/api/v1/reports', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(report),
+    });
+    expect(fencedReport.status).toBe(502);
+    expect(deps.db.select().from(schema.reports).all()).toEqual([]);
+    expect(assistantCreate).not.toHaveBeenCalled();
+    expect(deps.db.select().from(schema.jobs).all()).toEqual([]);
+    expect(
+      (await internal('/internal/qa/energy-budget/end', { method: 'POST', body: JSON.stringify({ id }) })).status,
+    ).toBe(204);
+    expect(deps.db.select().from(schema.weeklyJobBudgets).all()).toMatchObject([
+      { email: QA_EMAIL, newGames: 3, edits: 4 },
+    ]);
+    // Requests delayed until after restoration still cannot dispatch work or leave a report.
+    const staleReport = await app.request('/api/v1/reports', { method: 'POST', headers, body: JSON.stringify(report) });
+    expect(staleReport.status).toBe(409);
+    expect(deps.db.select().from(schema.reports).all()).toEqual([]);
+    expect((await draft()).status).toBe(409);
+    const delayedJob = await app.request('/api/v1/jobs', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ gameId: qa.gameId, branchId: 'main', kind: 'feature', complexity: 1, start: 'now', plan }),
+    });
+    expect(delayedJob.status).toBe(409);
+    expect(assistantCreate).not.toHaveBeenCalled();
+  }, 120_000);
+});

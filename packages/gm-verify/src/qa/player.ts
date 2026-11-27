@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 
-import type { Page } from 'playwright';
+import type { Frame, Page } from 'playwright';
 
 import { describeStep, fill, type ExpectStep, type Step } from './journey.js';
 import { frame, isBlank, isChanged, pixelStats } from './pixels.js';
@@ -33,16 +33,18 @@ export class Player {
   readonly label: string;
   private readonly touch: boolean;
   private readonly startedAt: number;
+  private readonly target: Page | Frame;
 
   constructor(
     readonly page: Page,
     readonly outDir: string,
-    options: { label: string; touch: boolean; vars?: Record<string, string>; startedAt?: number },
+    options: { label: string; touch: boolean; vars?: Record<string, string>; startedAt?: number; target?: Frame },
   ) {
     this.label = options.label;
     this.touch = options.touch;
     this.vars = options.vars ?? {};
     this.startedAt = options.startedAt ?? Date.now();
+    this.target = options.target ?? page;
   }
 
   private point([fx, fy]: readonly [number, number]): { x: number; y: number } {
@@ -51,8 +53,46 @@ export class Player {
   }
 
   private locator(step: { text?: string; selector?: string }) {
-    if (step.selector !== undefined) return this.page.locator(fill(step.selector, this.vars)).first();
-    return this.page.getByText(fill(step.text ?? '', this.vars), { exact: true }).first();
+    if (step.selector !== undefined) return this.target.locator(fill(step.selector, this.vars)).first();
+    return this.target.getByText(fill(step.text ?? '', this.vars), { exact: true }).first();
+  }
+
+  private async pixels(): Promise<Buffer> {
+    if (this.target === this.page) return frame(this.page);
+    const element = await (this.target as Frame).frameElement();
+    const box = await element.boundingBox();
+    if (!box) throw new Error('game frame is not visible');
+    const border = await element.evaluate((node) => {
+      const style = getComputedStyle(node as Element);
+      return [style.borderLeftWidth, style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth].map(
+        parseFloat,
+      );
+    });
+    const [left, top, right, bottom] = border;
+    const previous = await element.getAttribute('data-gm-qa-pixels');
+    await element.evaluate((node) => (node as Element).setAttribute('data-gm-qa-pixels', ''));
+    const style = await this.page.addStyleTag({
+      content: 'html * { visibility: hidden !important } iframe[data-gm-qa-pixels] { visibility: visible !important }',
+    });
+    try {
+      if (!(await style.evaluate((node) => Boolean((node as HTMLStyleElement).sheet))))
+        throw new Error('cannot isolate game frame pixels from shell overlays');
+      return await this.page.screenshot({
+        scale: 'css',
+        clip: {
+          x: box.x + left!,
+          y: box.y + top!,
+          width: box.width - left! - right!,
+          height: box.height - top! - bottom!,
+        },
+      });
+    } finally {
+      await style.evaluate((node) => (node as Element).remove());
+      await element.evaluate((node, value) => {
+        if (value === null) (node as Element).removeAttribute('data-gm-qa-pixels');
+        else (node as Element).setAttribute('data-gm-qa-pixels', value);
+      }, previous);
+    }
   }
 
   async shot(name: string): Promise<string> {
@@ -64,23 +104,23 @@ export class Player {
 
   /** Takes the frame a later `changed` expect compares against, for a page that waits on someone else's input. */
   async mark(): Promise<void> {
-    this.before = await frame(this.page);
+    this.before = await this.pixels();
   }
 
   /** Waits until the expect holds; throws with what was missing after `timeoutMs`. */
   async expect(step: ExpectStep): Promise<number> {
     const deadline = Date.now() + step.timeoutMs;
-    const before = step.pixels === 'changed' ? (this.before ?? (await frame(this.page))) : undefined;
+    const before = step.pixels === 'changed' ? (this.before ?? (await this.pixels())) : undefined;
     if (step.pixels === 'changed') this.before = undefined;
     const text = step.text !== undefined ? fill(step.text, this.vars) : undefined;
     for (;;) {
       let missing = '';
       if (text !== undefined) {
-        const body = await this.page.evaluate(() => document.body?.innerText ?? '');
+        const body = await this.target.evaluate(() => document.body?.innerText ?? '');
         if (!body.includes(text)) missing = `text "${text}"`;
       }
       if (!missing && step.pixels) {
-        const stats = await pixelStats(this.page, await frame(this.page), before, step.region);
+        const stats = await pixelStats(this.page, await this.pixels(), before, step.region);
         if (step.pixels === 'nonblank' && isBlank(stats)) missing = 'non-blank pixels';
         if (step.pixels === 'changed' && !isChanged(stats)) missing = 'changed pixels';
       }
@@ -118,7 +158,7 @@ export class Player {
     try {
       if (INPUT.has(step.do)) {
         this.firstInputAt ??= started;
-        this.before = await frame(this.page);
+        this.before = await this.pixels();
       }
       switch (step.do) {
         case 'goto':
@@ -193,7 +233,7 @@ export class Player {
           this.vars[step.as] = step.url
             ? this.page.url()
             : (
-                await this.page
+                await this.target
                   .locator(fill(step.selector ?? '', this.vars))
                   .first()
                   .innerText()

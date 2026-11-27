@@ -23,6 +23,10 @@ import { startAnalyticsRetention } from './analytics/retention.js';
 import { startEstimateRefinement } from './budget/estimate.js';
 import { createApplyUsage, startUsageReconciler } from './budget/aiur-usage.js';
 import { envFileValue, FAL_CAP_USD, providerReadings } from './energy/providers.js';
+import { readEnergySnapshot } from './energy/source.js';
+import { sendResourceThresholdMail } from './energy/threshold-mail.js';
+import { parseEmailList } from './auth/access.js';
+import { loadAuthEnv } from './auth/env.js';
 import { createChatJobDirectory } from './build-chat/job-directory.js';
 import { createDraftScopeTicket } from './new-game/draft-assistant.js';
 import { startDraftCleanup } from './game-drafts/cleanup.js';
@@ -112,6 +116,7 @@ const deps: AppDeps = {
     voiceInternalSecret: env.OGM_VOICE_INTERNAL_SECRET,
     narrationConcurrency: env.OGM_NARRATION_CONCURRENCY,
     defaultDailyAllowanceMicroUsd: env.OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD,
+    defaultDailyAllowanceConfigured: env.defaultDailyAllowanceConfigured,
     resetZoneDefault: env.OGM_RESET_ZONE_DEFAULT,
     intakeDir: env.OGM_INTAKE_DIR,
     reportBundleMaxBytes: env.OGM_REPORT_BUNDLE_MAX_BYTES,
@@ -194,6 +199,7 @@ startPreviewRelay(deps, previewTicketVerifier(env.OGM_INTAKE_GITHUB_TOKEN));
 
 const budgetDefaults = {
   dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+  defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
   resetZone: deps.config.resetZoneDefault,
 };
 const lifecycleDeps = { db, sqlite, events: deps.events, defaults: budgetDefaults };
@@ -297,6 +303,29 @@ const feed = startFeedConsumers({
 
 const app = createApp(deps);
 for (const { prefix, file } of (await scanRoutes(app, { deps })).mounted) log({ event: 'mounted', prefix, file });
+const resourceMaintainers = parseEmailList(loadAuthEnv().OGM_MAINTAINER_EMAILS);
+let resourceMailPending: Promise<void> | null = null;
+const resourceMailTick = () => {
+  if (resourceMailPending || !deps.registry.mailSender) return;
+  const mail = deps.registry.mailSender;
+  resourceMailPending = readEnergySnapshot(
+    {
+      db,
+      zone: deps.config.resetZoneDefault,
+      readings: deps.registry.energyReadings,
+      netlifyLog: deps.registry.energyNetlifyLog,
+    },
+    new Date(),
+  )
+    .then((snapshot) => sendResourceThresholdMail(db, mail, snapshot.resources, resourceMaintainers))
+    .catch((error: unknown) => log({ event: 'resource_threshold_mail_error', error: (error as Error).name }))
+    .finally(() => {
+      resourceMailPending = null;
+    });
+};
+resourceMailTick();
+const resourceMailTimer = setInterval(resourceMailTick, 60_000);
+resourceMailTimer.unref();
 const reviewNotifications = startReadyReviewNotifier(
   createReadyReviewNotifier(deps, {
     deliver: (notification) => getNotifyRuntime(deps).deliverStored(notification, { retryFailures: true }),
@@ -319,6 +348,7 @@ decisionWaits.start(env.OGM_COMMAND_POLL_MS);
 const server = serve({ fetch: app.fetch, hostname: API_HOST, port: env.OGM_API_PORT });
 server.once('listening', () => log({ event: 'listening', host: API_HOST, port: env.OGM_API_PORT }));
 process.once('SIGTERM', () => {
+  clearInterval(resourceMailTimer);
   intake.stop();
   stopDraftCleanup();
   stopAnalyticsRetention();
@@ -329,7 +359,7 @@ process.once('SIGTERM', () => {
   reviewNotifications.stop();
   stopBriefingPush();
   usageReconciler.stop();
-  void Promise.all([feed.stop(), usageReconciler.idle(), reviewNotifications.idle()]).finally(() =>
+  void Promise.all([feed.stop(), usageReconciler.idle(), reviewNotifications.idle(), resourceMailPending]).finally(() =>
     server.close(() => sqlite.close()),
   );
 });
