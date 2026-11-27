@@ -79,6 +79,12 @@ describe('job scheduler', () => {
     queued(deps, 'j_waiting', '2026-11-01T01:00:00.000Z');
 
     expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual([]);
+    deps.db
+      .update(schema.jobTickets)
+      .set({ terminalState: 'done' })
+      .where(eq(schema.jobTickets.jobId, 'j_running'))
+      .run();
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual(['j_waiting']);
   });
   it('honors a creator limit above one', () => {
     const { deps } = setup();
