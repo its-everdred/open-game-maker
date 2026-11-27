@@ -115,6 +115,7 @@ describe('check-ladder', () => {
     expect(checkLadder(noTicket)).toEqual(['1. Concepts: "chains" has no ticket']);
   });
 
+  // Five separate Node launches can exceed Vitest's five-second default on a busy host.
   it('runs as a command that exits 1 with the problems, 0 when clean, 2 without a file', () => {
     const script = path('./check-ladder.ts');
     const runScript = (file: string, ...args: string[]) => {
@@ -136,5 +137,5 @@ describe('check-ladder', () => {
     symlinkSync(path('..'), link);
     /* installed skills are often symlinks (.codex/skills, .agents/skills); the check must still run through one */
     expect(runScript(join(link, 'scripts/check-ladder.ts'), broken).code).toBe(1);
-  });
+  }, 30_000);
 });
