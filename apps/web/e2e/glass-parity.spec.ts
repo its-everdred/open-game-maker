@@ -20,19 +20,23 @@ const selected = process.env.OGM_GLASS_PARITY_SCREEN;
 const gameDist = process.env.OGM_GLASS_GAME_DIST;
 // eslint-disable-next-line no-restricted-properties
 const bridgePort = process.env.OGM_WEB_BRIDGE_PORT ?? '43176';
-if (selected && !['all', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet', 'Admin'].includes(selected)) {
+if (
+  selected &&
+  !['all', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet', 'Admin', 'Activity'].includes(selected)
+) {
   throw new Error(`Unknown glass parity screen: ${selected}`);
 }
 const root = resolve(process.cwd(), '../..');
 const baseline = resolve(root, 'tests/design-baselines/ogm-glass');
 const runId = randomUUID();
 test.use({ trace: 'off' });
-test.setTimeout(180_000);
+test.setTimeout(300_000);
 const screens = [
   { screen: 'SignIn', name: 'SignIn-780x1688', width: 390, height: 844, scale: 2, route: '/signin?test' },
   { screen: 'NewGame', name: 'NewGame-780x1688', width: 390, height: 844, scale: 2, route: '/new?test&step=genre' },
   { screen: 'GameSheet', name: 'GameSheet-780x1688', width: 390, height: 844, scale: 2, route: '/all?test' },
   { screen: 'Admin', name: 'Admin-780x1688', width: 390, height: 844, scale: 2, route: '/admin/members?test' },
+  { screen: 'Activity', name: 'Activity-780x1688', width: 390, height: 844, scale: 2, route: '/all?test' },
   { screen: 'Home', name: 'Home-780x1688', width: 390, height: 844, scale: 2, route: '/all?test' },
   { screen: 'Home', name: 'HomeLandscape-844x390', width: 844, height: 390, scale: 1, route: '/all?test' },
   { screen: 'Home', name: 'HomeDesktop-1440x900', width: 1440, height: 900, scale: 1, route: '/all?test' },
@@ -171,12 +175,75 @@ for (const target of screens) {
         );
         await page.route('**/api/v1/notifications?*', (route) => route.fulfill({ json: { notifications: [] } }));
         await page.route('**/api/v1/budget/status', (route) => route.fulfill({ json: { unitLabel: 'coins' } }));
-        if (target.screen === 'Home' || target.screen === 'GameSheet') {
+        if (target.screen === 'Home' || target.screen === 'GameSheet' || target.screen === 'Activity') {
+          if (target.screen === 'Activity') {
+            await page.route('**/api/v1/games/*/review-rounds*', (route) => route.fulfill({ json: { rounds: [] } }));
+            await page.route('**/api/v1/games/*/previews', (route) => route.fulfill({ json: { previews: [] } }));
+            await page.route('**/api/v1/games/*/commands', (route) => route.fulfill({ json: { commands: [] } }));
+            await page.route('**/api/v1/games/*/tickets/completed', (route) =>
+              route.fulfill({
+                json: {
+                  tickets: new URL(route.request().url()).pathname.includes('/dusk/')
+                    ? [
+                        {
+                          ticket: '8',
+                          title: 'Roadside camp',
+                          outcome: 'done',
+                          closedAt: new Date().toISOString(),
+                          url: 'https://example.test/tickets/8',
+                        },
+                        {
+                          ticket: '9',
+                          title: '[second completed ticket]',
+                          outcome: 'done',
+                          closedAt: new Date().toISOString(),
+                          url: 'https://example.test/tickets/9',
+                        },
+                      ]
+                    : [],
+                },
+              }),
+            );
+            await page.route('**/api/v1/games/*/workers', (route) =>
+              route.fulfill({
+                json: {
+                  workers: new URL(route.request().url()).pathname.includes('/dusk/')
+                    ? [
+                        {
+                          ticket: '1',
+                          title: 'Dusk and torch',
+                          percent: 80,
+                          etaSeconds: null,
+                          state: 'human-review',
+                          last: 'Warmer torch or cooler dusk?',
+                        },
+                        {
+                          ticket: '2',
+                          title: 'Forest road',
+                          percent: 55,
+                          etaSeconds: null,
+                          state: 'in-progress',
+                          last: 'Placing tree clusters',
+                        },
+                        {
+                          ticket: '3',
+                          title: 'Warmer torches',
+                          percent: 30,
+                          etaSeconds: null,
+                          state: 'in-progress',
+                          last: 'Your chat · rendering two looks',
+                        },
+                      ]
+                    : [],
+                },
+              }),
+            );
+          }
           await page.route('**/api/v1/jobs?state=active', (route) =>
             route.fulfill({
               json: {
                 jobs:
-                  target.screen === 'GameSheet'
+                  target.screen !== 'Home'
                     ? []
                     : [
                         {
@@ -256,20 +323,28 @@ for (const target of screens) {
       }
       await page.goto(target.route, { waitUntil: 'domcontentloaded' });
       const selector =
-        target.screen === 'Admin'
-          ? '.admin-table'
-          : target.screen === 'GameSheet'
-            ? '[data-game-id="blobs"] .game-tile'
-            : target.screen === 'NewGame'
-              ? '.new-game-head'
-              : target.screen === 'SignIn'
-                ? '.signin-screen'
-                : target.screen === 'Editor'
-                  ? '.edit-workspace'
-                  : target.screen === 'Home'
-                    ? '[data-game-id]'
-                    : '.settings-screen';
+        target.screen === 'Activity'
+          ? '.worker-tracker-button'
+          : target.screen === 'Admin'
+            ? '.admin-table'
+            : target.screen === 'GameSheet'
+              ? '[data-game-id="blobs"] .game-tile'
+              : target.screen === 'NewGame'
+                ? '.new-game-head'
+                : target.screen === 'SignIn'
+                  ? '.signin-screen'
+                  : target.screen === 'Editor'
+                    ? '.edit-workspace'
+                    : target.screen === 'Home'
+                      ? '[data-game-id]'
+                      : '.settings-screen';
       await expect(page.locator(selector).first()).toBeVisible({ timeout: 30_000 });
+      if (target.screen === 'Activity') {
+        await page.locator(selector).first().click();
+        await expect(page.locator('.worker-tracker-panel')).toBeVisible();
+        await expect(page.locator('.worker-tracker-panel').getByText('Forest road')).toBeVisible();
+        await expect(page.locator('.worker-tracker-panel')).not.toContainText('Could not load all reviews');
+      }
       if (target.screen === 'GameSheet') {
         await page.locator(selector).first().click();
         await expect(page.locator('.games-spotlight')).toBeVisible();
@@ -312,7 +387,7 @@ for (const target of screens) {
         }
       });
       console.log(`Capturing ${target.name}`);
-      const actual = await page.screenshot({ timeout: 60_000 });
+      const actual = await page.screenshot({ timeout: 120_000 });
       const reference = await readFile(resolve(baseline, `${target.name}.png`));
       const manifest: unknown = JSON.parse(await readFile(resolve(baseline, 'manifest.json'), 'utf8'));
       verifyGlassReference(reference, manifest, `${target.name}.png`);

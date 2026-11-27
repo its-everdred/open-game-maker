@@ -44,7 +44,10 @@ export function glassScreens(files) {
   const screens = new Set();
   for (const file of files) {
     if (/\.(?:test|spec)\.[^.]+$/.test(file)) continue;
-    if (file.startsWith('apps/web/src/routes/admin/')) {
+    if (file.startsWith('apps/web/src/features/worker-builds/')) {
+      screens.add('Activity');
+      screens.add('Unmapped');
+    } else if (file.startsWith('apps/web/src/routes/admin/')) {
       screens.add('Admin');
       if (!file.endsWith('/Members.tsx')) screens.add('Unmapped');
     } else if (file.startsWith('apps/web/src/routes/new/')) {
