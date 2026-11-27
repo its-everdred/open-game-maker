@@ -26,10 +26,11 @@ export async function clipScores(
     });
     let output = '';
     let failed = false;
+    // Semantic ranking is optional: leave time for index loading and text results.
     const timer = setTimeout(() => {
       failed = true;
-      child.kill();
-    }, 120_000);
+      child.kill('SIGKILL');
+    }, 3_000);
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
       output += chunk;

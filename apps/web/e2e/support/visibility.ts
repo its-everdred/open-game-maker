@@ -11,7 +11,7 @@ export function bridgeState(page: Page): Promise<string | undefined> {
 }
 
 export function gameFrame(page: Page): Frame | undefined {
-  return page.frames().find((frame) => frame.url().startsWith(`${bridgeOrigin}/g/`));
+  return page.frames().find((frame) => frame.url().startsWith(`${bridgeOrigin}/d/`));
 }
 
 /** Emulates the browser hiding and showing the tab, in the shell and in the game frame alike. */

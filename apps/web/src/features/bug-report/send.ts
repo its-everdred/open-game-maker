@@ -6,7 +6,8 @@ import { bugContext, setBugContext, type BugContext } from './slice';
 // the screen's ids and the last error's summary.
 export type ReportError = { type: string; message: string; frames: string[] };
 export type Report = BugContext & { text?: string; error?: ReportError };
-export type ReportResult = { reportId: string; route?: string; jobId?: string } | { queued: true };
+export type ReportResult =
+  { reportId: string; route?: string; jobId?: string; pendingBudget?: true; resetsAt?: string } | { queued: true };
 
 const QUEUE_KEY = 'ogm.reports.queue';
 const FRAMES = 5;
@@ -66,7 +67,10 @@ export function captureError(error: unknown, context: ErrorContext = {}, fallbac
 }
 
 function post(report: Report) {
-  return api<{ reportId: string; route?: string; jobId?: string }>('/reports', { method: 'POST', json: report });
+  return api<{ reportId: string; route?: string; jobId?: string; pendingBudget?: true; resetsAt?: string }>(
+    '/reports',
+    { method: 'POST', json: report },
+  );
 }
 
 function unreachable(e: unknown): boolean {

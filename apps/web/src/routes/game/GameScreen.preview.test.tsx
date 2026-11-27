@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
+import { notifyState } from '../../lib/notify/slice';
 
 type MockFrameState = {
   bridgeState: 'connecting' | 'ready' | 'error';
@@ -289,7 +290,15 @@ describe('GameScreen previews', () => {
     );
     await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled(), { timeout: 8_000 });
   }, 15_000);
-  it('shows a concept and sends a scope placement as a request before any build', async () => {
+  it('shows the interim limit and reset when a scope placement is refused', async () => {
+    fallbackAdmission.admitJob.mockResolvedValueOnce({
+      kind: 'refused',
+      error: 'energy_limit_reached',
+      reason: 'weekly_user',
+      window: 'week',
+      resetsAt: '2026-11-30T08:00:00.000Z',
+      offers: ['ask_admin'],
+    });
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,
       buildId: editorApi.NO_BUILD_ID,
@@ -319,6 +328,13 @@ describe('GameScreen previews', () => {
     fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
     fireEvent.pointerUp(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
     await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(
+        notifyState().toasts.some(({ text }) =>
+          /The interim weekly job limit is exhausted\. The limit resets/.test(text),
+        ),
+      ).toBe(true),
+    );
     expect(editorApi.postTransaction).not.toHaveBeenCalled();
   });
   it('uses an unmerged playable preview when no released build exists', async () => {

@@ -460,9 +460,9 @@ test("Play this build opens that build in the game's editor without leaving the 
   expect(context.pages()).toHaveLength(1);
   await expect(page.locator('.game-screen.is-editing')).toBeVisible();
   /* The reviewed build boots in the editor's preview, not the branch head. */
-  await expect.poll(() => frames.find((url) => url.includes(`/g/${gameId}/b_proto/`))).toBeTruthy();
+  await expect.poll(() => frames.find((url) => url.includes(`/d/${gameId}/b_proto/`))).toBeTruthy();
   expect(frames.some((url) => url.includes('/b_head/'))).toBe(false);
-  await expect(page.locator('.game-frame iframe')).toHaveAttribute('src', new RegExp(`/g/${gameId}/b_proto/`));
+  await expect(page.locator('.game-frame iframe')).toHaveAttribute('src', new RegExp(`/d/${gameId}/b_proto/`));
   await capture(page, testInfo, 'build-link-editor');
   /* The bridge fixture never reports its load done, so its cover stays up; this still hides it to show the frame. */
   const path = testInfo.outputPath('build-link-editor-frame.png');
@@ -503,6 +503,7 @@ async function install(page: Page): Promise<Api> {
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (path === '/api/v1/artifacts/grant') return json(route, { grant: 'fixture-grant' });
     const post = route.request().method() === 'POST';
     if (path === '/api/v1/me/commands') return json(route, { commands: creator, sessions: [] });
     if (path === '/api/v1/me/core-commands') return json(route, { commands: core, targets: [] });

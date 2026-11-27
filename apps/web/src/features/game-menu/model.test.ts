@@ -174,7 +174,7 @@ describe('edit menu energy (#1326)', () => {
       ...base,
       sources: [
         {
-          id: 'claude',
+          id: 'claude:week',
           label: 'Claude',
           usedPercent: 62,
           resetsAt: null,
@@ -183,7 +183,7 @@ describe('edit menu energy (#1326)', () => {
           stale: false,
         },
         {
-          id: 'codex',
+          id: 'codex:week',
           label: 'Codex',
           usedPercent: 91,
           resetsAt: null,
@@ -199,10 +199,8 @@ describe('edit menu energy (#1326)', () => {
     ]);
   });
 
-  it('falls back to the Energy windows', () => {
-    expect(energyCards(base)).toEqual([
-      { key: 'week', name: 'This week', usedPercent: 40, resetsAt: '2026-11-27T09:00:00Z' },
-    ]);
+  it('does not present aggregate build windows as resources', () => {
+    expect(energyCards(base)).toEqual([]);
     expect(energyCards(undefined)).toEqual([]);
   });
 
@@ -211,8 +209,6 @@ describe('edit menu energy (#1326)', () => {
        crashed on it. */
     const legacy: Partial<EnergyView> = { ...base };
     delete legacy.sources;
-    expect(energyCards(legacy as EnergyView)).toEqual([
-      { key: 'week', name: 'This week', usedPercent: 40, resetsAt: '2026-11-27T09:00:00Z' },
-    ]);
+    expect(energyCards(legacy as EnergyView)).toEqual([]);
   });
 });

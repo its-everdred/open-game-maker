@@ -310,7 +310,7 @@ else changes — the game appears in the games picker and opens from its play li
 
 ## Register an existing game as an operator
 
-Run `gm games register <slug> --repo <owner>/<repo> --folder games/<slug> --title "<title>"` on the API host. It reads the API token from `api.env` and the daemon port from the checkout's `.aiur/config`; the checkout defaults to `~/games/<repo>` and can be set with `--checkout`. The repository origin must match `--repo`. The owner defaults to `OGM_INSTANCE_OWNER_ID` in the API environment, or the sole family owner when only one exists. Set that value to the instance owner’s app user ID for installations with multiple families, or pass `--owner <user-id>` for a specific registration. Use `--visibility listed` to show the game in the picker (the default is private). Repeating the command updates the title, owner, visibility and daemon details for the same game; conflicting slugs or daemon registrations are refused.
+Run `gm games register <slug> --repo <owner>/<repo> --folder games/<slug> --title "<title>"` on the API host. It reads the API token from `api.env` and the daemon port from the checkout's `.aiur/config`; the checkout defaults to `~/games/<repo>` and can be set with `--checkout`. The repository origin must match `--repo`. The owner defaults to `OGM_INSTANCE_OWNER_ID` in the API environment, or the sole family owner when only one exists. Set that value to the instance owner’s app user ID for installations with multiple families, or pass `--owner <user-id>` for a specific registration. Use `--visibility listed` to show the game in the picker (the default is private). Repeating the command updates the title, owner, visibility and daemon details for the same game; conflicting slugs or daemon registrations are refused. Daemon endpoint changes are refused while an open or agreed New Game draft uses that repository; finish or abandon the draft before changing the endpoint.
 
 Operator publish can reuse a repository daemon checkout for multiple registered games. Those registrations do not create additional game daemon rows.
 
@@ -452,6 +452,21 @@ If a run fails, preserve its recovery state and rerun with the same SHA; an ambi
 change stops cleanup for inspection. `--out` selects another
 evidence directory, and `--origin` and `--api` select the app and loopback API origins. The internal QA routes accept
 only the internal token.
+
+## Check interim weekly limits on prod
+
+Admin > Users sets each account’s weekly new-game and edit limits; a blank limit is unlimited. Defaults are two new
+games and twenty edits per week, with admins unlimited unless explicitly configured. The reset is Monday in the configured
+reset zone. Explicit daily and overall build-budget caps still apply; scope starts are limited separately to ten per hour.
+Settings shows reported coding-provider windows as Minerals and paid-API readings as Gas; estimates are labelled.
+Actual paid spend remains unknown when the upstream data cannot distinguish billed API use from subscriptions.
+The API checks resource readings every minute and emails allowed administrators and configured maintainers at 95% use,
+once per resource and reset period; unavailable or stale readings do not trigger mail.
+
+After deploy, run `ops/bin/ogm-qa-session`, then `ops/bin/qa-energy-budget` on the API host. The check sets the
+dedicated QA account's weekly limits to zero and verifies the draft, job and report routes return the personal interim-limit
+refusal and reset. Its fence prevents dispatch even if a limit check fails. The command restores the prior QA budget and
+removes its probe report. If the command is interrupted, run `ops/bin/qa-energy-budget --recover` before the next check.
 
 ## Check the review deck on prod
 

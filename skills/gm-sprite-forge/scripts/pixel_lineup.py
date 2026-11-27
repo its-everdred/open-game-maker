@@ -1,17 +1,21 @@
 """In-engine lineups for a pixel_preview.py run: every pixel sprite at 1x on a real ground patch beside reference sprites.
 
 Usage: pixel_lineup.py <preview_out> --ground base.png[,overlay.png] --refs a.png b.png ... [--holder b.png] [--dir S]
+                       [--iso-dir SW]
 For each group in <preview_out>/sheets.json, writes lineup-<group>.png (1x, what the game shows) and
-lineup-<group>@3x.png (nearest neighbour, item names underneath) and adds both paths to sheets.json.
+lineup-<group>@3x.png and adds both paths to sheets.json. The @3x image is for a phone: each strip (nearest neighbour)
+is followed by a close-up row, every item alone at 4x (big pieces down to the strip's zoom) with its full name
+underneath, so a mace beside a hero is still readable; keep --refs to two (our hero and one pack original) so the strip stays compact.
+Environment and props are shown from --iso-dir (default SW, yaw 0: the pack camera sees their sides at 45 degrees, as
+the game's iso camera does; S faced walls square to the camera, Kevin 2026-11-24). A model without a visible render in
+that direction is left out, and a group with no visible item gets no lineup (logged, never an empty card).
 Ground: the pack's 256 px iso tiles (a 128 x 64 diamond), laid as a field; `overlay` (e.g. grass) is drawn on each base
 tile. Every strip starts with the refs (pack originals, approved base bodies) standing on the ground; characters, armor
 and props stand on it too; each weapon is shown beside a copy of --holder (default: the second ref) at hand height.
 Sprites are placed by their alpha box: its bottom on the ground line, its centre on the slot. Never resizes a sprite.
 Weapons are not shown at the pack's own scale (a chibi pack normalised to a 43 px hero inflates them): each is
 re-sized from its raw render so its longest side is a real-world fraction of the holder's height (REAL_SIZE; the pack
-6Barbarian's long axe measures ~36 px against a ~43 px body, 0.84, which anchors the two-handed axe), then given the
-preview's finish again (recipe.json: B; or C, re-sized by picking source pixels, never averaging, from the 4x render and
-its albedo and depth passes). The fractions and factors go to <preview_out>/lineup.json. Everything else keeps its render's size.
+6Barbarian's long axe measures ~36 px against a ~43 px body, 0.84, which anchors the two-handed axe), then given the preview's finish again. The fractions and factors go to <preview_out>/lineup.json. Everything else keeps its render's size.
 A sprite without its own shadow pixels gets a soft contact shadow, and the strip is lit with --light (default: Dusk
 Helm's breezy daylight, field.hd2d.json: ambient #e8f0ff x 0.85 plus the #ffe2a8 x 0.12 sun fill, contrast 1.1).
 """
@@ -29,7 +33,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pixel_finish_c import finish_c, pick_resize  # noqa: E402
 from pixel_preview import pixelate  # noqa: E402
 
-PER_STRIP = 12
+PER_STRIP = 6
+CLOSE = 4  # close-up zoom, nearest neighbour
+ISO_GROUPS = ('environment', 'props')
+BG = (40, 44, 40)
 GAP = 6
 HAND = 0.45  # hand height as a fraction of the holder's height
 # longest side of a weapon as a fraction of the holder's height; first match wins
@@ -161,6 +168,34 @@ def font(size):
         return ImageFont.load_default()
 
 
+def closeups(items, spec, width, zoom=CLOSE, size=20, min_zoom=1, max_side=400):
+    """Each item alone at `zoom` x, lit as in the strip, its full name underneath; rows wrap at `width`. A big piece
+    (a floor, a wall) drops toward `min_zoom` so its longest side stays near `max_side`: it is readable already, and at
+    4x one dungeon floor made the card 5,000 px wide."""
+    f, pad = font(size), 12
+    cells = []
+    for n, s in items:
+        z = max(min_zoom, min(zoom, max_side // max(s.size)))
+        big = light(s, spec).resize((s.width * z, s.height * z), Image.NEAREST)
+        cells.append((n, big, int(max(big.width, ImageDraw.Draw(big).textlength(n, font=f))) + 2 * pad))
+    rows = [[]]
+    for c in cells:
+        if rows[-1] and sum(r[2] for r in rows[-1]) + c[2] > width:
+            rows.append([])
+        rows[-1].append(c)
+    tall = [max(b.height for _, b, _ in r) for r in rows]
+    out = Image.new('RGB', (max(width, *(sum(c[2] for c in r) for r in rows)), sum(tall) + len(rows) * (size + 3 * pad)), BG)
+    d, y = ImageDraw.Draw(out), pad
+    for r, t in zip(rows, tall):
+        x = 0
+        for n, b, w in r:
+            out.paste(b, (x + (w - b.width) // 2, y + t - b.height), b)  # bottoms aligned
+            d.text((x + (w - d.textlength(n, font=f)) / 2, y + t + pad // 2), n, fill=(225, 225, 225), font=f)
+            x += w
+        y += t + size + 3 * pad
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('preview', type=Path)
@@ -168,9 +203,9 @@ def main():
     ap.add_argument('--refs', nargs='+', type=Path, required=True)
     ap.add_argument('--holder', type=Path, help='who stands beside each weapon (default: the second ref)')
     ap.add_argument('--dir', default='S')
+    ap.add_argument('--iso-dir', default='SW', help='direction for environment and props (SW: 45 degree iso view)')
     ap.add_argument('--zoom', type=int, default=3)
-    ap.add_argument('--colours', type=int, default=14, help='finish B colours for re-sized weapons (a finish C preview '
-                    'uses its own recipe)')
+    ap.add_argument('--colours', type=int, default=14, help='finish B colours for re-sized weapons')
     ap.add_argument('--light', default=DAYLIGHT, help='colour:weight,... ,contrast (default: Dusk Helm daylight)')
     a = ap.parse_args()
     sheets = json.loads((a.preview / 'sheets.json').read_text())
@@ -179,41 +214,56 @@ def main():
     refs = [crop(p) for p in a.refs]
     holder = crop(a.holder) if a.holder else refs[min(1, len(refs) - 1)]
     tiles = a.ground.split(',')
-    sizes = {}
+    sizes, skipped = {}, {}
     for g, info in sheets.items():
-        if g.startswith('weapons'):
-            items = []
-            for n in info['models']:
+        d = a.iso_dir if g in ISO_GROUPS else a.dir
+        items = []
+        for n in info['models']:
+            src = a.preview / ('raw' if g.startswith('weapons') else 'pixel') / f'{n}_{d}.png'
+            if not src.exists():
+                skipped[n] = f'no {d} render'
+                continue
+            if crop(src).getbbox() is None:
+                skipped[n] = 'nothing visible'
+                continue
+            if g.startswith('weapons'):
                 f = real_size(n)
-                im, k = resize_weapon(a.preview / 'raw' / f'{n}_{a.dir}.png', f * holder.height, a.colours, fin)
-                items.append((n, im))
+                im, k = resize_weapon(src, f * holder.height, a.colours, fin)
                 sizes[n] = {'fraction_of_holder': f, 'px': max(im.size), 'raw_scale': round(k, 3)}
-        else:
-            items = [(n, crop(a.preview / 'pixel' / f'{n}_{a.dir}.png')) for n in info['models']]
-        rows = [strip(items[k:k + PER_STRIP], refs, holder, g.startswith('weapons'), tiles, a.light)
-                for k in range(0, len(items), PER_STRIP)]
-        W, H = max(r[0].width for r in rows), sum(r[0].height for r in rows)
-        one = Image.new('RGBA', (W, H), (40, 44, 40, 255))
+            else:
+                im = crop(src)
+            if im.getbbox() is None:
+                skipped[n] = 'nothing visible'
+                continue
+            items.append((n, im))
+        if not items:
+            print(f'skip group {g}: no visible item ({", ".join(f"{n}: {skipped[n]}" for n in info["models"])})',
+                  file=sys.stderr)
+            for k in ('lineup', 'lineup_zoom'):
+                info.pop(k, None)
+            for output in (a.preview / f'lineup-{g}.png', a.preview / f'lineup-{g}@{a.zoom}x.png'):
+                output.unlink(missing_ok=True)
+            continue
+        chunks = [items[k:k + PER_STRIP] for k in range(0, len(items), PER_STRIP)]
+        rows = [strip(c, refs, holder, g.startswith('weapons'), tiles, a.light)[0] for c in chunks]
+        W, H = max(r.width for r in rows), sum(r.height for r in rows)
+        one = Image.new('RGBA', (W, H), BG + (255,))
         y = 0
-        for im, _ in rows:
+        for im in rows:
             one.alpha_composite(im, (0, y))
             y += im.height
-        one = one.convert('RGB')
         p1 = a.preview / f'lineup-{g}.png'
-        one.save(p1)
-        z, label = a.zoom, 16
-        big = Image.new('RGB', (W * z, (H + label * len(rows) // z + 1) * z), (40, 44, 40))
-        d = ImageDraw.Draw(big)
+        one.convert('RGB').save(p1)
+        z = a.zoom
+        parts = []
+        for im, c in zip(rows, chunks):
+            parts.append(im.convert('RGB').resize((im.width * z, im.height * z), Image.NEAREST))
+            parts.append(closeups(c, a.light, W * z, min_zoom=z))
+        big = Image.new('RGB', (max(p.width for p in parts), sum(p.height for p in parts)), BG)
         y = 0
-        for im, names in rows:
-            big.paste(im.convert('RGB').resize((im.width * z, im.height * z), Image.NEAREST), (0, y))
-            y += im.height * z
-            for n, cx, room in names:
-                fit = max(4, room * z // 8)  # ~8 px per character at size 13
-                t = n if len(n) <= fit else n[:fit - 1] + '…'
-                d.text((cx * z - d.textlength(t, font=font(13)) / 2, y + 2), t, fill=(225, 225, 225), font=font(13))
-            y += label
-        big = big.crop((0, 0, W * z, y))
+        for p in parts:
+            big.paste(p, (0, y))
+            y += p.height
         p3 = a.preview / f'lineup-{g}@{z}x.png'
         big.save(p3)
         info['lineup'], info['lineup_zoom'] = str(p1.resolve()), str(p3.resolve())
@@ -221,7 +271,8 @@ def main():
     (a.preview / 'sheets.json').write_text(json.dumps(sheets, indent=1) + '\n')
     (a.preview / 'lineup.json').write_text(json.dumps({
         'holder_px': holder.height, 'refs': [str(p) for p in a.refs], 'holder': str(a.holder or a.refs[min(1, len(a.refs) - 1)]),
-        'ground': tiles, 'light': a.light, 'weapon_sizes': sizes,
+        'ground': tiles, 'light': a.light, 'weapon_sizes': sizes, 'dir': a.dir, 'iso_dir': a.iso_dir,
+        'iso_groups': list(ISO_GROUPS), 'closeup_zoom': CLOSE, 'skipped': skipped,
         'weapon_calibration': 'pack 6Barbarian long axe ~36 px vs ~43 px body = 0.84 (2H axe)'}, indent=1) + '\n')
 
 

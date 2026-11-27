@@ -79,3 +79,42 @@ it('refuses a corner gate, whose cell would stay solid and seal the way in', () 
   const grid = new IsoMap(assemblyMap(3, 3, run.placements)).collisionGrid();
   expect([grid[2]![1], grid[1]![1]]).toEqual([false, false]);
 });
+
+it('places scaled posts at the inspected gate ends without blocking the entry', () => {
+  const cells = Array.from({ length: 9 }, (_, i) => ({ x: 2 + (i % 3), y: 2 + Math.floor(i / 3) }));
+  const gate = { cell: { x: 3, y: 4 }, edge: 'yMax' as const };
+  const style = {
+    asset: 't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01',
+    facing: 'E' as const,
+    scale: 0.4,
+  };
+  const run = edgeRun(cells, 'fence', [gate], style);
+  const map = new IsoMap(assemblyMap(6, 6, run.placements));
+  expect(map.pieces('decor').map(({ x, y, scale, elevation, solid }) => ({ x, y, scale, elevation, solid }))).toEqual([
+    { x: 3, y: 5, scale: 0.4, elevation: 0.5, solid: false },
+    { x: 4, y: 5, scale: 0.4, elevation: 0.5, solid: false },
+  ]);
+  expect(run.placements.filter((placement) => placement.layer === 'decor').map((placement) => placement.role)).toEqual([
+    'post',
+    'post',
+  ]);
+  expect(map.collisionGrid()[4]![3]).toBe(false);
+  expect(() => edgeRun(cells, 'fence', [{ cell: { x: 3, y: 2 }, edge: 'yMin' }], style)).toThrow('only inspected');
+  expect(() => edgeRun(cells, 'fence', [gate], { ...style, scale: 0.5 })).toThrow('only inspected');
+});
+
+it('explains the required margin when gate posts fall beyond the map edge', () => {
+  const cells = Array.from({ length: 16 }, (_, i) => ({ x: i % 4, y: Math.floor(i / 4) }));
+  const gate = { cell: { x: 1, y: 3 }, edge: 'yMax' as const };
+  const style = {
+    asset: 't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/stone-a14@2026-11-01',
+    facing: 'E' as const,
+    scale: 0.4,
+  };
+  const run = edgeRun(cells, 'fence', [gate], style);
+  expect(() => assemblyMap(4, 4, run.placements)).toThrow('gate posts need a one-cell map margin');
+  const post = run.placements.find((placement) => placement.role === 'post')!;
+  expect(() => assemblyMap(4, 4, [{ ...post, cell: { x: 1.5, y: 4 } }])).toThrow(
+    /^placement 1.5,4 is outside the map$/,
+  );
+});

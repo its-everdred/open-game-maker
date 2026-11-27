@@ -156,7 +156,7 @@ async function gameFrame(page: Page, speed: string): Promise<Frame> {
     .poll(() => {
       found = page
         .frames()
-        .find((frame) => frame.url().includes('/g/g_fall') && frame.url().includes(`speed=${speed}`));
+        .find((frame) => frame.url().includes('/d/g_fall') && frame.url().includes(`speed=${speed}`));
       return found === undefined ? false : found.evaluate(() => window.__fixture !== undefined).catch(() => false);
     })
     .toBe(true);
@@ -173,6 +173,7 @@ async function judgeDislike(page: Page) {
 async function installApi(page: Page) {
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/v1/artifacts/grant') return json(route, { grant: 'fixture-grant' });
     if (path === '/api/v1/notifications/stream') {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
     }

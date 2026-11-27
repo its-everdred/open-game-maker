@@ -365,7 +365,9 @@ export function GameScreen() {
       void admitJob(request)
         .then((result) => {
           if (result.kind === 'refused') {
-            pushToast(energyRefusalText(result.window) ?? 'The build could not be started.');
+            pushToast(
+              energyRefusalText(result.window, result.resetsAt, result.reason) ?? 'The build could not be started.',
+            );
             onDone?.(false);
             return;
           }
@@ -679,7 +681,7 @@ export function GameScreen() {
   const fileBug = useCallback<FileBug>(
     async (text, log, attempt) => {
       const owner = ownsGame && room.snapshot?.role !== 'peer' && jobBranch === 'main';
-      if (!owner) setBugContext({ gameId });
+      if (!owner) setBugContext({ gameId, buildHash: runningBuildId });
       const result = await fileBugRequest(
         { admit: admitJob, report: sendReport },
         { gameId, branchId: jobBranch, owner },
@@ -691,7 +693,7 @@ export function GameScreen() {
       }
       return result;
     },
-    [gameId, jobBranch, ownsGame, queryClient, room.snapshot?.role],
+    [gameId, jobBranch, ownsGame, queryClient, room.snapshot?.role, runningBuildId],
   );
   const readBugLog = useCallback(
     () => bugLog({ gameId, buildId: runningBuildId, mode, frame: frameState }),

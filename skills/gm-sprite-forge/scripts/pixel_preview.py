@@ -1,6 +1,6 @@
 """Preview 3D models through the pack camera and a pixel finish (B, or C): raw | pixel, side by side.
 
-Usage: pixel_preview.py <model|dir> [...] --out <dir> [--dirs S,SE] [--colours 14] [--anim rig.glb] [--ref-height H]
+Usage: pixel_preview.py <model|dir> [...] --out <dir> [--dirs S,SE,SW] [--colours 14] [--anim rig.glb] [--ref-height H]
                         [--group category|none] [--title "Pack"] [--finish B|C [--variant C1|C2|C3|C4] [--ssi ref.png ...]
                         [--cloth-split]]
 Renders every .glb/.gltf/.fbx/.obj (directories recursively; one file per model name, glb > gltf > fbx > obj) with
@@ -40,7 +40,7 @@ BG = (54, 58, 62)
 RULES = [
     ('armor', r'helm|armou?r|cape|cloak|boot|glove|gauntlet|pauldron|bracer|hood|hat\b|_hat|mask|belt|chestplate'),
     ('weapons-shields', r'shield'),
-    ('weapons-bows', r'crossbow|bow|arrow|quiver'),
+    ('weapons-bows', r'crossbow|quiver|(?<![a-z])(bows?|arrows?)(?![a-z])'),
     ('weapons-axes', r'axe(?!l)|halberd'),
     ('weapons-hammers', r'hammer|mace|club|maul|flail|fistweapon'),
     ('weapons-swords', r'sword|blade|dagger|knife|sabre|saber|katana|cutlass'),
@@ -153,7 +153,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('inputs', nargs='+', type=Path)
     ap.add_argument('--out', type=Path, required=True)
-    ap.add_argument('--dirs', default='S,SE')
+    ap.add_argument('--dirs', default='S,SE,SW')
     ap.add_argument('--colours', type=int, default=14, help='finish B: 14 (8 + 6 cloth, one palette without a mask)')
     ap.add_argument('--anim', type=Path, help='glb whose idle action poses rigged characters that have none')
     ap.add_argument('--ref-height', type=float, default=0,

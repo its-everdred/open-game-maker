@@ -25,6 +25,13 @@ class Grouping(unittest.TestCase):
         self.assertEqual(category({'name': 'Skeleton_Shield_Large_A'}, 40), 'weapons-shields')
         self.assertEqual(category({'name': 'crossbow_2handed'}, 40), 'weapons-bows')
 
+        self.assertEqual(category({'name': 'arrow_bow_bundle'}, 40), 'weapons-bows')
+        self.assertEqual(category({'name': 'Skeleton_Arrow_Broken'}, 40), 'weapons-bows')
+
+    def test_narrow_stairs_are_not_bows(self):  # KayKit Dungeon's only "bow" was stairs_narrow (Kevin: "no bows")
+        self.assertEqual(category({'name': 'stairs_narrow'}, 40), 'environment')
+        self.assertEqual(category({'name': 'wall-narrow'}, 40), 'environment')
+
     def test_armor_tiles_and_props(self):
         self.assertEqual(category({'name': 'helmet_knight'}, 0), 'armor')
         self.assertEqual(category({'name': 'wall_doorway'}, 0), 'environment')

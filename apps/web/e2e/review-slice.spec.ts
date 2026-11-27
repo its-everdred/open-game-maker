@@ -26,7 +26,7 @@ test('a review card plays its slice inline, straight into the scenario', async (
     `/g/${gameId}/play?build=b_wave&scenario=endless%2Fwave-3`,
   );
   /* Nothing loads from the games host until the tap. */
-  expect(page.frames().some((frame) => frame.url().includes(`/g/${gameId}/b_wave/`))).toBe(false);
+  expect(page.frames().some((frame) => frame.url().includes(`/d/${gameId}/b_wave/`))).toBe(false);
   await capture(page, testInfo, 'review-slice-card');
 
   const tapped = Date.now();
@@ -57,7 +57,7 @@ async function gameFrame(page: Page): Promise<Frame> {
   await expect
     .poll(
       () => {
-        found = page.frames().find((frame) => frame.url().includes(`/g/${gameId}/b_wave/`));
+        found = page.frames().find((frame) => frame.url().includes(`/d/${gameId}/b_wave/`));
         return found === undefined ? false : found.evaluate(() => window.__fixture !== undefined).catch(() => false);
       },
       { timeout: 20_000 },
@@ -69,6 +69,7 @@ async function gameFrame(page: Page): Promise<Frame> {
 async function installApi(page: Page, designs: string[]) {
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/v1/artifacts/grant') return json(route, { grant: 'fixture-grant' });
     if (path === '/api/v1/notifications/stream') {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
     }

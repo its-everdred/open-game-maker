@@ -78,7 +78,21 @@ export function useScopeSession(
 
     function handleError(cause: unknown) {
       if (!current) return;
-      if (cause instanceof ApiError && (cause.status === 402 || cause.status === 404 || cause.status === 503)) {
+      if (
+        cause instanceof ApiError &&
+        cause.status === 402 &&
+        cause.body &&
+        typeof cause.body === 'object' &&
+        'window' in cause.body &&
+        cause.body.window === 'week' &&
+        'resetsAt' in cause.body &&
+        typeof cause.body.resetsAt === 'string'
+      ) {
+        setStatus('unavailable');
+        setError(
+          `The interim new-game limit is exhausted. The limit resets ${new Date(cause.body.resetsAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.`,
+        );
+      } else if (cause instanceof ApiError && (cause.status === 402 || cause.status === 404 || cause.status === 503)) {
         setStatus('unavailable');
         setError('The builder is unavailable right now. Try again later.');
       } else {

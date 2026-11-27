@@ -10,6 +10,9 @@ import { installAuthRoutes } from './fixtures/auth-routes';
 import { buildId, installGameApi } from './support/mock-game-api';
 import { launchArgs } from './support/gpu';
 
+// eslint-disable-next-line no-restricted-properties
+const bridgeOrigin = `http://127.0.0.1:${process.env.OGM_WEB_BRIDGE_PORT ?? '10001'}`;
+
 test.use({
   serviceWorkers: 'block',
   launchOptions: {
@@ -63,7 +66,7 @@ test('a room pause freezes both game frames until the shared countdown ends', as
             },
           }),
         );
-        await target.route('http://127.0.0.1:10001/g/game/**/index.html*', async (route) =>
+        await target.route(`${bridgeOrigin}/d/game/**/index.html*`, async (route) =>
           route.fulfill({
             contentType: 'text/html',
             body: await readFile(new URL('./fixtures/fall-game/index.html', import.meta.url)),
@@ -143,14 +146,18 @@ test('two SDK clients stop and resume on the same per-seat tick', async ({ brows
           },
         }),
       );
-      await page.route('http://127.0.0.1:10001/g/game/**/index.html*', (route) =>
+      await page.route(`${bridgeOrigin}/d/game/**/index.html*`, (route) =>
         route.fulfill({
           contentType: 'text/html',
           body: '<html><body><script type="module" src="./per-seat-game.js"></script></body></html>',
         }),
       );
-      await page.route('http://127.0.0.1:10001/g/game/**/per-seat-game.js', (route) =>
-        route.fulfill({ contentType: 'text/javascript', body: bundle }),
+      await page.route(`${bridgeOrigin}/d/game/**/per-seat-game.js`, (route) =>
+        route.fulfill({
+          contentType: 'text/javascript',
+          headers: { 'access-control-allow-origin': '*' },
+          body: bundle,
+        }),
       );
       await page.goto(`/g/game?room=${room.roomId}&test`);
       await expect.poll(() => roomState(page), { timeout: 30_000 }).toBe('connected');
@@ -200,17 +207,17 @@ async function roomState(page: Page): Promise<string | undefined> {
 }
 
 async function framePaused(page: Page): Promise<boolean | undefined> {
-  const frame = page.frames().find((item) => item.url().startsWith('http://127.0.0.1:10001/g/'));
+  const frame = page.frames().find((item) => item.url().startsWith(`${bridgeOrigin}/d/`));
   return frame?.evaluate(() => (window as Window & { __fixture?: { paused?: boolean } }).__fixture?.paused);
 }
 
 async function framePosition(page: Page): Promise<number | undefined> {
-  const frame = page.frames().find((item) => item.url().startsWith('http://127.0.0.1:10001/g/'));
+  const frame = page.frames().find((item) => item.url().startsWith(`${bridgeOrigin}/d/`));
   return frame?.evaluate(() => (window as Window & { __fixture?: { firstY?: number } }).__fixture?.firstY);
 }
 
 async function sdkState(page: Page): Promise<{ tick: number; paused: boolean } | undefined> {
-  const frame = page.frames().find((item) => item.url().startsWith('http://127.0.0.1:10001/g/'));
+  const frame = page.frames().find((item) => item.url().startsWith(`${bridgeOrigin}/d/`));
   if (!frame || frame.isDetached()) return undefined;
   try {
     return await frame.evaluate(() => {

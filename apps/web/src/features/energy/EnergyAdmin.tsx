@@ -70,7 +70,7 @@ function EnergyDashboard({ view }: { view: EnergyAdminView }) {
   const { binding } = view.pool;
   return (
     <section className="energy-admin">
-      <h2>Energy: {LEVEL_LABELS[view.level]}</h2>
+      <h2>Minerals and Gas: {LEVEL_LABELS[view.level]}</h2>
       {binding ? (
         <p className="energy-binding">
           {binding.label} · {binding.leftPercent}% left{binding.resetsAt ? ` · resets ${day(binding.resetsAt)}` : ''}
@@ -88,7 +88,7 @@ function EnergyDashboard({ view }: { view: EnergyAdminView }) {
 function Resources({ resources }: { resources: EnergyResource[] }) {
   return (
     <div className="admin-table-wrap">
-      <table className="admin-table energy-resources" aria-label="Energy resources">
+      <table className="admin-table energy-resources" aria-label="Resources">
         <thead>
           <tr>
             <th scope="col">Resource</th>
@@ -172,7 +172,7 @@ function Limits({ view }: { view: EnergyAdminView }) {
   return (
     <form
       className="admin-card"
-      aria-label="Energy limits"
+      aria-label="Resource limits"
       onSubmit={(event) => {
         event.preventDefault();
         if (limits) saveLimits.mutate(limits);
@@ -222,7 +222,7 @@ function Caps({ caps }: { caps: EnergyCap[] }) {
   return (
     <form
       className="admin-card"
-      aria-label="Energy caps"
+      aria-label="Resource caps"
       onSubmit={(event) => {
         event.preventDefault();
         if (valid) saveCaps.mutate(changed);

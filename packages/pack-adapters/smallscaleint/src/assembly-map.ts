@@ -9,6 +9,12 @@ export interface AssemblyPlacement {
   facing: TileFacing;
   solid: boolean;
   elevation?: number;
+  /** Uniform sprite scale, anchored at the asset's ground point. */
+  scale?: number;
+  /** Adjustment to the projected draw-order key, in screen pixels. */
+  depthOffset?: number;
+  /** Explicit semantic role for scene checks. */
+  role?: string;
   /** Scene-check annotations attached to this placement, such as `gate`. */
   tags?: readonly string[];
 }
@@ -35,10 +41,27 @@ export function assemblyMap(width: number, height: number, placements: readonly 
   for (const placement of placements) {
     const { x, y } = placement.cell;
     if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y) || x < 0 || y < 0 || x >= width || y >= height) {
+      if (placement.role === 'post' && Number.isSafeInteger(x) && x >= 0 && x < width && y === height) {
+        throw new Error(`placement ${x},${y} is outside the map; gate posts need a one-cell map margin`);
+      }
       throw new Error(`placement ${x},${y} is outside the map`);
     }
     if (typeof placement.asset !== 'string' || !placement.asset) throw new Error('placement asset must not be empty');
     if (typeof placement.solid !== 'boolean') throw new Error('placement solid must be a boolean');
+    if (placement.role !== undefined && (typeof placement.role !== 'string' || !placement.role.trim()))
+      throw new Error('placement role must be a nonempty string');
+    if (
+      placement.scale !== undefined &&
+      (!Number.isFinite(placement.scale) ||
+        placement.scale <= 0 ||
+        (placement.layer === 'floor' && placement.scale !== 1))
+    )
+      throw new Error('sprite scale must be positive; floor scale must be 1');
+    if (
+      placement.depthOffset !== undefined &&
+      (!Number.isFinite(placement.depthOffset) || (placement.layer === 'floor' && placement.depthOffset !== 0))
+    )
+      throw new Error('depth offset must be finite; floor depth offset must be 0');
     if (
       placement.tags !== undefined &&
       (!Array.isArray(placement.tags) ||
@@ -77,6 +100,9 @@ export function assemblyMap(width: number, height: number, placements: readonly 
       placement.facing,
       placement.solid,
       placement.elevation ?? 0,
+      placement.scale ?? null,
+      placement.depthOffset ?? null,
+      placement.role,
       tags,
     ]);
     let gid = byKey.get(signature);
@@ -90,6 +116,9 @@ export function assemblyMap(width: number, height: number, placements: readonly 
           { name: 'rotation', value: ROTATION[placement.facing] },
           { name: 'solid', value: placement.solid },
           ...(placement.elevation === undefined ? [] : [{ name: 'elevation', value: placement.elevation }]),
+          ...(placement.scale === undefined ? [] : [{ name: 'scale', value: placement.scale }]),
+          ...(placement.depthOffset === undefined ? [] : [{ name: 'depthOffset', value: placement.depthOffset }]),
+          ...(placement.role === undefined ? [] : [{ name: 'role', value: placement.role }]),
           ...(tags ? [{ name: 'tags', value: tags }] : []),
         ],
       });

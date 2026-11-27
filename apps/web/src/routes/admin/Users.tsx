@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { adminKeys, adminRequest, invalidateAdmin, useAllowedUsers, useAdminMe } from './api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { GameplaySetting } from './GameplaySetting';
+import { WeeklyBudget } from './WeeklyBudget';
 import type { AdminAllowedUser, AllowListRole } from './types';
 
 const ROLES: AllowListRole[] = ['player', 'maker', 'admin'];
@@ -49,6 +50,16 @@ export function Users() {
       setPending(null);
     },
   });
+  const budget = useMutation({
+    mutationFn: ({
+      user,
+      value,
+    }: {
+      user: AdminAllowedUser;
+      value: { newGames: number | null; edits: number | null };
+    }) => adminRequest(`/admin/users/${encodeURIComponent(user.email)}/weekly-budget`, { method: 'PUT', json: value }),
+    onSuccess: () => invalidateAdmin(adminKeys.users()),
+  });
   const invite = useMutation({
     mutationFn: (user: AdminAllowedUser) =>
       adminRequest(`/admin/users/${encodeURIComponent(user.email)}/invite`, { method: 'POST', json: {} }),
@@ -93,7 +104,9 @@ export function Users() {
       ) : null}
       <GameplaySetting />
       <UsersTable
-        busy={changeRole.isPending || remove.isPending || invite.isPending}
+        busy={changeRole.isPending || remove.isPending || invite.isPending || budget.isPending}
+        budgetFailed={budget.isError}
+        onSaveBudget={(user, value) => budget.mutate({ user, value })}
         currentEmail={me.data.user.email.toLowerCase()}
         inviteFailed={invite.isError}
         roleFailed={changeRole.isError}
@@ -123,6 +136,8 @@ export function Users() {
 export function UsersTable({
   busy = false,
   currentEmail,
+  budgetFailed = false,
+  onSaveBudget = () => {},
   inviteFailed = false,
   roleFailed = false,
   users,
@@ -132,6 +147,8 @@ export function UsersTable({
 }: {
   busy?: boolean;
   currentEmail: string;
+  budgetFailed?: boolean;
+  onSaveBudget?(user: AdminAllowedUser, budget: { newGames: number | null; edits: number | null }): void;
   inviteFailed?: boolean;
   roleFailed?: boolean;
   users: AdminAllowedUser[];
@@ -147,6 +164,7 @@ export function UsersTable({
             <tr>
               <th scope="col">Email</th>
               <th scope="col">Role</th>
+              <th scope="col">Weekly budget</th>
               <th scope="col">Last sign-in</th>
               <th scope="col">Actions</th>
             </tr>
@@ -170,6 +188,14 @@ export function UsersTable({
                         </option>
                       ))}
                     </select>
+                  </td>
+                  <td data-label="Weekly budget">
+                    <WeeklyBudget
+                      key={`${user.email}:${user.role}:${JSON.stringify(user.weeklyBudget)}`}
+                      user={user}
+                      busy={busy}
+                      onSave={onSaveBudget}
+                    />
                   </td>
                   <td data-label="Last sign-in">{lastSignIn(user)}</td>
                   <td data-label="Actions">
@@ -201,6 +227,7 @@ export function UsersTable({
           </tbody>
         </table>
       </div>
+      {budgetFailed ? <p role="alert">Budget could not be saved. Try again.</p> : null}
       {roleFailed ? (
         <p className="admin-dialog-error" role="alert">
           Role could not be changed. Try again.

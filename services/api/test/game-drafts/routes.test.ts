@@ -67,6 +67,24 @@ describe('temporary game drafts', () => {
     expect(create).toHaveBeenCalledWith({ draftId: result.draftId, choices });
   });
 
+  it('does not spend a new-game unit when scope drafts are abandoned', async () => {
+    const { app, create } = await setup();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const started = await app.request('/api/v1/game-drafts', {
+        method: 'POST',
+        headers: { ...asUser(user.userId), 'content-type': 'application/json' },
+        body: JSON.stringify({ choices }),
+      });
+      expect(started.status).toBe(201);
+      const { draftId } = (await started.json()) as { draftId: string };
+      expect(
+        (await app.request(`/api/v1/game-drafts/${draftId}/abandon`, { method: 'POST', headers: asUser(user.userId) }))
+          .status,
+      ).toBe(204);
+    }
+    expect(create).toHaveBeenCalledTimes(3);
+  }, 120_000);
+
   it('deletes a draft and closes its shared scope ticket when the creator leaves', async () => {
     const { deps, app, close } = await setup();
     const started = await app.request('/api/v1/game-drafts', {

@@ -14,6 +14,7 @@ export const RESERVED_GAME_SLUGS: ReadonlySet<string> = new Set([
   'connect',
   'docs',
   'docs-prototype',
+  'factory',
   'g',
   'game',
   'games',

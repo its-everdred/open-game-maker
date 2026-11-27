@@ -48,6 +48,17 @@
   text-decoration: none;
 }
 
+@media (max-width: 600px) {
+  .settings-screen > header {
+    flex-wrap: wrap;
+    padding-right: 52px;
+  }
+
+  .settings-screen > header nav {
+    flex-wrap: wrap;
+  }
+}
+
 .credits-screen {
   padding-top: 24px;
 }

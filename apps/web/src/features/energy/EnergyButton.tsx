@@ -17,7 +17,7 @@ export function EnergyButton({ open, onToggle }: { open: boolean; onToggle(): vo
       type="button"
       className="menu-circle energy-button"
       data-level={level}
-      aria-label={`Energy: ${LEVEL_LABELS[level]}`}
+      aria-label={`Minerals and Gas: ${LEVEL_LABELS[level]}`}
       aria-expanded={open}
       aria-controls="energy-detail"
       onClick={onToggle}
@@ -28,7 +28,7 @@ export function EnergyButton({ open, onToggle }: { open: boolean; onToggle(): vo
   );
 }
 
-// The day/week/month detail; it opens the Energy settings, where the breakdown and preference live.
+// The day/week/month detail; it opens the Minerals and Gas settings, where the breakdown and preference live.
 export function EnergyDetail({ close }: { close(): void }) {
   const energy = useEnergy();
   if (!energy.data) return null;
@@ -36,7 +36,7 @@ export function EnergyDetail({ close }: { close(): void }) {
     <Link
       id="energy-detail"
       className="energy-detail"
-      aria-label="Energy settings"
+      aria-label="Minerals and Gas settings"
       to="/settings/energy"
       onClick={close}
     >
