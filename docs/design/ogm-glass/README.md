@@ -34,3 +34,9 @@ This is OGM's chrome only. Dusk Helm's pixel UI and any game's own art are separ
 - **Gas icon:** Kevin named aiur's "green rocky" SVG; aiur main (2026-11-26) has only the blue mineral (`src/priv/static/claude-token.svg`, which aiur maps to Codex) and an orange blob (`codex-token.svg`, mapped to Claude). The design uses a stand-in green rock; swap it when the real file is found or made in aiur.
 - **Allocations:** the invite and Resources screens show where per-user Minerals and Gas allowances go; the numbers are unanswered (voice decisions §8). Label any estimate as an estimate.
 - **Build order lanes:** aiur's prototype uses Documentation/Frontend/Backend/Infrastructure; OGM shows its role lanes (Setting, Art, Gameplay, Sound). Edges clear only from the GitHub outcome, as aiur's manifest requires.
+
+## Colour rule (Kevin 2026-11-27)
+"let's choose single blue for all chat elements. and generally let's try to limit UI elements to a single color within a given context."
+- Every chat element uses the one blue accent: composer buttons, mic, two-way, send, bubbles and waveform.
+- In any other screen or panel, interactive elements share one accent colour.
+- State (muted, error) is shown through shape, icon or opacity within that colour, not by adding new hues. Destructive actions are the only exception, and only where needed.
