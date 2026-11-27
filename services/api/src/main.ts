@@ -112,6 +112,7 @@ const deps: AppDeps = {
     voiceInternalSecret: env.OGM_VOICE_INTERNAL_SECRET,
     narrationConcurrency: env.OGM_NARRATION_CONCURRENCY,
     defaultDailyAllowanceMicroUsd: env.OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD,
+    creatorJobLimit: env.OGM_CREATOR_JOB_LIMIT,
     resetZoneDefault: env.OGM_RESET_ZONE_DEFAULT,
     intakeDir: env.OGM_INTAKE_DIR,
     reportBundleMaxBytes: env.OGM_REPORT_BUNDLE_MAX_BYTES,
@@ -194,6 +195,7 @@ startPreviewRelay(deps, previewTicketVerifier(env.OGM_INTAKE_GITHUB_TOKEN));
 
 const budgetDefaults = {
   dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+  creatorJobLimit: deps.config.creatorJobLimit,
   resetZone: deps.config.resetZoneDefault,
 };
 const lifecycleDeps = { db, sqlite, events: deps.events, defaults: budgetDefaults };

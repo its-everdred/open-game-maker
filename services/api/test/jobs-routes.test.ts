@@ -78,6 +78,18 @@ async function createJob(app: Awaited<ReturnType<typeof makeApp>>['app'], overri
 }
 
 describe('jobs routes', () => {
+  it('honors a configured creator limit for direct admission', async () => {
+    const deps = setup();
+    deps.config.creatorJobLimit = 2;
+    deps.db
+      .insert(schema.allowances)
+      .values({ familyId: ids.family, userId: ids.user, dailyMicroUsd: 100_000_000 })
+      .run();
+    const { app } = await makeApp(deps);
+    expect(await (await createJob(app)).json()).toMatchObject({ state: 'admitted' });
+    expect(await (await createJob(app, { kind: 'new_game' })).json()).toMatchObject({ state: 'admitted' });
+    expect(await (await createJob(app)).json()).toMatchObject({ state: 'queued' });
+  });
   it('queues a second job from the same creator even in a different slot', async () => {
     const deps = setup();
     deps.db

@@ -15,6 +15,7 @@ describe('analytics retention', () => {
   it('defaults to 90 days and rejects non-positive retention', () => {
     expect(loadApiEnv(baseEnv)).toMatchObject({
       OGM_ANALYTICS_RETENTION_DAYS: 90,
+      OGM_CREATOR_JOB_LIMIT: 1,
       OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD: 5_000_000,
       OGM_INTAKE_SWEEP_SECONDS: 60,
     });
@@ -23,6 +24,9 @@ describe('analytics retention', () => {
       /OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD/,
     );
     expect(() => loadApiEnv({ ...baseEnv, OGM_COMMAND_POLL_MS: '0' })).toThrow(/OGM_COMMAND_POLL_MS/);
+    expect(loadApiEnv({ ...baseEnv, OGM_CREATOR_JOB_LIMIT: '3' }).OGM_CREATOR_JOB_LIMIT).toBe(3);
+    expect(loadApiEnv({ ...baseEnv, OGM_CREATOR_JOB_LIMIT: '0' }).OGM_CREATOR_JOB_LIMIT).toBe(0);
+    expect(() => loadApiEnv({ ...baseEnv, OGM_CREATOR_JOB_LIMIT: '-1' })).toThrow(/OGM_CREATOR_JOB_LIMIT/);
     expect(() => loadApiEnv({ ...baseEnv, OGM_INTAKE_SWEEP_SECONDS: '0' })).toThrow(/OGM_INTAKE_SWEEP_SECONDS/);
   });
 

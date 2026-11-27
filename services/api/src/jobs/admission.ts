@@ -164,7 +164,9 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
         )
         .all().length;
       const state =
-        request.start === 'at_reset' || held >= settings.slots[slot] || creatorHoldsSlot(deps.db, actor.userId)
+        request.start === 'at_reset' ||
+        held >= settings.slots[slot] ||
+        creatorHoldsSlot(deps.db, actor.userId, deps.defaults.creatorJobLimit ?? 1)
           ? 'queued'
           : 'admitted';
       const at = now.toISOString();

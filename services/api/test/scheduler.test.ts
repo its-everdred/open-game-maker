@@ -64,6 +64,28 @@ function queued(deps: ReturnType<typeof makeDeps>, id: string, createdAt: string
 }
 
 describe('job scheduler', () => {
+  it('honors a creator limit above one', () => {
+    const { deps } = setup();
+    queued(deps, 'j_first', '2026-11-01T00:00:00.000Z');
+    queued(deps, 'j_second', '2026-11-01T01:00:00.000Z');
+    expect(
+      tick(
+        { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults: { ...defaults, creatorJobLimit: 2 } },
+        RESET,
+      ),
+    ).toEqual(['j_first', 'j_second']);
+  });
+  it('allows the creator limit to be disabled', () => {
+    const { deps } = setup();
+    queued(deps, 'j_first', '2026-11-01T00:00:00.000Z');
+    queued(deps, 'j_second', '2026-11-01T01:00:00.000Z');
+    expect(
+      tick(
+        { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults: { ...defaults, creatorJobLimit: 0 } },
+        RESET,
+      ),
+    ).toEqual(['j_first', 'j_second']);
+  });
   it('starts at most one job per creator while allowing another creator to start', () => {
     const { deps } = setup();
     deps.db

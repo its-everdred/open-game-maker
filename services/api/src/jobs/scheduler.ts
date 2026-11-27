@@ -49,7 +49,11 @@ export function tick(deps: SchedulerDeps, now = (deps.now ?? (() => new Date()))
             ),
           )
           .all().length;
-        if (held >= settings.slots[row.slot] || creatorHoldsSlot(deps.db, row.creatorId)) continue;
+        if (
+          held >= settings.slots[row.slot] ||
+          creatorHoldsSlot(deps.db, row.creatorId, deps.defaults.creatorJobLimit ?? 1)
+        )
+          continue;
         const state = transition(row.state, 'admit');
         const changed = deps.db
           .update(schema.jobs)

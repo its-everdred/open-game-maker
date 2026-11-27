@@ -35,6 +35,7 @@ type UserPrincipal = Extract<Principal, { kind: 'user' }>;
 function defaults(deps: AppDeps) {
   return {
     dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+    creatorJobLimit: deps.config.creatorJobLimit,
     resetZone: deps.config.resetZoneDefault,
   };
 }

@@ -2,7 +2,7 @@ import type { FamilyBudgetSettings } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
 import { and, eq } from 'drizzle-orm';
 
-export type BudgetDefaults = { dailyAllowanceMicroUsd: number; resetZone: string };
+export type BudgetDefaults = { dailyAllowanceMicroUsd: number; resetZone: string; creatorJobLimit?: number };
 
 export function dailyAllowance(db: Db, familyId: string, userId: string, defaults: BudgetDefaults): number {
   return (

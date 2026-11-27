@@ -15,6 +15,7 @@ export const apiEnvSpec = {
   OGM_CORE_PC_REPO: { kind: 'string', required: false },
   OGM_CORE_BUMP_CORE_REPO: { kind: 'string', required: false },
   OGM_ANALYTICS_RETENTION_DAYS: { kind: 'int', default: '90' },
+  OGM_CREATOR_JOB_LIMIT: { kind: 'int', default: '1' },
   OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD: { kind: 'int', default: '5000000' },
   OGM_RESET_ZONE_DEFAULT: { kind: 'string', default: hostTimeZone },
   OGM_INTAKE_DIR: { kind: 'path', required: false },
@@ -71,6 +72,9 @@ export const apiEnvSpec = {
 
 export function loadApiEnv(source?: Record<string, string | undefined>) {
   const env = loadEnv('api', apiEnvSpec, source);
+  if (env.OGM_CREATOR_JOB_LIMIT < 0) {
+    throw new ConfigError('api', [], [{ name: 'OGM_CREATOR_JOB_LIMIT', reason: 'must be a non-negative integer' }]);
+  }
   if (env.OGM_ANALYTICS_RETENTION_DAYS <= 0) {
     throw new ConfigError('api', [], [{ name: 'OGM_ANALYTICS_RETENTION_DAYS', reason: 'must be a positive integer' }]);
   }
