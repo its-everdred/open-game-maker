@@ -60,6 +60,9 @@ description: Run Open Game Maker's agent fleet as its Executor. The OGM layer ov
 - **Zomboid must keep running.** If load stays above about 80 or RPCs time out, lower `max_concurrent_agents` in `.aiur/config`, which hot-reloads.
 - **Never delete** without Kevin's OK, and never `commit -a`.
 
+## Root causes, not symptoms
+Kevin 2026-11-27: "treating symptoms is a very common problem". Every recovery (relabel, requeue, reset-budget, park, restart, fresh-thread) is paired in the same turn with its named root cause and a fix or a filed owner issue (aiur → the PC aiur agent over Khala; our scripts → fix them). A second occurrence means file it now, with the count. Reports lead with the root cause and owner.
+
 ## Hourly pass
 Run `meta-improve`. Each pass:
 - measures the review loop;
