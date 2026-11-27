@@ -69,3 +69,16 @@ it('rejects raw inline values hidden in conditional and mixed-token expressions'
   );
   expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(3);
 }, 30_000);
+
+it('rejects ad-hoc controls in conditional and template class names', async () => {
+  const eslint = new ESLint({
+    overrideConfig: [
+      { plugins: { glass: { rules: { components: glassComponentsRule } } }, rules: { 'glass/components': 'error' } },
+    ],
+  });
+  const [result] = await eslint.lintText(
+    'const Screen = ({ open }) => <><div className={open ? "settings-panel" : "closed"} /><div className={`dialog-sheet ${open}`} /><div className={"body"} /></>;',
+    { filePath: 'src/Screen.tsx' },
+  );
+  expect(result!.messages.filter((message) => message.ruleId === 'glass/components')).toHaveLength(2);
+}, 30_000);

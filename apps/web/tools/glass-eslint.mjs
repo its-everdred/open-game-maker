@@ -15,6 +15,15 @@ function rawDesignValue(node) {
   );
 }
 
+function hasControlClass(node) {
+  if (node.type === 'Literal') return typeof node.value === 'string' && controlClasses.test(node.value);
+  if (node.type === 'TemplateLiteral') return node.quasis.some((part) => controlClasses.test(part.value.cooked ?? ''));
+  if (node.type === 'ConditionalExpression') return hasControlClass(node.consequent) || hasControlClass(node.alternate);
+  if (node.type === 'LogicalExpression' || node.type === 'BinaryExpression')
+    return hasControlClass(node.left) || hasControlClass(node.right);
+  return false;
+}
+
 // Native controls belong inside the shared library so every screen gets the
 // same semantics and states. Test fixtures are excluded by the caller.
 export const glassComponentsRule = {
@@ -43,9 +52,8 @@ export const glassComponentsRule = {
           if (
             attr.type === 'JSXAttribute' &&
             attr.name.name === 'className' &&
-            attr.value?.type === 'Literal' &&
-            typeof attr.value.value === 'string' &&
-            controlClasses.test(attr.value.value)
+            attr.value &&
+            hasControlClass(attr.value.type === 'JSXExpressionContainer' ? attr.value.expression : attr.value)
           )
             context.report({ node: attr, messageId: 'control', data: { name: attr.value.value } });
           if (
