@@ -74,9 +74,10 @@ export function findGameForFamily(db: Db, id: string, familyId: string): GameRow
 
 export function findGameForPlay(db: Db, id: string, actor: Actor): GameRow {
   const game = findGame(db, id);
+  /* A delisted game stays reachable to its own family, as before, and to no one outside it. */
+  if (game.familyId === actor.familyId) return game;
   if (game.delistedAt !== null) throw new HttpError(404, 'game_not_found');
   if (
-    game.familyId === actor.familyId ||
     hasGameGrant(db, id, actor.userId) ||
     (game.releaseState === 'coming_soon' && (actor.platformRole === 'admin' || actor.platformRole === 'maintainer'))
   )

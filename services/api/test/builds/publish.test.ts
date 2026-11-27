@@ -57,7 +57,9 @@ describe('publishing a merged build', () => {
       .get(ids.main);
     expect(head?.base_build_id).toBe(buildId);
 
-    const host = await gamesHost(deps.config.gamesRoot);
+    // A private build needs a launch capability (test/games.test.ts); a listed game's build is public.
+    deps.sqlite.prepare("UPDATE games SET visibility = 'listed' WHERE id = ?").run(ids.game);
+    const host = await gamesHost(deps.config.gamesRoot, app);
     try {
       const page = await fetch(`${host.base}/g/${ids.game}/${buildId}/`);
       expect(page.status).toBe(200);

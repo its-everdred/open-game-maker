@@ -3,6 +3,7 @@ import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { serve } from '@hono/node-server';
 import type { GameManifest } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { main as startGamesHost } from '@ogm/games-host';
@@ -10,6 +11,7 @@ import { main as startGamesHost } from '@ogm/games-host';
 import { createApp } from '../../src/app/app.js';
 import { buildRoutes } from '../../src/builds/routes.js';
 import { setup as setupDesign } from '../../src/design/routes.js';
+import gamesRoutes, { prefix as gamesPrefix } from '../../src/games/routes.js';
 import { ids, now, setup as setupRelease } from '../release-fixtures.js';
 
 export { ids };
@@ -99,6 +101,8 @@ export function world(kind: JobKind = 'feature') {
         }
       : null;
   const app = createApp(deps);
+  /* The games host asks these routes who may read a build. */
+  app.route(gamesPrefix, gamesRoutes);
   app.route('/internal', buildRoutes({ daemonForSecret: async (secret) => (secret === SECRET ? REPO : null) }));
   return { deps, app };
 }
@@ -124,8 +128,10 @@ export function jobState(deps: ReturnType<typeof world>['deps']) {
   return deps.db.select().from(schema.jobs).all()[0]!.state;
 }
 
-// The real games host over `root` on a free loopback port.
-export async function gamesHost(root: string) {
+// The real games host over `root` on a free loopback port. It asks `app`, served on loopback, who may read each game.
+export async function gamesHost(root: string, app: ReturnType<typeof world>['app']) {
+  const api = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 });
+  await new Promise((resolve) => api.once('listening', resolve));
   const port = await new Promise<number>((resolve) => {
     const probe = createServer().listen(0, '127.0.0.1', () => {
       const { port: free } = probe.address() as AddressInfo;
@@ -136,7 +142,16 @@ export async function gamesHost(root: string) {
     OGM_GAMES_PORT: String(port),
     OGM_GAMES_ROOT: root,
     OGM_APP_ORIGIN: 'https://app.example.test',
+    OGM_GAMES_ACCESS_API: `http://127.0.0.1:${(api.address() as AddressInfo).port}`,
   });
   await new Promise((resolve) => server.once('listening', resolve));
-  return { base: `http://127.0.0.1:${port}`, close: () => new Promise((resolve) => server.close(resolve)) };
+  return {
+    base: `http://127.0.0.1:${port}`,
+    close: async () => {
+      await new Promise((resolve) => server.close(resolve));
+      /* The host's access checks keep loopback connections alive. */
+      (api as import('node:http').Server).closeAllConnections();
+      await new Promise((resolve) => api.close(resolve));
+    },
+  };
 }
