@@ -12,7 +12,7 @@ description: Run Open Game Maker's agent fleet as its Executor. The OGM layer ov
 2. Restart the background loops the compaction killed:
    - the meta-improve listener (`MI_ALWAYS=1 …/listen.sh <repo>`);
    - the Khala watch (the 0.4.17 binary);
-   - the review-page relay agent.
+   - the review-page relay agent. It must ALWAYS be running (Kevin 2026-11-26: "always keep it on"); restart it after any interrupt as well.
 3. Run `executor/quick-check.sh`. Then run `aiur-main queue show` in **both** repos.
 
 ## Daemons
