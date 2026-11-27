@@ -82,6 +82,7 @@ test('real local API and web reach New Game onboarding', async ({ browser }) => 
     const context = await browser.newContext({
       viewport: { width: 390, height: 844 },
       hasTouch: true,
+      reducedMotion: 'reduce',
       extraHTTPHeaders: { 'x-test-user': api.userId },
     });
     try {
