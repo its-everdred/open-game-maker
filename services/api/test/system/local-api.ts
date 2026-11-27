@@ -9,6 +9,7 @@ import { migrate, openDb, schema } from '@ogm/db';
 import { createAppEvents } from '../../src/app/events.js';
 import { createRegistry, type DraftScopeAssistant, type RepoProvisioner } from '../../src/app/registry.js';
 import type { AppDeps } from '../../src/app/types.js';
+import { createChatJobDirectory } from '../../src/build-chat/job-directory.js';
 import { BLOB_KEY, installUsers, INTERNAL_TOKEN, JOB_SECRET, makeApp } from '../helpers.js';
 
 const user = {
@@ -76,6 +77,7 @@ export async function startLocalApi(
       .values({ id: user.familyId, name: 'System test', ownerUserId: user.userId, createdAt: new Date().toISOString() })
       .run();
     installUsers(deps, [user]);
+    deps.registry.chatJobs = createChatJobDirectory(db);
     deps.registry.repoProvisioner = options.repoProvisioner ?? null;
     deps.registry.draftScopeAssistant = options.draftScopeAssistant ?? null;
     const { app } = await makeApp(deps);

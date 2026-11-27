@@ -75,6 +75,19 @@ describe('build chat contract', () => {
     expect(validate(document)).toBe(false);
   });
 
+  it('accepts draft chat message IDs without accepting malformed draft IDs', () => {
+    const message = {
+      id: 'm_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e20',
+      job_id: 'draft:d_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e20',
+      at: '2026-11-26T00:00:00.000Z',
+      actor: 'creator',
+      kind: 'text',
+      text: 'Hello',
+    };
+    expect(BuildChatMessage.safeParse(message).success).toBe(true);
+    expect(BuildChatMessage.safeParse({ ...message, job_id: 'draft:not-an-id' }).success).toBe(false);
+  });
+
   it('pairs the agent clip outbox line with the row it becomes', () => {
     const { line, message } = loadJson<{ line: unknown; message: unknown }>('fixtures/chat/agent-clip.json');
     const parsedLine = AgentOutboxLine.parse(line);
