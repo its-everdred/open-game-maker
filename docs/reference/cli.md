@@ -284,10 +284,11 @@ check and are listed by name.
 During prototype work, a screen may mark its look scope provisional with an owner and expiry rung, for example
 `{"screens":{"play":{"provisional":{"owner":"Kevin","until":"build"}}}}`.
 Before the expiry rung, `gm look check` reports a visible warning and exits successfully for the missing approved target and
-sheet. The creative ticket gate still requires a recorded mock approval before prototype work and a prototype approval before build work. At the expiry rung or later, `gm look check` fails until the provisional declaration is replaced by an approved look target.
+sheet. The creative ticket gate requires a recorded mock approval before prototype work unless an approved glass artboard covers the screen. It requires a prototype approval before build work. At the expiry rung or later, `gm look check` fails until the provisional declaration is replaced by an approved look target.
 For a ticket labeled `design:ogm-glass`, pass `--design ogm-glass`; for a covered prototype also pass
-`--design-screen <artboard>`. The base branch's `docs/design/ogm-glass/screens.md` must map that artboard to the
-ticket named in the PR body. Glass mock references may use `assets-local/review/design-ogm-glass/`.
+`--design-screen <artboard>`. The PR body must name the ticket, and the base branch's `docs/design/ogm-glass/screens.md` must contain that
+artboard. With an OGM GitHub remote, the gate also reads the named ticket's labels; if that lookup fails, pass the design
+explicitly for a glass ticket. Glass mock references may use `assets-local/review/design-ogm-glass/`.
 
 Pass the active rung with `gm check --phase <rung>`; the phase does not auto-advance from the branch or ticket. While a
 provisional scope exists, omitting `--phase` fails closed and asks for the current rung.

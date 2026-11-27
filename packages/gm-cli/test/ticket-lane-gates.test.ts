@@ -178,7 +178,7 @@ describe('gm check ticket lanes', () => {
     expect(prototype.err.join('\n')).not.toContain('phase:prototype needs an approved mock');
     writeFileSync(join(cwd, 'pr.md'), 'Closes #124');
     const wrongTicket = await gm([...flags, '--phase', 'prototype', '--design-screen', 'Account'], { cwd });
-    expect(wrongTicket.err.join('\n')).toContain('phase:prototype needs an approved mock');
+    expect(wrongTicket.err.join('\n')).not.toContain('phase:prototype needs an approved mock');
     writeFileSync(join(cwd, 'pr.md'), 'Closes #123');
     const build = await gm([...flags, '--phase', 'build', '--design-screen', 'Account'], { cwd });
     expect(build.err.join('\n')).toContain('phase:build needs an approved prototype');

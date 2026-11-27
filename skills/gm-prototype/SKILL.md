@@ -28,7 +28,7 @@ Before making a screen mock, check for an approved design or component kit that 
 UI and decisions. Record the design and one chosen path in the workpad:
 
 1. Move to `phase:prototype` and build with the existing components. Review the prototype with a play link and stills.
-   For OGM glass, name the covered artboard and ticket in the approved `screens.md` and pass the ticket label via
+   For OGM glass, name the ticket in the PR body, select its covered artboard from the approved `screens.md`, and pass
    `gm check --body <pr-body.md> --lane creative --phase prototype --design ogm-glass --design-screen <artboard>`. For a game, cite the approved screen-specific UI
    decision and its media in the workpad, and record the already-approved target and its actual approval rung for that
    screen in `review/decisions.json` so `gm check` can verify it. Never mark provisional or unapproved work approved.

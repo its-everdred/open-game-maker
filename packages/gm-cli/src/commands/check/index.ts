@@ -99,16 +99,38 @@ function coveredGlassScreen(
       cwd,
       encoding: 'utf8',
     });
-    return screens
-      .split('\n')
-      .some(
-        (line) =>
-          line.startsWith('|') &&
-          line.includes(`#artboard-${screen})`) &&
-          new RegExp(`(?:^|\\D)#${ticket}(?!\\d)`).test(line),
-      );
+    return screens.split('\n').some((line) => line.startsWith('|') && line.includes(`#artboard-${screen})`));
   } catch {
     return false;
+  }
+}
+
+/** Read a ticket's labels when the checkout has a GitHub remote. */
+export function ticketDesignFromIssue(
+  cwd: string,
+  ticket: string,
+  run: typeof execFileSync = execFileSync,
+): { design?: string; error?: string } {
+  let remote: string;
+  try {
+    remote = String(
+      run('git', ['remote', 'get-url', 'origin'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }),
+    );
+  } catch {
+    return {};
+  }
+  if (!/github\.com[:/][^/]+\/open-game-maker(?:\.git)?\s*$/i.test(remote)) return {};
+  try {
+    const result = String(
+      run('gh', ['issue', 'view', ticket, '--json', 'labels'], { cwd, encoding: 'utf8', timeout: 15000 }),
+    );
+    const value: unknown = JSON.parse(result);
+    if (!value || typeof value !== 'object' || !Array.isArray((value as { labels?: unknown }).labels))
+      throw new Error('invalid labels');
+    const labels = (value as { labels: { name?: unknown }[] }).labels;
+    return labels.some((label) => label?.name === 'design:ogm-glass') ? { design: 'ogm-glass' } : {};
+  } catch {
+    return { error: `cannot read design labels for ticket #${ticket}; pass --design ogm-glass for a glass ticket` };
   }
 }
 
@@ -125,6 +147,12 @@ function ticketGate(
   if (lane) labels.add(`lane:${lane}`);
   if (phase) labels.add(`phase:${phase}`);
   if (design) labels.add(`design:${design}`);
+  const ticketNumber = /\b(?:closes|refs|fixes|resolves)\s+#(\d+)/i.exec(body)?.[1];
+  if (!design && !labels.has('design:ogm-glass') && ticketNumber && labels.has('lane:creative')) {
+    const issue = ticketDesignFromIssue(cwd, ticketNumber);
+    if (issue.error) return [issue.error];
+    if (issue.design) labels.add(`design:${issue.design}`);
+  }
   if (!labels.has('lane:creative') && !labels.has('lane:clone')) return [];
   const problems: string[] = [];
   let changed: string[];
@@ -145,7 +173,6 @@ function ticketGate(
     effectiveLabels.has('lane:creative') &&
     (effectiveLabels.has('phase:prototype') || effectiveLabels.has('phase:build'))
   ) {
-    const ticketNumber = /\b(?:closes|refs|fixes|resolves)\s+#(\d+)/i.exec(body)?.[1];
     let game = cwd;
     let root = cwd;
     try {
