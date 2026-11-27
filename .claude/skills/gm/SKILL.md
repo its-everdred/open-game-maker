@@ -52,6 +52,7 @@ description: Run Open Game Maker's agent fleet as its Executor. The OGM layer ov
 - Titles are plain words, never bare ticket numbers.
 
 ## Host steps and protection
+- **Approved designs are replicated exactly** (Kevin 2026-11-26: "i care about replicating even the smallest details"). A redesign PR needs the `gm design parity` report (#1449): artboard renders vs app screenshots, strict thresholds, token/component lint. Reject any visible deviation in the side-by-side even when the score passes.
 - **Visual looks:** `executor/host-steps.done` (`judged:<pr>@<sha>`) / `host-steps.looked-back` (`rejected:…`). Look at the stills first.
 - **Merges and publishes:** `og-batch` / `og-merge` / `og-publish`. Game publishes are unlimited. Netlify deploys are at most one per hour each (app, site), and none 23:00–05:00 Pacific (`executor/quiet-hours.sh`).
 - **Heavy jobs** go in `ogm-heavy.slice`.
