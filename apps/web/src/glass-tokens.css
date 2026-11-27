@@ -1,0 +1,74 @@
+/* Generated from docs/design/ogm-glass/tokens.json. Do not edit. */
+:root {
+  --ogm-ground-night: #0f0e16;
+  --ogm-ground-night-2: #1a1824;
+  --ogm-ground-night-3: #282532;
+  --ogm-ink-ink: #f2ead6;
+  --ogm-ink-ink-2: rgba(242, 234, 214, 0.82);
+  --ogm-ink-muted: #c4beb0;
+  --ogm-ink-rule: rgba(242, 234, 214, 0.14);
+  --ogm-ink-dark: #1d1b16;
+  --ogm-role-go: #94d742;
+  --ogm-role-create: #ffbf32;
+  --ogm-role-needs-you: #ff9133;
+  --ogm-role-working: #74c8ed;
+  --ogm-role-agents: #d795e4;
+  --ogm-role-danger: #f76d67;
+  --ogm-role-danger-ink: #ff9b8f;
+  --ogm-role-focus: #6fd6b4;
+  --ogm-resource-minerals-1: #05cde6;
+  --ogm-resource-minerals-2: #168efd;
+  --ogm-resource-minerals-3: #4146ff;
+  --ogm-resource-gas-1: #b7f171;
+  --ogm-resource-gas-2: #46c46a;
+  --ogm-resource-gas-3: #1f8a52;
+  --ogm-glow-1: rgb(214 93 14 / 0.34);
+  --ogm-glow-2: rgb(177 98 134 / 0.32);
+  --ogm-glow-3: rgb(69 133 136 / 0.36);
+  --ogm-glow-4: rgb(215 153 33 / 0.22);
+  --ogm-glow-periods-1: 41s;
+  --ogm-glow-periods-2: 53s;
+  --ogm-glow-periods-3: 47s;
+  --ogm-glow-periods-4: 61s;
+  --ogm-glass-fill: rgba(24, 22, 32, 0.55);
+  --ogm-glass-fill-strong: rgba(30, 27, 40, 0.88);
+  --ogm-glass-blur: blur(22px) saturate(1.4);
+  --ogm-glass-edge: linear-gradient(
+    to bottom,
+    rgba(242, 234, 214, 0.05),
+    rgba(242, 234, 214, 0.16) 45%,
+    rgba(242, 234, 214, 0.42)
+  );
+  --ogm-glass-gloss: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.24),
+    rgba(255, 255, 255, 0.04) 50%,
+    rgba(255, 255, 255, 0) 51%
+  );
+  --ogm-radius-xs: 8px;
+  --ogm-radius-sm: 12px;
+  --ogm-radius-md: 16px;
+  --ogm-radius-lg: 20px;
+  --ogm-radius-xl: 28px;
+  --ogm-radius-pill: 999px;
+  --ogm-orb-sm: 40px;
+  --ogm-orb-md: 48px;
+  --ogm-orb-lg: 60px;
+  --ogm-orb-fab: 64px;
+  --ogm-pill-sm: 44px;
+  --ogm-pill-md: 52px;
+  --ogm-pill-lg: 68px;
+  --ogm-space-1: 4px;
+  --ogm-space-2: 8px;
+  --ogm-space-3: 12px;
+  --ogm-space-4: 16px;
+  --ogm-space-5: 20px;
+  --ogm-space-6: 24px;
+  --ogm-space-7: 32px;
+  --ogm-font-display: 'Fredoka', sans-serif;
+  --ogm-font-body: 'Nunito', sans-serif;
+  --ogm-motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ogm-motion-ease-duration: 300ms;
+  --ogm-motion-spring: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  --ogm-motion-spring-duration: 600ms;
+}

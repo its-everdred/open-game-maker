@@ -12,7 +12,7 @@
     "test": "vitest run --exclude e2e/render-gltf.test.ts --exclude e2e/thumbnail-scene.test.ts --exclude e2e/thumbnail-scene-3d.test.ts",
     "pretypecheck": "pnpm run build:deps",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src e2e tools",
+    "lint": "eslint src e2e tools && node tools/generate-glass-tokens.mjs --check",
     "prepare:browser": "VITE_GAMES_ORIGIN=http://127.0.0.1:${OGM_WEB_BRIDGE_PORT:-10001} pnpm build && node e2e/support/stage-prototype-fixture.mjs",
     "pree2e": "pnpm run prepare:browser",
     "e2e": "playwright test",
