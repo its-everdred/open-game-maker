@@ -3,12 +3,12 @@ import { resolve } from 'node:path';
 import { CommandError, EXIT, UsageError, type GmCommand } from '../../command.js';
 import { runChild } from '../capture/shell.js';
 
-const screenNames = ['all', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet'];
+const screenNames = ['all', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet', 'Admin'];
 export const command: GmCommand = {
   name: 'design parity',
   summary: 'compare seeded app screens against the approved glass artboards',
   usage:
-    '[--screen Home|Editor|Settings|SignIn|NewGame|GameSheet|all] [--web apps/web] [--dist <real-game-dist>] [--timeout seconds]',
+    '[--screen Home|Editor|Settings|SignIn|NewGame|GameSheet|Admin|all] [--web apps/web] [--dist <real-game-dist>] [--timeout seconds]',
   flags: {
     screen: { type: 'string', default: 'all', help: 'screen to compare, or all' },
     web: { type: 'string', default: 'apps/web', help: 'path to the web application' },
@@ -41,7 +41,7 @@ export const command: GmCommand = {
       throw new UsageError('invalid timeout or ports', 'gm help design parity');
     if (screen === 'all')
       throw new CommandError(
-        'full glass parity coverage is not yet available; select Home, Editor, Settings, SignIn, NewGame, or GameSheet',
+        'full glass parity coverage is not yet available; select Home, Editor, Settings, SignIn, NewGame, GameSheet, or Admin',
       );
     if (screen === 'Editor' && typeof flags.dist !== 'string')
       throw new UsageError('editor parity requires a real game build', 'pass --dist <game dist>');

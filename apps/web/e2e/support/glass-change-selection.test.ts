@@ -4,10 +4,12 @@ import { glassScreens } from '../../tools/glass-change-selection.mjs';
 it('selects affected screens and fails closed on other visible routes', () => {
   expect(
     glassScreens(['apps/web/src/routes/games/GamesScreen.tsx', 'apps/web/src/routes/settings/settings.css']),
-  ).toEqual(['GameSheet', 'Home', 'Settings']);
+  ).toEqual(['GameSheet', 'Home', 'Settings', 'Unmapped']);
   expect(glassScreens(['apps/web/src/features/editor/EditorChrome.tsx'])).toEqual(['Editor']);
   expect(glassScreens(['apps/web/src/routes/signin/SignInScreen.tsx'])).toEqual(['SignIn']);
   expect(glassScreens(['apps/web/src/routes/new/NewGameScreen.tsx'])).toEqual(['NewGame']);
+  expect(glassScreens(['apps/web/src/routes/admin/Members.tsx'])).toEqual(['Admin']);
+  expect(glassScreens(['apps/web/src/routes/admin/admin.css'])).toEqual(['Admin', 'Unmapped']);
   expect(glassScreens(['apps/web/src/routes/auth.css'])).toEqual(['SignIn', 'Unmapped']);
   expect(glassScreens(['apps/web/src/routes/title/TitleScreen.tsx'])).toEqual(['Unmapped']);
   expect(glassScreens(['apps/web/src/routes/games/GameDetail.tsx'])).toEqual(['GameSheet', 'Home']);

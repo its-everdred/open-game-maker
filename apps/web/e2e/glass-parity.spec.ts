@@ -20,7 +20,7 @@ const selected = process.env.OGM_GLASS_PARITY_SCREEN;
 const gameDist = process.env.OGM_GLASS_GAME_DIST;
 // eslint-disable-next-line no-restricted-properties
 const bridgePort = process.env.OGM_WEB_BRIDGE_PORT ?? '43176';
-if (selected && !['all', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet'].includes(selected)) {
+if (selected && !['all', 'Home', 'Editor', 'Settings', 'SignIn', 'NewGame', 'GameSheet', 'Admin'].includes(selected)) {
   throw new Error(`Unknown glass parity screen: ${selected}`);
 }
 const root = resolve(process.cwd(), '../..');
@@ -32,6 +32,7 @@ const screens = [
   { screen: 'SignIn', name: 'SignIn-780x1688', width: 390, height: 844, scale: 2, route: '/signin?test' },
   { screen: 'NewGame', name: 'NewGame-780x1688', width: 390, height: 844, scale: 2, route: '/new?test&step=genre' },
   { screen: 'GameSheet', name: 'GameSheet-780x1688', width: 390, height: 844, scale: 2, route: '/all?test' },
+  { screen: 'Admin', name: 'Admin-780x1688', width: 390, height: 844, scale: 2, route: '/admin/members?test' },
   { screen: 'Home', name: 'Home-780x1688', width: 390, height: 844, scale: 2, route: '/all?test' },
   { screen: 'Home', name: 'HomeLandscape-844x390', width: 844, height: 390, scale: 1, route: '/all?test' },
   { screen: 'Home', name: 'HomeDesktop-1440x900', width: 1440, height: 900, scale: 1, route: '/all?test' },
@@ -92,6 +93,77 @@ for (const target of screens) {
       } else {
         await mockGamesRoutes(page);
         if (target.screen === 'NewGame') await installNewRoutes(page);
+        if (target.screen === 'Admin') {
+          await page.route('**/api/v1/me', (route) =>
+            route.fulfill({
+              json: {
+                user: { id: 'u1', email: 'kevin@example.test' },
+                family: { id: 'f1', name: 'Family', role: 'owner', capability: 'creator' },
+                platformRole: 'admin',
+              },
+            }),
+          );
+          await page.route('**/api/v1/admin/members', (route) =>
+            route.fulfill({
+              json: {
+                members: [
+                  {
+                    userId: 'u1',
+                    name: 'Kevin',
+                    email: 'kevin@example.test',
+                    role: 'owner',
+                    capability: 'creator',
+                    joinedAt: '2026-10-01T00:00:00Z',
+                  },
+                  {
+                    userId: 'u2',
+                    name: 'Kim',
+                    email: 'kim@example.test',
+                    role: 'member',
+                    capability: 'creator',
+                    joinedAt: '2026-10-01T00:00:00Z',
+                  },
+                  {
+                    userId: 'u3',
+                    name: 'Player',
+                    email: 'player@example.test',
+                    role: 'member',
+                    capability: 'player',
+                    joinedAt: '2026-10-01T00:00:00Z',
+                  },
+                ],
+              },
+            }),
+          );
+          await page.route('**/api/v1/admin/invites', (route) =>
+            route.fulfill({
+              json: {
+                invitations: [
+                  {
+                    id: 'invite-1',
+                    kind: 'member',
+                    email: '[tester one email]',
+                    capability: 'player',
+                    createdAt: new Date().toISOString(),
+                    expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+                    acceptedAt: null,
+                    revokedAt: null,
+                  },
+                  {
+                    id: 'invite-2',
+                    kind: 'member',
+                    email: '[tester two email]',
+                    capability: 'creator',
+                    createdAt: new Date().toISOString(),
+                    expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+                    acceptedAt: null,
+                    revokedAt: null,
+                  },
+                ],
+              },
+            }),
+          );
+        }
         await page.route('**/api/v1/jobs?gameId=*', (route) => route.fulfill({ json: { jobs: [] } }));
         await page.route('**/api/v1/me/commands*', (route) => route.fulfill({ json: { commands: [], sessions: [] } }));
         await page.route('**/api/v1/me/core-commands*', (route) =>
@@ -184,17 +256,19 @@ for (const target of screens) {
       }
       await page.goto(target.route, { waitUntil: 'domcontentloaded' });
       const selector =
-        target.screen === 'GameSheet'
-          ? '[data-game-id="blobs"] .game-tile'
-          : target.screen === 'NewGame'
-            ? '.new-game-head'
-            : target.screen === 'SignIn'
-              ? '.signin-screen'
-              : target.screen === 'Editor'
-                ? '.edit-workspace'
-                : target.screen === 'Home'
-                  ? '[data-game-id]'
-                  : '.settings-screen';
+        target.screen === 'Admin'
+          ? '.admin-table'
+          : target.screen === 'GameSheet'
+            ? '[data-game-id="blobs"] .game-tile'
+            : target.screen === 'NewGame'
+              ? '.new-game-head'
+              : target.screen === 'SignIn'
+                ? '.signin-screen'
+                : target.screen === 'Editor'
+                  ? '.edit-workspace'
+                  : target.screen === 'Home'
+                    ? '[data-game-id]'
+                    : '.settings-screen';
       await expect(page.locator(selector).first()).toBeVisible({ timeout: 30_000 });
       if (target.screen === 'GameSheet') {
         await page.locator(selector).first().click();

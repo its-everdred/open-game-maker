@@ -44,7 +44,10 @@ export function glassScreens(files) {
   const screens = new Set();
   for (const file of files) {
     if (/\.(?:test|spec)\.[^.]+$/.test(file)) continue;
-    if (file.startsWith('apps/web/src/routes/new/')) {
+    if (file.startsWith('apps/web/src/routes/admin/')) {
+      screens.add('Admin');
+      if (!file.endsWith('/Members.tsx')) screens.add('Unmapped');
+    } else if (file.startsWith('apps/web/src/routes/new/')) {
       screens.add('NewGame');
       if (/NewGameChat|scope-chat/.test(file)) screens.add('Unmapped');
     } else if (file.startsWith('apps/web/src/routes/signin/') || file.startsWith('apps/web/src/routes/login/')) {
@@ -57,7 +60,7 @@ export function glassScreens(files) {
       screens.add('GameSheet');
     } else if (file.startsWith('apps/web/src/routes/settings/')) {
       screens.add('Settings');
-      if (/CreditsScreen|CreditsList/.test(file)) screens.add('Unmapped');
+      if (/CreditsScreen|CreditsList|settings\.css|\/route\.tsx$/.test(file)) screens.add('Unmapped');
     } else if (
       file.startsWith('apps/web/src/features/editor/') ||
       /apps\/web\/src\/routes\/game\/(?:EditWorkspace|edit-workspace)/.test(file)
