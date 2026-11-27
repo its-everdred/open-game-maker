@@ -13,7 +13,23 @@ for (const file of (await readdir(dist)).filter(
     .filter(([name]) => name === 'schemas' || /^[a-z0-9]+Schemas$/.test(name))
     .map(([, record]) => record);
   for (const [stem, schema] of records.flatMap((record) => Object.entries(record))) {
-    const jsonSchema = toJSONSchema(schema, { target: 'draft-2020-12' });
+    const jsonSchema = toJSONSchema(schema, {
+      target: 'draft-2020-12',
+      ...(stem === 'decision-inventory.v1' ? { io: 'input' } : {}),
+    });
+    if (stem === 'decision-inventory.v1') {
+      // Zod's status-dependent refinements are not emitted automatically.
+      jsonSchema.items.allOf = [
+        {
+          if: { required: ['mode'], properties: { mode: { type: 'string' } } },
+          else: {
+            if: { required: ['status'], properties: { status: { const: 'answered' } } },
+            then: { properties: { options: { type: 'array', minItems: 1 } } },
+            else: { properties: { options: { type: 'array', minItems: 2 } } },
+          },
+        },
+      ];
+    }
     const output = `${JSON.stringify(
       {
         ...jsonSchema,
