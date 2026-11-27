@@ -8,9 +8,11 @@ import { renderRepoTemplate } from '@ogm/game-repo-template';
 import type { RepoProvisioner } from '../../src/app/registry.js';
 
 /** Test-only substitute for the GitHub-backed commit service, writing a real template to a local checkout. */
-export function localProvisioner(checkout: string): RepoProvisioner {
+export function localProvisioner(checkout: string, bare: string): RepoProvisioner {
   return {
     async provision(game) {
+      const remote = execFileSync('git', ['-C', checkout, 'remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim();
+      if (remote !== bare) throw new Error('instance remote is not the temporary bare repository');
       const folder = gameFolder(game.slug);
       const gameRoot = resolve(checkout, folder);
       const template = renderRepoTemplate('game-2d@1', {

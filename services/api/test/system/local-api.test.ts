@@ -15,7 +15,7 @@ it('serves the real API with the test principal only when supplied', async () =>
   let api: Awaited<ReturnType<typeof startLocalApi>> | undefined;
   try {
     instance = createLocalInstance();
-    api = await startLocalApi(root, { repoProvisioner: localProvisioner(instance.checkout) });
+    api = await startLocalApi(root, { repoProvisioner: localProvisioner(instance.checkout, instance.bare) });
     expect((await fetch(`${api.origin}/api/v1/games`)).status).toBe(401);
     const response = await fetch(`${api.origin}/api/v1/games`, { headers: asUser(api.userId) });
     expect(response.status).toBe(200);

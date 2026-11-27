@@ -56,7 +56,7 @@ test('real local API and web reach New Game onboarding', async ({ browser }) => 
       readFileSync(new URL('../../../packages/contracts/fixtures/scope/agreed.json', import.meta.url), 'utf8'),
     ) as Record<string, unknown>;
     api = await startLocalApi(root, {
-      repoProvisioner: localProvisioner(instance.checkout),
+      repoProvisioner: localProvisioner(instance.checkout, instance.bare),
       draftScopeAssistant: {
         async create(input) {
           draftId = input.draftId;
