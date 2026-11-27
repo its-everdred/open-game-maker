@@ -74,3 +74,9 @@ Canvas page **Developer console**. All of it is **Monday design, post-Monday bui
 **Camera.** Camera angle controls are a game-declared option, shown only when a game exposes them. Dusk Helm's camera is fixed isometric (Kevin 2026-11-27), so its Arena and Visuals have no camera controls; zoom appears only if the game declares it.
 
 **Dusk Helm Arena.** Hero in the centre at the isometric camera. Spawn palette (goblin, skeleton, cave goblin, boss; real SmallScaleInt sprites from the game's packs) with a placed-count badge, count (1/3/5) and placement (near hero / ring), Clear all, enemy AI on/off, class swap (knight, archer, wizard) and weapon, combat sliders (damage, knockback, hit-stop, attack speed, aggression), quick look (HD-2D preset; pixel filter and 2D/3D mix in Visuals).
+
+## Chat pane: Reviews tab (Kevin 2026-11-27)
+The agent chat pane has two tabs, **Chat** and **Reviews**.
+- **Reviews** shows only that conversation's or agent's review cards, using the same card component as the cross-ticket review index.
+- It orders newest at the bottom and scrolls up for history, like the chat.
+- Review decisions also stay inline in the chat log.
