@@ -47,11 +47,12 @@ describe('splash page', () => {
     }
   });
 
-  it('shows no text beyond the line, headings, CTA labels and footer', () => {
+  it('shows the invite-only request access note with the existing content', () => {
     expect(visibleText(html)).toEqual([
       content.line,
       content.cta.setup,
       content.cta.sign_in,
+      'Invite only. Request access.',
       ...content.captures.map((capture) => capture.heading),
       content.footer.licence,
     ]);

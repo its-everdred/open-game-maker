@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { schema } from '@ogm/db';
 import { authorize, type Actor } from '@ogm/policy';
-import { and, eq, gte, isNull } from 'drizzle-orm';
+import { and, eq, gte } from 'drizzle-orm';
 
 import { requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
@@ -128,7 +128,7 @@ export async function acceptInvitation(
     .where(eq(schema.invitations.tokenHash, hashOf(token)))
     .get();
   if (!invitation) throw new HttpError(404, 'invite_not_found');
-  if (invitation.acceptedAt || invitation.revokedAt || Date.parse(invitation.expiresAt) <= nowMs) {
+  if (invitation.revokedAt || (!invitation.acceptedAt && Date.parse(invitation.expiresAt) <= nowMs)) {
     throw new HttpError(410, 'invite_gone');
   }
   if (invitation.email) {
@@ -140,12 +140,20 @@ export async function acceptInvitation(
   }
 
   return deps.db.transaction((tx) => {
-    const fresh = tx
-      .select()
-      .from(schema.invitations)
-      .where(and(eq(schema.invitations.id, invitation.id), isNull(schema.invitations.acceptedAt)))
-      .get();
-    if (!fresh || fresh.revokedAt || Date.parse(fresh.expiresAt) <= nowMs) throw new HttpError(410, 'invite_gone');
+    const fresh = tx.select().from(schema.invitations).where(eq(schema.invitations.id, invitation.id)).get();
+    if (!fresh || fresh.revokedAt) throw new HttpError(410, 'invite_gone');
+    if (fresh.acceptedAt) {
+      if (fresh.kind === 'member' && fresh.acceptedBy === userId) {
+        const member = tx
+          .select({ familyId: schema.familyMembers.familyId })
+          .from(schema.familyMembers)
+          .where(and(eq(schema.familyMembers.userId, userId), eq(schema.familyMembers.familyId, fresh.familyId)))
+          .get();
+        if (member) return { kind: 'member', familyId: fresh.familyId, capability: fresh.capability ?? 'player' };
+      }
+      throw new HttpError(410, 'invite_gone');
+    }
+    if (Date.parse(fresh.expiresAt) <= nowMs) throw new HttpError(410, 'invite_gone');
     const acceptedAt = new Date(nowMs).toISOString();
     tx.update(schema.invitations)
       .set({ acceptedAt, acceptedBy: userId })

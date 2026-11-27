@@ -414,6 +414,11 @@ family like any player, and its state lives outside git at `~/.config/ogm/qa/sto
    in Chromium, accepts the pending invitation while the account has no family, and saves the state. It prints the
    account and its family, never the cookie.
 
+To exercise the tester journey, run `ops/bin/ogm-qa-signin --admin-state <admin-storage.json>` on the host. The
+admin storage state must contain a signed-in administrator who belongs to the target family. The QA address must be in
+`OGM_QA_EMAILS`; the command adds a fresh address as a player from Admin › Users, opens the emailed link at
+phone size, follows the title and game-selection screens, and starts Blobs Endless. The QA address must not already be on the allow list or belong to a family. The check removes the membership and allow-list entry it created, then removes its uniquely identified invitation from the local database so repeated checks do not exhaust the daily invite limit. It does not save a session state in this mode.
+
 Sessions last 7 days: run it again when a capture shows Sign in. `--origin http://127.0.0.1:5173` signs in to the local
 stack instead of `OGM_APP_ORIGIN`; `--out` writes elsewhere. Exit codes: 0 saved, 1 sign-in failed, 64 bad usage, 65 no
 address, origin or database.
