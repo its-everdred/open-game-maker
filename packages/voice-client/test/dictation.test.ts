@@ -128,6 +128,7 @@ describe('Dictation', () => {
     dictation.pressEnd();
     dictation.pressEnd();
     socket.message({ v: 1, type: 'transcript', kind: 'final', text: 'make the door red' });
+    socket.message({ v: 1, type: 'ended' });
 
     expect(String(socket.url)).toContain('token=dictate-token');
     expect(socket.sent.map((frame) => JSON.parse(frame))).toEqual([
@@ -136,10 +137,52 @@ describe('Dictation', () => {
     ]);
     expect(transcripts).toEqual([
       { kind: 'partial', text: 'make the' },
+      { kind: 'partial', text: 'make the door red' },
       { kind: 'final', text: 'make the door red' },
     ]);
     expect(audio.stop).toHaveBeenCalledOnce();
     expect(socket.close).toHaveBeenCalledOnce();
+  });
+
+  it('keeps recording across provider phrase commits and returns the complete dictation', async () => {
+    const dictation = new Dictation({ connection: async () => ({ token: 't', url: 'ws://127.0.0.1/ws' }) });
+    const transcripts: Array<{ kind: string; text: string }> = [];
+    dictation.on('transcript', (frame) => transcripts.push(frame));
+    dictation.pressStart();
+    await vi.waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.message({ v: 1, type: 'transcript', kind: 'final', text: 'Make the sky' });
+    expect(socket.close).not.toHaveBeenCalled();
+    audio.onChunk?.('AA==');
+    socket.message({ v: 1, type: 'transcript', kind: 'partial', text: 'bright' });
+    dictation.pressEnd();
+    socket.message({ v: 1, type: 'transcript', kind: 'final', text: 'bright blue' });
+    socket.message({ v: 1, type: 'ended' });
+    expect(transcripts.at(-1)).toEqual({ kind: 'final', text: 'Make the sky bright blue' });
+    expect(socket.sent.map((frame) => JSON.parse(frame))).toEqual([
+      { v: 1, type: 'audio', data_b64: 'AA==' },
+      { v: 1, type: 'commit' },
+    ]);
+  });
+
+  it('reports an unconfirmed partial when the provider closes without a final phrase', async () => {
+    const dictation = new Dictation({ connection: async () => ({ token: 't', url: 'ws://127.0.0.1/ws' }) });
+    const errors: string[] = [];
+    const finals: string[] = [];
+    dictation.on('error', (error) => errors.push(error.code));
+    dictation.on('transcript', (frame) => {
+      if (frame.kind === 'final') finals.push(frame.text);
+    });
+    dictation.pressStart();
+    await vi.waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.message({ v: 1, type: 'transcript', kind: 'partial', text: 'make the sky' });
+    dictation.pressEnd();
+    socket.message({ v: 1, type: 'ended' });
+    expect(errors).toEqual(['incomplete_transcript']);
+    expect(finals).toEqual([]);
   });
 
   it('replays an early release after buffered audio reaches the socket', async () => {

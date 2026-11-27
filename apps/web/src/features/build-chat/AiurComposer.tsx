@@ -154,6 +154,11 @@ export function AiurComposer({
     `;
     element.after(cardStyle);
     const input = element.shadowRoot?.querySelector('textarea');
+    let dictationFailed = false;
+    const edited = () => {
+      dictationFailed = false;
+    };
+    input?.addEventListener('input', edited);
     const fileInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[type="file"]');
     const microphone = element.shadowRoot?.querySelector<HTMLButtonElement>('[part="mic"]');
     const twoWay = element.shadowRoot?.querySelector<HTMLButtonElement>('[part="voice"]');
@@ -247,6 +252,8 @@ export function AiurComposer({
         ? {
             dictation: {
               start: async ({ onPartial, onLevel }) => {
+                dictationFailed = false;
+                let hadDictationText = false;
                 let resolveCancelled: () => void = () => {};
                 let cleanup: () => void = () => {};
                 let offLevel = () => {};
@@ -257,6 +264,7 @@ export function AiurComposer({
                   };
                   const offTranscript = dictation.on('transcript', (value) => {
                     if (value.kind !== 'final') {
+                      hadDictationText = Boolean(value.text.trim());
                       onPartial(value.text);
                       return;
                     }
@@ -264,6 +272,7 @@ export function AiurComposer({
                     resolve(value.text);
                   });
                   const offError = dictation.on('error', (value) => {
+                    dictationFailed = hadDictationText;
                     cleanup();
                     reject(codedError(value.code, value.message));
                   });
@@ -297,6 +306,8 @@ export function AiurComposer({
         ? {
             voice: {
               start: async ({ onEnd, initialText }) => {
+                if (dictationFailed)
+                  throw codedError('incomplete_transcript', 'Review the dictation before continuing');
                 if (!element.isConnected) throw codedError('cancelled', 'The conversation was closed');
                 if (voiceStarting.current || voiceRef.current)
                   throw codedError('starting', 'Voice is already starting');
@@ -372,6 +383,7 @@ export function AiurComposer({
         : {}),
     };
     element.onSend = async (text, attachments) => {
+      if (dictationFailed) throw codedError('incomplete_transcript', 'Review the dictation before sending');
       if (!element.isConnected) throw codedError('cancelled', 'The conversation was closed');
       const { startJob, postText, onPosted, onOptimistic, onFailed, uploadAttachment, wasAdmissionReused } =
         callbacks.current;
@@ -444,6 +456,7 @@ export function AiurComposer({
       cardStyle.remove();
       element.classList.remove('build-chat-aiur-composer');
       input?.removeEventListener('paste', paste);
+      input?.removeEventListener('input', edited);
       style.remove();
     };
   }, [jobId, voiceTarget, dictationTarget, reading]);

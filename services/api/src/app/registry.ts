@@ -119,7 +119,7 @@ export interface Registry {
         ticket: string,
         slugs: string[],
         owned: boolean,
-      ) => Promise<{ text: string }[]>)
+      ) => Promise<{ text: string; at?: string }[]>)
     | null;
   issueStateWriter: IssueStateWriter | null;
   // Swaps a ticket's `phase:`/`model:` labels when the creator approves its rung from a review card (#1124).

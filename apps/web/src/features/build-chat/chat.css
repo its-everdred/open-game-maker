@@ -1,3 +1,13 @@
+.conversation-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.conversation-tabs [role='tab'][aria-selected='true'] {
+  border-bottom: 3px solid currentColor;
+  font-weight: 700;
+}
+
 .build-chat-messages {
   min-height: 180px;
   max-height: min(58svh, 620px);
