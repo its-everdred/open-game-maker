@@ -52,11 +52,19 @@ export function noOverlap(grid: Grid): Finding[] {
       objects: unboxed,
     });
   }
+  const layerBias: Record<string, number> = { floor: 0, wall: 0.1, decor: 0.2, roof: 0.3 };
+  const depth = (piece: Piece) =>
+    (piece.x + piece.y) * (grid.scene.tile[1] / 2) +
+    (layerBias[piece.layer.split('#')[0]!] ?? 0) +
+    (piece.depthOffset ?? 0);
   for (let i = 0; i < boxed.length; i++) {
     for (let j = i + 1; j < boxed.length; j++) {
       const a = boxed[i]!;
       const b = boxed[j]!;
-      if (a.piece.x + a.piece.y !== b.piece.x + b.piece.y || cellKey(a.piece) === cellKey(b.piece)) continue;
+      // Layer biases are tie breakers within a quarter-pixel band; retain those comparisons while honoring offsets.
+      const sameDiagonal = a.piece.x + a.piece.y === b.piece.x + b.piece.y;
+      if ((!sameDiagonal && Math.abs(depth(a.piece) - depth(b.piece)) > 0.25) || cellKey(a.piece) === cellKey(b.piece))
+        continue;
       if (RUN.has(a.piece.role) && RUN.has(b.piece.role)) continue; // run pieces are drawn to overlap at joints
       const w = Math.min(a.box[2], b.box[2]) - Math.max(a.box[0], b.box[0]);
       const h = Math.min(a.box[3], b.box[3]) - Math.max(a.box[1], b.box[1]);

@@ -81,8 +81,8 @@ Fences, walls, buildings, paths and dressing in a SmallScaleInt scene come from 
 structural pieces one sprite at a time or hard-code a facing-to-edge table in a game: a missing kind or style goes into
 the adapter as a measured fact with a test, so every game gets it. For an inspected `yMax` fence opening, pass Stone
 A14 facing E at scale 0.4 to `edgeRun` for vertex-aligned posts; source-mask contact is measured, while in-game depth
-and traversal remain unverified. Other post
-styles, gate orientations, steps and non-stone buildings are not bound yet.
+and traversal remain unverified. Stone and timber buildings have provisional two-row gables; actor occlusion and
+traversal need game verification. Other post styles, gate orientations and steps are not bound yet.
 Leave those gaps visible rather than hand-placing sprites.
 
 ## Sound

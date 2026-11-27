@@ -51,6 +51,19 @@ describe('sceneDrawList', () => {
     expect(after.anchorY).toBe(before.anchorY);
   });
 
+  it('uses the same draw-order offsets as the game renderer', async () => {
+    const adjusted = structuredClone(doc);
+    const tile = Object.values(adjusted.layers.wall!.tiles!)[0]!;
+    tile.props = { ...tile.props, depthOffset: -16 };
+    const before = sceneDrawList(doc).find((piece) => piece.asset === tile.asset)!;
+    const after = sceneDrawList(adjusted).find((piece) => piece.asset === tile.asset)!;
+    const fake = fakeIsoScene();
+    await new IsoMap(sceneToIsoMap(adjusted)).render(fake.scene, facingLoader());
+    const rendered = fake.images.find((image) => image.texture === `${after.asset}:${after.facing}`)!;
+    expect(after.depth).toBeCloseTo(before.depth - 16);
+    expect(rendered.depth).toBeCloseTo(after.depth);
+  });
+
   it('extends the fitted scene bounds for sprites larger than their original size', () => {
     const enlarged = structuredClone(doc);
     const tile = Object.values(enlarged.layers.wall!.tiles!)[0]!;

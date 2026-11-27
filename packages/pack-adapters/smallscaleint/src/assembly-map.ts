@@ -11,6 +11,8 @@ export interface AssemblyPlacement {
   elevation?: number;
   /** Uniform sprite scale, anchored at the asset's ground point. */
   scale?: number;
+  /** Adjustment to the projected draw-order key, in screen pixels. */
+  depthOffset?: number;
   /** Explicit semantic role for scene checks. */
   role?: string;
   /** Scene-check annotations attached to this placement, such as `gate`. */
@@ -53,6 +55,11 @@ export function assemblyMap(width: number, height: number, placements: readonly 
     )
       throw new Error('sprite scale must be positive; floor scale must be 1');
     if (
+      placement.depthOffset !== undefined &&
+      (!Number.isFinite(placement.depthOffset) || (placement.layer === 'floor' && placement.depthOffset !== 0))
+    )
+      throw new Error('depth offset must be finite; floor depth offset must be 0');
+    if (
       placement.tags !== undefined &&
       (!Array.isArray(placement.tags) ||
         placement.tags.some((tag) => typeof tag !== 'string' || !tag.trim() || tag.includes(',')))
@@ -91,6 +98,7 @@ export function assemblyMap(width: number, height: number, placements: readonly 
       placement.solid,
       placement.elevation ?? 0,
       placement.scale ?? null,
+      placement.depthOffset ?? null,
       placement.role,
       tags,
     ]);
@@ -106,6 +114,7 @@ export function assemblyMap(width: number, height: number, placements: readonly 
           { name: 'solid', value: placement.solid },
           ...(placement.elevation === undefined ? [] : [{ name: 'elevation', value: placement.elevation }]),
           ...(placement.scale === undefined ? [] : [{ name: 'scale', value: placement.scale }]),
+          ...(placement.depthOffset === undefined ? [] : [{ name: 'depthOffset', value: placement.depthOffset }]),
           ...(placement.role === undefined ? [] : [{ name: 'role', value: placement.role }]),
           ...(tags ? [{ name: 'tags', value: tags }] : []),
         ],

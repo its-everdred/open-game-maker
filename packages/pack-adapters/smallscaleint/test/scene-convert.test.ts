@@ -95,6 +95,14 @@ function loaded(json: TiledIsoMap) {
 }
 
 describe('isoMapToScene / sceneToIsoMap', () => {
+  it('retains a draw-order offset in the scene and Tiled round trip', () => {
+    const original = richMap();
+    original.tilesets[1]!.tiles![0]!.properties!.push({ name: 'depthOffset', value: -16 });
+    const doc = isoMapToScene(original, ids);
+    expect(doc.layers.wall!.tiles!['1,1']!.props).toEqual({ depthOffset: -16 });
+    expect(loaded(sceneToIsoMap(doc))).toEqual(loaded(original));
+  });
+
   it('preserves sprite scale in a scene document and Tiled round trip', () => {
     const original = richMap();
     original.tilesets[1]!.tiles![0]!.properties!.push({ name: 'scale', value: 0.4 }, { name: 'role', value: 'post' });

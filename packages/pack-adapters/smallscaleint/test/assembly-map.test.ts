@@ -56,6 +56,22 @@ it('preserves a sprite scale without changing collision or other copies', () => 
   expect(() => assemblyMap(1, 1, [{ ...base, layer: 'floor', cell: { x: 0, y: 0 }, scale: 0.4 }])).toThrow('scale');
 });
 
+it('keeps explicit draw-order offsets distinct and leaves collision unchanged', () => {
+  const base = { layer: 'wall', asset: 'wall', facing: 'E', solid: true } as const;
+  const json = assemblyMap(1, 1, [
+    { ...base, cell: { x: 0, y: 0 }, depthOffset: -16 },
+    { ...base, cell: { x: 0, y: 0 }, depthOffset: 16 },
+  ]);
+  const map = new IsoMap(json);
+  expect(map.pieces('wall').map((piece) => piece.depth)).toEqual([-15.9, 16.1]);
+  expect(map.collisionGrid()).toEqual([[true]]);
+  expect(json.tilesets[0]!.tiles).toHaveLength(2);
+  expect(() => assemblyMap(1, 1, [{ ...base, cell: { x: 0, y: 0 }, depthOffset: Infinity }])).toThrow('depth offset');
+  expect(() => assemblyMap(1, 1, [{ ...base, layer: 'floor', cell: { x: 0, y: 0 }, depthOffset: 1 }])).toThrow(
+    'depth offset',
+  );
+});
+
 it('keeps a gate annotation on only the marked floor cell', () => {
   const floor = { layer: 'floor', asset: 'grass', facing: 'E', solid: false } as const;
   const tiled = assemblyMap(2, 1, [

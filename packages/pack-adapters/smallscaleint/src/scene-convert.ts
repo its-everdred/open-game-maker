@@ -64,6 +64,7 @@ export function isoMapToScene(json: TiledIsoMap, ids: { game: string; scene: str
       ...(piece.solid === defaultSolid(piece.layer) ? {} : { solid: piece.solid }),
       ...(tags === undefined ? {} : { tags }),
       ...(piece.scale === undefined ? {} : { scale: piece.scale }),
+      ...(piece.depthOffset === undefined ? {} : { depthOffset: piece.depthOffset }),
       ...(rolesByGid.has(piece.gid) ? { role: rolesByGid.get(piece.gid)! } : {}),
     };
     const tile: SceneTile = {
@@ -155,17 +156,38 @@ export function sceneToIsoMap(input: SceneDoc): TiledIsoMap {
       if (tile.flip) refuse(`tile ${id}:${cell} is flipped; the pack draws facings instead`);
       const facing = (tile.facing ?? 'E') as TileFacing;
       if (!Object.hasOwn(ROTATION, facing)) refuse(`tile ${id}:${cell} facing ${tile.facing} is not E, N, W or S`);
-      const { solid = defaultSolid(id.replace(/-\d+$/, '')), tags, scale, role, ...rest } = tile.props ?? {};
+      const {
+        solid = defaultSolid(id.replace(/-\d+$/, '')),
+        tags,
+        scale,
+        role,
+        depthOffset,
+        ...rest
+      } = tile.props ?? {};
       if (typeof solid !== 'boolean') refuse(`tile ${id}:${cell} solid must be a boolean`);
       if (tags !== undefined && typeof tags !== 'string') refuse(`tile ${id}:${cell} tags must be a string`);
       if (role !== undefined && typeof role !== 'string') refuse(`tile ${id}:${cell} role must be a string`);
+      if (
+        depthOffset !== undefined &&
+        (typeof depthOffset !== 'number' || !Number.isFinite(depthOffset) || (id === 'floor' && depthOffset !== 0))
+      )
+        refuse(`tile ${id}:${cell} depthOffset must be finite and 0 on floor`);
       if (
         scale !== undefined &&
         (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0 || (id === 'floor' && scale !== 1))
       )
         refuse(`tile ${id}:${cell} scale must be positive; floor scale must be 1`);
       if (Object.keys(rest).length > 0) refuse(`tile ${id}:${cell} has props ${Object.keys(rest).join(', ')}`);
-      const signature = JSON.stringify([tile.asset, facing, solid, tile.elevation ?? null, tags, scale, role]);
+      const signature = JSON.stringify([
+        tile.asset,
+        facing,
+        solid,
+        tile.elevation ?? null,
+        tags,
+        scale,
+        role,
+        depthOffset,
+      ]);
       let gid = gids.get(signature);
       if (gid === undefined) {
         gid = tiles.length + 1;
@@ -178,6 +200,7 @@ export function sceneToIsoMap(input: SceneDoc): TiledIsoMap {
             { name: 'solid', value: solid },
             ...(tags === undefined ? [] : [{ name: 'tags', value: tags }]),
             ...(scale === undefined ? [] : [{ name: 'scale', value: scale }]),
+            ...(depthOffset === undefined ? [] : [{ name: 'depthOffset', value: depthOffset }]),
             ...(role === undefined ? [] : [{ name: 'role', value: role }]),
             ...(tile.elevation === undefined ? [] : [{ name: 'elevation', value: tile.elevation }]),
           ],

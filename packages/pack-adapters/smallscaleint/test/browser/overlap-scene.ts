@@ -15,9 +15,9 @@ class Fixture extends Phaser.Scene {
     const cell = { x: 0, y: 0 };
     const map = new IsoMap(
       assemblyMap(1, 1, [
-        { cell, layer: 'wall', asset: 'fence', facing: 'W', solid: true, scale: 0.4 },
-        { cell, layer: 'wall', asset: 'fence', facing: 'S', solid: true },
-        { cell, layer: 'roof', asset: 'roof', facing: 'N', solid: false, elevation: 1.75 },
+        { cell, layer: 'wall', asset: 'fence', facing: 'W', solid: true, scale: 0.4, depthOffset: -16 },
+        { cell, layer: 'wall', asset: 'fence', facing: 'S', solid: true, depthOffset: 16 },
+        { cell, layer: 'roof', asset: 'roof', facing: 'N', solid: false, elevation: 1.75, depthOffset: 64 },
       ]),
     );
     void map.render(this, {} as AssetLoader).then(({ sprites }) => {
@@ -26,6 +26,7 @@ class Fixture extends Phaser.Scene {
         x: object.x,
         y: object.y,
         scale: object.scaleX,
+        depth: object.depth,
         visible: object.visible,
       }));
       map.sync({ [sprites[0]!.key]: { visible: false } });

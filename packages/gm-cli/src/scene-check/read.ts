@@ -85,6 +85,7 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
   const notes: Finding[] = [];
   const flipped = new Set<string>();
   const unsupportedScales = new Map<string, { asset: string; cells: { x: number; y: number }[] }>();
+  const unsupportedDepths = new Map<string, { asset: string; cells: { x: number; y: number }[] }>();
   const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   for (const source of sources) {
     const map = tiledMap.parse(source.json);
@@ -153,13 +154,28 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
         const solid = prop(properties, 'solid');
         const elevation = prop(properties, 'elevation');
         const scale = prop(properties, 'scale');
+        const depthOffset = prop(properties, 'depthOffset');
         const x = (index % layer.width) + dx;
         const y = Math.floor(index / layer.width) + dy;
         const validScale = typeof scale === 'number' && Number.isFinite(scale) && scale > 0;
+        const validDepthOffset =
+          typeof depthOffset === 'number' &&
+          Number.isFinite(depthOffset) &&
+          (layer.name !== 'floor' || depthOffset === 0);
         if (scale !== undefined && (!validScale || (layer.name === 'floor' && scale !== 1))) {
           const key = `${prefix}${layer.name}:${gid}`;
           if (!unsupportedScales.has(key)) unsupportedScales.set(key, { asset, cells: [] });
           unsupportedScales.get(key)!.cells.push({ x, y });
+        }
+        if (
+          depthOffset !== undefined &&
+          (typeof depthOffset !== 'number' ||
+            !Number.isFinite(depthOffset) ||
+            (layer.name === 'floor' && depthOffset !== 0))
+        ) {
+          const key = `${prefix}${layer.name}:${gid}`;
+          if (!unsupportedDepths.has(key)) unsupportedDepths.set(key, { asset, cells: [] });
+          unsupportedDepths.get(key)!.cells.push({ x, y });
         }
         const facts = assetFacts(pack, lock, asset);
         const post = pack.asset(asset)?.postSocket;
@@ -177,6 +193,7 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
           under: source.under === true,
           elevation: typeof elevation === 'number' && layer.name !== 'roof' ? elevation : 0,
           ...(validScale && (layer.name !== 'floor' || scale === 1) ? { scale } : {}),
+          ...(validDepthOffset ? { depthOffset } : {}),
           ...(role === 'post' &&
           post &&
           post.facing === facing &&
@@ -209,6 +226,16 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
       id: 'facts/unsupported-scale',
       severity: 'high',
       message: `${cells.length} ${asset} piece(s) have an unsupported scale; the game ignores it`,
+      cells,
+      objects: [key],
+    });
+  }
+  for (const [key, { asset, cells }] of unsupportedDepths) {
+    notes.push({
+      check: 'facts',
+      id: 'facts/unsupported-depth-offset',
+      severity: 'high',
+      message: `${cells.length} ${asset} piece(s) have a depth offset the renderer refuses`,
       cells,
       objects: [key],
     });

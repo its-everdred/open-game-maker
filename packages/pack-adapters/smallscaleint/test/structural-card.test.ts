@@ -31,6 +31,15 @@ it('supplies measured card metadata without inventing anchors or sockets', () =>
     ['yMax'],
     ['xMin'],
   ]);
+  const timberArch = structuralCardFacts(
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-c6@2026-11-01',
+  )!;
+  expect(timberArch.S?.edges?.value).toEqual(['yMax']);
+  expect(timberArch.S?.alpha_bounds?.value).toEqual([60, 75, 147, 161]);
+  const thatch = structuralCardFacts(
+    't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/roof-a1@2026-11-01',
+  )!;
+  expect(thatch.S?.alpha_bounds?.value).toEqual([46, 103, 213, 255]);
   const arch = structuralCardFacts(
     't1:smallscaleint-fantasy-tileset-2d-isometric/tiles/environment/wall-f6@2026-11-01',
   )!;

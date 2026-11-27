@@ -26,6 +26,7 @@ export {
   wallF1Edges,
   wallF6Edges,
   wallC1Edges,
+  wallC6Edges,
   structuralImageBounds,
   inspectedGatePost,
   type AlphaBounds,

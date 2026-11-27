@@ -59,9 +59,10 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
     `yMax` fence openings and requires a one-cell map margin. The only supported style is Stone A14 facing E at scale
     0.4 with elevation 0.5. The source masks establish contact with ground-level Fence B1 E at the vertices;
     in-game depth and actor traversal still need verification. Post sprites do not block the gate cell.
-  - `building(footprint, 'stone', door, walkable)` returns `{ placements, entry }`: a closed shell, a gable over a
+  - `building(footprint, 'stone' | 'timber', door, walkable)` returns `{ placements, entry }`: a closed shell, a gable over a
     two-row footprint, and a door on a `yMax` edge opening onto the walkable `entry` cell. Provisional until checked
-    in a game render.
+    in a game render. The timber style uses a thatched roof and per-piece depth offsets inspected in a standalone render;
+    actor occlusion and traversal remain unverified.
   - `path(from, to, { walkable, palette: [{ asset, facing }], seed })` returns stepping stones on the `decor` layer
     over the scene's own ground.
   - `scatter(region, [{ asset, facing, solid, footprint }], density, { seed, avoid, boundaries, boundaryDensity })`
@@ -69,8 +70,10 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
     Solid items go on the `wall` layer so they block movement at their origin cell.
   - Concatenate the placements with the scene's floor and pass them to `assemblyMap(width, height, placements)`, the
     Tiled subset `IsoMap` reads. Mark an opening's floor placement with `tags: ['gate']` for scene verification.
+    A placement's optional `depthOffset` adjusts its projected sort key in pixels without changing position or collision;
+    it must be finite and is zero on floor tiles. Scene conversion and editor drawing preserve it.
     The structural asset ids are pinned card ids; record them in the game's asset list.
-  - Not bound yet: other gate orientations, steps and non-stone buildings.
+  - Not bound yet: other gate orientations, steps and other building styles.
 - `scripts/stage-structural-cards.mjs <library> <empty-dir>` (after `pnpm build`) writes validated card copies carrying
   the structural facts and a source-hash plan, for a host operator to apply to the shared library.
 - `structuralImageBounds`: inclusive alpha bounds for twenty-two measured structural or paving assets, keyed by asset card id.

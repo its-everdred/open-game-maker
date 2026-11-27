@@ -117,7 +117,12 @@ export function sceneDrawList(doc: SceneDoc): SceneDrawPiece[] {
           tile.props.scale > 0
             ? tile.props.scale
             : 1,
-        depth: isoToWorld(x, y).y + LAYER_DEPTH[base],
+        depth:
+          isoToWorld(x, y).y +
+          LAYER_DEPTH[base] +
+          (base !== 'floor' && typeof tile.props?.depthOffset === 'number' && Number.isFinite(tile.props.depthOffset)
+            ? tile.props.depthOffset
+            : 0),
         floor: base === 'floor',
       };
       (piece.floor ? floor : raised).push(piece);

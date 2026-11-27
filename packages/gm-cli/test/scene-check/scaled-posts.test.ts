@@ -4,11 +4,11 @@ import * as adapter from '../../../pack-adapters/smallscaleint/src/index.js';
 import { smallScaleIntFacts } from '../../src/scene-check/facts.js';
 import { Grid, segments, terminals } from '../../src/scene-check/grid.js';
 import { RUN } from '../../src/scene-check/model.js';
-import { screenBox } from '../../src/scene-check/overlap.js';
+import { noOverlap, screenBox } from '../../src/scene-check/overlap.js';
 import { readTiledScene } from '../../src/scene-check/read.js';
 import { checkScene } from '../../src/scene-check/report.js';
 import { connectedRuns, unmeasured } from '../../src/scene-check/runs.js';
-import { camera, scene as fixtureScene, yard } from './fixture.js';
+import { camera, pack, scene as fixtureScene, yard } from './fixture.js';
 
 it('recognizes assembled gate posts and checks their scaled alpha bounds', () => {
   const cells = Array.from({ length: 9 }, (_, i) => ({ x: 2 + (i % 3), y: 2 + Math.floor(i / 3) }));
@@ -117,6 +117,97 @@ it('accepts a unit-scaled floor and reports an unsupported floor scale without a
   expect(readTiledScene([{ json }], smallScaleIntFacts(adapter), {}).notes).toContainEqual(
     expect.objectContaining({ id: 'facts/unsupported-scale', severity: 'high' }),
   );
+});
+
+it('reports draw-order offsets that the game renderer cannot load', () => {
+  const json = adapter.assemblyMap(1, 1, [
+    { cell: { x: 0, y: 0 }, layer: 'wall', asset: 'wall', facing: 'E', solid: true, depthOffset: 16 },
+  ]);
+  json.tilesets[0]!.tiles![0]!.properties!.find((property) => property.name === 'depthOffset')!.value = 'near';
+  expect(() => new adapter.IsoMap(json)).toThrow('depthOffset');
+  expect(readTiledScene([{ json }], smallScaleIntFacts(adapter), {}).notes).toContainEqual(
+    expect.objectContaining({ id: 'facts/unsupported-depth-offset', severity: 'high' }),
+  );
+});
+
+it('checks overlapping sprites that offsets put in the same draw-depth band', () => {
+  const base = { layer: 'decor', asset: 'pack:bush', facing: 'E', solid: false } as const;
+  const placements = [
+    { ...base, cell: { x: 0, y: 0 }, depthOffset: 16 },
+    { ...base, cell: { x: 1, y: 0 }, depthOffset: -16 },
+  ];
+  const scene = readTiledScene([{ json: adapter.assemblyMap(2, 1, placements) }], pack, {});
+  expect(noOverlap(new Grid(scene))).toContainEqual(expect.objectContaining({ id: 'no-overlap/interpenetrate' }));
+  const ordinary = readTiledScene(
+    [
+      {
+        json: adapter.assemblyMap(
+          2,
+          1,
+          placements.map(({ depthOffset: _offset, ...piece }) => piece),
+        ),
+      },
+    ],
+    pack,
+    {},
+  );
+  expect(noOverlap(new Grid(ordinary)).filter((finding) => finding.id === 'no-overlap/interpenetrate')).toEqual([]);
+});
+
+it('accounts for layer tie breakers when offsets align two sprites', () => {
+  const placements = [
+    {
+      layer: 'wall' as const,
+      asset: 'pack:bush',
+      facing: 'E' as const,
+      solid: true,
+      role: 'wall',
+      cell: { x: 0, y: 0 },
+      depthOffset: 16.1,
+    },
+    {
+      layer: 'decor' as const,
+      asset: 'pack:bush',
+      facing: 'E' as const,
+      solid: false,
+      cell: { x: 1, y: 0 },
+      depthOffset: -16.2,
+    },
+  ];
+  const scene = readTiledScene([{ json: adapter.assemblyMap(2, 1, placements) }], pack, {});
+  expect(noOverlap(new Grid(scene))).toContainEqual(expect.objectContaining({ id: 'no-overlap/interpenetrate' }));
+});
+
+it('does not let a depth offset hide an overlap on the same diagonal', () => {
+  const base = { layer: 'decor', asset: 'pack:bush', facing: 'E', solid: false } as const;
+  const scene = readTiledScene(
+    [
+      {
+        json: adapter.assemblyMap(2, 2, [
+          { ...base, cell: { x: 0, y: 1 }, depthOffset: 1 },
+          { ...base, cell: { x: 1, y: 0 } },
+        ]),
+      },
+    ],
+    pack,
+    {},
+  );
+  expect(noOverlap(new Grid(scene))).toContainEqual(expect.objectContaining({ id: 'no-overlap/interpenetrate' }));
+});
+
+it('recognizes the timber doorway header as a measured opening', () => {
+  const footprint = Array.from({ length: 6 }, (_, i) => ({ x: i % 3, y: Math.floor(i / 3) }));
+  const house = adapter.building(footprint, 'timber', { cell: { x: 1, y: 1 }, edge: 'yMax' }, [{ x: 1, y: 2 }]);
+  const scene = readTiledScene(
+    [{ json: adapter.assemblyMap(3, 3, house.placements) }],
+    smallScaleIntFacts(adapter),
+    {},
+  );
+  expect(scene.pieces.find((piece) => piece.asset.includes('wall-c6'))).toMatchObject({
+    role: 'opening',
+    edge: 'yMax',
+  });
+  expect(unmeasured(new Grid(scene)).filter((finding) => finding.id === 'facts/unmeasured-edge')).toEqual([]);
 });
 
 it('reports scaled structural edges as unchecked instead of declaring them connected', () => {
