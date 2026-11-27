@@ -67,6 +67,7 @@ const fleet = createFleet({
     builderBotLogin: env.OGM_BUILDER_BOT_LOGIN,
     intakeLogin: env.OGM_INTAKE_BOT_LOGIN,
     assetsLocalDir: join(home, 'games', 'open-game-maker-2000', 'assets-local'),
+    blobRoot: env.OGM_BLOB_ROOT,
     apiPort: env.OGM_API_PORT,
   },
   alert: (message) => log({ event: 'daemon_alert', message }),

@@ -7,10 +7,20 @@ import { parse } from 'yaml';
 import { renderDaemonFiles } from '@ogm/game-repo-template';
 
 import { IDLE_STOP_MS } from '../../src/fleet/fleet.js';
+import { gameRepoDaemonFiles } from '../../src/fleet/daemon-dir.js';
 import { READY_TIMEOUT_MS, START_POLL_MS } from '../../src/fleet/health.js';
 import { daemonPaths, writeAtomic } from '../../src/fleet/secrets.js';
 import { preflight as realPreflight } from '../../src/policy/preflight.js';
-import { buildFleet, cleanupHomes, fakeFetch, liveRow, memoryStore, systemctlCalls, tempHome } from './helpers.js';
+import {
+  buildFleet,
+  cleanupHomes,
+  fakeFetch,
+  fleetEnv,
+  liveRow,
+  memoryStore,
+  systemctlCalls,
+  tempHome,
+} from './helpers.js';
 
 afterEach(cleanupHomes);
 
@@ -37,7 +47,9 @@ describe('ensureDaemon', () => {
 
     await fleet.refreshManagedHooks();
 
-    expect(await readFile(managed, 'utf8')).toBe(renderDaemonFiles({ gameSlug: slug }).hooks);
+    expect(await readFile(managed, 'utf8')).toBe(
+      (await gameRepoDaemonFiles(fleetEnv(home))(store.rows.get(slug)!)).hooks,
+    );
     expect(await readFile(join(checkout, '.aiur/hooks'), 'utf8')).toBe('custom hooks');
   });
   it('renders the directory, writes 0600 secrets, mints two tokens, starts the unit and polls health to running', async () => {
@@ -54,7 +66,9 @@ describe('ensureDaemon', () => {
     expect(config.tracker.github.label_prefix).toBe(slug);
     expect(config.server).toMatchObject({ host: '127.0.0.1', port: 4101 });
     expect(config.instance.id).toBe(slug);
-    expect(await readFile(join(dir, '.aiur/hooks'), 'utf8')).toBe(renderDaemonFiles({ gameSlug: slug }).hooks);
+    expect(await readFile(join(dir, '.aiur/hooks'), 'utf8')).toBe(
+      (await gameRepoDaemonFiles(fleetEnv(home))(store.rows.get(slug)!)).hooks,
+    );
     expect(await readFile(join(dir, '.aiur/prompt.md'), 'utf8')).toBe(renderDaemonFiles({ gameSlug: slug }).prompt);
     expect((await stat(join(dir, 'workspaces'))).isDirectory()).toBe(true);
 

@@ -37,6 +37,7 @@ let smokeTestSha: string;
 let wrongServeSha: string;
 let mutatingSmokeSha: string;
 let mutationSha: string;
+let sourceMutationSha: string;
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -145,6 +146,13 @@ beforeAll(async () => {
   );
   git(origin, 'commit', '-qam', 'mutating test fixture');
   mutationSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'mutating-source', 'main');
+  writeFileSync(
+    join(origin, 'games', 'blobs', 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"printf changed > manifest.json"}}\n',
+  );
+  git(origin, 'commit', '-qam', 'mutating source fixture');
+  sourceMutationSha = git(origin, 'rev-parse', 'HEAD');
   git(origin, 'switch', '-q', 'main');
 
   // pnpm stand-in: the scratch repository has nothing to install, and its build is one shell script.
@@ -327,6 +335,7 @@ describe('gm publish', () => {
         { name: 'pnpm run build', result: 'passed' },
         { name: 'production snapshot', result: 'passed' },
         { name: 'pnpm run test', result: 'passed' },
+        { name: 'source integrity', result: 'passed' },
         { name: 'production build integrity', result: 'passed' },
         { name: 'publish artifact', result: 'passed' },
       ],
@@ -603,6 +612,19 @@ describe('gm publish', () => {
     const run = await publish(['blobs', '--sha', mutationSha, '--api', api]);
     expect(run.code).toBe(1);
     expect(run.err.join('\n')).toContain('game checks changed the production build');
+    expect(requests.map((request) => request.method)).toEqual(['GET']);
+  });
+
+  it('does not publish if checks change tracked source', async () => {
+    const run = await publish(['blobs', '--sha', sourceMutationSha, '--api', api]);
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain('game checks changed the source commit or tracked files');
+    expect(checkRecords).toContainEqual(
+      expect.objectContaining({
+        gitSha: sourceMutationSha,
+        checks: expect.arrayContaining([{ name: 'source integrity', result: 'failed' }]),
+      }),
+    );
     expect(requests.map((request) => request.method)).toEqual(['GET']);
   });
 

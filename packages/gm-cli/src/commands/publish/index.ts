@@ -25,7 +25,7 @@ import { scanReferences, unlisted } from '../../references.js';
 import { mergePrototypeReviews, parsePrototypeReview } from '../../prototype-review.js';
 import { publishSandboxEnv, writePublishSandbox } from '../../publish-sandbox.js';
 import { publishBuildHash } from '../../publish-build-hash.js';
-import { readPublishLock, stagePublishAssets } from '../../publish-assets.js';
+import { legacyBlobGrants, readPublishLock, stagePublishAssets } from '../../publish-assets.js';
 import { safePublishTestScript } from '../../publish-test-script.js';
 
 /*
@@ -420,7 +420,14 @@ export const command: GmCommand = {
       ];
       const buildEnv: Record<string, string> = { NODE_ENV: 'production' };
       try {
-        await stagePublishAssets(game, stagedAssets, assetsRoot ?? null, blobRoot ?? null, facts.repoVisibility);
+        await stagePublishAssets(
+          game,
+          stagedAssets,
+          assetsRoot ?? null,
+          blobRoot ?? null,
+          facts.repoVisibility,
+          await legacyBlobGrants(game),
+        );
         checks.push({ name: 'asset rights and files', result: 'passed' });
       } catch (error) {
         await failCheck('asset rights and files');
@@ -517,6 +524,13 @@ export const command: GmCommand = {
         await failCheck('production build integrity');
         throw new CommandError('the game checks changed the production build');
       }
+      const currentHead = exec('git', ['rev-parse', 'HEAD'], work);
+      const sourceDiff = exec('git', ['diff', '--quiet', 'HEAD', '--'], work);
+      if (!currentHead.ok || currentHead.out.trim() !== commit || !sourceDiff.ok) {
+        await failCheck('source integrity');
+        throw new CommandError('the game checks changed the source commit or tracked files');
+      }
+      checks.push({ name: 'source integrity', result: 'passed' });
       const problems = checkPublishDist(productionSnapshot);
       if (!needsTestBuild) checks.push({ name: 'production build integrity', result: 'passed' });
       checks.push({ name: 'publish artifact', result: problems.length ? 'failed' : 'passed' });

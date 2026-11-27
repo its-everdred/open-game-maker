@@ -63,7 +63,7 @@ export function createFleet(deps: FleetDeps) {
   const { store, activeJobs, env } = deps;
   const runner = deps.runner ?? nodeRunner;
   const systemctl = deps.systemctl ?? createSystemctl(runner);
-  const files = deps.files ?? gameRepoDaemonFiles;
+  const files = deps.files ?? gameRepoDaemonFiles(env);
   const sleep = deps.sleep ?? realSleep;
   const now = deps.now ?? (() => new Date());
   const portFree = deps.portFree ?? probePort;

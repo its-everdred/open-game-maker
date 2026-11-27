@@ -58,6 +58,22 @@ export function buildRoutes(opts: {
     const resolver = deps.registry.ticketJobResolver;
     const job = resolver ? await resolver(repo, c.req.param('identifier') ?? '') : null;
     if (!job || job.repo.toLowerCase() !== repo.toLowerCase()) return c.json({ error: { code: 'not_found' } }, 404);
+    if (opts.gameForSecret) {
+      const identity = bearer ? await opts.gameForSecret(bearer[1]!, deps) : null;
+      const target = deps.db
+        .select({ gameId: schema.jobs.gameId })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.id, job.jobId))
+        .get();
+      const daemon = target && reviewDaemonForGame(deps.db, target.gameId);
+      if (
+        !identity ||
+        !daemon ||
+        identity.slug !== daemon.slug ||
+        identity.repo.toLowerCase() !== daemon.repo.toLowerCase()
+      )
+        return c.json({ error: { code: 'not_found' } }, 404);
+    }
     if (!awaitsBuild(deps, job.jobId) || isPublishing(job.jobId)) {
       return c.json({ error: { code: 'job_not_awaiting_build' } }, 409);
     }
@@ -67,6 +83,19 @@ export function buildRoutes(opts: {
   }
 
   return new Hono<ApiBindings>()
+    .get('/jobs/by-ticket/:identifier/publish-context', async (c) => {
+      const admitted = await admit(c);
+      if (admitted instanceof Response) return admitted;
+      const game = c
+        .get('deps')
+        .db.select({ path: schema.games.githubPath, visibility: schema.games.repoVisibility, slug: schema.games.slug })
+        .from(schema.jobs)
+        .innerJoin(schema.games, eq(schema.jobs.gameId, schema.games.id))
+        .where(eq(schema.jobs.id, admitted.jobId))
+        .get();
+      if (!game) return c.json({ error: { code: 'not_found' } }, 404);
+      return c.json({ path: game.path, visibility: game.visibility });
+    })
     .post('/jobs/by-ticket/:identifier/publish-checks', bodyLimit({ maxSize: 65536 }), async (c) => {
       const admitted = await admit(c);
       if (admitted instanceof Response) return admitted;

@@ -32,8 +32,9 @@ recognized public SPDX license; `LicenseRef-*`, unknown, and missing licenses fa
 Push requests use a 10-second socket timeout. Expired subscriptions are removed immediately; other failures are
 removed after five consecutive attempts without failing the notification emitter.
 
-Build publishing (`src/builds`): a game repo's `before_remove` hook runs the game's `pnpm run test` and `pnpm run build`, records
-their results, and posts the fresh `dist/` (plus `manifest.json`,
+Build publishing (`src/builds`): a game repo's `before_remove` hook resolves its game path and repository visibility from
+`GET /internal/jobs/by-ticket/:id/publish-context`, stages lock-listed assets, runs the game's `pnpm run build` and
+`pnpm run test` in a network-off sandbox, records their results, and posts the fresh `dist/` (plus `manifest.json`,
 `design/design.json`, `achievements.json`) as a gzipped ustar archive to `POST /internal/jobs/by-ticket/:id/build` with
 its daemon hook secret and `x-gm-sha`. Once Aiur reports the run completed, the API registers the build, moves it to
 `$OGM_GAMES_ROOT/<gameId>/<buildId>/`, writes `.complete`, switches the job's branch to it and finishes the job. A

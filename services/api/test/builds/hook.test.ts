@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -28,6 +28,11 @@ function beforeRemove(): string {
   return block.replace(/^ {2}/gmu, '');
 }
 
+function beforeRun(): string {
+  const [, block = ''] = renderDaemonFiles().hooks.split('before_run: |\n');
+  return block.split('before_remove: |\n')[0]!.replace(/^ {2}/gmu, '');
+}
+
 const COPY_WEB = "import { cpSync } from 'node:fs';\ncpSync('web', 'dist', { recursive: true });\n";
 
 // A workspace as the agent leaves it: a committed game repo whose `pnpm run build` (here `node build.mjs`) writes dist/.
@@ -45,7 +50,7 @@ function workspace(build = COPY_WEB, test = "node -e \"require('fs').accessSync(
     join(dir, 'package.json'),
     JSON.stringify({ name: 'fixture', private: true, scripts: { build: 'node build.mjs', test } }),
   );
-  writeFileSync(join(dir, '.gitignore'), 'dist/\n');
+  writeFileSync(join(dir, '.gitignore'), 'dist/\n.gm/\n.test-bin/\n');
   const git = (...args: string[]) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
   git('init', '-q', '-b', 'aiur/12');
   git('add', '-A');
@@ -53,14 +58,19 @@ function workspace(build = COPY_WEB, test = "node -e \"require('fs').accessSync(
   return { dir, sha: git('rev-parse', 'HEAD') };
 }
 
-async function runHook(cwd: string, api: string, extra: Record<string, string> = {}) {
+async function runHook(cwd: string, api: string, extra: Record<string, string> = {}, runBefore = false) {
   const secretFile = join(mkdtempSync(join(tmpdir(), 'ogm-hook-secret-')), 'hook-secret');
   writeFileSync(secretFile, SECRET);
   const bin = join(cwd, '.test-bin');
   mkdirSync(bin, { recursive: true });
   writeFileSync(join(bin, 'codex'), '#!/usr/bin/env bash\nwhile [[ "$1" != -- ]]; do shift; done\nshift\nexec "$@"\n');
   chmodSync(join(bin, 'codex'), 0o755);
-  const child = spawn('bash', ['-c', beforeRemove()], {
+  const stager = join(bin, 'stage.mjs');
+  writeFileSync(
+    stager,
+    'import { mkdirSync } from "node:fs"; mkdirSync(process.argv[3]+"/blob-store", { recursive: true });',
+  );
+  const child = spawn('bash', ['-c', `${runBefore ? `${beforeRun()}\n` : ''}${beforeRemove()}`], {
     cwd,
     env: {
       PATH: `${bin}:${HOOK_PATH}`,
@@ -70,6 +80,9 @@ async function runHook(cwd: string, api: string, extra: Record<string, string> =
       AIUR_HOOK_TICKET_IDENTIFIER: TICKET,
       OGM_HOOK_SECRET_FILE: secretFile,
       OGM_INTERNAL_URL: api,
+      OGM_PUBLISH_STAGER: stager,
+      OGM_PUBLISH_ASSETS: cwd,
+      OGM_PUBLISH_BLOBS: cwd,
       ...extra,
     },
   });
@@ -199,6 +212,47 @@ describe('before_remove hook to a playable build', () => {
     }
   });
 
+  it('builds the registered game within a shared repository', async () => {
+    const { deps, app } = world();
+    const api = await serveApi(app);
+    const { dir } = workspace();
+    const game = join(dir, 'games/castle-game');
+    mkdirSync(game, { recursive: true });
+    for (const name of ['build.mjs', 'package.json', 'manifest.json', 'design', 'web'])
+      renameSync(join(dir, name), join(game, name));
+    execFileSync('git', ['add', '-A'], { cwd: dir });
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'nested game'], { cwd: dir });
+    try {
+      const hook = await runHook(dir, api.base);
+      expect(hook.stderr).not.toContain('game publish context unavailable');
+      completeRun(deps);
+      expect(await publishStaged(deps, ids.job)).toMatchObject({ state: 'done' });
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not publish uncommitted source as the recorded commit', async () => {
+    const { deps, app } = world();
+    const api = await serveApi(app);
+    const { dir, sha } = workspace();
+    writeFileSync(join(dir, 'build.mjs'), COPY_WEB + '\n// uncommitted\n');
+    try {
+      const hook = await runHook(dir, api.base);
+      expect(hook.stderr).toContain('game source is not clean at the recorded commit');
+      completeRun(deps);
+      expect(await publishStaged(deps, ids.job)).toBeNull();
+      const record = deps.sqlite.prepare('SELECT checks_json FROM publish_checks WHERE git_sha = ?').get(sha) as {
+        checks_json: string;
+      };
+      expect(JSON.parse(record.checks_json)).toContainEqual({ name: 'source integrity', result: 'failed' });
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('uploads nothing when the build fails, even with an earlier dist/ in the workspace', async () => {
     const { deps, app } = world();
     const api = await serveApi(app);
@@ -275,12 +329,32 @@ describe('before_remove hook to a playable build', () => {
     }
   });
 
-  it('publishes the manifest captured before tests modify their workspace', async () => {
+  it('does not publish when tests modify tracked source', async () => {
     const { deps, app } = world();
     const api = await serveApi(app);
     const { dir } = workspace(COPY_WEB, "node -e \"require('fs').writeFileSync('manifest.json', '{}')\"");
     try {
-      await runHook(dir, api.base);
+      const hook = await runHook(dir, api.base);
+      expect(hook.stderr).toContain('game source changed during checks');
+      completeRun(deps);
+      expect(await publishStaged(deps, ids.job)).toBeNull();
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts skills installed by the preceding run hook', async () => {
+    const { deps, app } = world();
+    const api = await serveApi(app);
+    const { dir } = workspace();
+    mkdirSync(join(dir, '.gm/context'), { recursive: true });
+    mkdirSync(join(dir, '.claude/skills/gm-prototype'), { recursive: true });
+    writeFileSync(join(dir, '.gm/context/bundle.json'), JSON.stringify({ kind: 'feature' }));
+    writeFileSync(join(dir, '.claude/skills/gm-prototype/SKILL.md'), 'fixture');
+    try {
+      const hook = await runHook(dir, api.base, {}, true);
+      expect(hook.stderr).not.toContain('game source is not clean');
       completeRun(deps);
       expect(await publishStaged(deps, ids.job)).toMatchObject({ state: 'done' });
     } finally {
@@ -314,6 +388,10 @@ describe('before_remove hook to a playable build', () => {
     const { dir } = workspace();
     rmSync(join(dir, 'manifest.json'));
     execFileSync('ln', ['-s', join(builtFiles(), 'manifest.json'), join(dir, 'manifest.json')]);
+    execFileSync('git', ['add', 'manifest.json'], { cwd: dir });
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'linked manifest'], {
+      cwd: dir,
+    });
     try {
       expect((await runHook(dir, api.base)).status).toBe(0);
       completeRun(deps);

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { cp, mkdir, open, stat, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, extname, join } from 'node:path';
 
 import { cardById, loadIndex, type ResolvedCard } from '@ogm/asset-cards';
 import { AssetsLockSchema, type AssetsLock, type LockEntry } from '@ogm/contracts';
@@ -11,6 +11,7 @@ import { planUsed } from './assets-export/plan.js';
 import { sha256File } from './lock.js';
 import { refusalsForCheck, rightsForCard } from './rules.js';
 import { collectionParts } from './resolve.js';
+import { MIME } from './commands/packs/index.js';
 
 export async function readPublishLock(game: string): Promise<AssetsLock | null> {
   const lockPath = join(game, 'assets.lock.json');
@@ -31,6 +32,28 @@ export async function readPublishLock(game: string): Promise<AssetsLock | null> 
 /** A host-trusted grant, derived independently of the game-controlled lock. */
 export type PublishBlobGrant = { license: string; rights: LockEntry['rights'] };
 
+/**
+ * Compatibility for existing games: the current asset system stores no authoritative per-game blob grants.
+ * This narrows the host access that existing builds already have to the lock's pinned hashes. The game-authored
+ * rights are not independent ownership or licence evidence; per-game provenance is still required.
+ */
+export async function legacyBlobGrants(game: string): Promise<Map<string, PublishBlobGrant>> {
+  const lock = await readPublishLock(game);
+  const grants = new Map<string, PublishBlobGrant>();
+  for (const entry of lock?.assets ?? []) {
+    if (entry.source !== 'blob') continue;
+    for (const hash of [entry.sha256, ...(entry.files ?? []).map((file) => file.sha256)]) {
+      const grant = { license: entry.license, rights: entry.rights };
+      const prior = grants.get(hash);
+      if (prior && JSON.stringify(prior) !== JSON.stringify(grant)) {
+        throw new Error(`conflicting rights for blob ${hash}`);
+      }
+      grants.set(hash, grant);
+    }
+  }
+  return grants;
+}
+
 /** Copy only verified, in-game licensed lock entries into the game sandbox. */
 export async function stagePublishAssets(
   game: string,
@@ -45,9 +68,12 @@ export async function stagePublishAssets(
   if (!lock || lock.assets.length === 0) return;
   const index = assetsRoot ? await loadIndex(assetsRoot) : null;
   const cards = new Map<string, ResolvedCard>();
+  const blobMimes = new Map<string, string>();
   for (const entry of lock.assets) {
     if (entry.source === 'blob') {
-      for (const hash of [entry.sha256, ...(entry.files ?? []).map((file) => file.sha256)]) {
+      for (const item of [{ path: entry.path, sha256: entry.sha256 }, ...(entry.files ?? [])]) {
+        const hash = item.sha256;
+        blobMimes.set(hash, MIME[extname(item.path).toLowerCase()] ?? 'application/octet-stream');
         const grant = authorizedBlobs.get(hash);
         if (
           !grant ||
@@ -112,13 +138,10 @@ export async function stagePublishAssets(
     if (file.path.startsWith('blobs/')) {
       const hash = file.sha256;
       if (!hash || !authorizedBlobs.has(hash) || !blobStore) throw new Error('blob has no trusted authorization');
-      const metadata = await blobStore.head(`sha256:${hash}`);
-      if (!metadata || metadata.bytes !== (await stat(target)).size)
-        throw new Error(`blob metadata is invalid: ${hash}`);
-      await writeFile(
-        `${target}.json`,
-        JSON.stringify({ bytes: metadata.bytes, mime: metadata.mime, createdAt: new Date(0).toISOString() }),
-      );
+      const metadata = await blobStore.head(`sha256:${hash}`).catch(() => null);
+      const bytes = (await stat(target)).size;
+      const mime = metadata?.bytes === bytes ? metadata.mime : (blobMimes.get(hash) ?? 'application/octet-stream');
+      await writeFile(`${target}.json`, JSON.stringify({ bytes, mime, createdAt: new Date(0).toISOString() }));
     }
   }
 }

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import AdmZip from 'adm-zip';
@@ -738,7 +738,7 @@ describe('gm assets import refusals', () => {
 });
 
 it('stages only the rights-checked files pinned by this game for publish', async () => {
-  const { stagePublishAssets } = await import('../src/publish-assets.js');
+  const { stagePublishAssets, legacyBlobGrants } = await import('../src/publish-assets.js');
   const world = await instance();
   const staged = join(tempDir('publish-assets-'), 'library');
   const { readLock } = await import('../src/lock.js');
@@ -777,7 +777,8 @@ it('stages only the rights-checked files pinned by this game for publish', async
   ).rejects.toThrow('has no trusted per-game authorization');
   const allowedStage = join(staged, 'allowed-blob');
   const grant = { license: blobLock.assets[0]!.license, rights: blobLock.assets[0]!.rights };
-  const authorized = new Map([[world.made, grant]]);
+  const authorized = await legacyBlobGrants(world.gameA);
+  expect(authorized.get(world.made)).toEqual(grant);
   await stagePublishAssets(world.gameA, allowedStage, world.assetsRoot, world.blobRoot, 'private', authorized);
   const stagedBlobs = new FsBlobStore({
     root: join(allowedStage, 'blob-store'),
@@ -786,6 +787,15 @@ it('stages only the rights-checked files pinned by this game for publish', async
   });
   expect(await stagedBlobs.head(`sha256:${world.made}`)).toMatchObject({ mime: 'image/png', bytes: 10 });
   expect(await stagedBlobs.head(`sha256:${world.unpinned}`)).toBeNull();
+  rmSync(`${blobPath(world.blobRoot, `sha256:${world.made}`)}.json`);
+  const legacyStage = join(staged, 'legacy-blob');
+  await stagePublishAssets(world.gameA, legacyStage, world.assetsRoot, world.blobRoot, 'private', authorized);
+  const legacyBlobs = new FsBlobStore({
+    root: join(legacyStage, 'blob-store'),
+    signingKey: 'unused',
+    publicOrigin: 'http://127.0.0.1',
+  });
+  expect(await legacyBlobs.head(`sha256:${world.made}`)).toMatchObject({ mime: 'image/png', bytes: 10 });
   blobLock.assets[0]!.files = [{ path: 'image/other.webp', sha256: world.unpinned }];
   await writeLock(world.gameA, blobLock);
   await expect(

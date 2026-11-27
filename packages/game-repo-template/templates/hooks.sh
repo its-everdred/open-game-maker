@@ -194,11 +194,19 @@ before_run: |
   # The game's approved work this ticket should build on, inlined with gm-core in the first prompt (#1311).
   case "$ticket" in ''|*[!0-9]*) ;; *) [ ! -x node_modules/.bin/gm ] || timeout 300 node_modules/.bin/gm context "$ticket" --limit 5 --inject .claude/skills >&2 || true ;; esac
 before_remove: |
+  %%PUBLISH_HOST%%
   set -o pipefail
   git status --short
   ticket="${AIUR_HOOK_TICKET_IDENTIFIER:-}"
   secret="$(cat "${OGM_HOOK_SECRET_FILE:-/nonexistent}" 2>/dev/null || true)"
   root="$(pwd -P)"
+  workspace_root="$root"
+  source_clean() {
+    [ "$(git -C "$workspace_root" rev-parse HEAD)" = "$sha" ] &&
+      git -C "$workspace_root" diff --quiet HEAD -- &&
+      [ -z "$(git -C "$workspace_root" status --porcelain --untracked-files=all -- . \
+        ':(exclude).claude/skills/gm-*' ':(exclude).codex/skills/gm-*' ':(exclude).agents/skills/gm-*')" ]
+  }
   if [ -n "${OGM_HOOK_SECRET_FILE:-}" ]; then
     OGM_PREVIEW_GRANTS="$(dirname "$OGM_HOOK_SECRET_FILE")/preview-grants" node -e '
       const fs = require("node:fs"), crypto = require("node:crypto");
@@ -218,15 +226,55 @@ before_remove: |
     result=0
     env -i PATH="$PATH" HOME="$HOME" CODEX_HOME="${CODEX_HOME:-}" \
       TMPDIR="$runtime" XDG_RUNTIME_DIR="$runtime" COREPACK_HOME="${COREPACK_HOME:-}" \
-      OGM_ASSETS_ROOT="${OGM_ASSETS_ROOT:-}" GM_VERIFY_SOFTWARE_GL="${GM_VERIFY_SOFTWARE_GL:-}" \
+      OGM_ASSETS_ROOT="${asset_stage:-}" OGM_BLOB_ROOT="${asset_stage:-}/blob-store" \
+      GM_ASSET_CACHE_DIR="${cache_stage:-}" GM_VERIFY_SOFTWARE_GL="${GM_VERIFY_SOFTWARE_GL:-}" \
       codex sandbox "${sandbox_args[@]}" -P gamebuilder --sandbox-state-disable-network -C "$root" -- pnpm "$@" || result=$?
     rm -rf "$runtime"
     return "$result"
   }
   # Build what the workspace holds now; a stale dist/ from an earlier run never leaves it.
   if [ -n "$ticket" ] && [ -n "$secret" ]; then
-    rm -rf dist
     sha="$(git rev-parse HEAD)"
+    context="$(curl -fsS --max-time 20 -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $sha" \
+      "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/publish-context")" || context=''
+    game_path="$(printf '%s' "$context" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const p=JSON.parse(s).path;if(typeof p==="string" && !p.startsWith("/") && !p.split("/").includes(".."))process.stdout.write(p)}catch{}})')"
+    visibility="$(printf '%s' "$context" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const v=JSON.parse(s).visibility;if(v==="public" || v==="private")process.stdout.write(v)}catch{}})')"
+    game_root="$root"
+    if [ -n "$game_path" ] && [ -f "$root/$game_path/package.json" ]; then
+      candidate="$(realpath "$root/$game_path")"
+      case "$candidate" in "$root"|"$root"/*) game_root="$candidate" ;; *) game_root='' ;; esac
+    elif [ ! -f "$root/manifest.json" ] && [ ! -f "$root/gm.manifest.json" ]; then
+      game_root=''
+    fi
+    if [ -z "$game_root" ] || [ -z "$visibility" ]; then
+      echo "game publish context unavailable: nothing uploaded" >&2
+      exit 0
+    fi
+    cd "$game_root"
+    root="$game_root"
+    source_result=passed
+    if ! source_clean; then
+      source_result=failed
+      echo "game source is not clean at the recorded commit: nothing uploaded" >&2
+    fi
+    rm -rf dist
+    mkdir -p "$root/.gm"
+    if [ "$(realpath "$root/.gm")" != "$root/.gm" ]; then
+      echo "game scratch directory is not contained: nothing uploaded" >&2
+      exit 0
+    fi
+    asset_stage="$(mktemp -d "$root/.gm/publish-assets.XXXXXXXX")"
+    cache_stage="$(mktemp -d "$root/.gm/publish-cache.XXXXXXXX")"
+    assets_ready=0
+    asset_stage_result=not-run
+    if [ "$source_result" = passed ]; then asset_stage_result=failed; fi
+    if [ "$source_result" = passed ] && [ -n "$publish_helper" ] && [ -f "$publish_helper" ] &&
+      node "$publish_helper" "$root" "$asset_stage" "$publish_assets" "$publish_blobs" "$visibility" >&2; then
+      assets_ready=1
+      asset_stage_result=passed
+    elif [ "$source_result" = passed ]; then
+      echo "game asset staging failed: nothing uploaded" >&2
+    fi
     test_result=not-run
     test_mode_result=not-run
     test_config_result=not-run
@@ -236,8 +284,9 @@ before_remove: |
     snapshot_result=not-run
     integrity_result=not-run
     production_hash=''
-    build_result=failed
-    if game_pnpm run build >&2; then
+    build_result=not-run
+    if [ "$assets_ready" = 1 ]; then build_result=failed; fi
+    if [ "$assets_ready" = 1 ] && game_pnpm run build >&2; then
       build_result=passed
       snapshot_result=failed
       if [ -d dist ] && [ "$(realpath dist)" = "$root/dist" ]; then
@@ -296,15 +345,19 @@ before_remove: |
       fi
     else
       rm -rf dist
-      echo "build failed: nothing uploaded" >&2
+      if [ "$build_result" = failed ]; then echo "build failed: nothing uploaded" >&2; fi
+    fi
+    if [ "$source_result" = passed ] && ! source_clean; then
+      source_result=failed
+      echo "game source changed during checks: nothing uploaded" >&2
     fi
     artifact_hash=''
-    if [ "$test_result" = passed ] && [ "$snapshot_result" = passed ] && [ "$integrity_result" = passed ]; then
+    if [ "$source_result" = passed ] && [ "$test_result" = passed ] && [ "$snapshot_result" = passed ] && [ "$integrity_result" = passed ]; then
       if tar --format=ustar -czf "$stage.tgz" -C "$stage" .; then
         artifact_hash="$(sha256sum "$stage.tgz" | cut -d ' ' -f 1)"
       fi
     fi
-    checks="$(node -e 'const [gitSha,build,mode,test,snapshot,integrity,hash,testHash,needsTestBuild,config]=process.argv.slice(1);const checks=[{name:"pnpm run build",result:build}];for(const [name,result] of [["production snapshot",snapshot],["test configuration",config],["test-mode build",mode],["pnpm run test",test],["production build integrity",integrity]])if(result!=="not-run")checks.push({name,result});console.log(JSON.stringify({gitSha,surface:"game",sizes:test==="passed" && needsTestBuild==="1"?["390x844","1180x820"]:[],checks,...(hash?{artifactSha256:hash}:{}),...(testHash?{testArtifactSha256:testHash}:{})}))' "$sha" "$build_result" "$test_mode_result" "$test_result" "$snapshot_result" "$integrity_result" "$artifact_hash" "$test_artifact_hash" "${needs_test_build:-0}" "$test_config_result")"
+    checks="$(node -e 'const [gitSha,build,mode,test,snapshot,integrity,hash,testHash,needsTestBuild,config,assets,source]=process.argv.slice(1);const checks=[];for(const [name,result] of [["source integrity",source],["asset staging",assets],["pnpm run build",build],["production snapshot",snapshot],["test configuration",config],["test-mode build",mode],["pnpm run test",test],["production build integrity",integrity]])if(result!=="not-run")checks.push({name,result});console.log(JSON.stringify({gitSha,surface:"game",sizes:test==="passed" && needsTestBuild==="1"?["390x844","1180x820"]:[],checks,...(hash?{artifactSha256:hash}:{}),...(testHash?{testArtifactSha256:testHash}:{})}))' "$sha" "$build_result" "$test_mode_result" "$test_result" "$snapshot_result" "$integrity_result" "$artifact_hash" "$test_artifact_hash" "${needs_test_build:-0}" "$test_config_result" "$asset_stage_result" "$source_result")"
     answer="$(curl -fsS --max-time 20 -X POST -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $sha" -H "content-type: application/json" --data-binary "$checks" "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/publish-checks")" || answer=''
     check_id="$(printf '%s' "$answer" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const r=JSON.parse(s);if(r.result==="passed" && typeof r.id==="string")process.stdout.write(r.id)}catch{}})')"
     if [ -n "$check_id" ] && [ -n "$artifact_hash" ]; then
@@ -316,4 +369,5 @@ before_remove: |
       echo "game checks not recorded: nothing uploaded" >&2
     fi
     if [ -n "$stage" ]; then rm -rf "$stage" "$stage.tgz"; fi
+    rm -rf "$asset_stage" "$cache_stage"
   fi
