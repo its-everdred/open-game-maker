@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { missingParityCoverage } from './parity-coverage';
+import { missingParityCoverage, requiredParityArtboards } from './parity-coverage';
 
 it('requires every reference and selected capture before all-artboard parity can pass', () => {
   const required = ['Title-780x1688', 'Home-780x1688'];
@@ -22,6 +22,14 @@ it('requires every reference and selected capture before all-artboard parity can
       new Set(['Title', 'Home']),
     ),
   ).toEqual({ missingReferences: [], missingCaptures: ['New-780x1688'] });
+});
+
+it('requires landscape references for phone screens without an exported landscape artboard', () => {
+  for (const name of ['SignInLandscape-844x390', 'SettingsLandscape-844x390', 'PauseLandscape-844x390']) {
+    expect(requiredParityArtboards).toContain(name);
+  }
+  const result = missingParityCoverage(requiredParityArtboards, ['SignIn-780x1688.png'], [], new Set());
+  expect(result.missingReferences).toContain('SignInLandscape-844x390');
 });
 
 it('does not count a capture whose viewport or scale differs from its reference', () => {

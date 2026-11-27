@@ -1,4 +1,32 @@
-/** Monday and existing artboards in docs/design/ogm-glass/screens.md, at available native sizes. */
+/** Monday and existing artboards in docs/design/ogm-glass/screens.md. */
+const portraitScreens = [
+  'Title',
+  'SignIn',
+  'Join',
+  'Account',
+  'Home',
+  'GameSheet',
+  'NewGame',
+  'NewGameChat',
+  'PlayView',
+  'PauseMenu',
+  'Editor',
+  'EditMenu',
+  'AgentChat',
+  'VoiceLive',
+  'BugReport',
+  'Review',
+  'Activity',
+  'TicketChat',
+  'BuildOrder',
+  'Settings',
+  'Resources',
+  'LimitReached',
+  'Publish',
+  'Admin',
+  'AdminInvite',
+] as const;
+
 export const requiredParityArtboards = [
   'Main-1440x1700',
   'Components-1440x1560',
@@ -33,6 +61,9 @@ export const requiredParityArtboards = [
   'EditorLandscape-844x390',
   'PauseLandscape-844x390',
   'BuildOrderDesktop-1440x900',
+  // Most landscape exports are unavailable. Keep them required rather than
+  // letting a portrait-only comparison satisfy the phone coverage gate.
+  ...portraitScreens.map((screen) => `${screen === 'PauseMenu' ? 'Pause' : screen}Landscape-844x390`),
 ] as const;
 
 type Capture = { name: string; screen: string; width: number; height: number; scale: number };
