@@ -76,8 +76,8 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
   - Not bound yet: other gate orientations, steps and other building styles.
 - `scripts/stage-structural-cards.mjs <library> <empty-dir>` (after `pnpm build`) writes validated card copies carrying
   the structural facts and a source-hash plan, for a host operator to apply to the shared library.
-- `structuralImageBounds`: inclusive alpha bounds for twenty-two measured structural or paving assets, keyed by asset card id.
-  Bounds do not establish an anchor or connection socket. `fenceB1Edges`, `wallF1Edges`, `wallF6Edges`, and `wallC1Edges` record measured fence, stone wall, stone arch, and timber wall facings.
+- `structuralImageBounds`: inclusive alpha bounds for measured structural or paving assets, keyed by asset card id.
+  Bounds do not establish an anchor or connection socket. `fenceB1Edges`, `wallF1Edges`, `wallF6Edges`, `wallC1Edges`, and `wallC6Edges` record measured fence, stone wall, stone arch, timber wall, and timber opening facings.
   `structuralCardFacts(id)` returns the known card fields without fabricating unmeasured facts.
 - `vocabulary`: canonical roles to this set's action names, and the loop set.
 
