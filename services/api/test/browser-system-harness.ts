@@ -89,6 +89,9 @@ export async function startBrowserSystem(appOrigin: string) {
         deps!.config.voiceTokenSecret = 'local-test-voice-secret-0123456789';
         deps!.config.voiceWsUrl = url;
       },
+      exhaustWeeklyJobs() {
+        deps!.db.insert(schema.weeklyJobBudgets).values({ email: 'player@example.test', newGames: 0, edits: 0 }).run();
+      },
       async seedEditor() {
         const gameId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01';
         const buildId = 'build_01BX5ZZKBKACTAV9WEVGEMMVRZ';

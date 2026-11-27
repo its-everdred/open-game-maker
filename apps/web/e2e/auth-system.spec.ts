@@ -165,6 +165,44 @@ for (const viewport of [
         .toMatchObject({ verdict: 'needs_work', notes: 'Make the glow softer' });
     });
 
+    test('resource limits are visible and refuse a consuming job', async ({ page, system }) => {
+      await signIn(page, system);
+      system.seedChat();
+      system.exhaustWeeklyJobs();
+      await page.goto('/settings', { waitUntil: 'domcontentloaded' });
+      await page.getByRole('link', { name: 'Minerals and Gas' }).tap();
+      await expect(page.getByRole('heading', { name: /Minerals and Gas:/ })).toBeVisible();
+      await expect(page.getByText('Interim edit limit', { exact: true })).toBeVisible();
+      await expect(page.getByText(/0 of 0 left.*resets/)).toHaveCount(2);
+      await expect(page.getByText('Actual paid API spend: Unknown')).toBeVisible();
+      const refusal = await page.evaluate(async () => {
+        const response = await fetch('/api/v1/jobs', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            gameId: 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01',
+            branchId: 'main',
+            kind: 'feature',
+            complexity: 1,
+            plan: {
+              title: 'Add a lantern',
+              summary: 'Add a lantern',
+              scope: { included: ['lantern'], excluded: [] },
+              tickets: [{ key: 'T1', skills: [], dependsOn: [], acceptanceCriteria: ['It glows'] }],
+            },
+            start: 'now',
+          }),
+        });
+        return { status: response.status, body: await response.json() };
+      });
+      expect(refusal).toMatchObject({
+        status: 402,
+        body: { error: 'energy_limit_reached', reason: 'weekly_user', window: 'week', resetsAt: expect.any(String) },
+      });
+      await page.goto('/all', { waitUntil: 'domcontentloaded' });
+      await expect(page.getByRole('button', { name: /^Test game:/ })).toBeVisible({ timeout: 30_000 });
+    });
+
     test('manual edit persists through the real game host', async ({ page, system }) => {
       test.setTimeout(600_000);
       await signIn(page, system);
