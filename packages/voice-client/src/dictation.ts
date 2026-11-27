@@ -22,6 +22,7 @@ export interface DictationOptions {
 type DictationEventMap = {
   transcript: DictationTranscript;
   error: DictationError;
+  level: number;
 };
 
 const MAX_BUFFERED_BASE64_BYTES = 640_000;
@@ -107,7 +108,10 @@ export class Dictation {
 
   private async beginCapture(generation: number): Promise<void> {
     try {
-      const capture = await startCapture((chunk) => this.sendAudio(generation, chunk));
+      const capture = await startCapture(
+        (chunk) => this.sendAudio(generation, chunk),
+        (level) => this.emit('level', level),
+      );
       if (generation !== this.generation || this.finished || this.released) {
         capture.stop();
       } else {

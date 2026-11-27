@@ -247,6 +247,11 @@
   gap: 10px;
 }
 
+.build-chat-composer-stack {
+  display: grid;
+  gap: 8px;
+}
+
 .build-chat-voice-side {
   min-width: 0;
 }

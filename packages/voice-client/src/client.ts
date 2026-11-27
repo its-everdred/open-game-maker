@@ -14,6 +14,7 @@ export interface VoiceClientOptions {
   url: string;
   token: string;
   target: Record<string, unknown>;
+  onLevel?: (level: number) => void;
 }
 
 export class VoiceClientError extends Error {
@@ -59,7 +60,7 @@ export class VoiceClient {
     this.endRequested = false;
     this.muted = false;
     const playbackReady = this.player.unlock();
-    const captureReady = startCapture((chunk) => this.sendAudio(chunk));
+    const captureReady = startCapture((chunk) => this.sendAudio(chunk), this.options.onLevel);
 
     try {
       const capture = await captureReady;

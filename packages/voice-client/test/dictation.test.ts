@@ -5,6 +5,7 @@ const audio = vi.hoisted(() => ({
   stop: vi.fn(),
   setMuted: vi.fn(),
   onChunk: undefined as ((chunk: string) => void) | undefined,
+  onLevel: undefined as ((level: number) => void) | undefined,
 }));
 
 vi.mock('../src/audio/capture.js', () => ({
@@ -71,10 +72,13 @@ describe('Dictation', () => {
     audio.stop.mockClear();
     audio.setMuted.mockClear();
     audio.startCapture.mockReset();
-    audio.startCapture.mockImplementation(async (onChunk: (chunk: string) => void) => {
-      audio.onChunk = onChunk;
-      return { stop: audio.stop, setMuted: audio.setMuted, context: {} };
-    });
+    audio.startCapture.mockImplementation(
+      async (onChunk: (chunk: string) => void, onLevel?: (level: number) => void) => {
+        audio.onChunk = onChunk;
+        audio.onLevel = onLevel;
+        return { stop: audio.stop, setMuted: audio.setMuted, context: {} };
+      },
+    );
     vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.stubGlobal('AudioContext', class {});
     vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn() } });
@@ -90,6 +94,21 @@ describe('Dictation', () => {
   it('is available through microphone capture without a browser speech-recognition API', () => {
     expect('SpeechRecognition' in globalThis).toBe(false);
     expect(Dictation.isSupported()).toBe(true);
+  });
+
+  it('forwards captured microphone levels to composer dictation callbacks', async () => {
+    const dictation = new Dictation({
+      connection: async () => ({ token: 'dictate-token', url: 'ws://127.0.0.1/ws/voice?mode=dictate' }),
+    });
+    const levels: number[] = [];
+    dictation.on('level', (level) => levels.push(level));
+
+    dictation.pressStart();
+    await vi.waitFor(() => expect(audio.onLevel).toBeTypeOf('function'));
+    audio.onLevel?.(0.7);
+
+    expect(levels).toEqual([0.7]);
+    dictation.cancel();
   });
 
   it('streams PCM to Scribe, publishes partial text, and commits exactly once on release', async () => {

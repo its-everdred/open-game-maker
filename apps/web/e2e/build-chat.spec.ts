@@ -466,39 +466,66 @@ test('build composer keeps voice controls at the right through dictation and liv
   await page.setViewportSize({ width: 390, height: 844 });
   await installAuthRoutes(page, { signedIn: true });
   await installBuildRoutes(page);
+  await page.addInitScript(() => {
+    const audio = new AudioContext();
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    const destination = audio.createMediaStreamDestination();
+    gain.gain.value = 0.45;
+    const modulation = audio.createOscillator();
+    const modulationDepth = audio.createGain();
+    modulation.frequency.value = 0.8;
+    modulationDepth.gain.value = 0.2;
+    modulation.connect(modulationDepth).connect(gain.gain);
+    modulation.start();
+    oscillator.connect(gain).connect(destination);
+    oscillator.start();
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+      configurable: true,
+      value: async () => {
+        await audio.resume();
+        return destination.stream;
+      },
+    });
+  });
+  await page.route('**/api/v1/voice/dictation-token', (route) =>
+    json(route, { token: 'dictation-token', url: 'wss://dictation.example.test/session' }),
+  );
+  await page.route('**/api/v1/voice/token', (route) =>
+    json(route, { token: 'voice-token', url: 'wss://voice.example.test/session' }),
+  );
+  await page.routeWebSocket('wss://dictation.example.test/**', (socket) => {
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as { type: string };
+      if (frame.type === 'audio')
+        socket.send(JSON.stringify({ v: 1, type: 'transcript', kind: 'partial', text: 'Make the moonlight warmer' }));
+      if (frame.type === 'commit')
+        socket.send(JSON.stringify({ v: 1, type: 'transcript', kind: 'final', text: 'Make the moonlight warmer' }));
+    });
+  });
+  let receivedVoiceText = '';
+  await page.routeWebSocket('wss://voice.example.test/**', (socket) => {
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as { type: string; text?: string };
+      if (frame.type === 'start')
+        socket.send(JSON.stringify({ v: 1, type: 'state', state: 'ready', capabilities: { text: true } }));
+      if (frame.type === 'text') {
+        receivedVoiceText = frame.text ?? '';
+        socket.send(JSON.stringify({ v: 1, type: 'transcript', kind: 'final', text: receivedVoiceText }));
+        socket.send(
+          JSON.stringify({ v: 1, type: 'agent_text', turn_id: 'turn-1', text: 'I started the run.', final: true }),
+        );
+      }
+    });
+  });
+  await page.context().grantPermissions(['microphone']);
   await page.goto('/all?test');
   await openBuildChat(page);
   const composer = page.locator('aiur-composer');
+  const state = page.locator('.build-chat-composer-stack');
   const mic = composer.locator('[part="mic"]');
   const send = composer.locator('[part="send"]');
   const input = composer.locator('[part="input"]');
-
-  await composer.evaluate((node) => {
-    const element = node as HTMLElement & {
-      adapters: {
-        upload: () => Promise<{ name: string }>;
-        dictation: {
-          start: (callbacks: { onPartial: (text: string) => void }) => Promise<{ stop: () => Promise<string> }>;
-        };
-        voice: { start: (options: { initialText: string }) => Promise<{ stop: () => Promise<void> }> };
-      };
-    };
-    element.adapters = {
-      upload: async () => ({ name: 'file' }),
-      dictation: {
-        start: async ({ onPartial }) => {
-          onPartial('Make the moonlight warmer');
-          return { stop: async () => 'Make the moonlight warmer' };
-        },
-      },
-      voice: {
-        start: async ({ initialText }) => {
-          (window as Window & { __ogmVoiceOpening?: string }).__ogmVoiceOpening = initialText;
-          return { stop: async () => {} };
-        },
-      },
-    };
-  });
 
   const idleMic = await mic.boundingBox();
   const idleSend = await send.boundingBox();
@@ -512,29 +539,76 @@ test('build composer keeps voice controls at the right through dictation and liv
       (node) => getComputedStyle((node as HTMLElement).shadowRoot!.querySelector('[part="card"]')!).borderRadius,
     ),
   ).toBe('28px');
-  await composer.screenshot({ path: 'e2e/screenshots/1087/composer-idle.png' });
+  await state.screenshot({ path: 'e2e/screenshots/1087/composer-idle.png' });
 
   await mic.click();
   await expect(composer).toHaveAttribute('data-recording', '');
   await expect(mic).toBeVisible();
   await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
+  await expect
+    .poll(() => mic.evaluate((button) => getComputedStyle(button).backgroundColor))
+    .toBe('rgb(111, 214, 180)');
+  await expect(input).toHaveValue('Make the moonlight warmer');
+  await expect(composer.locator('[part="waveform"]')).toBeVisible();
+  await expect(composer.locator('[part="voice"]')).toBeVisible();
+  await expect
+    .poll(() =>
+      composer.evaluate((node) => {
+        const heights = Array.from(node.shadowRoot!.querySelectorAll<HTMLElement>('[part="waveform"] i')).map(
+          (bar) => bar.getBoundingClientRect().height,
+        );
+        return Math.max(...heights);
+      }),
+    )
+    .toBeGreaterThan(8);
   expect(await input.inputValue()).toBe('Make the moonlight warmer');
   const recordingMic = await mic.boundingBox();
   const recordingSend = await send.boundingBox();
   expect(Math.abs(recordingMic!.x - idleMic!.x)).toBeLessThan(1);
   expect(Math.abs(recordingSend!.x - idleSend!.x)).toBeLessThan(1);
-  await composer.screenshot({ path: 'e2e/screenshots/1087/composer-dictating.png' });
+  await state.screenshot({ path: 'e2e/screenshots/1087/composer-dictating.png', animations: 'allow' });
 
   await mic.click();
   await expect(mic).toHaveAttribute('aria-label', 'Unmute microphone');
+  await expect(mic).toHaveAttribute('aria-pressed', 'true');
+  await expect
+    .poll(() => mic.evaluate((button) => getComputedStyle(button).backgroundColor))
+    .toBe('rgb(215, 149, 228)');
+  await expect
+    .poll(() =>
+      composer.evaluate((node) =>
+        Math.max(
+          ...Array.from(node.shadowRoot!.querySelectorAll<HTMLElement>('[part="waveform"] i')).map(
+            (bar) => bar.getBoundingClientRect().height,
+          ),
+        ),
+      ),
+    )
+    .toBeLessThanOrEqual(3);
+  await state.screenshot({ path: 'e2e/screenshots/1087/composer-dictating-muted.png' });
+  await mic.click();
+  await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
   await composer.locator('[part="voice"]').click();
   await expect(composer).toHaveAttribute('data-voice-live', '');
   await expect(composer.locator('[part="voice"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(composer.locator('[part="waveform"]')).toBeVisible();
+  await expect
+    .poll(() =>
+      composer.evaluate((node) =>
+        Math.max(
+          ...Array.from(node.shadowRoot!.querySelectorAll<HTMLElement>('[part="waveform"] i')).map(
+            (bar) => bar.getBoundingClientRect().height,
+          ),
+        ),
+      ),
+    )
+    .toBeGreaterThan(8);
   await expect(mic).toBeVisible();
   await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
-  await expect
-    .poll(() => page.evaluate(() => (window as Window & { __ogmVoiceOpening?: string }).__ogmVoiceOpening))
-    .toBe('Make the moonlight warmer');
-  await composer.screenshot({ path: 'e2e/screenshots/1087/composer-two-way-voice.png' });
+  await expect.poll(() => receivedVoiceText).toBe('Make the moonlight warmer');
+  const liveConversation = page.getByRole('region', { name: 'Live voice conversation' });
+  await expect(liveConversation.getByText('Make the moonlight warmer')).toBeVisible();
+  await expect(liveConversation.getByText('I started the run.')).toBeVisible();
+  await state.screenshot({ path: 'e2e/screenshots/1087/composer-two-way-voice.png', animations: 'allow' });
   await composer.locator('[part="voice"]').click();
 });

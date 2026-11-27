@@ -102,13 +102,24 @@ export function AiurComposer({
       .attach, .cancel { order:0; }
       textarea { order:1; flex:1 1 0; flex-basis:0; min-width:0; padding-inline:4px; }
       :host([data-recording]) textarea { flex:1 1 0; flex-basis:0; padding-inline:4px; }
-      .wave, .stop { display:none !important; }
-      .voice { order:2; opacity:0; transform:translateX(6px); transition:opacity 160ms ease, transform 160ms ease; }
+      .stop { display:none !important; }
+      .wave { order:2; }
+      :host([data-voice-live]) .wave { display:flex !important; }
+      @keyframes live-wave { from { transform:scaleY(.16); } 50% { transform:scaleY(.82); } to { transform:scaleY(.34); } }
+      @media (prefers-reduced-motion:no-preference) {
+        :host([data-recording]:not([data-mic-muted])) .wave i, :host([data-voice-live]:not([data-mic-muted])) .wave i { animation:live-wave 720ms ease-in-out infinite; }
+        .wave i:nth-child(3n+1) { animation-delay:-230ms; }
+        .wave i:nth-child(3n+2) { animation-delay:-470ms; }
+      }
+      @media (prefers-reduced-motion:reduce) {
+        :host([data-recording]:not([data-mic-muted])) .wave i, :host([data-voice-live]:not([data-mic-muted])) .wave i { transform:scaleY(.45); }
+      }
+      .voice { order:3; opacity:0; transform:translateX(6px); transition:opacity 160ms ease, transform 160ms ease; }
       :host([data-recording]) .voice, :host([data-voice-live]) .voice { opacity:1; transform:translateX(0); }
-      .mic { order:3; position:relative; }
+      .mic { order:4; position:relative; }
       :host([data-recording]) .mic, :host([data-voice-live]) .mic { display:inline-grid !important; }
       .mic[data-muted='true']::after { content:''; position:absolute; width:2px; height:25px; border-radius:2px; background:currentColor; transform:rotate(-45deg); }
-      .send { order:4; }
+      .send { order:5; }
       :host(:not([data-recording]):not([data-voice-live])) .voice { display:none; }
     `
         : '';
@@ -138,6 +149,8 @@ export function AiurComposer({
       aiur-composer.build-chat-aiur-composer::part(input)::placeholder { color:rgba(242,234,214,.6); }
       aiur-composer.build-chat-aiur-composer::part(send) { color:#1d1b16; border-color:rgba(255,255,255,.55); background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.04) 50%,transparent 51%),#94d742; }
       aiur-composer.build-chat-aiur-composer::part(cancel) { color:#ff9b8f; }
+      aiur-composer.build-chat-aiur-composer[data-recording]::part(mic), aiur-composer.build-chat-aiur-composer[data-voice-live]::part(mic) { color:#1d1b16; background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.04) 50%,transparent 51%),#6fd6b4; }
+      aiur-composer.build-chat-aiur-composer[data-mic-muted]::part(mic) { color:#1d1b16; background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.04) 50%,transparent 51%),#d795e4; }
     `;
     element.after(cardStyle);
     const input = element.shadowRoot?.querySelector('textarea');
@@ -150,7 +163,7 @@ export function AiurComposer({
         ? new Dictation({ connection: () => connectDictation(transcriptionTarget) })
         : undefined;
     if (twoWay)
-      twoWay.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6h9a1.5 1.5 0 0 1 1.5 1.5V13a1.5 1.5 0 0 1-1.5 1.5H8l-4 3v-4A1.5 1.5 0 0 1 2.5 12V7.5A1.5 1.5 0 0 1 4 6Z" fill="#1c2128" stroke="#1c2128"/><path d="M10 3.5h9A1.5 1.5 0 0 1 20.5 5v5.5A1.5 1.5 0 0 1 19 12h-1v4l-4-4h-3A1.5 1.5 0 0 1 9.5 10.5V5A1.5 1.5 0 0 1 11 3.5Z" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
+      twoWay.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h8.5a2 2 0 0 1 2 2v4.5a2 2 0 0 1-2 2H7l-4 3v-4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" fill="#7d6b8c" stroke="#7d6b8c"/><path d="M10 3.5h9A1.5 1.5 0 0 1 20.5 5v5.5A1.5 1.5 0 0 1 19 12h-1v4l-4-4h-3A1.5 1.5 0 0 1 9.5 10.5V5A1.5 1.5 0 0 1 11 3.5Z" fill="none" stroke="#f2ead6" stroke-width="2"/></svg>`;
     const isVoiceActive = () => element.hasAttribute('data-recording') || element.hasAttribute('data-voice-live');
     const syncMicrophone = () => {
       if (!microphone) return;
@@ -160,10 +173,16 @@ export function AiurComposer({
         microphone.setAttribute('aria-pressed', String(microphoneMuted.current));
         microphone.setAttribute('aria-label', microphoneMuted.current ? 'Unmute microphone' : 'Mute microphone');
         microphone.dataset.muted = String(microphoneMuted.current);
+        element.toggleAttribute('data-mic-muted', microphoneMuted.current);
+        microphone.style.background = microphoneMuted.current ? '#d795e4' : '#6fd6b4';
+        microphone.style.color = '#1d1b16';
       } else {
         microphone.removeAttribute('aria-pressed');
         microphone.setAttribute('aria-label', 'Dictate');
         delete microphone.dataset.muted;
+        element.removeAttribute('data-mic-muted');
+        microphone.style.background = '';
+        microphone.style.color = '';
         microphoneMuted.current = false;
       }
     };
@@ -172,6 +191,7 @@ export function AiurComposer({
       microphoneMuted.current = !microphoneMuted.current;
       if (element.hasAttribute('data-voice-live')) voiceRef.current?.setMuted(microphoneMuted.current);
       else dictation?.setMuted(microphoneMuted.current);
+      if (microphoneMuted.current) drawComposerWave(element, 0);
       syncMicrophone();
     };
     const microphonePointer = (event: Event) => {
@@ -226,9 +246,10 @@ export function AiurComposer({
       ...(dictation
         ? {
             dictation: {
-              start: async ({ onPartial }) => {
+              start: async ({ onPartial, onLevel }) => {
                 let resolveCancelled: () => void = () => {};
                 let cleanup: () => void = () => {};
+                let offLevel = () => {};
                 const result = new Promise<string>((resolve, reject) => {
                   resolveCancelled = () => {
                     cleanup();
@@ -249,8 +270,10 @@ export function AiurComposer({
                   cleanup = () => {
                     offTranscript();
                     offError();
+                    offLevel();
                   };
                 });
+                offLevel = dictation.on('level', onLevel);
                 // The microphone or token can fail before the user releases the button.
                 void result.catch(() => {});
                 cancelDictation.current = () => {
@@ -287,7 +310,12 @@ export function AiurComposer({
                 const available = voiceAvailability.current;
                 if (!available.available)
                   throw codedError(available.code ?? 'voice_unavailable', 'Voice is unavailable');
-                const voice = new VoiceClient({ url: available.url, token: available.token, target: voiceTarget });
+                const voice = new VoiceClient({
+                  url: available.url,
+                  token: available.token,
+                  target: voiceTarget,
+                  onLevel: (level) => drawComposerWave(element, level),
+                });
                 microphoneMuted.current = false;
                 setVoiceCaptions({ you: [], builder: [] });
                 let openingPending = initialText;
@@ -421,33 +449,46 @@ export function AiurComposer({
   }, [jobId, voiceTarget, dictationTarget, reading]);
   return (
     <>
-      {voiceLive && (
-        <section className="build-chat-voice" aria-label="Live voice conversation">
-          <div className="build-chat-voice-side">
-            <header>You</header>
-            <div className="build-chat-captions" role="log" aria-live="polite">
-              {voiceCaptions.you.map((line) => (
-                <p key={line.id}>{line.text}</p>
-              ))}
+      <div className="build-chat-composer-stack">
+        {voiceLive && (
+          <section className="build-chat-voice" aria-label="Live voice conversation">
+            <div className="build-chat-voice-side">
+              <header>You</header>
+              <div className="build-chat-captions" role="log" aria-live="polite">
+                {voiceCaptions.you.map((line) => (
+                  <p key={line.id}>{line.text}</p>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="build-chat-voice-side">
-            <header>Agent</header>
-            <div className="build-chat-captions" role="log" aria-live="polite">
-              {voiceCaptions.builder.map((line) => (
-                <p key={line.id}>{line.text}</p>
-              ))}
+            <div className="build-chat-voice-side">
+              <header>Agent</header>
+              <div className="build-chat-captions" role="log" aria-live="polite">
+                {voiceCaptions.builder.map((line) => (
+                  <p key={line.id}>{line.text}</p>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
-      )}
-      {createElement('aiur-composer', { ref, placeholder: 'Message' })}
-      {error && <p role="alert">{error}</p>}
+          </section>
+        )}
+        {createElement('aiur-composer', { ref, placeholder: 'Message' })}
+        {error && <p role="alert">{error}</p>}
+      </div>
     </>
   );
 }
 
 let optimisticCount = 0;
+
+function drawComposerWave(element: ComposerElement, level: number): void {
+  const bars = element.shadowRoot?.querySelectorAll<HTMLElement>('[part="waveform"] i');
+  if (!bars) return;
+  const phase = performance.now() / 160;
+  bars.forEach((bar, index) => {
+    const envelope = 0.25 + (Math.sin(index * 0.9 + phase) + 1) * 0.3;
+    const height = Math.max(0.1, Math.min(1, level * envelope * 1.8));
+    bar.style.transform = `scaleY(${height.toFixed(2)})`;
+  });
+}
 
 function optimisticMessage(jobId: string, text: string, files: File[]): StreamedChatMessage {
   const count = (optimisticCount += 1);

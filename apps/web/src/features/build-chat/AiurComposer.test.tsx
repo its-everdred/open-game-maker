@@ -10,6 +10,7 @@ const fake = vi.hoisted(() => ({
   start: vi.fn().mockResolvedValue(undefined),
   dictationMuted: vi.fn(),
   voiceMuted: vi.fn(),
+  voiceLevel: undefined as ((level: number) => void) | undefined,
   defaultUpload: vi.fn(),
 }));
 vi.mock('./attachments', async (importOriginal) => ({
@@ -34,6 +35,9 @@ vi.mock('@ogm/voice-client', async (importOriginal) => {
       cancel() {}
     },
     VoiceClient: class {
+      constructor(options: { onLevel?: (level: number) => void }) {
+        fake.voiceLevel = options.onLevel;
+      }
       on(name: string, callback: (value: unknown) => void) {
         fake.listeners.set(`voice:${name}`, callback);
         return () => fake.listeners.delete(`voice:${name}`);
@@ -222,17 +226,26 @@ it('keeps the microphone as a mute control and shows both live voice transcripts
   mic.click();
   await waitFor(() => expect(composer.hasAttribute('data-recording')).toBe(true));
   await waitFor(() => expect(mic.getAttribute('aria-label')).toBe('Mute microphone'));
+  const waveform = composer.shadowRoot!.querySelector<HTMLElement>('[part="waveform"]')!;
+  fake.listeners.get('level')!(0.6);
+  expect(waveform.hidden).toBe(false);
+  expect(waveform.querySelector('i')?.style.transform).not.toBe('scaleY(0.1)');
   expect(mic.hidden).toBe(false);
+  expect(mic.style.background).toBe('rgb(111, 214, 180)');
 
   mic.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, button: 0 }));
   expect(fake.dictationMuted).toHaveBeenCalledWith(true);
   expect(mic.getAttribute('aria-label')).toBe('Unmute microphone');
+  expect(mic.style.background).toBe('rgb(215, 149, 228)');
+  expect(Array.from(waveform.querySelectorAll('i')).every((bar) => bar.style.transform === 'scaleY(0.10)')).toBe(true);
 
   composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="voice"]')!.click();
   fake.listeners.get('transcript')!({ kind: 'final', text: 'Start run' });
   await waitFor(() => expect(composer.hasAttribute('data-voice-live')).toBe(true));
   await waitFor(() => expect(mic.getAttribute('aria-label')).toBe('Mute microphone'));
   expect(mic.hidden).toBe(false);
+  fake.voiceLevel?.(0.8);
+  expect(waveform.querySelector('i')?.style.transform).not.toBe('scaleY(0.1)');
 
   mic.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, button: 0 }));
   expect(fake.voiceMuted).toHaveBeenCalledWith(true);

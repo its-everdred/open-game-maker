@@ -31,7 +31,10 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export async function startCapture(onChunk: (dataBase64: string) => void): Promise<CaptureHandle> {
+export async function startCapture(
+  onChunk: (dataBase64: string) => void,
+  onLevel?: (level: number) => void,
+): Promise<CaptureHandle> {
   const releaseSession = holdRecordingSession();
   let stream: MediaStream;
   try {
@@ -53,9 +56,12 @@ export async function startCapture(onChunk: (dataBase64: string) => void): Promi
   const nodes: AudioNode[] = [];
   let stopped = false;
 
+  let muted = false;
   const publish = (samples: Float32Array) => {
     const pcm = resamplePcm16(samples, context.sampleRate);
     onChunk(bytesToBase64(new Uint8Array(pcm.buffer)));
+    const squareSum = samples.reduce((sum, sample) => sum + sample * sample, 0);
+    onLevel?.(muted || samples.length === 0 ? 0 : Math.min(1, Math.sqrt(squareSum / samples.length) * 4));
   };
 
   try {
@@ -96,8 +102,10 @@ export async function startCapture(onChunk: (dataBase64: string) => void): Promi
 
   return {
     context,
-    setMuted(muted) {
-      for (const track of stream.getAudioTracks()) track.enabled = !muted;
+    setMuted(isMuted) {
+      muted = isMuted;
+      if (isMuted) onLevel?.(0);
+      for (const track of stream.getAudioTracks()) track.enabled = !isMuted;
     },
     stop() {
       if (stopped) return;
