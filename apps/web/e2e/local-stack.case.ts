@@ -16,7 +16,17 @@ const webOrigin = 'http://127.0.0.1:43179';
 async function startWeb(apiOrigin: string): Promise<ChildProcess> {
   const child = spawn(
     execPath,
-    [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '43179', '--strictPort'],
+    [
+      resolve('node_modules/vite/bin/vite.js'),
+      'preview',
+      '--config',
+      'system.vite.config.ts',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      '43179',
+      '--strictPort',
+    ],
     { cwd: process.cwd(), env: { ...env, OGM_API_PORT: new URL(apiOrigin).port }, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   try {
@@ -32,7 +42,7 @@ async function startWeb(apiOrigin: string): Promise<ChildProcess> {
       child.once('exit', (code) => finish(new Error(`web server exited (${code}): ${output.slice(-500)}`)));
       const onOutput = (chunk: Buffer) => {
         output += chunk.toString();
-        if (/VITE .*ready in/u.test(output)) finish();
+        if (output.includes(webOrigin)) finish();
       };
       child.stdout!.on('data', onOutput);
       child.stderr!.on('data', onOutput);
