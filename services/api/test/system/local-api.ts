@@ -91,8 +91,11 @@ export async function startLocalApi(
       userId: user.userId,
       deps,
       async close() {
-        await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-        sqlite.close();
+        try {
+          await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+        } finally {
+          sqlite.close();
+        }
       },
     };
   } catch (error) {

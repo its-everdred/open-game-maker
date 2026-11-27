@@ -1,5 +1,5 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { env, execPath } from 'node:process';
@@ -144,7 +144,7 @@ test('real local API and web reach New Game onboarding', async ({ browser }) => 
       await context.close();
     }
   } finally {
-    if (web && web.exitCode === null) {
+    if (web && web.exitCode === null && web.signalCode === null) {
       const closed = new Promise<void>((done) => web!.once('close', () => done()));
       web.kill();
       await closed;
@@ -156,4 +156,6 @@ test('real local API and web reach New Game onboarding', async ({ browser }) => 
       rmSync(root, { recursive: true, force: true });
     }
   }
+  expect(existsSync(root)).toBe(false);
+  expect(instance && existsSync(instance.root)).toBe(false);
 });
