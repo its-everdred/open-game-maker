@@ -63,7 +63,9 @@ export async function installAuthRoutes(page: Page, fixture: AuthFixture = {}) {
   await page.route('**/api/v1/github/connection', (route) =>
     json(route, fixture.github ? { connected: true, login: fixture.github } : { connected: false }),
   );
-  await page.route('**/api/v1/me', (route) => json(route, { platformRole: 'none' }));
+  await page.route('**/api/v1/me', (route) =>
+    json(route, { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' }),
+  );
 }
 
 function registrationOptions(rpId: string) {

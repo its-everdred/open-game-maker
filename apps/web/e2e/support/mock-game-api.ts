@@ -39,17 +39,19 @@ export async function installGameApi(
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname.slice('/api/v1'.length);
+    if (path === '/me') return route.fallback();
     if (path === '/notifications/stream') return eventStream(route);
     if (path === '/notifications' && request.method() === 'GET') return json(route, []);
-    if (path === '/games/game' && request.method() === 'GET') {
-      return json(route, {
+    if ((path === '/games' || path === '/games/game') && request.method() === 'GET') {
+      const game = {
         id: 'game',
         familyId: 'family',
-        ownerId: 'user',
+        ownerId: 'u1',
         title,
         visibility: 'private',
         repoVisibility: 'private',
-      });
+      };
+      return json(route, path === '/games' ? { games: [game] } : game);
     }
     if (path === '/jobs' && request.method() === 'GET') return json(route, { jobs: [] });
     if (path === '/games/game/workers' && request.method() === 'GET') return json(route, { workers: [] });
