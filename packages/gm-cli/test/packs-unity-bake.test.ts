@@ -42,6 +42,7 @@ for loop in mesh.loops:
  x,y,_=mesh.vertices[loop.vertex_index].co
  mesh.uv_layers['uv0'].data[loop.index].uv=(x,y); mesh.uv_layers['uv1'].data[loop.index].uv=(1-x,1-y)
 mesh.materials.append(bpy.data.materials.new('source'))
+obj2=obj.copy(); obj2.data=mesh.copy(); bpy.context.scene.collection.objects.link(obj2)
 paths=[]
 for layer in range(2):
  image=bpy.data.images.new('gradient',width=16,height=16,alpha=True); image.colorspace_settings.name='Non-Color'
@@ -66,6 +67,18 @@ for loop in mesh.loops:
  for i,expected in [(0,(.8*vx+.1)*.5),(1,green*blend),(2,.5)]:
   expected=expected*12.92 if expected<=.0031308 else 1.055*expected**(1/2.4)-.055
   assert abs(pixels[ix+i]-expected)<.12, (loop.vertex_index,i,pixels[ix+i],expected)
+adjustedSource={'path':'test.mat','textures':surface['textures'],'texturePaths':paths,'textureSrgb':[False,False],'color':[1,1,1,1],'adjustment':{'op':'saturation','amount':.5}}
+adjusted={'path':'test.mat','textures':[],'texturePaths':[],'textureSrgb':[],'color':[1.1,1.1,1.1,1],'products':[adjustedSource],'adjustment':{'op':'power','amount':2}}
+bake_mesh(obj2,[adjusted]); mesh2=obj2.data
+image2=next(n.image for n in mesh2.materials[0].node_tree.nodes if n.type=='TEX_IMAGE'); pixels2=list(image2.pixels); size2=image2.size[0]
+for loop in mesh2.loops:
+ u,v=mesh2.uv_layers[0].data[loop.index].uv; u=.8*u+.1; v=.8*v+.1
+ ix=(min(size2-1,int(v*size2))*size2+min(size2-1,int(u*size2)))*4
+ x=.8*mesh2.vertices[loop.vertex_index].co.x+.1; luma=x*(.2126729+.7151522)+.0721750
+ for i,component in enumerate([x,x,1]):
+  expected=min(1,(1.1*(luma+.5*(component-luma)))**2)
+  expected=expected*12.92 if expected<=.0031308 else 1.055*expected**(1/2.4)-.055
+  assert abs(pixels2[ix+i]-expected)<.12, (loop.vertex_index,i,pixels2[ix+i],expected)
 for index in range(7): mesh.uv_layers.new(name=f'extra-{index}')
 try:
  bake_mesh(obj,[surface])

@@ -255,6 +255,14 @@ it('resolves texture paths inside blended graph terms', async () => {
     expect(affinePlan[0]?.surfaces[0]?.blends).toMatchObject([
       { b: { textures: [{ uv: 2, uvTransform: [0.5, 0, 0.25, 0, 0.5, 0.125] }] } },
     ]);
+    docs[0]!.m_Edges = [edge('power', 'base', 0, 2), edge('b', 'power', 0), edge('amount', 'power', 1)];
+    docs.push({ m_ObjectId: 'power', m_Type: 'UnityEditor.ShaderGraph.PowerNode' } as (typeof docs)[number]);
+    await writeFile(join(root, 'graph.shadergraph'), docs.map((doc) => JSON.stringify(doc)).join('\n'));
+    const adjustedPlan = await planUnityAssembly(root, prefab);
+    expect(adjustedPlan[0]?.surfaces[0]).toMatchObject({
+      adjustment: { op: 'power', amount: 0.5 },
+      products: [{ texturePaths: [join(root, 'b.png')], textureSrgb: [true] }],
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

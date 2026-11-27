@@ -59,7 +59,7 @@ def build_material(surface, uv_names):
     nodes = material.node_tree.nodes
     shader = nodes.get("Principled BSDF")
     shader.inputs["Base Color"].default_value = surface["color"]
-    if surface.get("blends"):
+    if surface.get("blends") or surface.get("products") or surface.get("adjustment") or any(value > 1 for value in surface["color"]):
         return build_blended_material(material, surface, uv_names)
     textures = surface["textures"]
     texture_paths = surface["texturePaths"]
@@ -150,6 +150,8 @@ def build_blended_material(material, surface, uv_names):
         if len(textures) != len(paths) or len(textures) != len(spaces):
             raise ValueError("material texture references differ from resolved paths")
         layers.extend(zip(textures, paths, spaces))
+        for product in term.get("products", []):
+            collect(product)
         for blend in term.get("blends", []):
             weight = blend["weight"]
             collect(blend["a"])
@@ -159,6 +161,21 @@ def build_blended_material(material, surface, uv_names):
             collect_weight(weight)
 
     collect(surface)
+    def adjust(value, adjustment):
+        if not adjustment:
+            return value
+        result = value.copy()
+        rgb = result[..., :3]
+        amount = adjustment["amount"]
+        if adjustment["op"] == "power" and amount > 0:
+            result[..., :3] = np.power(rgb, amount)
+        elif adjustment["op"] == "saturation" and 0 <= amount <= 1:
+            luma = np.sum(rgb * np.asarray([0.2126729, 0.7151522, 0.0721750]), axis=-1, keepdims=True)
+            result[..., :3] = luma + amount * (rgb - luma)
+        else:
+            raise ValueError("unsupported Unity color adjustment")
+        return result
+
     if not layers:
         def constant_weight(weight):
             if isinstance(weight, (float, int)):
@@ -174,11 +191,16 @@ def build_blended_material(material, surface, uv_names):
 
         def constant(term):
             value = np.asarray(term["color"], dtype=np.float32)
+            for product in term.get("products", []):
+                value = value * constant(product)
             for blend in term.get("blends", []):
                 weight = constant_weight(blend["weight"])
                 value = value * (constant(blend["a"]) * (1 - weight) + constant(blend["b"]) * weight)
-            return value
-        material.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value = constant(surface)
+            return adjust(value, term.get("adjustment"))
+        value = constant(surface)
+        if not np.all(np.isfinite(value)):
+            raise ValueError("non-finite shader blend result")
+        material.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value = np.clip(value, 0, 1)
         return material
     first = layers[0][0]
     if any(texture["scale"] != first["scale"] or texture["offset"] != first["offset"] or texture.get("uv", 0) != first.get("uv", 0) for texture, _, _ in layers):
@@ -218,10 +240,12 @@ def build_blended_material(material, surface, uv_names):
                 pixels[:, :3] = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
             value *= pixels
             bpy.data.images.remove(copy)
+        for product in term.get("products", []):
+            value *= evaluate(product)
         for blend in term.get("blends", []):
             a, b, weight = evaluate(blend["a"]), evaluate(blend["b"]), evaluate_weight(blend["weight"])
             value *= a * (1 - weight) + b * weight
-        return value
+        return adjust(value, term.get("adjustment"))
 
     pixels = evaluate(surface)
     if not np.all(np.isfinite(pixels)):

@@ -108,6 +108,8 @@ def expression_material(surface, uv_names):
             links.new(sample.outputs['Color'], separate.inputs[0])
             rgba = [separate.outputs[i] for i in range(3)] + [sample.outputs['Alpha']]
             channels = [math_node('MULTIPLY', left, right) for left, right in zip(channels, rgba)]
+        for product in value.get('products', []):
+            channels = [math_node('MULTIPLY', left, right) for left, right in zip(channels, term(product))]
         for blend in value.get('blends', []):
             if isinstance(blend['weight'], (int, float)) and not 0 <= blend['weight'] <= 1:
                 raise ValueError('invalid shader blend weight')
@@ -119,6 +121,21 @@ def expression_material(surface, uv_names):
                 )
                 for channel, left, right, factor in zip(channels, a, b, amount)
             ]
+        adjustment = value.get('adjustment')
+        if adjustment:
+            amount = adjustment['amount']
+            if adjustment['op'] == 'power' and amount > 0:
+                channels[:3] = [math_node('POWER', component, constant(amount)) for component in channels[:3]]
+            elif adjustment['op'] == 'saturation' and 0 <= amount <= 1:
+                weights = [0.2126729, 0.7151522, 0.0721750]
+                weighted = [math_node('MULTIPLY', component, constant(factor)) for component, factor in zip(channels, weights)]
+                luma = math_node('ADD', math_node('ADD', weighted[0], weighted[1]), weighted[2])
+                channels[:3] = [
+                    math_node('ADD', luma, math_node('MULTIPLY', constant(amount), math_node('SUBTRACT', component, luma)))
+                    for component in channels[:3]
+                ]
+            else:
+                raise ValueError('unsupported Unity color adjustment')
         return channels
 
     rgba = term(surface)
@@ -136,6 +153,8 @@ def requires_mesh_bake(surfaces):
     """Return whether any one surface samples differing UV mappings."""
     def layers(term):
         result = list(term['textures'])
+        for product in term.get('products', []):
+            result.extend(layers(product))
         for blend in term.get('blends', []):
             result.extend(layers(blend['a']))
             result.extend(layers(blend['b']))

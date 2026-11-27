@@ -1,5 +1,5 @@
 import { parseUnityYaml } from './yaml.js';
-import type { ShaderGraphBase } from './shadergraph.js';
+import type { ShaderGraphBase, ShaderGraphFactor } from './shadergraph.js';
 import { mapWeightExpression, type WeightExpression } from './weight-expression.js';
 
 export type UnityTexture = {
@@ -12,6 +12,8 @@ export type UnityTexture = {
 export type UnitySurface = {
   textures: UnityTexture[];
   color: [number, number, number, number];
+  products?: UnitySurface[];
+  adjustment?: { op: 'power' | 'saturation'; amount: number };
   blends?: Array<{
     a: UnitySurface;
     b: UnitySurface;
@@ -69,6 +71,21 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
   }
   const environments = properties(saved.m_TexEnvs);
   const colors = properties(saved.m_Colors);
+  const resolveFactor = (factor: ShaderGraphFactor): number | number[] => {
+    if (factor.kind === 'constant') return factor.defaultValue;
+    if (factor.kind === 'scalar') return Number(floats.get(factor.key) ?? factor.defaultValue);
+    if (factor.kind === 'component') {
+      if (
+        !Number.isInteger(factor.channel) ||
+        factor.channel! < 0 ||
+        factor.channel! > 3 ||
+        typeof factor.defaultValue !== 'number'
+      )
+        throw new Error('invalid Unity color adjustment component');
+      return vector(colors.get(factor.key), ['r', 'g', 'b', 'a'], Array(4).fill(factor.defaultValue))[factor.channel!]!;
+    }
+    return vector(colors.get(factor.key), ['r', 'g', 'b', 'a'], factor.defaultValue as number[]);
+  };
   const standard = ['_BaseColorMap', '_BaseMap', '_MainTex'].find((key) => {
     const value = environments.get(key);
     return value !== undefined && typeof object(object(value).m_Texture).guid === 'string';
@@ -117,20 +134,34 @@ export function parseUnitySurface(source: string, graph?: ShaderGraphBase): Unit
       term ? [1, 1, 1, 1] : vector(colors.get('_BaseColor') ?? colors.get('_Color'), ['r', 'g', 'b', 'a'], [1, 1, 1, 1])
     ) as [number, number, number, number];
     for (const factor of term?.factors ?? []) {
-      const value =
-        factor.kind === 'constant'
-          ? factor.defaultValue
-          : factor.kind === 'scalar'
-            ? Number(floats.get(factor.key) ?? factor.defaultValue)
-            : vector(colors.get(factor.key), ['r', 'g', 'b', 'a'], factor.defaultValue as number[]);
+      const value = resolveFactor(factor);
       for (let index = 0; index < 4; index++)
         color[index] = color[index]! * (typeof value === 'number' ? value : value[index]!);
     }
-    if (color.some((value) => !Number.isFinite(value) || value < 0 || value > 1))
+    if (color.some((value) => !Number.isFinite(value) || value < 0))
       throw new Error('unsupported Unity base color factor');
+    const products = term?.products?.map(resolve);
+    const adjustment = term?.adjustment
+      ? { op: term.adjustment.op, amount: resolveFactor(term.adjustment.amount) }
+      : undefined;
+    if (
+      adjustment &&
+      (typeof adjustment.amount !== 'number' ||
+        !Number.isFinite(adjustment.amount) ||
+        adjustment.amount < 0 ||
+        (adjustment.op === 'power' && adjustment.amount === 0) ||
+        (adjustment.op === 'saturation' && adjustment.amount > 1))
+    )
+      throw new Error(`unsupported Unity color adjustment amount: ${adjustment.op}=${String(adjustment.amount)}`);
+    const containsBlend = (surface: UnitySurface): boolean =>
+      Boolean(surface.blends?.length || surface.products?.some(containsBlend));
+    if (adjustment?.op === 'power' && products?.some(containsBlend))
+      throw new Error('unsupported Unity power input with blends');
     return {
       textures,
       color,
+      ...(products ? { products } : {}),
+      ...(adjustment ? { adjustment: adjustment as UnitySurface['adjustment'] } : {}),
       ...(term?.blends
         ? {
             blends: term.blends.map(({ a, b, weight }) => ({

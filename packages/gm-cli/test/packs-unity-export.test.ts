@@ -376,6 +376,44 @@ it.skipIf(!available)(
       expect(rgbPixels[1]).toBeGreaterThan(185);
       expect(rgbPixels[1]).toBeLessThan(191);
       expect(rgbPixels[2]).toBeGreaterThan(252);
+      const adjustedPlan = [structuredClone(plan[3]!)];
+      adjustedPlan[0]!.parentId = null;
+      adjustedPlan[0]!.surfaces[0] = {
+        path: 'adjusted.mat',
+        textures: [],
+        texturePaths: [],
+        textureSrgb: [],
+        color: [1.1, 1.1, 1.1, 1],
+        products: [
+          {
+            path: 'adjusted.mat',
+            textures: [{ guid: 'rgb', scale: [1, 1], offset: [0, 0] }],
+            texturePaths: [rgbMask],
+            textureSrgb: [false],
+            color: [1, 1, 1, 1],
+            adjustment: { op: 'saturation', amount: 0.5 },
+          },
+        ],
+        adjustment: { op: 'power', amount: 2 },
+      };
+      const adjustedOutput = join(root, 'adjusted.glb');
+      await exportUnityAssembly(adjustedPlan, adjustedOutput);
+      const adjustedDocument = await new NodeIO()
+        .registerExtensions([KHRTextureTransform])
+        .readBinary(await readFile(adjustedOutput));
+      const adjustedPixels = await sharp(
+        adjustedDocument.getRoot().listMaterials()[0]!.getBaseColorTexture()!.getImage()!,
+      )
+        .ensureAlpha()
+        .raw()
+        .toBuffer();
+      const components = [0, 128 / 255, 1];
+      const luma = components[0]! * 0.2126729 + components[1]! * 0.7151522 + components[2]! * 0.072175;
+      for (let index = 0; index < 3; index++) {
+        const linear = Math.min(1, (1.1 * (luma + 0.5 * (components[index]! - luma))) ** 2);
+        const encoded = 255 * (linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055);
+        expect(Math.abs(adjustedPixels[index]! - encoded)).toBeLessThan(3);
+      }
       const missing = [structuredClone(plan[3]!)];
       missing[0]!.parentId = null;
       missing[0]!.surfaces[0]!.textures[0]!.uv = 7;
