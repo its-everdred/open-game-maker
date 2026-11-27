@@ -15,9 +15,19 @@ test('shares blobs across builds and keeps build code immutable', async ({ page,
 
   await page.goto(`${gameOrigin}/g/cache-game/b1/index.html`);
   await expect(page.locator('#cache-result')).toHaveText('fixture-asset');
+  // The worker serves the response before its background cache write completes.
+  // Wait for that write before testing reuse by a different build.
+  await page.waitForFunction(
+    async (url) => Boolean(await (await caches.open('gm-blobs-v1')).match(url)),
+    `${gameOrigin}${blobPath}`,
+  );
 
   await page.goto(`${gameOrigin}/g/cache-game/b2/index.html`);
   await expect(page.locator('#cache-result')).toHaveText('fixture-asset');
+  await page.waitForFunction(
+    async (url) => Boolean(await (await caches.open('gm-builds-v1')).match(url)),
+    `${gameOrigin}${buildCodePath('b2')}`,
+  );
 
   const afterSecondBuild = (await (await request.get(`${gameOrigin}/test/request-counts`)).json()) as Record<
     string,
