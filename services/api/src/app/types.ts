@@ -50,6 +50,7 @@ export interface AppDeps {
     narrationConcurrency: number;
     defaultDailyAllowanceMicroUsd: number;
     creatorJobLimit: number;
+    defaultDailyAllowanceConfigured?: boolean;
     resetZoneDefault: string;
     intakeDir?: string;
     reportBundleMaxBytes: number;

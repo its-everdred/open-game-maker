@@ -416,6 +416,11 @@ family like any player, and its state lives outside git at `~/.config/ogm/qa/sto
    in Chromium, accepts the pending invitation while the account has no family, and saves the state. It prints the
    account and its family, never the cookie.
 
+To exercise the tester journey, run `ops/bin/ogm-qa-signin --admin-state <admin-storage.json>` on the host. The
+admin storage state must contain a signed-in administrator who belongs to the target family. The QA address must be in
+`OGM_QA_EMAILS`; the command adds a fresh address as a player from Admin › Users, opens the emailed link at
+phone size, follows the title and game-selection screens, and starts Blobs Endless. The QA address must not already be on the allow list or belong to a family. The check removes the membership and allow-list entry it created, then removes its uniquely identified invitation from the local database so repeated checks do not exhaust the daily invite limit. It does not save a session state in this mode.
+
 Sessions last 7 days: run it again when a capture shows Sign in. `--origin http://127.0.0.1:5173` signs in to the local
 stack instead of `OGM_APP_ORIGIN`; `--out` writes elsewhere. Exit codes: 0 saved, 1 sign-in failed, 64 bad usage, 65 no
 address, origin or database.
@@ -438,6 +443,21 @@ If a run fails, preserve its recovery state and rerun with the same SHA; an ambi
 change stops cleanup for inspection. `--out` selects another
 evidence directory, and `--origin` and `--api` select the app and loopback API origins. The internal QA routes accept
 only the internal token.
+
+## Check interim weekly limits on prod
+
+Admin > Users sets each account’s weekly new-game and edit limits; a blank limit is unlimited. Defaults are two new
+games and twenty edits per week, with admins unlimited unless explicitly configured. The reset is Monday in the configured
+reset zone. Explicit daily and overall build-budget caps still apply; scope starts are limited separately to ten per hour.
+Settings shows reported coding-provider windows as Minerals and paid-API readings as Gas; estimates are labelled.
+Actual paid spend remains unknown when the upstream data cannot distinguish billed API use from subscriptions.
+The API checks resource readings every minute and emails allowed administrators and configured maintainers at 95% use,
+once per resource and reset period; unavailable or stale readings do not trigger mail.
+
+After deploy, run `ops/bin/ogm-qa-session`, then `ops/bin/qa-energy-budget` on the API host. The check sets the
+dedicated QA account's weekly limits to zero and verifies the draft, job and report routes return the personal interim-limit
+refusal and reset. Its fence prevents dispatch even if a limit check fails. The command restores the prior QA budget and
+removes its probe report. If the command is interrupted, run `ops/bin/qa-energy-budget --recover` before the next check.
 
 ## Check the review deck on prod
 

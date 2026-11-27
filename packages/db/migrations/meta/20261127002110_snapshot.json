@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e176f11a-3abf-4551-959d-cd0e3549504b",
+  "id": "60a284f5-2fc0-4ef4-965a-93fe1d0268a9",
   "prevId": "82925755-b604-4efe-9058-d3d1b9273396",
   "tables": {
     "app_meta": {
@@ -812,14 +812,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "epoch": {
-          "name": "epoch",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
-        },
         "seq": {
           "name": "seq",
           "type": "integer",
@@ -872,9 +864,9 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "aiur_events_daemon_slug_epoch_seq_pk": {
-          "columns": ["daemon_slug", "epoch", "seq"],
-          "name": "aiur_events_daemon_slug_epoch_seq_pk"
+        "aiur_events_daemon_slug_seq_pk": {
+          "columns": ["daemon_slug", "seq"],
+          "name": "aiur_events_daemon_slug_seq_pk"
         }
       },
       "uniqueConstraints": {},
@@ -3299,20 +3291,6 @@
         "filed_at": {
           "name": "filed_at",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "terminal_state": {
-          "name": "terminal_state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "lifecycle_seq": {
-          "name": "lifecycle_seq",
-          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -6052,6 +6030,52 @@
         "allowed_users_role_check": {
           "name": "allowed_users_role_check",
           "value": "\"allowed_users\".\"role\" IN ('player', 'maker', 'admin')"
+        }
+      }
+    },
+    "weekly_job_budgets": {
+      "name": "weekly_job_budgets",
+      "columns": {
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "new_games": {
+          "name": "new_games",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "edits": {
+          "name": "edits",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "weekly_job_budgets_email_allowed_users_email_fk": {
+          "name": "weekly_job_budgets_email_allowed_users_email_fk",
+          "tableFrom": "weekly_job_budgets",
+          "tableTo": "allowed_users",
+          "columnsFrom": ["email"],
+          "columnsTo": ["email"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "weekly_job_budgets_values": {
+          "name": "weekly_job_budgets_values",
+          "value": "(\"weekly_job_budgets\".\"new_games\" IS NULL OR \"weekly_job_budgets\".\"new_games\" >= 0) AND (\"weekly_job_budgets\".\"edits\" IS NULL OR \"weekly_job_budgets\".\"edits\" >= 0)"
         }
       }
     },

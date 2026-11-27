@@ -19,3 +19,13 @@ it('accepts only a loopback core daemon URL and leaves missing core settings uns
     loadApiEnv(makeApiEnv({ AIUR_API_URL: 'https://example.test', AIUR_API_TOKEN: 'test-token-0123456789' })),
   ).toThrow(/AIUR_API_URL/);
 });
+
+it('distinguishes an explicitly configured daily allowance from the built-in default', () => {
+  expect(loadApiEnv(makeApiEnv()).defaultDailyAllowanceConfigured).toBe(false);
+  expect(loadApiEnv(makeApiEnv({ OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD: '' })).defaultDailyAllowanceConfigured).toBe(
+    false,
+  );
+  expect(
+    loadApiEnv(makeApiEnv({ OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD: '5000000' })).defaultDailyAllowanceConfigured,
+  ).toBe(true);
+});

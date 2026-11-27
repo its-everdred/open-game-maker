@@ -36,6 +36,7 @@ function lifecycle(deps: AppDeps) {
     defaults: {
       dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
       creatorJobLimit: deps.config.creatorJobLimit,
+      defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
       resetZone: deps.config.resetZoneDefault,
     },
   };

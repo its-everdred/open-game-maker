@@ -102,7 +102,7 @@ function tokenFrom(mail: RecordingMailSender, index = -1): string {
 }
 
 describe('invitation routes', () => {
-  it('stores only a hash, accepts a member token once, and expires it at 72 hours', async () => {
+  it('stores only a hash and allows the same member to retry acceptance', async () => {
     const { deps, mail } = setup();
     const { app } = await makeApp(deps);
     const before = Date.now();
@@ -140,7 +140,11 @@ describe('invitation routes', () => {
           headers: asUser(invitee.userId),
         })
       ).status,
-    ).toBe(410);
+    ).toBe(200);
+    expect(
+      (await app.request(`/api/v1/invites/${token}/accept`, { method: 'POST', headers: asUser(wrongUser.userId) }))
+        .status,
+    ).toBe(403);
   });
 
   it('binds acceptance to the signed-in user email and rejects expired tokens', async () => {

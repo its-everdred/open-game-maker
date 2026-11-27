@@ -4,7 +4,8 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 
 import { SLOT_STATES } from '../jobs/state.js';
 import { allowanceRemaining } from './allowance.js';
-import { getBudgetSettings, type BudgetDefaults } from './settings.js';
+import { getBudgetSettings, hasExplicitAllowance, type BudgetDefaults } from './settings.js';
+import { weeklyJobs } from './weekly-jobs.js';
 
 export function budgetStatus(
   deps: { db: Db; defaults: BudgetDefaults },
@@ -12,6 +13,7 @@ export function budgetStatus(
 ): BudgetStatus {
   const settings = getBudgetSettings(deps.db, input.familyId, deps.defaults);
   const allowance = allowanceRemaining({ db: deps.db, ...input, defaults: deps.defaults });
+  const weekly = weeklyJobs(deps.db, input.userId, input.now, deps.defaults.resetZone);
   const held = (slot: 'new_game' | 'edit') =>
     deps.db
       .select({ id: schema.jobs.id })
@@ -33,6 +35,10 @@ export function budgetStatus(
     .map(({ id }) => id);
   return {
     remainingMicroUsd: allowance.remainingMicroUsd,
+    dailyLimitActive: Boolean(
+      deps.defaults.defaultAllowanceConfigured || hasExplicitAllowance(deps.db, input.familyId, input.userId),
+    ),
+    weeklyJobs: { ...weekly.remaining, resetsAt: weekly.resetsAt },
     remainingPercent:
       allowance.dailyMicroUsd > 0
         ? Math.min(100, Math.round((allowance.remainingMicroUsd / allowance.dailyMicroUsd) * 100))

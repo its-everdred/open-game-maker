@@ -85,7 +85,7 @@ async function installMenuData(page: Page) {
         services: [],
         sources: [
           {
-            id: 'claude',
+            id: 'claude:week',
             label: 'Claude',
             usedPercent: 62,
             resetsAt: new Date(Date.now() + 2 * 86_400_000).toISOString(),
@@ -94,7 +94,7 @@ async function installMenuData(page: Page) {
             stale: false,
           },
           {
-            id: 'codex',
+            id: 'codex:primary',
             label: 'Codex',
             usedPercent: 91,
             resetsAt: new Date(Date.now() + 9 * 86_400_000).toISOString(),
@@ -138,7 +138,7 @@ for (const viewport of viewports) {
     await expect(work.getByRole('button')).toHaveCount(3);
     await expect(work.getByRole('button').first()).toContainText('Dusk and torch');
     await expect(dialog.getByRole('region', { name: 'Review' })).toContainText('UI kit with liquid orbs');
-    await expect(dialog.getByRole('region', { name: 'Energy' })).toContainText('Claude');
+    await expect(dialog.getByRole('region', { name: 'Minerals and Gas' })).toContainText('Claude');
     await page.waitForTimeout(800);
     await page.screenshot({ path: testInfo.outputPath(`edit-menu-${viewport.name}.png`), timeout: 400_000 });
 

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Check real creator admission routes with a fenced QA account. --recover restores an interrupted run.
+set -euo pipefail
+[[ $# -eq 0 || ( $# -eq 1 && $1 == --recover ) ]] || { printf 'usage: qa-energy-budget [--recover]\n' >&2; exit 64; }
+env_dir=${OGM_ENV_DIR:-$HOME/.config/ogm/env}
+env_value() {
+  grep -E "^$2=" "$env_dir/$1.env" 2>/dev/null | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' || true
+}
+token=${OGM_INTERNAL_TOKEN:-$(env_value api OGM_INTERNAL_TOKEN)}
+port=${OGM_API_PORT:-$(env_value api OGM_API_PORT)}
+email=${OGM_QA_EMAIL:-$(env_value qa OGM_QA_EMAIL)}
+[[ -n $token && $port =~ ^[0-9]+$ ]] || { printf '%s\n' 'qa-energy-budget: internal token or API port missing' >&2; exit 65; }
+[[ -n $email || $# -eq 1 ]] || { printf '%s\n' 'qa-energy-budget: run ogm-qa-session first' >&2; exit 65; }
+QA_ENERGY_TOKEN=$token QA_ENERGY_PORT=$port QA_ENERGY_EMAIL=$email QA_ENERGY_MODE=${1:-check} node --input-type=module - <<'NODE'
+const { QA_ENERGY_TOKEN: token, QA_ENERGY_PORT: port, QA_ENERGY_EMAIL: email, QA_ENERGY_MODE: mode } = process.env;
+const base = `http://127.0.0.1:${port}`;
+const internal = async (path, method = 'GET', body) => {
+  const response = await fetch(base + path, { method, headers: { 'x-ogm-internal': token, ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(30000) });
+  if (!response.ok) throw new Error(`${path} returned ${response.status}`);
+  return response.status === 204 ? null : response.json();
+};
+const end = (id) => internal('/internal/qa/energy-budget/end', 'POST', { id });
+if (mode === '--recover') {
+  const { active } = await internal('/internal/qa/energy-budget');
+  if (active) await end(active.id);
+  console.log('qa-energy-budget: recovery complete');
+} else {
+  const session = await internal('/internal/qa/session', 'POST', { email });
+  const { id } = await internal('/internal/qa/energy-budget/begin', 'POST');
+  console.log(`qa-energy-budget: probe ${id} started`);
+  try {
+    const headers = { 'content-type': 'application/json', cookie: `${session.cookie.name}=${session.cookie.value}`, 'x-ogm-internal': token, 'x-ogm-qa-energy-probe': id };
+    const plan = { title: 'QA Energy probe', summary: 'QA Energy probe', scope: { included: [], excluded: [] }, tickets: [{ key: 'qa', skills: [], dependsOn: [], acceptanceCriteria: ['refused'] }] };
+    const check = async (path, body) => {
+      const response = await fetch(base + path, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
+      const result = await response.json().catch(() => ({}));
+      if (response.status !== 402 || result.reason !== 'weekly_user' || result.window !== 'week' || !result.resetsAt) throw new Error(`${path} did not return a personal weekly refusal (status ${response.status})`);
+      return result.resetsAt;
+    };
+    const choices = { genre: 'platformer', vibe: 'cozy', family: 'chunky-low-poly', world: 'floating islands', players: 'single', pov: 'isometric' };
+    const resets = [await check('/api/v1/game-drafts', { choices })];
+    for (const kind of ['new_game', 'feature']) resets.push(await check('/api/v1/jobs', { gameId: session.gameId, branchId: 'main', kind, complexity: 1, start: 'now', plan }));
+    const report = { gameId: session.gameId, buildHash: '0'.repeat(64), text: `qa-energy-probe:${id}`, error: { type: 'QaEnergyProbe', message: 'Energy probe', frames: [{ file: `/g/${session.gameId}/qa/probe-${id}.js`, line: 1, fn: id }] } };
+    const repair = await fetch(base + '/api/v1/reports', { method: 'POST', headers, body: JSON.stringify(report), signal: AbortSignal.timeout(30000) });
+    const result = await repair.json().catch(() => ({}));
+    if (repair.status !== 201 || result.pendingBudget !== true || result.budgetReason !== 'weekly_user' || !result.resetsAt) throw new Error(`report did not return a personal weekly refusal (status ${repair.status})`);
+    console.log(`qa-energy-budget: draft, new game, edit and repair refused; resets ${resets[0]}`);
+  } finally {
+    await end(id);
+  }
+}
+NODE

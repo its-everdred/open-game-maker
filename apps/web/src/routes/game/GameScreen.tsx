@@ -331,7 +331,9 @@ export function GameScreen() {
       void admitJob(request)
         .then((result) => {
           if (result.kind === 'refused') {
-            pushToast(energyRefusalText(result.window) ?? 'The build could not be started.');
+            pushToast(
+              energyRefusalText(result.window, result.resetsAt, result.reason) ?? 'The build could not be started.',
+            );
             onDone?.(false);
             return;
           }

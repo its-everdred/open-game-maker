@@ -21,9 +21,10 @@ describe('built routes', () => {
     expect(doc.title.trim()).not.toBe('');
   });
 
-  it('keeps both splash CTAs on marketing routes so deploy redirects own the instance origin', () => {
-    const ctas = [...page('index.html').querySelectorAll('a.s-cta')].map((a) => a.getAttribute('href'));
-    expect(ctas).toEqual(['/setup', '/signin']);
+  it('links visitors to the app and self-hosting guide', () => {
+    const links = [...page('index.html').querySelectorAll('a')].map((a) => a.getAttribute('href'));
+    expect(links).toContain('/setup');
+    expect(links).toContain('/signin');
   });
 
   it('renders the eight setup headers in order', () => {

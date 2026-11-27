@@ -173,6 +173,12 @@ describe('jobs routes', () => {
     const read = await app.request(`/api/v1/jobs/${queued.jobId}`, { headers: asUser(ids.user) });
     expect(await read.json()).toMatchObject({ state: 'queued', position: 1 });
   });
+  it('rejects arbitrary scope jobs on the public job route', async () => {
+    const { app } = await makeApp(setup());
+    const response = await createJob(app, { kind: 'scope' });
+    expect(response.status).toBe(403);
+  });
+
   it("serves the web app's game and active jobs query strings", async () => {
     const deps = setup();
     deps.db

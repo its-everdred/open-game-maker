@@ -13,6 +13,7 @@ import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
 import { AdmissionRefused, admit } from './admission.js';
+import { isEnergyProbe } from '../qa/energy-probe.js';
 import { createControlsRoutes, storedDaemonFor } from './controls.js';
 import { findJob, findJobRow, listJobs } from './repo.js';
 import { raiseCap } from './spend-cap.js';
@@ -28,6 +29,7 @@ function defaults(deps: AppDeps) {
   return {
     dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
     creatorJobLimit: deps.config.creatorJobLimit,
+    defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
     resetZone: deps.config.resetZoneDefault,
   };
 }
@@ -55,11 +57,18 @@ const routes = new Hono<ApiBindings>()
   .post('/jobs', async (c) => {
     const principal = requirePrincipal(c, ['user']);
     const body = await parseBody(c, CreateJobRequest);
+    if (body.kind === 'scope') throw new HttpError(403, 'scope_job_not_allowed');
     const deps = c.get('deps');
     try {
       return c.json(
         await admit(
-          { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults: defaults(deps) },
+          {
+            db: deps.db,
+            sqlite: deps.sqlite,
+            events: deps.events,
+            defaults: defaults(deps),
+            qaEnergyProbe: isEnergyProbe(c, principal.userId),
+          },
           body,
           actorFromPrincipal(principal),
         ),

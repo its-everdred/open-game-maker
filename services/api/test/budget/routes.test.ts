@@ -1,3 +1,4 @@
+import { schema } from '@ogm/db';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { asUser, makeApp } from '../helpers.js';
@@ -16,6 +17,8 @@ describe('GET /api/v1/budget/status', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       remainingMicroUsd: 2_000_000,
+      dailyLimitActive: false,
+      weeklyJobs: { newGames: 2, edits: 19, resetsAt: '2026-11-02T08:00:00.000Z' },
       remainingPercent: 40,
       unitLabel: 'energy',
       resetsAt: RESETS_AT,
@@ -57,7 +60,7 @@ describe('POST /api/v1/budget/estimate', () => {
       sizeClass: 'large',
       rangeMicroUsd: [4_000_000, 9_000_000],
       confidence: 'low',
-      fits: false,
+      fits: true,
     });
   });
 
@@ -85,7 +88,12 @@ describe('POST /api/v1/budget/estimate', () => {
 describe('queue_change', () => {
   // A medium change (p80 4000000) does not fit the 2000000 left today but fits tomorrow's allowance.
   it('queues an at_reset job that then shows in status', async () => {
-    const { app } = await makeApp(worked());
+    const deps = worked();
+    deps.db
+      .insert(schema.allowances)
+      .values({ familyId: ids.family, userId: ids.creator, dailyMicroUsd: 5_000_000 })
+      .run();
+    const { app } = await makeApp(deps);
     const before = (await (await status(app, ids.creator)).json()) as { queued: string[]; freeSlots: object };
     expect(before.queued).toEqual([]);
 

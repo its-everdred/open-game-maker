@@ -51,6 +51,7 @@ export async function storedDaemonFor(deps: AppDeps, gameId: string): Promise<Ai
 function defaults(deps: AppDeps) {
   return {
     dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+    defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
     resetZone: deps.config.resetZoneDefault,
   };
 }

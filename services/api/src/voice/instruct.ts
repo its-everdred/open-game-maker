@@ -156,6 +156,7 @@ async function deliverScope(
         defaults: {
           dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
           creatorJobLimit: deps.config.creatorJobLimit,
+          defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
           resetZone: deps.config.resetZoneDefault,
         },
       },
@@ -186,7 +187,11 @@ async function deliverScope(
     return draft.later && admitted.state === 'queued' ? 'queued_at_reset' : 'delivered';
   } catch (error) {
     if (!(error instanceof AdmissionRefused)) throw error;
-    const reset = localTime(error.body.resetsAt, deps.config.resetZoneDefault);
+    const time = localTime(error.body.resetsAt, deps.config.resetZoneDefault);
+    const reset =
+      error.body.window === 'week'
+        ? `${localDate(error.body.resetsAt, deps.config.resetZoneDefault)} at ${time}`
+        : time;
     setVoiceWaitingOn(target, refusalText(error.body, reset));
     return 'needs_choice';
   }
@@ -218,14 +223,26 @@ async function deliverEdit(
   return 'delivered';
 }
 
+function localDate(at: string, zone: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: zone, month: 'short', day: 'numeric' }).format(new Date(at));
+  } catch {
+    return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }).format(new Date(at));
+  }
+}
+
 const ENERGY_WINDOWS = { day: 'today', week: 'this week', month: 'this month' } as const;
 
 // An Energy block names its window and only the offers admission made (#598); the member allowance keeps its wording.
 function refusalText(body: AdmissionRefused['body'], reset: string): string {
+  if (body.reason === 'weekly_user')
+    return `The interim weekly job limit is exhausted: resets ${reset}, or ask an admin`;
   if (body.error !== 'energy_limit_reached')
     return `Doesn't fit today: trim, split, queue for ${reset}, or ask an admin`;
-  const left = `Needs more Energy than is left ${ENERGY_WINDOWS[body.window ?? 'day']}`;
-  return body.offers.includes('queue') ? `${left}: queue for ${reset}, or ask an admin` : `${left}: ask an admin`;
+  const left = `Exceeds the overall build budget ${ENERGY_WINDOWS[body.window ?? 'day']}`;
+  return body.offers.includes('queue')
+    ? `${left}: queue for ${reset}, or ask an admin`
+    : `${left}: resets ${reset}, or ask an admin`;
 }
 
 async function attempt(deps: AppDeps, request: InstructRequest): Promise<InstructResponse> {

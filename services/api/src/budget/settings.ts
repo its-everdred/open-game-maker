@@ -2,7 +2,32 @@ import type { FamilyBudgetSettings } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
 import { and, eq } from 'drizzle-orm';
 
-export type BudgetDefaults = { dailyAllowanceMicroUsd: number; resetZone: string; creatorJobLimit?: number };
+export type BudgetDefaults = {
+  dailyAllowanceMicroUsd: number;
+  resetZone: string;
+  defaultAllowanceConfigured?: boolean;
+  creatorJobLimit?: number;
+};
+
+// Legacy cost caps remain effective only when an admin has explicitly configured them.
+export function hasExplicitAllowance(db: Db, familyId: string, userId: string): boolean {
+  return (
+    db
+      .select({ userId: schema.allowances.userId })
+      .from(schema.allowances)
+      .where(and(eq(schema.allowances.familyId, familyId), eq(schema.allowances.userId, userId)))
+      .get() !== undefined
+  );
+}
+
+export function hasExplicitPlatformCap(db: Db, familyId: string): boolean {
+  const row = db
+    .select({ cap: schema.familyBudgetSettings.platformCapMicroUsd })
+    .from(schema.familyBudgetSettings)
+    .where(eq(schema.familyBudgetSettings.familyId, familyId))
+    .get();
+  return row?.cap != null;
+}
 
 export function dailyAllowance(db: Db, familyId: string, userId: string, defaults: BudgetDefaults): number {
   return (
