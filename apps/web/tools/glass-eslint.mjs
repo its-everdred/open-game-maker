@@ -7,6 +7,10 @@ const designStyle =
 function rawDesignValue(node) {
   if (node.type === 'ConditionalExpression') return rawDesignValue(node.consequent) || rawDesignValue(node.alternate);
   if (node.type === 'LogicalExpression') return rawDesignValue(node.left) || rawDesignValue(node.right);
+  if (node.type === 'TemplateLiteral') {
+    if (node.expressions.length) return true;
+    return rawDesignValue({ type: 'Literal', value: node.quasis[0].value.cooked });
+  }
   if (node.type !== 'Literal') return false;
   const value = node.value;
   return (
