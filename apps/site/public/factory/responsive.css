@@ -307,7 +307,27 @@
   }
 }
 
-/* Preview choices keep the approved layout while varying the frame treatment. */
+/* Preview choices explore distinct treatments within the approved factory layout. */
+.variant-b #create {
+  background: #183b56;
+  color: #fff;
+}
+.variant-b #create .sh p,
+.variant-b #create .bul li {
+  color: #e2edf3;
+}
+.variant-b #create .bul li b {
+  color: #fff;
+}
+.variant-b #create .card,
+.variant-b #create .feed li {
+  color: var(--ink);
+}
+.variant-b .mold {
+  background: #f3f3f0;
+  color: #183b56;
+  border: 3px solid #f3f3f0;
+}
 .variant-b .mold,
 .variant-b .gate,
 .variant-b .card,
@@ -316,7 +336,10 @@
   border-radius: 4px;
 }
 .variant-b .mold.sel {
-  box-shadow: 0 0 0 4px var(--ink);
+  background: var(--hazard);
+  color: var(--ink);
+  border-color: var(--hazard);
+  box-shadow: 0 0 0 3px #fff;
 }
 .variant-b .sh .step {
   border-radius: 0;
@@ -325,11 +348,25 @@
   background-size: 12px 12px;
 }
 .variant-c .molds {
-  gap: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 .variant-c .mold {
-  padding: 32px 20px;
-  border-radius: 24px;
+  padding: 20px 12px;
+  border: 2px solid var(--ink);
+  border-radius: 20px;
+  background: #a8d9cf;
+  color: var(--ink);
+}
+.variant-c .mold:nth-child(2n) {
+  background: #f6a69e;
+}
+.variant-c .mold.sel {
+  background: var(--hazard);
+  box-shadow: 5px 5px 0 var(--ink);
+}
+.variant-c #create {
+  background: #f8e9ce;
 }
 .variant-c .sh {
   margin-bottom: 80px;
