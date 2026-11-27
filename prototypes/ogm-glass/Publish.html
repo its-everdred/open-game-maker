@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Publish and access</title>
+<link rel="stylesheet" href="./glass.css">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&amp;family=Nunito:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0f0e16}a{color:#74c8ed}a:hover{color:#f2ead6}
+.grp{display:flex;flex-direction:column;gap:2px}
+.grp .row{border-radius:4px}.grp .row:first-child{border-radius:18px 18px 4px 4px}.grp .row:last-child{border-radius:4px 4px 18px 18px}
+.person{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 6px 0 4px;border-radius:18px;background:rgba(57,54,67,.7);font:700 14px Nunito}
+.person i{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:700 13px Fredoka;font-style:normal;color:#1d1b16}</style>
+</head>
+<body>
+<div class="g phone">
+<img src="../../assets-local/review/design-ogm-glass/img/dusk.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+<div class="scrim"></div>
+<div class="sheet pane strong" style="top:60px">
+<div style="display:flex;align-items:center;gap:10px;padding:16px 12px 10px 18px">
+<h1 class="h2" style="flex:1">Dusk Helm</h1>
+<a class="orb sm" href="EditMenu.html" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></a>
+</div>
+<div style="flex:1;min-height:0;overflow:hidden;padding:4px 14px 16px;display:flex;flex-direction:column;gap:16px">
+<div class="sec"><div class="cap">Who can play</div>
+<div class="seg" role="group" aria-label="Who can play"><button aria-pressed="false">Only me</button><button aria-pressed="true">Invited</button><button aria-pressed="false">Everyone</button></div>
+<div class="row" style="flex-wrap:wrap;gap:8px">
+<span class="person"><i style="background:#74c8ed">K</i>Kevin</span>
+<span class="person"><i style="background:#ffbf32">T</i>[Tester]</span>
+<button class="orb sm" aria-label="Invite someone" style="width:36px;height:36px"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+</div>
+</div>
+<div class="sec"><div class="cap">Everyone else sees</div>
+<div class="grp">
+<div class="row"><span class="pill soon">Coming soon</span><span class="t grow" style="font-size:16px">Card on home</span><button class="switch" role="switch" aria-checked="true" aria-label="Coming soon card"></button></div>
+<div class="row"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"></path></svg><span class="t grow" style="font-size:16px">makeopen.games/duskhelm</span></div>
+</div></div>
+<div class="sec"><div class="cap">Versions</div>
+<div class="grp">
+<div class="row"><span class="pill done">Live</span><span class="t grow" style="font-size:16px">v14</span><span class="s">Mon 10:12</span></div>
+<div class="row"><span class="pill work">Testing</span><span class="t grow" style="font-size:16px">v15</span><button class="btn go sm">Publish</button></div>
+<div class="row"><span class="t grow" style="font-size:16px">Publish after QA passes</span><button class="switch" role="switch" aria-checked="true" aria-label="Publish after QA passes"></button></div>
+</div></div>
+<button class="btn danger block" style="margin-top:auto">Unpublish</button>
+</div>
+</div>
+</div>
+<script src="fallback.js"></script>
+</body>
+</html>

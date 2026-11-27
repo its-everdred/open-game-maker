@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Two-way voice</title>
+<link rel="stylesheet" href="./glass.css">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&amp;family=Nunito:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0f0e16}a{color:#74c8ed}a:hover{color:#f2ead6}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.core{animation:breathe 2.4s cubic-bezier(.22,1,.36,1) infinite}</style>
+</head>
+<body>
+<div class="g phone">
+<img src="../../assets-local/review/design-ogm-glass/img/play-bg.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(14px) brightness(.45);transform:scale(1.1)">
+<div class="top"><div class="sp"></div><span class="pill work" style="margin-top:12px">Warmer torches</span><div class="sp"></div></div>
+<div aria-hidden="true" style="position:absolute;left:50%;top:250px;translate:-50% 0;width:240px;height:240px;display:grid;place-items:center">
+<span style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(closest-side,rgba(215,149,228,.35),rgba(215,149,228,.08) 70%,transparent)"></span>
+<span style="position:absolute;inset:30px;border-radius:50%;border:1px solid rgba(215,149,228,.45)"></span>
+<span class="core" style="width:132px;height:132px;border-radius:50%;background:var(--gloss),radial-gradient(circle at 35% 30%,#f1c8f8,#d795e4 45%,#7e3f97);box-shadow:0 0 60px rgba(215,149,228,.6),inset 0 1px 0 rgba(255,255,255,.6);display:grid;place-items:center">
+<span class="wave" style="height:44px"><i style="height:14px;background:#1d1b16"></i><i style="height:30px;background:#1d1b16"></i><i style="height:44px;background:#1d1b16"></i><i style="height:24px;background:#1d1b16"></i><i style="height:36px;background:#1d1b16"></i><i style="height:16px;background:#1d1b16"></i></span>
+</span>
+</div>
+<div style="position:absolute;left:24px;right:24px;top:540px;display:flex;flex-direction:column;gap:12px;text-align:center">
+<p style="margin:0;font:600 15px/1.4 Nunito;color:#c4beb0">“B, but a little less orange.”</p>
+<p style="margin:0;font:600 20px/1.35 Fredoka;color:#f2ead6">Got it. B with the orange pulled back. Rendering now.</p>
+</div>
+<div style="position:absolute;left:0;right:0;bottom:44px;display:flex;justify-content:center;gap:28px">
+<button class="orb lg" aria-label="Mute microphone"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"></path></svg></button>
+<a class="orb lg rec" href="AgentChat.html" aria-label="End voice" style="width:72px;height:72px;color:#1d1b16"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></a>
+<a class="orb lg" href="AgentChat.html" aria-label="Show conversation"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-5 4v-4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"></path></svg></a>
+</div>
+</div>
+<script src="fallback.js"></script>
+</body>
+</html>
