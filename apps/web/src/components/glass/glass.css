@@ -1,0 +1,728 @@
+@import '../../glass-tokens.css';
+
+:is(
+  .ogm-glass-button,
+  .ogm-glass-orb,
+  .ogm-glass-pane,
+  .ogm-glass-status,
+  .ogm-glass-row,
+  .ogm-glass-input,
+  .ogm-glass-switch,
+  .ogm-glass-progress,
+  .ogm-glass-tag,
+  .ogm-glass-resources,
+  .ogm-glass-banner,
+  .ogm-glass-message,
+  .ogm-glass-composer,
+  .ogm-glass-field,
+  .ogm-glass-segmented,
+  .ogm-glass-slider,
+  .ogm-glass-meter
+),
+:is(
+    .ogm-glass-button,
+    .ogm-glass-orb,
+    .ogm-glass-pane,
+    .ogm-glass-status,
+    .ogm-glass-row,
+    .ogm-glass-input,
+    .ogm-glass-switch,
+    .ogm-glass-progress,
+    .ogm-glass-tag,
+    .ogm-glass-resources,
+    .ogm-glass-banner,
+    .ogm-glass-message,
+    .ogm-glass-composer,
+    .ogm-glass-field,
+    .ogm-glass-segmented,
+    .ogm-glass-slider,
+    .ogm-glass-meter
+  )
+  * {
+  box-sizing: border-box;
+}
+
+.ogm-glass-button,
+.ogm-glass-orb,
+.ogm-glass-switch {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ogm-glass-button:focus-visible,
+.ogm-glass-orb:focus-visible,
+.ogm-glass-switch:focus-visible,
+.ogm-glass-input:focus-visible {
+  outline: var(--ogm-component-focus-width) solid var(--ogm-role-focus);
+  outline-offset: var(--ogm-component-focus-offset);
+}
+
+.ogm-glass-button,
+.ogm-glass-orb {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ogm-ink-ink);
+  background: var(--ogm-glass-gloss), var(--ogm-component-button-fill);
+  border: 1px solid var(--ogm-component-button-edge);
+  border-radius: var(--ogm-radius-pill);
+  box-shadow: var(--ogm-component-button-shadow);
+}
+
+.ogm-glass-button {
+  min-height: var(--ogm-pill-md);
+  gap: 10px;
+  padding: 0 22px;
+  font: var(--ogm-component-button-font);
+}
+.ogm-glass-button.ogm-size-sm {
+  min-height: var(--ogm-pill-sm);
+  font: var(--ogm-component-button-font-sm);
+  padding: 0 16px;
+}
+.ogm-glass-button.ogm-size-lg {
+  min-height: var(--ogm-pill-lg);
+  font: var(--ogm-component-button-font-lg);
+  padding: 0 32px;
+}
+.ogm-glass-button.ogm-block {
+  display: flex;
+  width: 100%;
+}
+
+.ogm-tone-go,
+.ogm-accent-go {
+  --ogm-action-color: var(--ogm-role-go);
+}
+.ogm-tone-create,
+.ogm-accent-create {
+  --ogm-action-color: var(--ogm-role-create);
+}
+.ogm-tone-warn,
+.ogm-accent-warn {
+  --ogm-action-color: var(--ogm-role-needs-you);
+}
+.ogm-tone-info,
+.ogm-accent-info {
+  --ogm-action-color: var(--ogm-role-working);
+}
+.ogm-tone-danger,
+.ogm-accent-danger {
+  --ogm-action-color: var(--ogm-role-danger);
+}
+.ogm-tone-live,
+.ogm-accent-live {
+  --ogm-action-color: var(--ogm-role-agents);
+}
+.ogm-tone-glassy:not([class*='ogm-accent-']) {
+  --ogm-action-color: var(--ogm-role-go);
+}
+.ogm-glass-button:is(.ogm-tone-go, .ogm-tone-create, .ogm-tone-warn, .ogm-tone-info, .ogm-tone-danger) {
+  color: var(--ogm-ink-dark);
+  background: var(--ogm-glass-gloss), var(--ogm-action-color);
+  border-color: var(--ogm-component-action-edge);
+  box-shadow: var(--ogm-component-action-shadow);
+}
+.ogm-glass-orb:is(.ogm-tone-go, .ogm-tone-create, .ogm-tone-danger, .ogm-tone-live) {
+  color: var(--ogm-ink-dark);
+  background: var(--ogm-glass-gloss), var(--ogm-action-color);
+}
+.ogm-glass-orb:is(.ogm-tone-go, .ogm-tone-create) {
+  border-color: var(--ogm-component-action-edge);
+}
+.ogm-glass-orb.ogm-tone-live {
+  background: var(--ogm-glass-gloss), var(--ogm-component-live-fill);
+}
+.ogm-glass-button.ogm-tone-glassy {
+  color: var(--ogm-ink-ink);
+  border: 0;
+  background: var(--ogm-component-glassy-fill);
+  box-shadow: var(--ogm-component-glassy-shadow);
+  -webkit-backdrop-filter: var(--ogm-glass-blur);
+  backdrop-filter: var(--ogm-glass-blur);
+}
+.ogm-glass-button.ogm-tone-glassy::before {
+  position: absolute;
+  inset: 0;
+  content: '';
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--ogm-component-glassy-edge);
+  -webkit-mask:
+    var(--ogm-component-mask-gradient) content-box,
+    var(--ogm-component-mask-gradient);
+  -webkit-mask-composite: xor;
+  mask:
+    var(--ogm-component-mask-gradient) content-box exclude,
+    var(--ogm-component-mask-gradient);
+}
+.ogm-glass-button.ogm-tone-ghost {
+  color: var(--ogm-ink-ink-2);
+  background: transparent;
+  border-color: var(--ogm-ink-rule);
+  box-shadow: none;
+}
+.ogm-glass-button:disabled,
+.ogm-glass-button[aria-disabled='true'],
+.ogm-glass-orb:disabled,
+.ogm-glass-orb[aria-disabled='true'],
+.ogm-glass-switch:disabled,
+.ogm-glass-switch[aria-disabled='true'],
+.ogm-glass-menu-item:disabled,
+.ogm-glass-menu-item[aria-disabled='true'],
+.ogm-glass-resources:disabled,
+.ogm-glass-resources[aria-disabled='true'],
+.ogm-glass-banner:disabled,
+.ogm-glass-banner[aria-disabled='true'] {
+  opacity: var(--ogm-component-disabled-opacity);
+  filter: saturate(var(--ogm-component-disabled-saturation));
+  cursor: default;
+}
+
+.ogm-glass-orb {
+  flex: none;
+  width: var(--ogm-orb-md);
+  height: var(--ogm-orb-md);
+  padding: 0;
+  background: var(--ogm-glass-gloss), var(--ogm-component-orb-fill);
+  border-color: var(--ogm-component-orb-edge);
+  box-shadow: var(--ogm-component-orb-shadow);
+  -webkit-backdrop-filter: var(--ogm-component-orb-blur);
+  backdrop-filter: var(--ogm-component-orb-blur);
+}
+.ogm-glass-orb.ogm-size-sm {
+  width: var(--ogm-orb-sm);
+  height: var(--ogm-orb-sm);
+}
+.ogm-glass-orb.ogm-size-fab {
+  width: var(--ogm-orb-fab);
+  height: var(--ogm-orb-fab);
+}
+.ogm-glass-orb.ogm-size-lg {
+  width: var(--ogm-orb-lg);
+  height: var(--ogm-orb-lg);
+}
+.ogm-glass-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--ogm-radius-pill);
+  color: var(--ogm-ink-dark);
+  background: var(--ogm-role-needs-you);
+  font: var(--ogm-component-status-font);
+}
+
+.ogm-glass-pane {
+  position: relative;
+  border-radius: var(--ogm-radius-lg);
+  background: var(--ogm-glass-fill);
+  box-shadow: var(--ogm-component-pane-shadow);
+  -webkit-backdrop-filter: var(--ogm-glass-blur);
+  backdrop-filter: var(--ogm-glass-blur);
+}
+.ogm-glass-pane::before {
+  position: absolute;
+  inset: 0;
+  content: '';
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--ogm-glass-edge);
+  pointer-events: none;
+  -webkit-mask:
+    var(--ogm-component-mask-gradient) content-box,
+    var(--ogm-component-mask-gradient);
+  -webkit-mask-composite: xor;
+  mask:
+    var(--ogm-component-mask-gradient) content-box exclude,
+    var(--ogm-component-mask-gradient);
+}
+.ogm-glass-pane.ogm-strong {
+  background: var(--ogm-glass-fill-strong);
+}
+.ogm-glass-pane.ogm-tint {
+  background: color-mix(in srgb, var(--ogm-action-color) var(--ogm-component-tint-mix), var(--ogm-glass-fill));
+}
+.ogm-glass-pane.ogm-tint::before {
+  background: var(--ogm-component-tint-edge);
+}
+.ogm-glass-sheet {
+  position: absolute;
+  inset: 10px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--ogm-radius-xl);
+  overflow: hidden;
+  animation: ogm-sheet-enter var(--ogm-motion-spring-duration) var(--ogm-motion-spring) both;
+}
+
+.ogm-glass-sheet.ogm-bottom {
+  inset: auto 0 0;
+  border-radius: var(--ogm-radius-xl) var(--ogm-radius-xl) 0 0;
+}
+
+.ogm-glass-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--ogm-component-status-radius);
+  color: var(--ogm-ink-dark);
+  font: var(--ogm-component-status-font);
+  white-space: nowrap;
+}
+.ogm-status-work {
+  background: var(--ogm-role-working);
+}
+.ogm-status-you {
+  background: var(--ogm-role-needs-you);
+}
+.ogm-status-done {
+  background: var(--ogm-role-go);
+}
+.ogm-status-fail {
+  background: var(--ogm-role-danger);
+}
+.ogm-status-wait {
+  color: var(--ogm-ink-ink);
+  background: var(--ogm-component-status-wait);
+}
+.ogm-status-soon {
+  background: var(--ogm-role-agents);
+}
+.ogm-glass-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 14px;
+  border: 1px solid var(--ogm-component-row-edge);
+  border-radius: var(--ogm-component-row-radius);
+  color: var(--ogm-ink-ink);
+  background: var(--ogm-component-row-fill);
+  text-align: left;
+}
+.ogm-glass-input {
+  width: 100%;
+  height: var(--ogm-pill-md);
+  padding: 0 16px;
+  border: 1px solid var(--ogm-ink-rule);
+  border-radius: var(--ogm-radius-md);
+  color: var(--ogm-ink-ink);
+  background: var(--ogm-component-field-fill);
+  font: var(--ogm-component-field-font);
+}
+.ogm-glass-input::placeholder {
+  color: var(--ogm-component-placeholder);
+}
+.ogm-glass-switch {
+  position: relative;
+  flex: none;
+  width: 52px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--ogm-component-button-edge);
+  border-radius: var(--ogm-component-switch-radius);
+  background: var(--ogm-component-switch-fill);
+}
+.ogm-glass-switch::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ogm-radius-pill);
+  background: var(--ogm-glass-gloss), var(--ogm-component-switch-knob);
+  box-shadow: var(--ogm-component-switch-shadow);
+  content: '';
+}
+.ogm-glass-switch[aria-checked='true'] {
+  background: var(--ogm-glass-gloss), var(--ogm-role-go);
+}
+.ogm-glass-switch[aria-checked='true']::after {
+  left: 23px;
+  background: var(--ogm-glass-gloss), var(--ogm-component-white);
+}
+.ogm-glass-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--ogm-component-bar-radius);
+  background: var(--ogm-component-progress-track);
+}
+.ogm-glass-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ogm-role-working);
+}
+.ogm-progress-you > span {
+  background: var(--ogm-role-needs-you);
+}
+.ogm-progress-done > span {
+  background: var(--ogm-role-go);
+}
+
+.ogm-glass-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--ogm-ink-rule);
+  border-radius: var(--ogm-component-tag-radius);
+  color: var(--ogm-ink-ink-2);
+  background: var(--ogm-component-tag-fill);
+  font: var(--ogm-component-tag-font);
+}
+.ogm-glass-menu-item {
+  cursor: pointer;
+  font: var(--ogm-component-menu-font);
+}
+.ogm-glass-resources,
+.ogm-glass-banner {
+  cursor: pointer;
+}
+.ogm-glass-menu-item:focus-visible,
+.ogm-glass-resources:focus-visible,
+.ogm-glass-banner:focus-visible {
+  outline: var(--ogm-component-focus-width) solid var(--ogm-role-focus);
+  outline-offset: var(--ogm-component-focus-offset);
+}
+.ogm-glass-resources {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 12px 0 8px;
+  border: 1px solid var(--ogm-component-resource-edge);
+  border-radius: var(--ogm-component-resource-radius);
+  color: var(--ogm-ink-ink);
+  background: var(--ogm-glass-gloss), var(--ogm-component-resource-fill);
+  box-shadow: var(--ogm-component-resource-shadow);
+  -webkit-backdrop-filter: var(--ogm-component-resource-blur);
+  backdrop-filter: var(--ogm-component-resource-blur);
+  font: var(--ogm-component-resource-font);
+  font-variant-numeric: tabular-nums;
+}
+.ogm-glass-resources svg,
+.ogm-glass-resources img {
+  display: block;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+.ogm-resource-separator {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--ogm-ink-rule);
+}
+.ogm-glass-resources.ogm-low {
+  border-color: var(--ogm-role-needs-you);
+}
+.ogm-glass-resources.ogm-out {
+  border-color: var(--ogm-role-danger);
+}
+.ogm-glass-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 48px;
+  padding: 0 8px 0 12px;
+  border: 0;
+  border-radius: var(--ogm-component-banner-radius);
+  color: var(--ogm-ink-ink);
+  background: color-mix(
+    in srgb,
+    var(--ogm-role-agents) var(--ogm-component-banner-mix),
+    var(--ogm-component-banner-fill)
+  );
+  box-shadow: var(--ogm-component-banner-shadow);
+  -webkit-backdrop-filter: var(--ogm-glass-blur);
+  backdrop-filter: var(--ogm-glass-blur);
+}
+.ogm-glass-banner::before {
+  position: absolute;
+  inset: 0;
+  content: '';
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--ogm-component-banner-edge);
+  pointer-events: none;
+  -webkit-mask:
+    var(--ogm-component-mask-gradient) content-box,
+    var(--ogm-component-mask-gradient);
+  -webkit-mask-composite: xor;
+  mask:
+    var(--ogm-component-mask-gradient) content-box exclude,
+    var(--ogm-component-mask-gradient);
+}
+.ogm-banner-pulse {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--ogm-radius-pill);
+  background: var(--ogm-role-agents);
+  box-shadow: var(--ogm-component-banner-pulse-shadow);
+}
+.ogm-banner-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--ogm-component-banner-font);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ogm-activity-content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+.ogm-activity-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font: var(--ogm-component-row-title-font);
+}
+.ogm-activity-content[data-state='you'] .ogm-activity-heading > :last-child {
+  color: var(--ogm-role-needs-you);
+}
+.ogm-activity-heading > :last-child {
+  color: var(--ogm-role-working);
+}
+.ogm-activity-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ogm-ink-muted);
+  font: var(--ogm-component-row-detail-font);
+}
+.ogm-activity-detail > :last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ogm-glass-message {
+  max-width: 84%;
+  padding: 10px 14px;
+  border-radius: var(--ogm-component-message-radius);
+  font: var(--ogm-component-message-font);
+}
+.ogm-message-agent {
+  align-self: flex-start;
+  border-bottom-left-radius: var(--ogm-component-message-tail-radius);
+  color: var(--ogm-ink-ink);
+  background: var(--ogm-component-message-agent-fill);
+}
+.ogm-message-self {
+  align-self: flex-end;
+  border-bottom-right-radius: var(--ogm-component-message-tail-radius);
+  color: var(--ogm-ink-dark);
+  background: var(--ogm-glass-gloss), var(--ogm-role-go);
+}
+.ogm-message-system {
+  align-self: center;
+  max-width: 100%;
+  padding: 4px 8px;
+  color: var(--ogm-ink-muted);
+  background: transparent;
+  font: var(--ogm-component-message-system-font);
+}
+.ogm-glass-composer {
+  --aiur-composer-bg: var(--ogm-glass-fill-strong);
+  --aiur-composer-fg: var(--ogm-ink-ink);
+  --aiur-composer-muted: var(--ogm-component-composer-placeholder);
+  --aiur-composer-line: var(--ogm-ink-rule);
+  --aiur-composer-button-bg: var(--ogm-component-orb-fill);
+  --aiur-composer-accent: var(--ogm-role-go);
+  --aiur-composer-on-accent: var(--ogm-ink-dark);
+  --aiur-composer-focus: var(--ogm-role-focus);
+  --aiur-composer-radius: var(--ogm-radius-xl);
+  --aiur-composer-font: var(--ogm-font-body);
+  --aiur-composer-shadow: var(--ogm-component-pane-shadow);
+}
+.ogm-glass-scrim {
+  position: fixed;
+  z-index: var(--ogm-component-overlay-z);
+  inset: 0;
+  background: var(--ogm-component-scrim-fill);
+  -webkit-backdrop-filter: var(--ogm-component-scrim-blur);
+  backdrop-filter: var(--ogm-component-scrim-blur);
+}
+
+.ogm-dialog > h2 {
+  margin: 0;
+  padding: 16px;
+  color: var(--ogm-ink-ink);
+  font: var(--ogm-component-sheet-title-font);
+}
+
+@keyframes ogm-sheet-enter {
+  from {
+    opacity: var(--ogm-component-motion-hidden);
+    transform: translateY(var(--ogm-component-sheet-enter-distance));
+  }
+  to {
+    opacity: var(--ogm-component-motion-visible);
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ogm-glass-sheet {
+    animation: none;
+  }
+}
+.ogm-glass-segmented {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--ogm-ink-rule);
+  border-radius: var(--ogm-radius-pill);
+  background: var(--ogm-component-segment-fill);
+}
+.ogm-glass-segmented > button {
+  flex: 1;
+  height: var(--ogm-orb-sm);
+  border: 0;
+  border-radius: var(--ogm-radius-pill);
+  color: var(--ogm-ink-muted);
+  background: transparent;
+  font: var(--ogm-component-segment-font);
+  cursor: pointer;
+}
+.ogm-glass-segmented > button[aria-pressed='true'] {
+  color: var(--ogm-ink-dark);
+  background: var(--ogm-glass-gloss), var(--ogm-ink-ink);
+}
+.ogm-glass-segmented > button:disabled {
+  opacity: var(--ogm-component-disabled-opacity);
+  cursor: default;
+}
+.ogm-glass-segmented > button:focus-visible,
+.ogm-glass-slider:focus-visible {
+  outline: var(--ogm-component-focus-width) solid var(--ogm-role-focus);
+  outline-offset: var(--ogm-component-focus-offset);
+}
+.ogm-glass-slider {
+  appearance: none;
+  width: 100%;
+  height: var(--ogm-component-slider-height);
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.ogm-glass-slider::-webkit-slider-runnable-track {
+  height: var(--ogm-component-slider-track-height);
+  border-radius: var(--ogm-component-bar-radius);
+  background: var(--ogm-component-slider-track);
+}
+.ogm-glass-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--ogm-component-slider-height);
+  height: var(--ogm-component-slider-height);
+  margin-top: var(--ogm-component-slider-knob-offset);
+  border: 0;
+  border-radius: var(--ogm-radius-pill);
+  background: var(--ogm-glass-gloss), var(--ogm-component-white);
+  box-shadow: var(--ogm-component-slider-shadow);
+}
+.ogm-glass-slider::-moz-range-track {
+  height: var(--ogm-component-slider-track-height);
+  border-radius: var(--ogm-component-bar-radius);
+  background: var(--ogm-component-slider-track);
+}
+.ogm-glass-slider::-moz-range-thumb {
+  width: var(--ogm-component-slider-height);
+  height: var(--ogm-component-slider-height);
+  border: 0;
+  border-radius: var(--ogm-radius-pill);
+  background: var(--ogm-glass-gloss), var(--ogm-component-white);
+  box-shadow: var(--ogm-component-slider-shadow);
+}
+.ogm-glass-slider:disabled {
+  opacity: var(--ogm-component-disabled-opacity);
+  cursor: default;
+}
+.ogm-glass-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ogm-glass-field > label {
+  padding: 0 4px;
+  color: var(--ogm-ink-muted);
+  font: var(--ogm-component-label-font);
+  letter-spacing: var(--ogm-component-label-tracking);
+  text-transform: uppercase;
+}
+.ogm-glass-menu {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--ogm-radius-lg);
+  background: var(--ogm-glass-fill-strong);
+}
+.ogm-progress-minerals > span {
+  background: var(--ogm-component-minerals-gradient);
+}
+.ogm-progress-gas > span {
+  background: var(--ogm-component-gas-gradient);
+}
+.ogm-glass-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--ogm-radius-md);
+  color: var(--ogm-ink-ink);
+  background: var(--ogm-component-meter-fill);
+}
+.ogm-glass-meter.ogm-low {
+  border-color: var(--ogm-role-needs-you);
+}
+.ogm-glass-meter.ogm-out {
+  border-color: var(--ogm-role-danger);
+}
+.ogm-glass-meter.ogm-out .ogm-meter-icon {
+  filter: saturate(0);
+  opacity: var(--ogm-component-disabled-opacity);
+}
+.ogm-meter-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--ogm-component-meter-title-font);
+}
+.ogm-meter-heading > strong {
+  margin-left: auto;
+  font: var(--ogm-component-meter-value-font);
+}
+.ogm-meter-detail {
+  color: var(--ogm-ink-muted);
+  font: var(--ogm-component-meter-detail-font);
+}
+.ogm-glass-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--ogm-radius-pill);
+}

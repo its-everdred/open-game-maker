@@ -52,5 +52,6 @@ export function skillsConfig(roles: Role[], games: GameSkills[] = []): SkillsCon
   for (const phase of ['prototype', 'build', 'polish']) byLabel[`phase:${phase}`] = ['gm-prototype'];
   byLabel['lane:creative'] = ['gm-image-mock', 'gm-prototype'];
   byLabel['lane:clone'] = ['gm-sprite-forge', 'gm-verify'];
+  byLabel['build-lane:web'] = ['gm-glass'];
   return { preload_max_bytes: PRELOAD_MAX_BYTES, by_label: byLabel };
 }

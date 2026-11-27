@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import console from 'node:console';
 import process from 'node:process';
-import { format } from 'prettier';
+import { format, resolveConfig } from 'prettier';
 
 const source = new URL('../../../docs/design/ogm-glass/tokens.json', import.meta.url);
 const destination = new URL('../src/glass-tokens.css', import.meta.url);
@@ -18,6 +18,7 @@ for (const [group, entries] of Object.entries(tokens.color)) {
   }
 }
 for (const name of ['fill', 'fill-strong', 'blur', 'edge', 'gloss']) emit(`glass-${name}`, tokens.glass[name].$value);
+for (const [name, value] of Object.entries(tokens.component)) emit(`component-${name}`, value);
 for (const [name, value] of Object.entries(tokens.radius)) emit(`radius-${name}`, value);
 for (const [name, value] of Object.entries(tokens.size.orb)) emit(`orb-${name}`, value);
 for (const [name, value] of Object.entries(tokens.size.pill)) emit(`pill-${name}`, value);
@@ -30,7 +31,7 @@ for (const name of ['ease', 'spring']) {
 }
 const output = await format(
   `/* Generated from docs/design/ogm-glass/tokens.json. Do not edit. */\n:root {\n${properties.join('\n')}\n}\n`,
-  { parser: 'css', singleQuote: true },
+  { ...(await resolveConfig(fileURLToPath(destination))), parser: 'css' },
 );
 if (process.argv.includes('--check')) {
   if ((await readFile(destination, 'utf8').catch(() => '')) !== output) {

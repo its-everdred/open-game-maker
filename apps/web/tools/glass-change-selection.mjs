@@ -26,8 +26,13 @@ export function changedGlassFiles(root, base = 'origin/main') {
     const status = fields[i];
     const file = fields[i + 1];
     if (!file) throw new Error('Incomplete git diff output');
-    // The initial generated file is not yet imported; later edits affect the design system.
-    if (status === 'A' && file === 'apps/web/src/glass-tokens.css') continue;
+    // Initial library additions have no existing consumers. A route importing them
+    // is itself selected; subsequent changes to shared code must fail closed.
+    if (
+      status === 'A' &&
+      (file === 'apps/web/src/glass-tokens.css' || file.startsWith('apps/web/src/components/glass/'))
+    )
+      continue;
     files.push(file);
   }
   return files;
@@ -59,4 +64,30 @@ export function glassScreens(files) {
     else if (file.startsWith('apps/web/src/') && /\.(?:tsx|css)$/.test(file)) screens.add('Unmapped');
   }
   return [...screens].sort();
+}
+
+/** Run selected captures, preserving a failure for any uncovered screen or failed comparison. */
+export function runGlassScreens(files, { gameDist, run, log, error }) {
+  const screens = glassScreens(files);
+  let failed = screens.includes('Unmapped');
+  if (failed) {
+    const unmapped = files.filter((file) => glassScreens([file]).includes('Unmapped'));
+    error(
+      `Glass parity has no capture for changed UI: ${unmapped.join(', ')}. Add a reviewed screen capture before merging.`,
+    );
+  }
+  for (const screen of screens.filter((item) => item !== 'Unmapped')) {
+    if (screen === 'Editor' && !gameDist) {
+      log(
+        'Post-deploy check: open the Blobs editor in the signed-in app on a physical iPhone and compare portrait and landscape with the approved Editor artboards (operator: physical iPhone).',
+      );
+      continue;
+    }
+    if (screen === 'Settings')
+      log(
+        'Post-deploy check: open Settings on a physical iPhone in landscape and compare it with the approved Settings layout (operator: physical iPhone).',
+      );
+    if (!run(screen)) failed = true;
+  }
+  return failed ? 1 : 0;
 }

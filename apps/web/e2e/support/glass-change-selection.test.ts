@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { glassScreens } from '../../tools/glass-change-selection.mjs';
 
 it('selects affected screens and fails closed on other visible routes', () => {
@@ -47,6 +47,16 @@ it('finds changed screen files from the repository root', async () => {
     git('add', '.');
     git('commit', '-qm', 'add tokens');
     expect(glassScreens(changedGlassFiles(root))).toEqual([]);
+    await mkdir(join(root, 'apps/web/src/components/glass'), { recursive: true });
+    await writeFile(join(root, 'apps/web/src/components/glass/Glass.tsx'), 'export {}');
+    git('add', '.');
+    git('commit', '-qm', 'add library');
+    expect(glassScreens(changedGlassFiles(root))).toEqual([]);
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    await writeFile(join(root, 'apps/web/src/components/glass/Glass.tsx'), 'export const changed = true');
+    git('add', '.');
+    git('commit', '-qm', 'change library');
+    expect(glassScreens(changedGlassFiles(root))).toEqual(['Unmapped']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     await writeFile(join(root, 'apps/web/src/glass-tokens.css'), ':root { color: red }');
     git('add', '.');
@@ -56,3 +66,25 @@ it('finds changed screen files from the repository root', async () => {
     await rm(root, { recursive: true, force: true });
   }
 }, 30_000);
+
+it('runs covered screens even when another screen is missing, and reports manual checks', async () => {
+  const { runGlassScreens } = await import('../../tools/glass-change-selection.mjs');
+  const run = vi.fn(() => true);
+  const log = vi.fn();
+  const error = vi.fn();
+  expect(
+    runGlassScreens(['apps/web/src/routes/games/GamesScreen.tsx', 'apps/web/src/routes/title/TitleScreen.tsx'], {
+      run,
+      log,
+      error,
+    }),
+  ).toBe(1);
+  expect(run).toHaveBeenCalledWith('Home');
+  expect(error).toHaveBeenCalledOnce();
+  run.mockClear();
+  expect(runGlassScreens(['apps/web/src/features/editor/EditorChrome.tsx'], { run, log, error })).toBe(0);
+  expect(run).not.toHaveBeenCalled();
+  expect(log).toHaveBeenCalledWith(expect.stringContaining('Post-deploy check:'));
+  run.mockReturnValue(false);
+  expect(runGlassScreens(['apps/web/src/routes/games/GamesScreen.tsx'], { run, log, error })).toBe(1);
+});

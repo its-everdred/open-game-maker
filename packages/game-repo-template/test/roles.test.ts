@@ -34,7 +34,7 @@ describe('ticket roles', () => {
     for (const role of readRoles())
       for (const skill of role.skills) expect(existsSync(join(WORKSPACE_ROOT, 'skills', skill, 'SKILL.md'))).toBe(true);
     const config = skillsConfig(readRoles());
-    for (const label of ['lane:creative', 'lane:clone', 'phase:mock'])
+    for (const label of ['lane:creative', 'lane:clone', 'phase:mock', 'build-lane:web'])
       for (const skill of config.by_label[label]!)
         expect(existsSync(join(WORKSPACE_ROOT, 'skills', skill, 'SKILL.md'))).toBe(true);
   });
@@ -54,6 +54,7 @@ describe('ticket roles', () => {
       'phase:polish': ['gm-prototype'],
       'lane:creative': ['gm-image-mock', 'gm-prototype'],
       'lane:clone': ['gm-sprite-forge', 'gm-verify'],
+      'build-lane:web': ['gm-glass'],
     });
     expect(config.preload_max_bytes).toBe(49152);
   });
