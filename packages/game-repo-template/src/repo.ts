@@ -28,6 +28,9 @@ export function renderRepoTemplate(ref: string, ctx: TemplateCtx, root: string =
   const scaffoldPaths = new Set(scaffoldFiles.map((file) => file.path));
 
   const files: TemplateFile[] = [
+    ...(!scaffoldPaths.has('.github/pull_request_template.md')
+      ? [{ path: '.github/pull_request_template.md', content: readTemplate('pull_request_template.md') }]
+      : []),
     { path: '.github/workflows/ci.yml', content: readTemplate('ci.yml') },
     { path: 'AGENTS.md', content: fill(readTemplate('AGENTS.md'), values) },
     ...(!scaffoldPaths.has('README.md')

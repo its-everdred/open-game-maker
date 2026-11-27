@@ -19,6 +19,14 @@ describe('check-ladder', () => {
     expect(checkLadder(BLOBS)).toEqual([]);
   });
 
+  it('requires system ownership and a convergence prototype for each stream', () => {
+    expect(checkLadder(BLOBS.replace('Example play prototype', ''))).toContain('Systems: fill in Convergence prototype');
+    expect(checkLadder(BLOBS.replace('play screen, chains, character select, round end |', 'play screen, chains |')))
+      .toContain('Systems: assign "round end" to exactly one system');
+    expect(checkLadder(BLOBS.replace('play screen, chains, character select, round end |', 'play screen, chains, character select, round end, missing |')))
+      .toContain('Systems: "missing" is not in Features');
+  });
+
   it('fails the template until it is filled in, so a copied blank plan never reads as ready', () => {
     const problems = checkLadder(TEMPLATE);
     expect(problems).toContain('Features: replace every <placeholder>');

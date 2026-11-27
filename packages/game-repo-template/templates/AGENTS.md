@@ -13,6 +13,7 @@ snapshot; if it fails, obtain the current design before making those changes.
 CI (`ci / required`) runs exactly these:
 
 - `pnpm install --frozen-lockfile`
+- `pnpm exec gm work pr-check --body <file> --base <ref> --pr <number>` on pull requests
 - `pnpm run check` (`gm check`)
 - `pnpm run test` (`gm test`)
 
@@ -24,3 +25,5 @@ Run `gm run` to play the game and capture a still. Done means `gm check`, `gm te
   `assets.lock.json` by hand (use `gm assets use`). Change `scenes/` only through `gm scene push`.
 - Open the pull request with `Closes #<issue>` as its first line and a `## Local tests` section listing each command
   you ran and its result.
+- Add `## Related work` with `Reused:`, `Overlap:`, and `Verdict:` lines. Name any open PR that this one extends or
+  supersedes when both touch the same files.

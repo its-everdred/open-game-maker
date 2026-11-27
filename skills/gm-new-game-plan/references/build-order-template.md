@@ -5,6 +5,21 @@ Copy to `games/<name>/design/ladder.md` and fill it in from the spec and the flo
 has one row per feature in Features, with the same feature ticket title in every stage. Check it with
 `node .claude/skills/gm-new-game-plan/scripts/check-ladder.ts games/<name>/design/ladder.md`.
 
+## Related work
+
+Reused: <existing modules, pipelines, assets or none and why>
+Overlap: <in-flight or merged work examined>
+Verdict: <build, extend the named module or PR, or fold into #ticket>
+
+For each system, name its GitHub epic, aiur feature, stream lanes and the single prototype child where streams
+converge before filing the stream tickets.
+
+## Systems
+
+| System | GitHub epic | Aiur feature | Stream lanes | Convergence prototype | Streams |
+|---|---|---|---|---|---|
+| <system> | <epic issue> | <feature slug> | <stream lanes> | <prototype ticket> | <feature> |
+
 ## Features
 
 | Feature | Flow node | Labels |

@@ -4,6 +4,7 @@ import type { TemplateFile } from './repo.js';
 export type InstanceTemplate = { files: TemplateFile[] };
 
 const INSTANCE_FILES = [
+  ['.github/pull_request_template.md', 'pull_request_template.md'],
   ['.github/workflows/ci.yml', 'instance/ci.yml'],
   ['.gitignore', 'instance/gitignore'],
   ['.npmrc', 'instance/npmrc'],

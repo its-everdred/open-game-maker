@@ -122,7 +122,7 @@ gm qa games-cache [--origin <app origin>] [--game <slug>] [--after-publish <buil
 ```
 
 ```text
-gm check [--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase mock|prototype|build|polish] [--json]
+gm check [--body <file>] [--base <ref>] [--work-bundle <file>] [--pr <number>] [--lane <creative|clone>] [--phase mock|prototype|build|polish] [--json]
 gm check static [--json]
 gm check hooks [--json]
 gm check images [--json]
@@ -140,6 +140,8 @@ gm decisions next --ticket <n> [--body <file>]
 gm decisions raise <id>
 gm decisions answer <id> <option label> [--note <text>] [--reuse <path>]... [--generator <path>] [--reuse-note <text>]
 gm decisions sync
+gm work search <topic or feature> [--aiur-root <launch directory>] [--json]
+gm work pr-check --body <file> --base <ref> --pr <number> [--json]
 ```
 
 `gm check` runs TypeScript, deterministic simulation-source, test-hook, and registered asset gates. Use `static` or
@@ -147,6 +149,21 @@ gm decisions sync
 gate result. `--phase` supplies the current look rung when evaluating provisional look scopes; it defaults to
 `prototype` when no provisional scope is declared. A provisional scope requires the caller to pass the current rung, so
 expiry cannot remain green because a command defaulted to an earlier phase.
+`gm work search` reads matching aiur features and their members, associated open and recently updated PRs and files,
+ticket branches, matching tracked paths, local decisions, and available asset cards. Run it from the game's repository;
+when its aiur daemon is keyed to a separate launch directory, supply `--aiur-root`. Read the reported limitations
+before concluding that no work overlaps. PR bodies checked with `gm check --body` need `## Related work` with
+`Reused:`, `Overlap:`, and `Verdict:` lines; documentation-only diffs are exempt.
+Passing `--work-bundle <file>` with `--body` additionally checks the PR's files against open PRs in a JSON bundle
+captured with `gm work search --json`; `--pr <number>` excludes the current PR. A shared file requires the related-work
+section to name the other PR. This is only as current and complete as the supplied bundle.
+`gm work pr-check` obtains feature labels and open PR files directly from GitHub for CI. It fails when the linked
+tickets have no projected feature label, since their file overlap cannot be checked. It also requires the related-work
+section to address the target of the newest trusted Aiur overlap-review note on each linked ticket; comments from
+untrusted authors do not count. Generated game CI runs this check on PR changes and body edits; existing game
+repositories need their CI template updated to enable it.
+Labels may omit imported or also-affects memberships, and a review note may arrive after CI starts; the check is not
+proof that the registry and reviewer found no other overlap.
 In ticket PR mode, pass `--body <file>` and `--base <ref>` to also reject open creator decisions and
 creator-visible changes without a prototype review section (or `Prototype review: none` for code-only changes), and a
 Play link that starts no `scenario=`.

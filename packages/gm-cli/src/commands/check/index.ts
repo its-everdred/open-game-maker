@@ -204,16 +204,26 @@ export async function runSelected(ctx: GmContext, checks: RunL0Options): Promise
 export const command: GmCommand = {
   name: 'check',
   summary: 'run deterministic static, hook, and asset gates',
-  usage: '[--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase <mock|prototype|build|polish>] [--json]',
+  usage:
+    '[--body <file>] [--base <ref>] [--work-bundle <file>] [--pr <number>] [--lane <creative|clone>] [--phase <mock|prototype|build|polish>] [--json]',
   example: 'check',
   flags: {
     body: { type: 'string', help: 'pull request body markdown for ticket PR gates' },
     base: { type: 'string', help: 'base ref for changed-file detection (default origin/main)' },
     lane: { type: 'string', help: 'ticket lane for ticket PR gates: creative or clone' },
     phase: { type: 'string', help: 'current look rung: mock, prototype, build, or polish' },
+    'work-bundle': { type: 'string', help: 'JSON from gm work search, for same-feature PR overlap detection' },
+    pr: { type: 'number', help: 'current PR number (excluded from overlap detection)' },
   },
   async run(ctx, args, flags) {
     if (args.length > 0) throw new UsageError(`unexpected argument ${args[0]}`, 'gm help check');
+    if (flags['work-bundle'] !== undefined && typeof flags.body !== 'string')
+      throw new UsageError('--work-bundle requires --body', 'gm help check');
+    if (
+      flags.pr !== undefined &&
+      (typeof flags['work-bundle'] !== 'string' || !Number.isInteger(flags.pr) || (flags.pr as number) < 1)
+    )
+      throw new UsageError('--pr requires --work-bundle and a positive PR number', 'gm help check');
     const phase = flags.phase as string | undefined;
     if (phase !== undefined && !['mock', 'prototype', 'build', 'polish'].includes(phase))
       throw new UsageError(`invalid look phase "${phase}"`, 'use --phase mock|prototype|build|polish');
@@ -238,7 +248,13 @@ export const command: GmCommand = {
     const prProblems =
       typeof flags.body === 'string'
         ? [
-            ...checkPrReview(ctx.cwd, flags.body, typeof flags.base === 'string' ? flags.base : 'origin/main'),
+            ...checkPrReview(
+              ctx.cwd,
+              flags.body,
+              typeof flags.base === 'string' ? flags.base : 'origin/main',
+              typeof flags['work-bundle'] === 'string' ? flags['work-bundle'] : undefined,
+              typeof flags.pr === 'number' ? flags.pr : undefined,
+            ),
             ...ticketGate(
               ctx.cwd,
               (() => {

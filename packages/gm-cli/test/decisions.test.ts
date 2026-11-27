@@ -345,12 +345,13 @@ describe('gm decisions', () => {
     git('add', '-A');
     git('commit', '-qm', 'visible change');
     const body = join(root, 'pr.md');
+    const related = '\n## Related work\nReused: none\nOverlap: none found\nVerdict: build\n';
     writeFileSync(body, 'Closes #71\n');
     const missing = await gm(['check', '--body', 'pr.md', '--base', 'origin/main'], { cwd: root });
     expect(missing.code).toBe(1);
     expect(missing.err.join('\n')).toContain('Prototype review');
     /* The waiver with a reason must pass here too, or publish accepts a body the PR gate rejects (#1250). */
-    writeFileSync(body, 'Closes #71\n\nPrototype review: none (mock images only; no playable change)\n');
+    writeFileSync(body, 'Closes #71\n\nPrototype review: none (mock images only; no playable change)\n' + related);
     const waived = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
     expect(JSON.parse(waived.out[0]!).prototypeReview.problems).toEqual([]);
     writeFileSync(
@@ -363,13 +364,14 @@ describe('gm decisions', () => {
     expect(JSON.parse(open.out[0]!).prototypeReview.problems.join('\n')).toContain('enemy-style is still open');
     writeFileSync(
       body,
-      'Closes #71\n\n## Prototype review\nPlay: https://example.test/g/g_1?mode=edit&build=build_1&scenario=wave-3\nClip: clip.mp4\nWorks now: move.\nKnown limitations: none.\nWeigh in on: enemy-style, map-style, loot-style, inventory-ui.\n',
+      'Closes #71\n\n## Prototype review\nPlay: https://example.test/g/g_1?mode=edit&build=build_1&scenario=wave-3\nClip: clip.mp4\nWorks now: move.\nKnown limitations: none.\nWeigh in on: enemy-style, map-style, loot-style, inventory-ui.\n' +
+        related,
     );
     const reviewed = await gm(['check', '--body', 'pr.md', '--base', 'origin/main', '--json'], { cwd: root });
     expect(JSON.parse(reviewed.out[0]!).prototypeReview.problems).toEqual([]);
     /* Kevin, #1278: a games-host play link throws the home-screen app out to the browser; reviews open the editor. */
     const review = (play: string) =>
-      `Closes #71\n\n## Prototype review\nPlay: ${play}\nClip: clip.mp4\nWorks now: move.\nKnown limitations: none.\nWeigh in on: enemy-style, map-style, loot-style, inventory-ui.\n`;
+      `Closes #71\n\n## Prototype review\nPlay: ${play}\nClip: clip.mp4\nWorks now: move.\nKnown limitations: none.\nWeigh in on: enemy-style, map-style, loot-style, inventory-ui.\n${related}`;
     for (const hosted of [
       'https://host.example.ts.net:10000/g/g_1/build_1/',
       'https://games.example.test/g/g_1/build_1/',
