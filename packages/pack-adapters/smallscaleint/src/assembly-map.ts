@@ -41,7 +41,7 @@ export function assemblyMap(width: number, height: number, placements: readonly 
   for (const placement of placements) {
     const { x, y } = placement.cell;
     if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y) || x < 0 || y < 0 || x >= width || y >= height) {
-      if (placement.role === 'post') {
+      if (placement.role === 'post' && Number.isSafeInteger(x) && x >= 0 && x < width && y === height) {
         throw new Error(`placement ${x},${y} is outside the map; gate posts need a one-cell map margin`);
       }
       throw new Error(`placement ${x},${y} is outside the map`);

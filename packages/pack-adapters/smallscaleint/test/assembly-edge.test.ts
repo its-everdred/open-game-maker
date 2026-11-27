@@ -113,4 +113,8 @@ it('explains the required margin when gate posts fall beyond the map edge', () =
   };
   const run = edgeRun(cells, 'fence', [gate], style);
   expect(() => assemblyMap(4, 4, run.placements)).toThrow('gate posts need a one-cell map margin');
+  const post = run.placements.find((placement) => placement.role === 'post')!;
+  expect(() => assemblyMap(4, 4, [{ ...post, cell: { x: 1.5, y: 4 } }])).toThrow(
+    /^placement 1.5,4 is outside the map$/,
+  );
 });
