@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 /** A phone-sized frame whose game declares a stick and three buttons, as Dusk Helm's does. */
-function phoneFrame() {
+function phoneFrame(capabilities: string[] = []) {
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(pointer: coarse)' }));
   const container = document.createElement('div');
   document.body.append(container);
@@ -23,7 +23,7 @@ function phoneFrame() {
     build: 'published',
     mode: 'play',
     playerIndex: 0,
-    capabilities: [],
+    capabilities,
     role: () => 'owner',
   });
   const ready = on.mock.calls.find(([type]) => type === 'ready')?.[1] as (payload: unknown) => void;
@@ -133,8 +133,8 @@ it('shows every control for a game that never chooses, as before', () => {
   frame.dispose();
 });
 
-it('advertises the host Back capability to the game', () => {
-  const { frame } = phoneFrame();
+it('advertises only Back support opted into by the embedding surface', () => {
+  const { frame } = phoneFrame(['host.back']);
   const send = vi.spyOn(frame.iframe.contentWindow!, 'postMessage');
   window.dispatchEvent(
     new MessageEvent('message', {

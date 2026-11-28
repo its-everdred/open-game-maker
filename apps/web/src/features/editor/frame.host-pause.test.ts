@@ -31,6 +31,7 @@ function mount() {
     gameId: 'game',
     buildId: 'build',
     mode: 'play',
+    hostBack: true,
     design: { rev: 0, doc: {} as DesignDoc },
     create: (value) => {
       options = value;
@@ -38,6 +39,7 @@ function mount() {
     },
     onState: (state) => states.push(state),
   });
+  expect(options?.capabilities).toContain('host.back');
   options?.onReady?.({ id: 'blobs', title: 'Blobs', inputs: { actions: {} } } as GameManifest, []);
   const tell = (visible: boolean) => listeners.get('host.pause.visible')?.({ visible } as never);
   const tellBack = (enabled: boolean, label?: string) => listeners.get('host.back')?.({ enabled, label } as never);

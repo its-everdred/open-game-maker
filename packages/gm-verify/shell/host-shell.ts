@@ -30,7 +30,7 @@ const frame = createGameFrame({
   params: { ...Object.fromEntries(games.searchParams), capture: '1', tier: query.get('tier') ?? 'mobile' },
   mode: 'play',
   playerIndex: 0,
-  capabilities: [],
+  capabilities: ['host.back'],
   role: () => 'owner',
   onLoad: (event) => {
     if (event.t === 'load.frame') {

@@ -103,6 +103,8 @@ export type MountGameFrameOptions = {
   gameId: string;
   buildId: string;
   preview?: boolean;
+  /** The embedding surface renders and handles the shared Back button. */
+  hostBack?: boolean;
   mode: 'play' | 'edit';
   design: { rev: number; doc: DesignDoc };
   build?: 'draft' | 'test' | 'published';
@@ -266,7 +268,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       mode: options.mode,
       ...(options.startupRestore ? { startupHold: true } : {}),
       playerIndex: 0,
-      capabilities: [],
+      capabilities: options.hostBack ? ['host.back'] : [],
       role: () => 'owner',
       /*
        * The handshake waits for the game's entry module to download and run. Over Funnel from a busy host that took

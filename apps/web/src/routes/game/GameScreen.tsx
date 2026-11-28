@@ -488,6 +488,7 @@ export function GameScreen() {
         : snapshot.buildId === NO_BUILD_ID && !framePreview
           ? mountSceneryPreview(container, previewSource!, snapshot.doc, setFrameState)
           : mountGameFrame({
+              hostBack: true,
               container,
               gamesOrigin,
               gameId,
@@ -828,8 +829,7 @@ export function GameScreen() {
         <Hd2dPanel report={frameState.hd2d} apply={frameController?.applyHd2d} onSave={saveLighting} />
       )}
       <div className="game-stage">
-        {mode === 'play' &&
-        frameState.bridgeState === 'ready' &&
+        {frameState.bridgeState === 'ready' &&
         frameState.firstFrame &&
         frameState.back?.enabled &&
         !menuOpen &&

@@ -18,6 +18,7 @@ type MockFrameState = {
 };
 
 type MockMountOptions = {
+  hostBack?: boolean;
   onSaveWrite?(payload: { saveSchemaVersion: number; data: unknown }): void;
   onState?(state: MockFrameState): void;
   onLoadDone?(measurement: { ms: number; fetchedBytes: number; cachedBytes: number }): void;
@@ -923,6 +924,7 @@ describe('GameScreen', () => {
 it('shows the host Back action only while the game enables it', async () => {
   renderGame();
   await readyPlayFrame();
+  expect(host.mountGameFrame.mock.calls.at(-1)?.[0]?.hostBack).toBe(true);
   expect(screen.queryByRole('button', { name: 'Choose mode' })).toBeNull();
   act(() =>
     host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
