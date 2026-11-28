@@ -284,7 +284,7 @@ describe('StudioMenu', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.admin = { data: { platformRole: 'none', capability: 'creator' }, attested: false };
     state.decisions = [decision('private')];
-    const job = buildChatJob({ creatorId: 'user-1', state: 'done' });
+    const job = { ...buildChatJob({ creatorId: 'user-1', state: 'done' }), state: 'done' as const };
     state.jobs = { jobs: [job], active: [], games: [{ id: 'game-1', title: 'Mine', ownerId: 'user-1' }] };
     renderMenu('/games');
     expect(screen.queryByText('1', { selector: '.studio-menu-badge' })).toBeNull();
@@ -329,7 +329,7 @@ describe('StudioMenu', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.admin = { data: { platformRole: 'none', capability: 'creator' } };
     state.decisions = [decision('d1')];
-    const job = buildChatJob({ creatorId: 'user-1', state: 'done' });
+    const job = { ...buildChatJob({ creatorId: 'user-1', state: 'done' }), state: 'done' as const };
     state.jobs = { jobs: [job], active: [], games: [{ id: 'game-1', title: 'Mine', ownerId: 'user-1' }] };
     const view = renderMenu('/games');
     expect(screen.getByText('1', { selector: '.studio-menu-badge' })).toBeVisible();
