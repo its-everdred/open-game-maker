@@ -43,6 +43,7 @@ const editorApi = vi.hoisted(() => ({
   postAnalyticsEvent: vi.fn(),
   putSave: vi.fn(),
   releaseLease: vi.fn(),
+  requestDraftGrant: vi.fn(),
   submitReapply: vi.fn(),
 }));
 
@@ -139,6 +140,7 @@ beforeEach(() => {
   preview.mountSceneryPreview.mockReturnValue(host.controller);
   useDock.getState().reset();
   editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar' });
+  editorApi.requestDraftGrant.mockResolvedValue({ grant: 'test-grant' });
   editorApi.getFallbackPalette.mockResolvedValue({ mode: 'request', palette: { categories: [], items: [] } });
   editorApi.getEditorPreviews.mockResolvedValue({ previews: [] });
   editorApi.getEditorStage.mockResolvedValue({ stage: null });
@@ -181,6 +183,13 @@ afterEach(() => {
 });
 
 describe('GameScreen previews', () => {
+  it('obtains an owner grant before mounting a draft', async () => {
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(editorApi.requestDraftGrant).toHaveBeenCalledWith('game', 'build'));
+    await waitFor(() =>
+      expect(host.mountGameFrame).toHaveBeenCalledWith(expect.objectContaining({ draftGrant: 'test-grant' })),
+    );
+  });
   it('advances from an approved concept to a populated scenery diorama', async () => {
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,

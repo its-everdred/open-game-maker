@@ -35,5 +35,9 @@ it('resolves item art against its own game build for published and preview build
     resolvePaletteThumbnails(manifest, 'https://games.example.test', 'game', 'preview', true).palette.items[0]
       ?.thumbnail,
   ).toBe('https://games.example.test/p/game/preview/art/wall.png');
+  expect(
+    resolvePaletteThumbnails(manifest, 'https://games.example.test', 'game', 'build', false, 'grant').palette.items[0]
+      ?.thumbnail,
+  ).toBe('https://games.example.test/d/game/build/grant/art/wall.png');
   expect(manifest.palette.items[0]?.thumbnail).toBe('art/wall.png');
 });
