@@ -2,6 +2,12 @@ import { resolve } from 'node:path';
 import { accentForName } from './glass-accents.mjs';
 const intrinsicControls = new Set(['button', 'input', 'select', 'textarea', 'dialog', 'menu']);
 const controlRoles = new Set(['button', 'switch', 'slider', 'menu', 'menuitem', 'dialog']);
+// These controls have accented interactive states even without a tone prop.
+const fixedControlRoles = new Map([
+  ['GlassSwitch', 'go'],
+  ['GlassSlider', 'go'],
+  ['GlassChoice', 'needs-you'],
+]);
 const controlClasses = /(?:^|[\s_-])(?:panel|sheet|menu|chip|toggle|slider)(?:$|[\s_-])/i;
 const designStyle =
   /^(?:color|background(?:Color)?|border(?:.*Color|.*Radius)?|boxShadow|textShadow|backdropFilter|opacity|font(?:Size|Weight)?|lineHeight|letterSpacing|transition(?:Duration|TimingFunction)?|animation(?:Duration|TimingFunction)?)$/;
@@ -134,6 +140,14 @@ export const glassComponentsRule = {
     }
     return {
       JSXOpeningElement(node) {
+        if (node.name.type === 'JSXIdentifier') {
+          const role = fixedControlRoles.get(node.name.name);
+          const accent = role && accentForName(role);
+          if (accent) {
+            hues.add(accent);
+            firstAccent ??= node;
+          }
+        }
         if (node.name.type === 'JSXIdentifier' && /^(?:GlassButton|GlassOrb|GlassOption)$/.test(node.name.name)) {
           const tone = node.attributes.find((attr) => attr.type === 'JSXAttribute' && attr.name.name === 'tone');
           const accent = node.attributes.find((attr) => attr.type === 'JSXAttribute' && attr.name.name === 'accent');

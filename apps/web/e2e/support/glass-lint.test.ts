@@ -80,6 +80,25 @@ it('rejects multiple explicit Glass control accents, including conditional tones
     { filePath: 'src/Screen.tsx' },
   );
   expect(unusedAccent!.messages.some((message) => message.messageId === 'accents')).toBe(false);
+  for (const control of ['<GlassSwitch checked={false} />', '<GlassSlider />', '<GlassChoice selected={false} />']) {
+    const [result] = await eslint.lintText(`const Screen = () => <>${control}<GlassButton tone="info" /></>;`, {
+      filePath: 'src/Screen.tsx',
+    });
+    expect(
+      result!.messages.some((message) => message.messageId === 'accents'),
+      control,
+    ).toBe(true);
+  }
+  for (const controls of [
+    '<GlassSwitch /><GlassSlider /><GlassButton tone="go" />',
+    '<GlassChoice /><GlassButton tone="warn" />',
+  ]) {
+    const [result] = await eslint.lintText(`const Screen = () => <>${controls}</>;`, { filePath: 'src/Screen.tsx' });
+    expect(
+      result!.messages.some((message) => message.messageId === 'accents'),
+      controls,
+    ).toBe(false);
+  }
 }, 30_000);
 
 it('rejects ad-hoc native controls in screens', async () => {
