@@ -601,7 +601,8 @@ more than waiting does. A swipe that moves nothing is reported as unchecked inst
 the game's move stick (a `move` stick without `touch: "self"`). One game plays at a time, in the capture slot, and
 each play has a load-adjusted wall-time budget capped at 340 s; capture-slot waiting is capped at 90 s. Published JSON fetches retry transient failures and report their final cause. A boot timeout is inconclusive. A game that fails is played once more and fails only when both plays fail: a loaded host
 can miss one boot, a broken game misses both.
-The default sweep selects listed games; `--game <slug>` also permits an explicitly requested private game.
+The default sweep selects listed games; `--game <slug>` also permits an explicitly requested private game with a valid
+current release. Its privileged smoke does not prove an owner or invited player can load it; check those sessions too.
 
 The QA account cannot read another family's private game, so the check answers that game's own API routes from its
 published build (`design/design.json`) and absorbs its writes; the shell, auth, the rest of the API and the games host
