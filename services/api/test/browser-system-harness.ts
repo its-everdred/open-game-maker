@@ -2,8 +2,7 @@
 import { execFile } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import { serve } from '@hono/node-server';
@@ -106,9 +105,19 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
           const blobs = join(buildDirectory, 'a');
           if (existsSync(blobs)) cpSync(blobs, join(deps!.config.gamesRoot, '_a'), { recursive: true });
         } else {
-          pendingBuild = run('pnpm', ['exec', 'vite', 'build', '--base=./', '--mode=draft', '--outDir', directory], {
-            cwd: fileURLToPath(new URL('../../../templates/game-3d/', import.meta.url)),
-          });
+          const template = resolve('..', '..', 'templates', 'game-3d');
+          pendingBuild = run(
+            process.execPath,
+            [
+              join(template, 'node_modules', 'vite', 'bin', 'vite.js'),
+              'build',
+              '--base=./',
+              '--mode=draft',
+              '--outDir',
+              directory,
+            ],
+            { cwd: template },
+          );
           await pendingBuild;
         }
         if (closing) throw new Error('system closed while staging the editor build');

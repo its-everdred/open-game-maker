@@ -147,18 +147,11 @@ for (const viewport of [
       try {
         system.configureVoice(provider.url);
         const composer = await openChat(page, system);
-        const mic = composer.getByRole('button', { name: 'Hold to dictate' });
-        const bounds = await mic.boundingBox();
-        if (!bounds) throw new Error('dictation control is missing');
-        const touch = await page.context().newCDPSession(page);
-        await touch.send('Input.dispatchTouchEvent', {
-          type: 'touchStart',
-          touchPoints: [{ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }],
-        });
+        await composer.getByRole('button', { name: 'Dictate' }).tap();
+        await expect(composer).toHaveAttribute('data-recording', '');
         await expect.poll(() => provider.stats().audioFrames, { timeout: 30_000 }).toBeGreaterThan(0);
-        await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-        await touch.detach();
-        await expect(composer.locator('textarea')).toHaveValue('Make the lantern glow blue');
+        await composer.getByRole('button', { name: 'Stop and send' }).tap();
+        await expect.poll(() => system.chatTexts(), { timeout: 30_000 }).toEqual(['Make the lantern glow blue']);
         expect(provider.stats().commits).toBe(1);
       } finally {
         await provider.close();

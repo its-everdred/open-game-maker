@@ -56,11 +56,18 @@ it('accepts a matching dictate token and rejects forged, expired, wrong-scope an
       const [error] = await response;
       expect(JSON.parse(error.toString())).toMatchObject({ type: 'error', code: 'invalid_frame' });
     }
-    const transcript = nextMessage(valid);
+    const frames: unknown[] = [];
+    const collect = (data: WebSocket.RawData) => frames.push(JSON.parse(data.toString()) as unknown);
+    valid.on('message', collect);
     valid.send(JSON.stringify({ v: 1, type: 'audio', data_b64: 'AA==' }));
     valid.send(JSON.stringify({ v: 1, type: 'commit' }));
-    const [message] = await transcript;
-    expect(JSON.parse(message.toString())).toMatchObject({ type: 'transcript', kind: 'final' });
+    await expect
+      .poll(() => frames)
+      .toEqual([
+        expect.objectContaining({ type: 'transcript', kind: 'final' }),
+        expect.objectContaining({ type: 'ended' }),
+      ]);
+    valid.off('message', collect);
     const afterDuplicate = nextMessage(valid);
     valid.send(JSON.stringify({ v: 1, type: 'commit' }));
     valid.send(JSON.stringify({ v: 2, type: 'commit' }));

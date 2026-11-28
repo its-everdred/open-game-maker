@@ -68,6 +68,7 @@ export async function startDictationSystemServer() {
         committed = true;
         commits += 1;
         socket.send(JSON.stringify({ v: 1, type: 'transcript', kind: 'final', text: 'Make the lantern glow blue' }));
+        socket.send(JSON.stringify({ v: 1, type: 'ended' }));
       } else if (frame?.v === 1 && frame.type === 'commit' && committed) {
         return;
       } else if (frame?.v === 1 && frame.type === 'stop') {
