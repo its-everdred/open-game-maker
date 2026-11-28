@@ -86,9 +86,16 @@ export function createScalarFactor(
       inputs[0]!.inputSlot === 0
     ) {
       const inner = scalarFactor(inputs[0]!, next);
-      if (inner.kind !== 'constant' || typeof inner.defaultValue !== 'number')
+      if (!['constant', 'scalar'].includes(inner.kind) || typeof inner.defaultValue !== 'number')
         throw new Error('unsupported Unity color adjustment amount');
-      return { key: '', kind: 'constant', defaultValue: 1 - inner.defaultValue };
+      const raw = inner.kind === 'scalar' && floats.has(inner.key) ? floats.get(inner.key) : inner.defaultValue;
+      if (
+        (typeof raw !== 'number' && typeof raw !== 'string') ||
+        String(raw).trim() === '' ||
+        !Number.isFinite(Number(raw))
+      )
+        throw new Error('unsupported Unity color adjustment amount');
+      return { key: '', kind: 'constant', defaultValue: 1 - Number(raw) };
     }
     if (
       node?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode' &&
@@ -137,6 +144,20 @@ export function createScalarFactor(
       const property = byId.get(nodeId(source.m_Property));
       const key = property?.m_OverrideReferenceName || property?.m_DefaultReferenceName;
       const channel = edge.outputSlot - 1;
+      const vectorSizes: Record<string, number> = {
+        'UnityEditor.ShaderGraph.Internal.Vector2ShaderProperty': 2,
+        'UnityEditor.ShaderGraph.Internal.Vector3ShaderProperty': 3,
+        'UnityEditor.ShaderGraph.Internal.Vector4ShaderProperty': 4,
+      };
+      const vectorSize = vectorSizes[String(property?.m_Type)];
+      if (vectorSize && typeof key === 'string' && key) {
+        if (channel >= vectorSize) return { key: '', kind: 'constant', defaultValue: channel === 3 ? 1 : 0 };
+        const vector = object(colors.get(key) ?? property!.m_Value);
+        const keys = 'r' in vector ? ['r', 'g', 'b', 'a'] : ['x', 'y', 'z', 'w'];
+        const selected = Number(vector[keys[channel]!]);
+        if (!Number.isFinite(selected)) throw new Error('invalid Unity color adjustment property');
+        return { key: '', kind: 'constant', defaultValue: selected };
+      }
       if (
         property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.ColorShaderProperty' ||
         typeof key !== 'string' ||

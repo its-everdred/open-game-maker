@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -360,6 +360,14 @@ it('resolves texture paths inside blended graph terms', async () => {
       doubleSided: true,
       opacity: { scalarMask: { channel: 3, term: { texturePaths: [join(root, 'b.png')] } } },
     });
+    await rename(join(root, 'b.png'), join(root, 'b.bmp'));
+    await rename(metaPath, join(root, 'b.bmp.meta'));
+    const bmpPlan = await planUnityAssembly(root, prefab);
+    expect(bmpPlan[0]?.surfaces[0]?.opacity).toMatchObject({
+      scalarMask: { term: { texturePaths: [join(root, 'b.bmp')] } },
+    });
+    await rename(join(root, 'b.bmp'), join(root, 'b.png'));
+    await rename(join(root, 'b.bmp.meta'), metaPath);
     docs.push(
       {
         m_ObjectId: 'clip',

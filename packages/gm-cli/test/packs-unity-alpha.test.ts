@@ -116,3 +116,57 @@ it('resolves sampled opacity multiplied by a nonnegative property', () => {
   expect(parse(6)).toMatchObject({ factors: [{ defaultValue: 6 }], scalarMask: { channel: 0 } });
   expect(() => parse(-1)).toThrow('unsupported Unity opacity graph');
 });
+
+it('selects material-specific opacity texture branches before resolving UVs', () => {
+  const edge = (from: string, to: string, input: number, output = 0) => ({
+    m_OutputSlot: { m_Node: { m_Id: from }, m_SlotId: output },
+    m_InputSlot: { m_Node: { m_Id: to }, m_SlotId: input },
+  });
+  const docs = [
+    {
+      m_Type: 'UnityEditor.ShaderGraph.GraphData',
+      m_Edges: [
+        edge('multiply', 'alpha', 0, 2),
+        edge('branch', 'multiply', 0, 3),
+        edge('gain', 'multiply', 1),
+        edge('flag', 'branch', 0),
+        edge('a', 'branch', 1, 7),
+        edge('b', 'branch', 2),
+      ],
+    },
+    {
+      m_ObjectId: 'alpha',
+      m_Type: 'UnityEditor.ShaderGraph.BlockNode',
+      m_SerializedDescriptor: 'SurfaceDescription.Alpha',
+    },
+    { m_ObjectId: 'multiply', m_Type: 'UnityEditor.ShaderGraph.MultiplyNode' },
+    { m_ObjectId: 'branch', m_Type: 'UnityEditor.ShaderGraph.BranchNode' },
+    { m_ObjectId: 'a', m_Type: 'UnityEditor.ShaderGraph.SampleTexture2DNode' },
+    { m_ObjectId: 'b', m_Type: 'UnityEditor.ShaderGraph.SampleTexture2DNode' },
+    { m_ObjectId: 'gain', m_Type: 'UnityEditor.ShaderGraph.PropertyNode', m_Property: { m_Id: 'gain-property' } },
+    {
+      m_ObjectId: 'gain-property',
+      m_Type: 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty',
+      m_DefaultReferenceName: '_Gain',
+      m_Value: 1,
+    },
+    { m_ObjectId: 'flag', m_Type: 'UnityEditor.ShaderGraph.PropertyNode', m_Property: { m_Id: 'flag-property' } },
+    {
+      m_ObjectId: 'flag-property',
+      m_Type: 'UnityEditor.ShaderGraph.Internal.BooleanShaderProperty',
+      m_DefaultReferenceName: '_Flag',
+      m_Value: false,
+    },
+  ];
+  const parse = (value: number) =>
+    shaderGraphAlpha(
+      docs.map((doc) => JSON.stringify(doc)).join('\n'),
+      () => '',
+      new Map([['_Flag', value]]),
+      new Map(),
+      new Map(),
+    );
+  expect(parse(0)).toMatchObject({ scalarMask: { channel: 0, term: { textures: ['_SampleTexture2D_b_Texture_1'] } } });
+  expect(parse(1)).toMatchObject({ scalarMask: { channel: 3, term: { textures: ['_SampleTexture2D_a_Texture_1'] } } });
+  expect(() => parse(2)).toThrow('unsupported Unity opacity graph');
+});

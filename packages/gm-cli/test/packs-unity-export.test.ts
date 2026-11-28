@@ -409,6 +409,27 @@ it.skipIf(!available)(
         },
       };
       rgbPlan.push(scalarNode);
+      const overlayNode = structuredClone(scalarNode);
+      overlayNode.name = 'Overlay mask';
+      overlayNode.transformId = 'root/overlay';
+      overlayNode.surfaces[0]!.path = 'overlay.mat';
+      overlayNode.surfaces[0]!.scalarMask = {
+        op: 'overlay',
+        args: [
+          {
+            channel: 1,
+            term: {
+              path: 'overlay.mat',
+              textures: [{ guid: 'rgb', scale: [1, 1], offset: [0, 0] }],
+              texturePaths: [rgbMask],
+              textureSrgb: [false],
+              color: [1, 1, 1, 1],
+            },
+          },
+          0.8,
+        ],
+      };
+      rgbPlan.push(overlayNode);
       const zeroNode = structuredClone(plan[3]!);
       zeroNode.name = 'Zero mask';
       zeroNode.transformId = 'root/zero';
@@ -464,6 +485,26 @@ it.skipIf(!available)(
       flameNode.surfaces[0]!.path = 'flame.mat';
       flameNode.surfaces[0]!.additiveEmission = true;
       rgbPlan.push(flameNode);
+      const worldNode = structuredClone(plan[3]!);
+      worldNode.name = 'World projected';
+      worldNode.transformId = 'root/world-one';
+      worldNode.parentId = null;
+      worldNode.position = [0, 0, 0];
+      worldNode.surfaces[0] = {
+        path: 'world.mat',
+        textures: [
+          { guid: 'world', scale: [1, 1], offset: [0, 0], worldUvTransform: [0.25, 0, 0, 0.25, 0, 0, 0.25, 0.25] },
+        ],
+        texturePaths: [mask],
+        textureSrgb: [false],
+        color: [1, 1, 1, 1],
+      };
+      rgbPlan.push(worldNode);
+      const secondWorld = structuredClone(worldNode);
+      secondWorld.name = 'World projected shifted';
+      secondWorld.transformId = 'root/world-two';
+      secondWorld.position = [1, 0, 0];
+      rgbPlan.push(secondWorld);
       const rgbOutput = join(root, 'rgb.glb');
       await exportUnityAssembly(rgbPlan, rgbOutput);
       const rgbDocument = await new NodeIO()
@@ -496,6 +537,17 @@ it.skipIf(!available)(
       expect(flame.getAlphaMode()).toBe('BLEND');
       expect(flame.getEmissiveTexture()).toBeTruthy();
       expect(flame.getBaseColorFactor().slice(0, 3)).toEqual([0, 0, 0]);
+      const worldMaterials = rgbDocument
+        .getRoot()
+        .listMaterials()
+        .filter((entry) => entry.getBaseColorTexture()?.getSize()?.[0] === 256);
+      expect(worldMaterials).toHaveLength(2);
+      expect(
+        Buffer.compare(
+          Buffer.from(worldMaterials[0]!.getBaseColorTexture()!.getImage()!),
+          Buffer.from(worldMaterials[1]!.getBaseColorTexture()!.getImage()!),
+        ),
+      ).not.toBe(0);
       const rgbImage = rgbDocument
         .getRoot()
         .listMaterials()
@@ -519,6 +571,15 @@ it.skipIf(!available)(
         expect(scalarPixels[channel]).toBeGreaterThan(10);
         expect(scalarPixels[channel]).toBeLessThan(16);
       }
+      const overlayImage = rgbDocument
+        .getRoot()
+        .listMaterials()
+        .find((entry) => entry.getName() === 'overlay')!
+        .getBaseColorTexture()!
+        .getImage()!;
+      const overlayPixels = await sharp(overlayImage).ensureAlpha().raw().toBuffer();
+      expect(overlayPixels[0]).toBeGreaterThan(228);
+      expect(overlayPixels[0]).toBeLessThan(234);
       expect(
         rgbDocument
           .getRoot()
@@ -538,11 +599,21 @@ it.skipIf(!available)(
         products: [
           {
             path: 'adjusted.mat',
-            textures: [{ guid: 'rgb', scale: [1, 1], offset: [0, 0] }],
-            texturePaths: [rgbMask],
-            textureSrgb: [false],
+            textures: [],
+            texturePaths: [],
+            textureSrgb: [],
             color: [1, 1, 1, 1],
-            adjustment: { op: 'saturation', amount: 0.5 },
+            adjustment: { op: 'contrast', amount: 0.5 },
+            products: [
+              {
+                path: 'adjusted.mat',
+                textures: [{ guid: 'rgb', scale: [1, 1], offset: [0, 0] }],
+                texturePaths: [rgbMask],
+                textureSrgb: [false],
+                color: [1, 1, 1, 1],
+                adjustment: { op: 'saturation', amount: 0.5 },
+              },
+            ],
           },
         ],
         adjustment: { op: 'power', amount: 2 },
@@ -561,13 +632,15 @@ it.skipIf(!available)(
       const components = [0, 128 / 255, 1];
       const luma = components[0]! * 0.2126729 + components[1]! * 0.7151522 + components[2]! * 0.072175;
       for (let index = 0; index < 3; index++) {
-        const linear = Math.min(1, (1.1 * (luma + 0.5 * (components[index]! - luma))) ** 2);
+        const saturation = luma + 0.5 * (components[index]! - luma);
+        const contrasted = (saturation - 0.5 ** 2.2) * 0.5 + 0.5 ** 2.2;
+        const linear = Math.min(1, (1.1 * contrasted) ** 2);
         const encoded = 255 * (linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055);
         expect(Math.abs(adjustedPixels[index]! - encoded)).toBeLessThan(3);
       }
       const missing = [structuredClone(plan[3]!)];
       missing[0]!.parentId = null;
-      missing[0]!.surfaces[0]!.textures[0]!.uv = 7;
+      missing[0]!.surfaces[0]!.textures[0]!.uv = 8;
       await expect(exportUnityAssembly(missing, join(root, 'missing.glb'))).rejects.toThrow(
         'missing or unsupported Unity UV channel',
       );
@@ -577,5 +650,5 @@ it.skipIf(!available)(
       await rm(root, { recursive: true, force: true });
     }
   },
-  600_000,
+  1_200_000,
 );

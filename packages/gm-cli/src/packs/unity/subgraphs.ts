@@ -156,6 +156,24 @@ export function inlineUnitySubgraphs(source: string, load: (guid: string) => str
           ) {
             docs.push({ m_ObjectId: constantId, m_Type: 'UnityEditor.ShaderGraph.Vector1Node', m_Value: slot.m_Value });
           } else if (
+            property?.m_Type === 'UnityEditor.ShaderGraph.Internal.BooleanShaderProperty' &&
+            slot?.m_Type === 'UnityEditor.ShaderGraph.BooleanMaterialSlot' &&
+            typeof slot.m_Value === 'boolean'
+          ) {
+            const propertyId = `${constantId}-property`;
+            if (docs.some((doc) => doc.m_ObjectId === propertyId)) throw new Error('duplicate Unity subgraph default');
+            docs.push({
+              m_ObjectId: propertyId,
+              m_Type: 'UnityEditor.ShaderGraph.Internal.BooleanShaderProperty',
+              m_DefaultReferenceName: propertyId,
+              m_Value: slot.m_Value,
+            });
+            docs.push({
+              m_ObjectId: constantId,
+              m_Type: 'UnityEditor.ShaderGraph.PropertyNode',
+              m_Property: { m_Id: propertyId },
+            });
+          } else if (
             property?.m_Type === 'UnityEditor.ShaderGraph.Internal.Vector2ShaderProperty' &&
             slot?.m_Type === 'UnityEditor.ShaderGraph.Vector2MaterialSlot'
           ) {
@@ -172,7 +190,10 @@ export function inlineUnitySubgraphs(source: string, load: (guid: string) => str
               m_Type: 'UnityEditor.ShaderGraph.Vector2Node',
               m_Value: { x: value.x, y: value.y },
             });
-          } else throw new Error('unsupported unconnected Unity subgraph input');
+          } else
+            throw new Error(
+              `unsupported unconnected Unity subgraph input ${String(property?.m_Type)} ${String(slot?.m_Type)}`,
+            );
           sourceEndpoint = { m_Node: { m_Id: constantId }, m_SlotId: 0 };
           inputByGuid.set(propertyGuid, sourceEndpoint);
         }

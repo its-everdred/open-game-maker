@@ -155,7 +155,7 @@ export async function planUnityAssembly(
       }
       const resolveSurface = (term: UnitySurface): PlannedUnitySurface => {
         const texturePaths = term.textures.map((texture) =>
-          file({ fileId: '0', guid: texture.guid }, ['.png', '.jpg', '.jpeg', '.tga', '.tif', '.tiff']),
+          file({ fileId: '0', guid: texture.guid }, ['.png', '.jpg', '.jpeg', '.tga', '.tif', '.tiff', '.bmp']),
         );
         const textureSrgb = texturePaths.map((texturePath) =>
           textureIsSrgb(readFileSync(`${texturePath}.meta`, 'utf8')),
@@ -185,12 +185,21 @@ export async function planUnityAssembly(
         if (
           !mask ||
           typeof mask === 'number' ||
+          'normal' in mask ||
+          'vertexColor' in mask ||
+          'noise' in mask ||
           'op' in mask ||
           ![0, 3].includes(mask.channel as number) ||
           mask.term.textures.length !== 1
         )
           throw new Error(`material ${path}: unsupported Unity opacity graph`);
-        const texturePath = file({ fileId: '0', guid: mask.term.textures[0]!.guid }, ['.png', '.tga', '.tif', '.tiff']);
+        const texturePath = file({ fileId: '0', guid: mask.term.textures[0]!.guid }, [
+          '.png',
+          '.tga',
+          '.tif',
+          '.tiff',
+          '.bmp',
+        ]);
         if (mask.channel === 3 && !textureHasSourceAlpha(readFileSync(`${texturePath}.meta`, 'utf8')))
           throw new Error(`material ${path}: unsupported Unity opacity texture alpha`);
       }

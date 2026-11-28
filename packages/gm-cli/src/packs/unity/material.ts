@@ -1,5 +1,6 @@
 import { parseUnityYaml } from './yaml.js';
 import type { ShaderGraphBase, ShaderGraphFactor } from './shadergraph.js';
+import type { WorldUv } from './world-uv.js';
 import { mapWeightExpression, type WeightExpression } from './weight-expression.js';
 
 export type UnityTexture = {
@@ -8,6 +9,7 @@ export type UnityTexture = {
   offset: [number, number];
   uv?: number;
   uvTransform?: [number, number, number, number, number, number];
+  worldUvTransform?: WorldUv;
 };
 export type UnitySurface = {
   textures: UnityTexture[];
@@ -18,7 +20,7 @@ export type UnitySurface = {
   doubleSided?: boolean;
   products?: UnitySurface[];
   scalarMask?: WeightExpression<UnitySurface>;
-  adjustment?: { op: 'power' | 'saturation'; amount: number };
+  adjustment?: { op: 'power' | 'saturation' | 'contrast'; amount: number };
   blends?: Array<{
     a: UnitySurface;
     b: UnitySurface;
@@ -156,6 +158,19 @@ export function parseUnitySurface(
         ))
     )
       throw new Error('invalid Unity texture UV transforms');
+    if (
+      term?.textureWorldTransforms &&
+      (term.textureWorldTransforms.length !== keys.length ||
+        term.textureWorldTransforms.some(
+          (transform, index) =>
+            transform &&
+            (transform.length !== 8 ||
+              transform.some((value) => !Number.isFinite(value)) ||
+              term.textureUvTransforms?.[index] ||
+              (term.textureChannels?.[index] ?? 0) !== 0),
+        ))
+    )
+      throw new Error('invalid Unity texture world UV transforms');
     const textures = keys.map((key, index) => {
       const env = object(environments.get(key));
       const reference = object(env.m_Texture);
@@ -163,6 +178,7 @@ export function parseUnitySurface(
       const scale = vector(env.m_Scale, ['x', 'y'], [1, 1]) as [number, number];
       const offset = vector(env.m_Offset, ['x', 'y'], [0, 0]) as [number, number];
       const transform = term?.textureUvTransforms?.[index];
+      const worldTransform = term?.textureWorldTransforms?.[index];
       if (transform && (scale[0] !== 1 || scale[1] !== 1 || offset[0] !== 0 || offset[1] !== 0))
         throw new Error('unsupported texture property transform with explicit Unity UV graph');
       return {
@@ -171,6 +187,7 @@ export function parseUnitySurface(
         offset,
         ...(term?.textureChannels?.[index] ? { uv: term.textureChannels[index] } : {}),
         ...(transform ? { uvTransform: transform.matrix } : {}),
+        ...(worldTransform ? { worldUvTransform: worldTransform } : {}),
       };
     });
     const color = (
@@ -187,8 +204,21 @@ export function parseUnitySurface(
     const scalarMask = term?.scalarMask !== undefined ? mapWeightExpression(term.scalarMask, resolve) : undefined;
     const validMask = (mask: WeightExpression<UnitySurface>): boolean => {
       if (typeof mask === 'number') return Number.isFinite(mask);
+      if ('normal' in mask) return Number.isInteger(mask.normal) && mask.normal >= 0 && mask.normal <= 2;
+      if ('vertexColor' in mask)
+        return Number.isInteger(mask.vertexColor) && mask.vertexColor >= 0 && mask.vertexColor <= 3;
+      if ('noise' in mask)
+        return (
+          Number.isInteger(mask.noise.uv) &&
+          mask.noise.uv >= 0 &&
+          mask.noise.uv <= 7 &&
+          Number.isFinite(mask.noise.scale)
+        );
       if ('op' in mask) return mask.args.every(validMask);
-      return Number.isInteger(mask.channel) && (mask.channel as number) >= 0 && (mask.channel as number) <= 3;
+      return (
+        mask.channel === 'rgb' ||
+        (Number.isInteger(mask.channel) && (mask.channel as number) >= 0 && (mask.channel as number) <= 3)
+      );
     };
     if (scalarMask !== undefined && !validMask(scalarMask)) throw new Error('invalid Unity scalar mask channel');
     const adjustment = term?.adjustment
@@ -205,12 +235,16 @@ export function parseUnitySurface(
       throw new Error(`unsupported Unity color adjustment amount: ${adjustment.op}=${String(adjustment.amount)}`);
     const unsafeMask = (mask: WeightExpression<UnitySurface>): boolean => {
       if (typeof mask === 'number') return mask < 0;
+      if ('normal' in mask) return true;
+      if ('vertexColor' in mask) return true;
+      if ('noise' in mask) return true;
       if ('op' in mask) return !['add', 'multiply'].includes(mask.op) || mask.args.some(unsafeMask);
       return Boolean(mask.invert || containsBlend(mask.term));
     };
     const containsBlend = (surface: UnitySurface): boolean =>
       Boolean(
         surface.blends?.length ||
+        (surface.adjustment?.op === 'contrast' && surface.adjustment.amount > 1) ||
         surface.products?.some(containsBlend) ||
         (surface.scalarMask !== undefined && unsafeMask(surface.scalarMask)),
       );

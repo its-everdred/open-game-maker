@@ -1,3 +1,4 @@
+import { selectUvBranch } from './uv-branch.js';
 type Obj = Record<string, unknown>;
 type Edge = { node: string; inputSlot: number; outputSlot: number };
 type Component = [number, number, number];
@@ -106,6 +107,8 @@ export function compileUvAffine(
       return found ? resolve(found, next) : inputDefault(node, slot);
     };
     const type = node.m_Type;
+    if (type === 'UnityEditor.ShaderGraph.BranchNode' && edge.outputSlot === 3)
+      return input(selectUvBranch(linked, byId, incoming, floats));
     if (
       type === 'UnityEditor.ShaderGraph.UvVector2Conversion' &&
       edge.outputSlot === 0 &&

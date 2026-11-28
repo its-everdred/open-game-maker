@@ -1,5 +1,6 @@
 import { compileWeightExpression, type WeightExpression } from './weight-expression.js';
 import { compileUvAffine, type UvAffine } from './uv-affine.js';
+import { compileWorldUv, type WorldUv } from './world-uv.js';
 import { createScalarFactor, hasBlackRgbFallback } from './color-factor.js';
 
 type GraphObject = Record<string, unknown>;
@@ -51,10 +52,11 @@ export type ShaderGraphBase = {
   textures: string[];
   textureChannels?: number[];
   textureUvTransforms?: Array<UvAffine | null>;
+  textureWorldTransforms?: Array<WorldUv | null>;
   factors: ShaderGraphFactor[];
   products?: ShaderGraphBase[];
   scalarMask?: WeightExpression<ShaderGraphBase>;
-  adjustment?: { op: 'power' | 'saturation'; amount: ShaderGraphFactor };
+  adjustment?: { op: 'power' | 'saturation' | 'contrast'; amount: ShaderGraphFactor };
   blends?: Array<{
     a: ShaderGraphBase;
     b: ShaderGraphBase;
@@ -68,6 +70,7 @@ function graphOutputSlot(node: GraphObject | undefined): number {
     case 'UnityEditor.ShaderGraph.PowerNode':
     case 'UnityEditor.ShaderGraph.SaturationNode':
     case 'UnityEditor.ShaderGraph.ContrastNode':
+    case 'UnityEditor.ShaderGraph.BlendNode':
       return 2;
     case 'UnityEditor.ShaderGraph.BranchNode':
     case 'UnityEditor.ShaderGraph.LerpNode':
@@ -131,6 +134,26 @@ export function shaderGraphBase(
       const source = byId.get(input.node);
       if (source?.m_Type === 'UnityEditor.ShaderGraph.SplitNode')
         return { textures: [], factors: [scalarFactor(input)] };
+      if (
+        [
+          'UnityEditor.ShaderGraph.ClampNode',
+          'UnityEditor.ShaderGraph.AddNode',
+          'UnityEditor.ShaderGraph.SubtractNode',
+        ].includes(String(source?.m_Type))
+      )
+        return {
+          textures: [],
+          factors: [],
+          scalarMask: compileWeightExpression(
+            { ...input, inputSlot: 0 },
+            byId,
+            incoming,
+            floats,
+            (sample, seen, channel) => blackMask(sample, channel) ?? visit(sample, seen),
+            new Set(ancestors).add(id),
+            true,
+          ),
+        };
       if (source?.m_Type === 'UnityEditor.ShaderGraph.SampleTexture2DNode' && [4, 5, 6, 7].includes(input.outputSlot)) {
         if (source.m_TextureType !== undefined && source.m_TextureType !== 0)
           throw new Error('unsupported Unity texture sample type');
@@ -179,6 +202,41 @@ export function shaderGraphBase(
         factors: [{ key: '', kind: 'constant', defaultValue: color as [number, number, number, number] }],
       };
     }
+    if (type === 'UnityEditor.ShaderGraph.BlendNode') {
+      if (
+        (node.m_BlendMode !== 15 && node.m_BlendMode !== 19) ||
+        inputs.length !== 2 ||
+        !inputs.some((input) => input.inputSlot === 0) ||
+        !inputs.some((input) => input.inputSlot === 1)
+      )
+        throw new Error('unsupported Unity color blend');
+      const slots = Array.isArray(node.m_Slots) ? node.m_Slots.map((slot) => byId.get(nodeId(slot))) : [];
+      const amount = slots.filter((slot) => slot?.m_Id === 3 && slot.m_SlotType === 0);
+      if (amount.length !== 1 || typeof amount[0]!.m_Value !== 'number' || !Number.isFinite(amount[0]!.m_Value))
+        throw new Error('unsupported Unity color blend amount');
+      const a: WeightExpression<ShaderGraphBase> = {
+        term: resolveSource(inputs.find((input) => input.inputSlot === 0)!),
+        channel: 'rgb',
+      };
+      const b: WeightExpression<ShaderGraphBase> = {
+        term: resolveSource(inputs.find((input) => input.inputSlot === 1)!),
+        channel: 'rgb',
+      };
+      const result: WeightExpression<ShaderGraphBase> = {
+        op: node.m_BlendMode === 15 ? 'overlay' : 'subtract',
+        args: [a, b],
+      };
+      if (amount[0]!.m_Value === 0) return { textures: [], factors: [], scalarMask: a };
+      if (amount[0]!.m_Value === 1) return { textures: [], factors: [], scalarMask: result };
+      return {
+        textures: [],
+        factors: [],
+        scalarMask: {
+          op: 'add',
+          args: [a, { op: 'multiply', args: [{ op: 'subtract', args: [result, a] }, amount[0]!.m_Value as number] }],
+        },
+      };
+    }
     if (
       type === 'UnityEditor.ShaderGraph.PowerNode' ||
       type === 'UnityEditor.ShaderGraph.SaturationNode' ||
@@ -192,18 +250,17 @@ export function shaderGraphBase(
         throw new Error('unsupported Unity color adjustment');
       const source = inputs.find((input) => input.inputSlot === 0)!;
       const amount = inputs.find((input) => input.inputSlot === 1)!;
-      if (type === 'UnityEditor.ShaderGraph.ContrastNode') {
-        const factor = scalarFactor(amount);
-        if (factor.kind !== 'constant' || factor.defaultValue !== 1)
-          throw new Error('unsupported Unity color contrast');
-        return resolveSource(source);
-      }
       return {
         textures: [],
         factors: [],
         products: [resolveSource(source)],
         adjustment: {
-          op: type === 'UnityEditor.ShaderGraph.PowerNode' ? 'power' : 'saturation',
+          op:
+            type === 'UnityEditor.ShaderGraph.PowerNode'
+              ? 'power'
+              : type === 'UnityEditor.ShaderGraph.SaturationNode'
+                ? 'saturation'
+                : 'contrast',
           amount: scalarFactor(amount),
         },
       };
@@ -433,11 +490,25 @@ export function shaderGraphBase(
       const uv = inputs.find((input) => input.inputSlot === 2);
       let uvChannel = 0;
       let uvTransform: UvAffine | undefined;
+      let worldTransform: WorldUv | undefined;
       if (uv) {
         const uvNode = byId.get(uv.node);
         if (uvNode?.m_Type !== 'UnityEditor.ShaderGraph.UVNode') {
-          uvTransform = compileUvAffine(uv, byId, incoming, floats, colors, new Set(ancestors).add(id));
-          uvChannel = uvTransform.channel;
+          try {
+            uvTransform = compileUvAffine(uv, byId, incoming, floats, colors, new Set(ancestors).add(id));
+            uvChannel = uvTransform.channel;
+          } catch (error) {
+            try {
+              worldTransform = compileWorldUv(uv, byId, incoming, floats, colors, new Set(ancestors).add(id));
+            } catch (worldError) {
+              if (
+                error instanceof Error &&
+                error.message.includes('unsupported Unity UV node UnityEditor.ShaderGraph.PositionNode')
+              )
+                throw worldError;
+              throw error;
+            }
+          }
         } else if (
           uv.outputSlot !== 0 ||
           (uvNode.m_OutputChannel !== undefined &&
@@ -455,6 +526,7 @@ export function shaderGraphBase(
           factors: [],
           ...(uvChannel ? { textureChannels: [uvChannel] } : {}),
           ...(uvTransform ? { textureUvTransforms: [uvTransform] } : {}),
+          ...(worldTransform ? { textureWorldTransforms: [worldTransform] } : {}),
         };
       const textureNode = byId.get(texture.node);
       if (textureNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode')
@@ -472,6 +544,7 @@ export function shaderGraphBase(
         factors: [],
         ...(uvChannel ? { textureChannels: [uvChannel] } : {}),
         ...(uvTransform ? { textureUvTransforms: [uvTransform] } : {}),
+        ...(worldTransform ? { textureWorldTransforms: [worldTransform] } : {}),
       };
     }
     if (type === 'UnityEditor.ShaderGraph.PropertyNode' && inputs.length === 0) {
@@ -540,9 +613,14 @@ export function shaderGraphBase(
         ...(result.textureUvTransforms ?? result.textures.map(() => null)),
         ...(term.textureUvTransforms ?? term.textures.map(() => null)),
       ];
+      const worldTransforms = [
+        ...(result.textureWorldTransforms ?? result.textures.map(() => null)),
+        ...(term.textureWorldTransforms ?? term.textures.map(() => null)),
+      ];
       result.textures.push(...term.textures);
       if (channels.some((channel) => channel !== 0)) result.textureChannels = channels;
       if (transforms.some(Boolean)) result.textureUvTransforms = transforms;
+      if (worldTransforms.some(Boolean)) result.textureWorldTransforms = worldTransforms;
       result.factors.push(...term.factors);
       if (term.blends) (result.blends ??= []).push(...term.blends);
     }

@@ -1,16 +1,23 @@
 import type { ShaderGraphBase } from './shadergraph.js';
+import { selectUvBranch } from './uv-branch.js';
 
 type Obj = Record<string, unknown>;
 type Edge = { node: string; inputSlot: number; outputSlot: number };
 export type WeightExpression<T> =
   | number
+  | { normal: 0 | 1 | 2 }
+  | { vertexColor: 0 | 1 | 2 | 3 }
+  | { noise: { uv: number; scale: number } }
   | { term: T; channel: number | 'rgb'; invert?: boolean }
   | {
-      op: 'add' | 'subtract' | 'multiply' | 'divide' | 'clamp' | 'contrast' | 'invert';
+      op: 'add' | 'subtract' | 'multiply' | 'divide' | 'clamp' | 'contrast' | 'invert' | 'absolute' | 'overlay';
       args: WeightExpression<T>[];
     };
 export function mapWeightExpression<A, B>(value: WeightExpression<A>, map: (term: A) => B): WeightExpression<B> {
   if (typeof value === 'number') return value;
+  if ('normal' in value) return value;
+  if ('vertexColor' in value) return value;
+  if ('noise' in value) return value;
   if ('op' in value) return { ...value, args: value.args.map((arg) => mapWeightExpression(arg, map)) };
   return { ...value, term: map(value.term) };
 }
@@ -65,6 +72,13 @@ export function compileWeightExpression(
     if (!node) throw new Error('missing Unity scalar node');
     const next = new Set(seen).add(edge.node);
     const linked = incoming.get(edge.node) ?? [];
+    if (node.m_Type === 'UnityEditor.ShaderGraph.BranchNode' && edge.outputSlot === 3) {
+      if (new Set(linked.map((entry) => entry.inputSlot)).size !== linked.length)
+        throw new Error('ambiguous Unity scalar branch');
+      const chosen = selectUvBranch(linked, byId, incoming, floats);
+      const input = linked.find((entry) => entry.inputSlot === chosen);
+      return input ? resolve(input, next, narrow, vectorAllowed) : slotDefault(node, chosen);
+    }
     if (
       node.m_Type === 'UnityEditor.ShaderGraph.UnsupportedScalarConversion' &&
       edge.outputSlot === 0 &&
@@ -87,12 +101,14 @@ export function compileWeightExpression(
     if (node.m_Type === 'UnityEditor.ShaderGraph.PropertyNode' && edge.outputSlot === 0 && linked.length === 0) {
       const property = byId.get(ref(node.m_Property));
       const key = property?.m_OverrideReferenceName || property?.m_DefaultReferenceName;
+      if (vectorAllowed && property?.m_Type === 'UnityEditor.ShaderGraph.Internal.ColorShaderProperty')
+        return { term: visitTexture(edge.node, seen, 'rgb'), channel: 'rgb' };
       if (
         property?.m_Type !== 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty' ||
         typeof key !== 'string' ||
         !key
       )
-        throw new Error('unsupported Unity scalar property');
+        throw new Error(`unsupported Unity scalar property ${String(property?.m_Type)}`);
       return numeric(floats.has(key) ? floats.get(key) : property.m_Value);
     }
     if (node.m_Type === 'UnityEditor.ShaderGraph.Vector1Node' && edge.outputSlot === 0) {
@@ -104,10 +120,78 @@ export function compileWeightExpression(
           ? slotDefault(node, 1)
           : numeric(node.m_Value);
     }
+    if (node.m_Type === 'UnityEditor.ShaderGraph.RemapNode' && edge.outputSlot === 3) {
+      if (linked.some((entry) => entry.inputSlot !== 0) || linked.length > 1 || !Array.isArray(node.m_Slots))
+        throw new Error('unsupported Unity remap range');
+      const range = (id: number): [number, number] => {
+        const slots = (node.m_Slots as unknown[])
+          .map((entry) => byId.get(ref(entry)))
+          .filter((slot) => slot?.m_Id === id && slot.m_SlotType === 0);
+        if (slots.length !== 1) throw new Error('invalid Unity remap range');
+        const value = object(slots[0]!.m_Value);
+        return [numeric(value.x), numeric(value.y)];
+      };
+      const [inMin, inMax] = range(1),
+        [outMin, outMax] = range(2);
+      if (inMin === inMax) throw new Error('unsupported Unity remap range');
+      const input = linked.length ? resolve(linked[0]!, next, narrow, vectorAllowed) : slotDefault(node, 0);
+      return {
+        op: 'add',
+        args: [
+          { op: 'multiply', args: [{ op: 'subtract', args: [input, inMin] }, (outMax - outMin) / (inMax - inMin)] },
+          outMin,
+        ],
+      };
+    }
+    if (node.m_Type === 'UnityEditor.ShaderGraph.NoiseNode' && node.m_SGVersion === 0 && edge.outputSlot === 2) {
+      if (linked.some((entry) => entry.inputSlot !== 1) || linked.length > 1 || !Array.isArray(node.m_Slots))
+        throw new Error('unsupported Unity noise inputs');
+      const uvSlots = node.m_Slots
+        .map((entry) => byId.get(ref(entry)))
+        .filter((slot) => slot?.m_Id === 0 && slot.m_SlotType === 0);
+      const uv = uvSlots[0]?.m_Channel;
+      const scale = linked.length ? resolve(linked[0]!, next, false, false) : slotDefault(node, 1);
+      if (
+        uvSlots.length !== 1 ||
+        !Number.isInteger(uv) ||
+        Number(uv) < 0 ||
+        Number(uv) > 7 ||
+        typeof scale !== 'number' ||
+        !Number.isFinite(scale)
+      )
+        throw new Error('unsupported Unity noise inputs');
+      return { noise: { uv: Number(uv), scale } };
+    }
+    if (
+      node.m_Type === 'UnityEditor.ShaderGraph.SplitNode' &&
+      edge.outputSlot >= 1 &&
+      edge.outputSlot <= 4 &&
+      linked.length === 1 &&
+      linked[0]!.inputSlot === 0
+    ) {
+      const source = byId.get(linked[0]!.node);
+      if (
+        source?.m_Type === 'UnityEditor.ShaderGraph.VertexColorNode' &&
+        linked[0]!.outputSlot === 0 &&
+        (incoming.get(linked[0]!.node) ?? []).length === 0
+      )
+        return { vertexColor: (edge.outputSlot - 1) as 0 | 1 | 2 | 3 };
+      if (
+        source?.m_Type === 'UnityEditor.ShaderGraph.NormalVectorNode' &&
+        source.m_Space === 2 &&
+        linked[0]!.outputSlot === 0 &&
+        (incoming.get(linked[0]!.node) ?? []).length === 0 &&
+        edge.outputSlot <= 3
+      )
+        return { normal: (edge.outputSlot - 1) as 0 | 1 | 2 };
+      if (edge.outputSlot === 1) return resolve(linked[0]!, next, true, false);
+      throw new Error(`unsupported Unity scalar split ${edge.node} channel ${edge.outputSlot}`);
+    }
     const types: Record<
       string,
       {
-        op: 'add' | 'subtract' | 'multiply' | 'divide' | 'clamp' | 'contrast' | 'invert' | 'lerp';
+        op:
+          'add' | 'subtract' | 'multiply' | 'divide' | 'clamp' | 'contrast' | 'invert' | 'absolute' | 'lerp' | 'blend';
         output: number;
         inputs: number[];
       }
@@ -119,7 +203,9 @@ export function compileWeightExpression(
       'UnityEditor.ShaderGraph.ClampNode': { op: 'clamp', output: 3, inputs: [0, 1, 2] },
       'UnityEditor.ShaderGraph.ContrastNode': { op: 'contrast', output: 2, inputs: [0, 1] },
       'UnityEditor.ShaderGraph.OneMinusNode': { op: 'invert', output: 1, inputs: [0] },
+      'UnityEditor.ShaderGraph.AbsoluteNode': { op: 'absolute', output: 1, inputs: [0] },
       'UnityEditor.ShaderGraph.LerpNode': { op: 'lerp', output: 3, inputs: [0, 1, 2] },
+      'UnityEditor.ShaderGraph.BlendNode': { op: 'blend', output: 2, inputs: [0, 1, 3] },
     };
     const spec = typeof node.m_Type === 'string' ? types[node.m_Type] : undefined;
     if (
@@ -142,6 +228,18 @@ export function compileWeightExpression(
         descriptor?.m_Type !== 'UnityEditor.ShaderGraph.Vector2MaterialSlot';
       return input ? resolve(input, next, narrow, allowsRgb) : slotDefault(node, slot);
     });
+    if (spec.op === 'blend') {
+      if (node.m_BlendMode !== 15 && node.m_BlendMode !== 19) throw new Error('unsupported Unity blend mode');
+      const [base, blend, amount] = args;
+      const result: WeightExpression<ShaderGraphBase> = {
+        op: node.m_BlendMode === 15 ? 'overlay' : 'subtract',
+        args: [base!, blend!],
+      };
+      return {
+        op: 'add',
+        args: [base!, { op: 'multiply', args: [{ op: 'subtract', args: [result, base!] }, amount!] }],
+      };
+    }
     if (spec.op === 'lerp') {
       const [a, b, amount] = args;
       return { op: 'add', args: [a!, { op: 'multiply', args: [{ op: 'subtract', args: [b!, a!] }, amount!] }] };

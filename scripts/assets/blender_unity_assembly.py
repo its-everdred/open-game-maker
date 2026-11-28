@@ -14,7 +14,7 @@ import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from blender_unity_bake import bake_mesh, requires_mesh_bake
+from blender_unity_bake import bake_mesh, requires_mesh_bake, has_world_coordinates, resolve_uv_channel
 
 
 # Unity's left-handed Y-up coordinates become glTF's right-handed Y-up coordinates;
@@ -35,9 +35,7 @@ def transform(node):
 
 def validate_texture_uv(texture, uv_names):
     channel = texture.get("uv", 0)
-    if type(channel) is not int or not 0 <= channel <= 7 or channel >= len(uv_names):
-        raise ValueError("missing or unsupported Unity UV channel")
-    return channel
+    return resolve_uv_channel(channel, uv_names)
 
 
 def connect_texture_uv(material, image_node, texture, uv_names):
@@ -143,6 +141,11 @@ def build_blended_material(material, surface, uv_names):
     def arithmetic(op, args):
         if op == "invert" and len(args) == 1:
             return 1 - args[0]
+        if op == "absolute" and len(args) == 1:
+            return np.abs(args[0])
+        if op == "overlay" and len(args) == 2:
+            base, blend = args
+            return np.where(np.asarray(base) <= 0.5, 2 * base * blend, 1 - 2 * (1 - base) * (1 - blend))
         if op == "add" and len(args) == 2:
             return args[0] + args[1]
         if op == "subtract" and len(args) == 2:
@@ -191,6 +194,9 @@ def build_blended_material(material, surface, uv_names):
         elif adjustment["op"] == "saturation" and 0 <= amount <= 1:
             luma = np.sum(rgb * np.asarray([0.2126729, 0.7151522, 0.0721750]), axis=-1, keepdims=True)
             result[..., :3] = luma + amount * (rgb - luma)
+        elif adjustment["op"] == "contrast" and amount >= 0:
+            midpoint = 0.5 ** 2.2
+            result[..., :3] = (rgb - midpoint) * amount + midpoint
         else:
             raise ValueError("unsupported Unity color adjustment")
         return result
@@ -363,15 +369,21 @@ def main():
             if len(surfaces) != len(mesh.materials):
                 raise ValueError(f"material slot count differs for {model['name']}")
             mixed_uv = requires_mesh_bake(surfaces)
-            bake_key = json.dumps([model, surfaces], sort_keys=True) if mixed_uv else None
-            if bake_key in baked_meshes:
-                bpy.data.meshes.remove(mesh)
-                mesh = baked_meshes[bake_key].copy()
             obj = bpy.data.objects.new(f"{reserved}mesh_{count}", mesh)
             names.append((obj, node["name"] or model["name"]))
             bpy.context.scene.collection.objects.link(obj)
             obj.parent = objects[node["transformId"]]
             obj.matrix_basis = matrix
+            if mixed_uv and has_world_coordinates(surfaces):
+                bpy.context.view_layer.update()
+                world_matrix = [list(row) for row in obj.matrix_world]
+            else:
+                world_matrix = None
+            bake_key = json.dumps([model, surfaces, world_matrix], sort_keys=True) if mixed_uv else None
+            if bake_key in baked_meshes:
+                obj.data = baked_meshes[bake_key].copy()
+                bpy.data.meshes.remove(mesh)
+                mesh = obj.data
             if mixed_uv and bake_key not in baked_meshes:
                 bake_mesh(obj, surfaces)
                 baked_meshes[bake_key] = mesh

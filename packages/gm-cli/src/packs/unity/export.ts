@@ -25,6 +25,7 @@ export async function exportUnityAssembly(
       'blender',
       [
         '--background',
+        '--quiet',
         '--factory-startup',
         '--python-use-system-env',
         '--python-exit-code',
@@ -35,7 +36,9 @@ export async function exportUnityAssembly(
         planFile,
         resultFile,
       ],
-      { env: environment, timeout: 20 * 60_000, maxBuffer: 2 * 1024 * 1024 },
+      // Full buildings may need many serialized mesh bakes. Do not kill an
+      // active conversion based on a fixed wall-clock limit.
+      { env: environment, maxBuffer: 64 * 1024 * 1024 },
     );
     if (!(await stat(resultFile)).size) throw new Error('Unity exporter wrote an empty GLB');
     await link(resultFile, output);
