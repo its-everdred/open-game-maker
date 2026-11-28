@@ -29,8 +29,8 @@ anchor elements to corners and edges, never to absolute pixels of one device. Re
 including rotation.
 
 Budget the HUD to at most 25% of the screen and keep the centre clear for play. The host's Pause button sits in its play
-bar outside the game, so the top corners are the game's; on touch screens the host's overlay fills the lower-left
-and lower-right corners. Put status top-left, score top-centre, and prompts bottom-centre. Hide what does
+bar outside the game. The host's Back and Menu occupy the top-left and top-right; leave those corners clear. On touch
+screens the host's overlay fills the lower-left and lower-right corners. Put score top-centre and prompts bottom-centre. Hide what does
 not matter in the current state.
 
 On phones the host's on-screen buttons must never cover important content. Keep a 140 × 200 CSS px zone clear in each
