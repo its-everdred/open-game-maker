@@ -34,4 +34,6 @@ for r in open-game-maker open-games; do gh issue list -R its-everdred/$r --label
   c=$(gh issue view $i -R its-everdred/$r --json comments -q '[.comments[]|select(.body|test("no-op turn limit|orphaned in-progress claim"))]|length' 2>/dev/null); [ "${c:-0}" -ge 2 ] && echo "REPEAT-ERROR $r#$i $c no-op/orphan events"; done; done
 # 7. Post-deploy checks failing (prod broken). Any failure in the window is P0 (11-28: no game served for 75 min after a gate merged).
 [ -n "$S" ] && [ -f "$S/aiur-replies.md" ] && { since=$(date -u -d "-$H hours" +%FT%H:%M); f=$(grep -E 'qa-game-play failed|cards-check|card check' "$S/aiur-replies.md" | awk -v s="$since" '$1>=s' | wc -l); [ "$f" -gt 0 ] && echo "P0-POSTDEPLOY $f post-deploy check failures in ${H}h (aiur-replies.md)"; }
+# 8. Choppy review media: GIFs Kevin sees under 20 fps (11-28: PC GIFs were 8 fps after the "30 fps" fix, unseen for a day).
+c=0; for g in $(find "$REV/pack-renders" -name '*.gif' -mmin -$M 2>/dev/null | head -20); do r=$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of csv=p=0 "$g" 2>/dev/null); [ -n "$r" ] && awk -v r="$r" 'BEGIN{split(r,a,"/"); exit !(a[2]>0 && a[1]/a[2]<20)}' && c=$((c+1)); done; [ $c -gt 0 ] && echo "LOW-FPS-MEDIA $c pack-render GIFs under 20 fps (PC source; page rebuilds from MP4)"
 exit 0
