@@ -2,7 +2,8 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
 import { AiurConfigError, AiurHttpError, AiurUnavailableError, type AiurClient } from '@ogm/aiur-client';
-import { JOB_STAGE_WORDS } from '@ogm/contracts';
+import { readDaemonLabelPrefix, withJobDispatchLock } from '@ogm/builder';
+import { JOB_STAGE_WORDS, JobPlan } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { authorize, type Action } from '@ogm/policy';
 import { and, eq } from 'drizzle-orm';
@@ -95,7 +96,7 @@ function cancelled(deps: AppDeps, row: JobRow, now: () => Date) {
           { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults: defaults(deps), now },
           row.id,
           'cancelled',
-          row.aiurIssueNumber === null ? {} : { deferRelease: true },
+          row.aiurIssueNumber === null || row.state === 'queued' ? {} : { deferRelease: true },
         );
   return { ...job, stage: 'cancelled' as const, stageText: JOB_STAGE_WORDS.cancelled };
 }
@@ -121,23 +122,65 @@ export function createControlsRoutes(services: ControlsServices): Hono<ApiBindin
   const now = services.now ?? (() => new Date());
 
   return new Hono<ApiBindings>()
-    .post('/:id/cancel', async (c) => {
-      const { row } = loadAuthorized(c, 'job.cancel');
-      const deps = c.get('deps');
-      if (row.state === 'cancelled') return c.json(cancelled(deps, row, now));
-      if (row.state === 'done' || row.state === 'failed') throw new HttpError(409, 'job_not_active');
-      if (row.aiurRepo === null || row.aiurIssueNumber === null) {
-        if (row.state !== 'queued' && row.state !== 'admitted') throw new HttpError(409, 'job_not_filed');
-        return c.json(cancelBeforeFiling(deps, row.id, (current) => cancelled(deps, current, now)));
-      }
+    .post('/:id/cancel', async (c) =>
+      withJobDispatchLock(c.req.param('id'), async () => {
+        const { row, game } = loadAuthorized(c, 'job.cancel');
+        const deps = c.get('deps');
+        if (row.state === 'cancelled') return c.json(cancelled(deps, row, now));
+        if (row.state === 'done' || row.state === 'failed') throw new HttpError(409, 'job_not_active');
+        if (row.state === 'queued' && (row.idempotencyKey ?? '').startsWith('planner:')) {
+          const ticketKey = JobPlan.parse(JSON.parse(row.plan)).tickets[0]?.key;
+          if (!ticketKey) throw new HttpError(409, 'job_not_filed');
+          const recorded = deps.db
+            .select()
+            .from(schema.jobTickets)
+            .where(and(eq(schema.jobTickets.jobId, row.id), eq(schema.jobTickets.key, ticketKey)))
+            .get();
+          const parentMatch = /^planner:(j_[A-Za-z0-9-]+):[A-Za-z0-9_-]{1,60}$/.exec(row.idempotencyKey ?? '');
+          const parentTicket = parentMatch
+            ? (deps.db
+                .select()
+                .from(schema.jobTickets)
+                .where(and(eq(schema.jobTickets.jobId, parentMatch[1]!), eq(schema.jobTickets.key, 'new-game-plan')))
+                .get() ??
+              deps.db
+                .select()
+                .from(schema.jobTickets)
+                .where(and(eq(schema.jobTickets.jobId, parentMatch[1]!), eq(schema.jobTickets.key, 'new-game')))
+                .get())
+            : undefined;
+          const repo = recorded?.repo ?? row.aiurRepo ?? parentTicket?.repo;
+          if (!repo) throw new HttpError(503, 'cancel_fallback_failed');
+          const issues = services.issues(deps);
+          try {
+            if (!issues) throw new Error('issue state writer unavailable');
+            const issue = recorded
+              ? { number: recorded.issueNumber }
+              : row.aiurIssueNumber
+                ? { number: row.aiurIssueNumber }
+                : await issues.findByMarkers?.(repo, row.id, ticketKey);
+            if (!recorded && row.aiurIssueNumber === null && !issues.findByMarkers)
+              throw new Error('issue marker lookup unavailable');
+            if (issue) {
+              if (!issues.close) throw new Error('issue closer unavailable');
+              await issues.close(repo, issue.number);
+            }
+          } catch {
+            throw new HttpError(503, 'cancel_fallback_failed');
+          }
+          return c.json(cancelled(deps, row, now));
+        }
+        if (row.aiurRepo === null || row.aiurIssueNumber === null) {
+          if (row.state !== 'queued' && row.state !== 'admitted') throw new HttpError(409, 'job_not_filed');
+          return c.json(cancelBeforeFiling(deps, row.id, (current) => cancelled(deps, current, now)));
+        }
 
-      const linkedTickets = deps.db.select().from(schema.jobTickets).where(eq(schema.jobTickets.jobId, row.id)).all();
-      if (linkedTickets.length > 1) {
-        const client = await services.daemonFor(deps, row.gameId);
-        for (const linked of linkedTickets) {
-          if (linked.terminalState !== null) continue;
-          if (client === null) throw new HttpError(503, 'cancel_unconfirmed');
-          else {
+        const linkedTickets = deps.db.select().from(schema.jobTickets).where(eq(schema.jobTickets.jobId, row.id)).all();
+        if (linkedTickets.length > 1) {
+          const client = await services.daemonFor(deps, row.gameId);
+          for (const linked of linkedTickets) {
+            if (linked.terminalState !== null) continue;
+            if (client === null) throw new HttpError(503, 'cancel_unconfirmed');
             let status = 'still_running';
             let confirmed = false;
             for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -149,9 +192,8 @@ export function createControlsRoutes(services: ControlsServices): Hono<ApiBindin
                   break;
                 }
               } catch (error) {
-                if (error instanceof AiurHttpError && error.status === 409 && error.code === 'agent_not_running') {
+                if (error instanceof AiurHttpError && error.status === 409 && error.code === 'agent_not_running')
                   throw new HttpError(503, 'cancel_unconfirmed');
-                }
                 if (
                   error instanceof AiurHttpError &&
                   error.status === 409 &&
@@ -166,46 +208,78 @@ export function createControlsRoutes(services: ControlsServices): Hono<ApiBindin
               deps.log({ event: 'admin-alert', code: 'cancel_unconfirmed', jobId: row.id, status });
               throw new HttpError(503, 'cancel_unconfirmed', undefined, { status });
             }
+            deps.db
+              .update(schema.jobTickets)
+              .set({ terminalState: 'cancelled' })
+              .where(and(eq(schema.jobTickets.jobId, row.id), eq(schema.jobTickets.issueNumber, linked.issueNumber)))
+              .run();
           }
-          deps.db
-            .update(schema.jobTickets)
-            .set({ terminalState: 'cancelled' })
-            .where(and(eq(schema.jobTickets.jobId, row.id), eq(schema.jobTickets.issueNumber, linked.issueNumber)))
-            .run();
+          const current = findJobRow(deps.db, row.id);
+          if (current.state === 'done' || current.state === 'failed') throw new HttpError(409, 'job_not_active');
+          return c.json(cancelled(deps, current, now));
         }
-        const current = findJobRow(deps.db, row.id);
-        if (current.state === 'done' || current.state === 'failed') throw new HttpError(409, 'job_not_active');
-        return c.json(cancelled(deps, current, now));
-      }
 
-      const filed = ticket(row);
-      const client = await services.daemonFor(deps, row.gameId);
-      if (client === null) throw new HttpError(503, 'cancel_unconfirmed');
-
-      let status = 'still_running';
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const filed = ticket(row);
+        const labelFallback = async () => {
+          try {
+            const issues = services.issues(deps);
+            if (issues === null) throw new Error('issue state writer unavailable');
+            const daemon = daemonRowForGame(deps.db, row.gameId);
+            if (
+              !daemon &&
+              (row.kind === 'new_game' || (row.idempotencyKey ?? '').startsWith('planner:')) &&
+              row.state !== 'queued'
+            )
+              throw new Error('daemon label prefix unavailable');
+            const prefix = daemon ? await readDaemonLabelPrefix(daemon.checkoutPath) : (game.slug ?? 'agent');
+            if (!prefix) throw new Error('daemon label prefix unavailable');
+            await issues.setStateLabel(filed.repo, filed.issue, 'cancelled', prefix);
+          } catch (error) {
+            deps.log({
+              event: 'admin-alert',
+              code: 'cancel_fallback_failed',
+              jobId: row.id,
+              error: (error as Error).name,
+            });
+            throw new HttpError(503, 'cancel_fallback_failed');
+          }
+          return c.json(cancelled(deps, row, now));
+        };
+        if (row.state === 'queued') return labelFallback();
+        let client: AiurClient | null;
         try {
-          const result = await client.cancel(String(filed.issue));
-          status = result.process.status;
-          if (status === 'exited') return c.json(cancelled(deps, row, now));
+          client = await services.daemonFor(deps, row.gameId);
         } catch (error) {
-          if (error instanceof AiurHttpError && error.status === 409 && error.code === 'agent_not_running') {
-            throw new HttpError(503, 'cancel_unconfirmed');
-          }
-          if (
-            error instanceof AiurHttpError &&
-            error.status === 409 &&
-            (error.code === 'still_running' || error.code === 'kill_failed')
-          ) {
-            status = error.code; // retry like a non-exited 200
-          } else controlError(error);
+          if (error instanceof HttpError && error.code === 'daemon_credentials_unavailable') return labelFallback();
+          throw error;
         }
-        if (attempt < 2) await sleep(5_000);
-      }
+        if (client === null) return labelFallback();
 
-      deps.log({ event: 'admin-alert', code: 'cancel_unconfirmed', jobId: row.id, status });
-      throw new HttpError(503, 'cancel_unconfirmed', undefined, { status });
-    })
+        let status = 'still_running';
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const result = await client.cancel(String(filed.issue));
+            status = result.process.status;
+            if (status === 'exited') return c.json(cancelled(deps, row, now));
+          } catch (error) {
+            if (error instanceof AiurHttpError && error.status === 409 && error.code === 'agent_not_running') {
+              return labelFallback();
+            }
+            if (
+              error instanceof AiurHttpError &&
+              error.status === 409 &&
+              (error.code === 'still_running' || error.code === 'kill_failed')
+            ) {
+              status = error.code; // retry like a non-exited 200
+            } else controlError(error);
+          }
+          if (attempt < 2) await sleep(5_000);
+        }
+
+        deps.log({ event: 'admin-alert', code: 'cancel_unconfirmed', jobId: row.id, status });
+        throw new HttpError(503, 'cancel_unconfirmed', undefined, { status });
+      }),
+    )
     .post('/:id/pause', async (c) => {
       const { row } = loadAuthorized(c, 'job.edit');
       active(row);

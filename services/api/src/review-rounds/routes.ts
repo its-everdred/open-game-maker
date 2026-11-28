@@ -26,14 +26,18 @@ export default new Hono<ApiBindings>()
     const game = authorizedGame(c, 'game.edit');
     const deps = c.get('deps');
     const includeGameplay = c.req.query('includeGameplay') === '1';
+    const historyTicket = c.req.query('historyTicket');
+    if (historyTicket !== undefined && !/^[1-9]\d*$/u.test(historyTicket)) throw new HttpError(400, 'invalid_ticket');
     const rounds = deps.db
       .select()
       .from(schema.reviewRounds)
       .where(
         and(
           eq(schema.reviewRounds.gameId, game.id),
-          isNull(schema.reviewRounds.verdict),
-          sql`NOT EXISTS (
+          historyTicket ? eq(schema.reviewRounds.ticket, historyTicket) : isNull(schema.reviewRounds.verdict),
+          historyTicket
+            ? undefined
+            : sql`NOT EXISTS (
             SELECT 1 FROM review_rounds AS newer
             WHERE newer.game_id = ${schema.reviewRounds.gameId}
               AND (
@@ -49,6 +53,7 @@ export default new Hono<ApiBindings>()
             : or(
                 ne(schema.reviewRounds.category, 'gameplay'),
                 eq(schema.reviewRounds.track, 'prototype-publish'),
+                sql`EXISTS (SELECT 1 FROM json_each(${schema.reviewRounds.media}) WHERE json_extract(value, '$.kind') = 'build' AND json_extract(value, '$.ref') = 'live-' || ${schema.reviewRounds.id})`,
                 and(
                   eq(schema.reviewRounds.phase, 'mock'),
                   sql`NOT EXISTS (SELECT 1 FROM json_each(${schema.reviewRounds.media}) WHERE json_extract(value, '$.kind') = 'build')`,
@@ -80,6 +85,15 @@ export default new Hono<ApiBindings>()
         );
         const build = media.find((item) => item.kind === 'build');
         const published = round.track === 'prototype-publish' && build && game.slug ? build : undefined;
+        const live =
+          build?.ref === `live-${round.id}` && game.slug && /^[1-9]\d{0,15}$/u.test(round.ticket) ? build : undefined;
+        const liveUrl = live
+          ? new URL(
+              `/live/${encodeURIComponent(game.slug!)}/${encodeURIComponent(round.ticket)}`,
+              deps.config.appOrigin,
+            )
+          : undefined;
+        if (liveUrl && live?.scenario) liveUrl.searchParams.set('scenario', live.scenario);
         return {
           id: round.id,
           ticket: round.ticket,
@@ -92,12 +106,15 @@ export default new Hono<ApiBindings>()
           decisionIds: JSON.parse(round.decisionIds) as string[],
           clipStatus: round.clipStatus,
           sourceTickets: JSON.parse(round.sourceTickets) as string[],
-          playUrl: published ? editorBuildUrl(deps.config.appOrigin, game.id, published.ref, published.scenario) : null,
+          playUrl:
+            liveUrl?.href ??
+            (published ? editorBuildUrl(deps.config.appOrigin, game.id, published.ref, published.scenario) : null),
           sliceUrl: published?.scenario
             ? sliceUrl(deps.config.appOrigin, game.id, published.ref, published.scenario)
             : null,
           media: items,
           postedAt: round.postedAt,
+          ...(historyTicket ? { verdict: round.verdict, verdictAt: round.verdictAt } : {}),
         };
       }),
     );
@@ -156,6 +173,7 @@ export default new Hono<ApiBindings>()
     if (c.req.query('kind') === 'build' && round.track !== 'prototype-publish') {
       const build = media.find((item) => item.kind === 'build' && item.ref !== '');
       if (!build) throw new HttpError(409, 'review_changed');
+      if (build.ref === `live-${round.id}`) throw new HttpError(409, 'media_present');
       const previews = await listPreviews(deps, game.id);
       if (
         previews.some(
@@ -203,7 +221,7 @@ export default new Hono<ApiBindings>()
       !round ||
       (round.track !== 'prototype-publish' &&
         round.category === 'gameplay' &&
-        (JSON.parse(round.media) as Media[]).some((item) => item.kind === 'build'))
+        (JSON.parse(round.media) as Media[]).some((item) => item.kind === 'build' && item.ref !== `live-${round.id}`))
     )
       throw new HttpError(404, 'review_round_not_found');
     let guard: string | undefined;

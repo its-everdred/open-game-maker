@@ -14,6 +14,7 @@ export type FrameObservation = {
 
 /* Only refusals of a frame: the game's own CSP lines (img-src, connect-src) are not this check's business. */
 const REFUSAL = /frame-ancestors|frame-src|X-Frame-Options|Refused to (?:display|frame)/iu;
+const redact = (text: string) => text.replace(/(\/d\/[^/]+\/[^/]+\/)[^/\s]+/gu, '$1<redacted>');
 
 export function isFrameRefusal(text: string): boolean {
   return REFUSAL.test(text);
@@ -55,7 +56,7 @@ export async function observeFrame(
     const page = await context.newPage();
     page.on('console', (message) => {
       const text = message.text();
-      if (isFrameRefusal(text)) observation.refusals.push(text.replace(/\s+/gu, ' ').slice(0, 300));
+      if (isFrameRefusal(text)) observation.refusals.push(redact(text.replace(/\s+/gu, ' ').slice(0, 300)));
     });
     await page.goto(app, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     observation.landed = new URL(page.url()).origin;
@@ -82,7 +83,7 @@ export async function observeFrame(
         ])
       : false;
   } catch (error) {
-    observation.error = (error instanceof Error ? error.message.split('\n')[0]! : String(error)).slice(0, 300);
+    observation.error = redact((error instanceof Error ? error.message.split('\n')[0]! : String(error)).slice(0, 300));
   } finally {
     await context.close();
   }

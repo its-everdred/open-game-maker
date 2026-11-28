@@ -173,9 +173,9 @@
 }
 
 .edit-workspace-chat aiur-composer::part(send):disabled {
-  opacity: 1;
-  background: var(--border);
-  color: var(--text-muted);
+  opacity: 0.75;
+  background: var(--blue-b);
+  color: var(--surface-deep);
 }
 
 .edit-workspace-chat .build-chat-messages {

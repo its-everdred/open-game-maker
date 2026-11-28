@@ -81,6 +81,11 @@ The API file must set `OGM_APP_ORIGIN`, `OGM_COMMIT_INTERNAL_URL`, and `OGM_COMM
 `OGM_RESET_ZONE_DEFAULT` (the host's IANA time zone when blank). Family budget settings override both defaults.
 `OGM_CREATOR_JOB_LIMIT` sets the maximum concurrent in-flight jobs per creator across games and families. It defaults
 to 1; set it to 0 to disable the limit. Queued jobs start when the creator has room under the limit.
+`OGM_TESTER_NEW_GAMES_PER_DAY` limits each non-admin creator's game creations and New Game requests per day in the family's
+reset zone; it defaults to 1. A provisioning retry uses its existing game record and does not consume another slot.
+Set it to a positive integer in `api.env` and restart the API to change it. Admins and maintainers are exempt.
+`OGM_NEW_GAME_PLAN_TICKET_LIMIT` sets the automated planner's maximum child tickets per game, defaulting to 1 for the
+starter scope. Set a positive integer in `api.env` and restart the API to change the limit for new plans.
 
 The commit file must also set the shared `OGM_INTERNAL_TOKEN` so boundary checks can read active repositories and
 creator PII terms. The Aiur Executor's unit needs the same `OGM_INTERNAL_TOKEN`: it reads a New Game request's private
@@ -100,7 +105,7 @@ fallback when it is blank.
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `api.env`        | `OGM_API_PORT`, `OGM_PUBLIC_ORIGIN`, `OGM_APP_ORIGIN`, `OGM_GAMES_ORIGIN`, `OGM_DATA_DIR`, `OGM_BLOB_ROOT`, `OGM_ROOMS_INTERNAL_URL`, `OGM_COMMIT_INTERNAL_URL`, `OGM_INSTANCE_REPO` (`owner/repository` for creator games), `OGM_BUILDER_BOT_LOGIN`, `OGM_INTAKE_BOT_LOGIN`, `OGM_VAPID_SUBJECT`; tokens you obtain: `OGM_BUILDER_BOT_TOKEN`, `OGM_INTAKE_GITHUB_TOKEN` | `OGM_INSTANCE_OWNER_ID`, `OGM_GAMES_ROOT`, `OGM_ASSETS_ROOT`, `OGM_INTAKE_DIR`, `OGM_VOICE_HOST_INTERNAL_URL`, `OGM_VOICE_WS_URL`, `OGM_BUILDER_WORKSPACES_ROOT`, `OGM_VAPID_KEY_FILE`, `OGM_GAME_TEMPLATE_REF`, `OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD`, `OGM_CREATOR_JOB_LIMIT`, `OGM_RESET_ZONE_DEFAULT`, `OGM_ANALYTICS_RETENTION_DAYS`, `OGM_REPORT_BUNDLE_MAX_BYTES`, `OGM_NARRATION_CONCURRENCY`, `OGM_INTAKE_SWEEP_SECONDS`, `OGM_CHAT_POLL_MS`, `OGM_COMMAND_POLL_MS`, `OGM_DESIGN_DEFAULT_MS`, `OGM_VOICE_QUESTIONS_AT`, `OGM_ALLOWED_EMAILS`, `OGM_MAINTAINER_EMAILS`, `OGM_QA_INSTANCE_REPO`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `SMTP_URL`/`SMTP_FROM`, `OGM_QA_EMAILS` |
 | `rooms.env`      | `OGM_ROOMS_PORT`, `OGM_GAMES_ORIGIN`, `OGM_API_INTERNAL_URL`                                                                                                                                                                                                                                                                                                             |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `games.env`      | `OGM_GAMES_PORT`, `OGM_GAMES_ROOT`, `OGM_APP_ORIGIN`                                                                                                                                                                                                                                                                                                                     | `OGM_GAMES_SW` (defaults to the workspace's built `packages/host/dist/game-cache.js`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `games.env`      | `OGM_GAMES_PORT`, `OGM_GAMES_ROOT`, `OGM_APP_ORIGIN`, `OGM_API_INTERNAL_URL`                                                                                                                                                                                                                                                                                                                     | `OGM_GAMES_SW` (defaults to the workspace's built `packages/host/dist/game-cache.js`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `voice-host.env` | `OGM_VOICE_PORT`, `OGM_VOICE_INTERNAL_PORT`, `OGM_API_INTERNAL_URL`, `OGM_VOICE_PROVIDER` (`fake`)                                                                                                                                                                                                                                                                       | Live ElevenLabs only: `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `OGM_VOICE_LLM`, `OGM_VOICE_CLEANUP_ROOT`; tuning: `OGM_VOICE_MAX_SESSIONS`, `OGM_VOICE_RENDER_DIR`, `OGM_VOICE_NARRATION_ENABLED`                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `intake.env`     | `OGM_ASSETS_ROOT`, `OGM_STATE_DIR`                                                                                                                                                                                                                                                                                                                                       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `drive-sync.env` | none; the worker reads `~/.config/ogm/drive-sync.toml` and `drive-sa.json` (`scripts/py/drive-sync/README.md`)                                                                                                                                                                                                                                                           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -320,10 +325,10 @@ Operator publish can reuse a repository daemon checkout for multiple registered 
 
 A game the app registered against a repository whose own tickets are not Game Maker jobs never gets a build: the
 daemon's `before_remove` hook uploads a build per ticket, and those tickets never run in this instance's daemon. The
-game appears in the picker and opens from its play link, but nothing is playable until an operator publishes a build.
+The game is playable by ordinary players only after its owner publishes a release.
 
-`gm publish` builds one registered game at a git SHA and publishes the build through the same publisher the daemon's
-uploads use, so the release history stays one path (`ops/bin/ogm-publish` is a thin wrapper that runs it with the
+`gm publish` builds one registered game at a git SHA and registers a tested build through the same publisher the daemon's
+uploads use (`ops/bin/ogm-publish` is a thin wrapper that runs it with the
 same arguments):
 
 ```
@@ -339,7 +344,7 @@ under `~/.local/state/ogm/publish`. It refuses before building when the game's c
 the checkout's own HEAD or a stale `origin/main`. It builds that folder's own build script in production mode with a
 relative base (`--base=./`, so the build works under `/g/<gameId>/<buildId>/`) and `OGM_ASSETS_ROOT`, then archives
 `dist/` with the repository's `manifest.json`, `design/design.json` and `achievements.json` and posts it to the API's
-internal route. The build lands as the next build on the game's `main` branch and as a release in the game's history;
+internal route. The build lands as the next tested build on the game's `main` branch;
 the command prints the build id and the game's play link.
 
 It needs the host's `~/.config/ogm/env/api.env`, so run it on the host as the API's user:
@@ -353,8 +358,11 @@ gm publish blobs --dry-run       # confirm registration without building or publ
 gm publish blobs --json          # one JSON line with build details, exact-build play URL and prototypeReview status
 ```
 
-Re-run it with a newer SHA to publish the next release; the previous build stays playable until the new one is
-tested and the branch pointer moves. Exit codes follow the gm CLI: 0 published, 1 the build or the upload failed (a
+For an existing listed game without a release, choose a specific tested build with its owner and verify it in the
+editor. In Releases, select that build and publish it; this creates the design snapshot and release record through
+the normal rights and commit checks. Registration or a new build never silently promotes the latest draft. Repeat
+the release step for later builds. The previous release stays playable until the published pointer moves.
+Exit codes follow the gm CLI: 0 build registered, 1 the build or the upload failed (a
 refused archive prints the API's reason), 2 bad usage, an unknown game, no checkout or no internal token.
 
 The two routes it calls are operator-only, reached with the internal token in `x-ogm-internal` and never with a user
@@ -362,6 +370,14 @@ session: `GET /internal/operator/games/<slug>` returns the game's facts and `POS
 takes the gzipped archive with the commit in `x-gm-sha`. The upload writes a `feature` job row that the publisher
 settles — `done` for a published build, `failed` for a refused archive — so the release history reads like any other
 build's.
+
+Set `OGM_API_INTERNAL_URL=http://127.0.0.1:<api-port>` in the games service environment and restart games-host
+after the API. The host denies artifact requests if this authorization service is unavailable. Current listed
+releases alone authorize public build and legacy shared-blob URLs; owner draft URLs expire after 30 minutes without renewal and their session
+and role are rechecked for every request. The updated game cache worker stops using its old build and blob caches.
+Treat `/d/` and `/p/` URLs as credentials: exclude their paths from proxy access logs and never share them.
+Purge any reverse proxy or CDN caches for `/g/` and `/a/` during rollout and verify the new worker has activated.
+Previously downloaded or cached bytes cannot be recalled, including copies held by old clients.
 
 ### Verify a game-workspace publish
 
@@ -504,8 +520,8 @@ ogm-qa-new-game.timer` and `journalctl --user -u ogm-qa-new-game.service`.
    Changes to the games host, games/build API or games route also run `gm qa games-cache --game blobs --json` after a
    fresh QA session; its log is `~/.local/state/ogm/qa/games-cache/<sha>.log`, and a failed cache check appends an
    attention line. After publishing a build, compare it with its predecessor using `gm qa games-cache --game blobs
---after-publish <buildId> --json`; this reports transferred bytes for the game's files and fails if an unchanged
-   content URL transfers again. The publish comparison uses the configured QA account and game origins.
+--after-publish <buildId> --json`; this compares the files by content hash and reports transferred bytes without expecting a cache hit.
+   The publish comparison uses the QA account, game origin and internal operator credential.
 
    `ops/bin/ogm-host-setup.sh` also installs `ogm-qa-publish-review.timer`, which runs `gm qa publish-review-check
 --all` every ten minutes. It finds published builds whose review state is still pending and appends one line per

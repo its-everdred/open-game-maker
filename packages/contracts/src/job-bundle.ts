@@ -51,6 +51,13 @@ export const JobBundle = z
       .strict()
       .optional(),
     attachments: z.array(JobBundleAttachment).optional(),
+    plannerBase: z
+      .object({
+        branch: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/),
+        sha: z.string().regex(/^[a-f0-9]{40}$/),
+      })
+      .strict()
+      .optional(),
     // The instance's Energy and the creator's preference when the job started (#598); `gm energy` reads it.
     energy: EnergyView.optional(),
   })

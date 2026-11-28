@@ -9,6 +9,8 @@ import { constants as zlibConstants, createBrotliCompress } from 'node:zlib';
 import { cachePlanSchema, StableIdSchema } from '@ogm/contracts';
 
 import { isCompressiblePath } from './mime.js';
+export { artifactBlobIndex } from './blob-index.js';
+export { rewriteRootReferences } from './root-references.js';
 
 const LEGACY_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
 const BLOB_FILE_RE = /^[0-9a-f]{64}\.[a-z0-9]{1,12}$/u;

@@ -13,12 +13,32 @@ import {
   tallyFrames,
   twoWayFailure,
   voiceE2e,
+  waitForDictationCommit,
 } from '../src/qa-voice-e2e.js';
 import { gm, tempDir } from './helpers.js';
 
 afterEach(() => vi.unstubAllGlobals());
 
 const frame = (value: Record<string, unknown>) => JSON.stringify(value);
+
+it('waits for the final commit and rejects an error even when partial text looks complete', async () => {
+  let checks = 0;
+  await expect(
+    waitForDictationCommit(
+      async () => ++checks > 1,
+      async () => 'final transcript missing',
+      1_000,
+    ),
+  ).rejects.toThrow('dictation failed: final transcript missing');
+  expect(checks).toBe(2);
+  await expect(
+    waitForDictationCommit(
+      async () => false,
+      async () => null,
+      0,
+    ),
+  ).rejects.toThrow('dictation did not finish committing');
+});
 
 // The prod check clicks the app's composer by its button names. When the build chat moved to the aiur composer the old
 // names ('Hold to talk', 'Start voice chat') matched nothing, and the post-deploy voice check failed on every deploy
@@ -175,6 +195,8 @@ describe('verdicts', () => {
   it('passes dictation only on the clip’s words', () => {
     expect(dictationFailure('Make the sky blue.')).toBeNull();
     expect(dictationFailure('make the skies Blue')).toBeNull();
+    expect(dictationFailure('Make the sky')).toMatch(/not the clip's words/);
+    expect(dictationFailure('blue')).toMatch(/not the clip's words/);
     expect(dictationFailure('  ')).toBe('the message box stayed empty after the clip');
     expect(dictationFailure('Hello there')).toMatch(/not the clip's words/);
   });

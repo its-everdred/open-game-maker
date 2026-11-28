@@ -55,6 +55,7 @@ export type StoredCommand = ChatCommand & {
   // many changes there were. Kept apart from `option_id`, which the poller keeps equal to aiur's answer.
   corrected_option_id?: string;
   corrections?: number;
+  answer_origin?: 'player' | 'skip' | 'default' | 'unknown';
 };
 
 // Mints a short-lived URL for a blob hash (the blob store's signed GET).

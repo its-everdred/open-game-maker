@@ -5,9 +5,9 @@ import { HttpError } from '../app/errors.js';
 export type JobEvent = 'admit' | 'file' | 'run' | 'pause' | 'resume' | 'finish' | 'fail' | 'cancel';
 
 const TRANSITIONS: Record<JobState, Partial<Record<JobEvent, JobState>>> = {
-  queued: { admit: 'admitted', cancel: 'cancelled' },
+  queued: { admit: 'admitted', fail: 'failed', cancel: 'cancelled' },
   admitted: { file: 'filed', fail: 'failed', cancel: 'cancelled' },
-  // A New Game request's obligation ends at its parent issue: nothing in this system runs it, so filing finishes it.
+  // New Game planning uses a separate worker ticket; its parent remains a non-dispatchable record.
   filed: { run: 'running', finish: 'done', fail: 'failed', cancel: 'cancelled' },
   running: { pause: 'paused_budget', finish: 'done', fail: 'failed', cancel: 'cancelled' },
   paused_budget: { resume: 'running', finish: 'done', fail: 'failed', cancel: 'cancelled' },

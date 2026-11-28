@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Editor desktop</title>
+<link rel="stylesheet" href="./glass.css">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&amp;family=Nunito:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0f0e16}a{color:#74c8ed}a:hover{color:#f2ead6}
+.tool{width:48px;height:48px;border-radius:14px;border:0;background:transparent;display:grid;place-items:center;color:#f2ead6}
+.tool[aria-pressed="true"]{background:var(--gloss),#ffbf32;color:#1d1b16}
+.asset{width:76px;height:76px;flex:none;border-radius:14px;overflow:hidden;border:1px solid rgba(242,234,214,.16);background:#1a1824;padding:0}
+.asset img{width:100%;height:100%;object-fit:cover;display:block}
+.asset[aria-pressed="true"]{box-shadow:0 0 0 3px #ffbf32}</style>
+</head>
+<body>
+<div class="g wide" style="width:1440px;height:900px">
+<img src="../../assets-local/review/design-ogm-glass/img/land-bg.jpg" alt="" style="position:absolute;left:0;top:0;width:1020px;height:900px;object-fit:cover">
+<div class="top" style="right:420px;padding:16px 20px 0">
+<a class="orb sm" href="HomeDesktop.html" aria-label="Games" style="margin-top:4px"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+<div class="seg" role="group" aria-label="Mode" style="width:160px;background:rgba(24,22,32,.6)"><a href="PlayView.html" aria-label="Play" style="flex:1;height:40px;border-radius:999px;display:grid;place-items:center;color:#c4beb0"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"></path></svg></a><button aria-pressed="true" aria-label="Edit" style="background:var(--gloss),#ffbf32"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin:auto"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg></button></div>
+<span class="h3" style="line-height:48px;margin-left:8px;text-shadow:0 2px 8px rgba(0,0,0,.6)">Dusk Helm</span>
+</div>
+<div class="pane" role="toolbar" aria-label="Tools" style="position:absolute;left:20px;top:110px;padding:6px;display:flex;flex-direction:column;gap:4px;border-radius:22px">
+<button class="tool" aria-label="Select" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M5 3l14 8-6 2-2 6z"></path></svg></button>
+<button class="tool" aria-label="Place" aria-pressed="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"></path><path d="M3 8v8l9 5 9-5V8"></path></svg></button>
+<button class="tool" aria-label="Paint terrain" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 3l3 3-9 9-3-3zM9 12l-4 1-2 8 8-2 1-4"></path></svg></button>
+<button class="tool" aria-label="Erase" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 20h12M4 14l9-9 6 6-7 7H8z"></path></svg></button>
+<button class="tool" aria-label="Scenes" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="9" cy="10" r="1.8"></circle><path d="M21 16l-5-5-8 8"></path></svg></button>
+<button class="tool" aria-label="Undo" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"></path><path d="M4 9h11a5 5 0 0 1 0 10h-3"></path></svg></button>
+</div>
+<div class="pane" style="position:absolute;left:100px;right:440px;bottom:20px;padding:10px;border-radius:24px;display:flex;gap:10px;overflow:hidden">
+<button class="asset" aria-label="Forest tiles" aria-pressed="true"><img src="../../assets-local/review/design-ogm-glass/img/thumb-41.jpg" alt=""></button>
+<button class="asset" aria-label="Tavern"><img src="../../assets-local/review/design-ogm-glass/img/thumb-16.jpg" alt=""></button>
+<button class="asset" aria-label="Cave"><img src="../../assets-local/review/design-ogm-glass/img/dusk.jpg" alt=""></button>
+<button class="asset" aria-label="Meadow"><img src="../../assets-local/review/design-ogm-glass/img/blobs.jpg" alt=""></button>
+<button class="asset" aria-label="Search assets" style="display:grid;place-items:center;color:#f2ead6;background:rgba(57,54,67,.6)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg></button>
+</div>
+<aside class="pane strong" style="position:absolute;right:0;top:0;bottom:0;width:420px;border-radius:0;display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;gap:10px;padding:16px 16px 10px 20px">
+<div style="flex:1;min-width:0"><div class="h3">Warmer torches</div><div style="display:flex;gap:6px;align-items:center;margin-top:4px"><span class="pill work">Working</span></div></div>
+<a class="res" href="Resources.html" aria-label="Minerals 62 percent, Gas 40 percent"><img src="img/minerals.svg" alt="">62<span class="sep"></span><svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b7f171"></stop><stop offset=".55" stop-color="#46c46a"></stop><stop offset="1" stop-color="#1f8a52"></stop></linearGradient></defs><path d="M4 18.5 6.2 11l4-2.6 4.6 1.2 3.4 3.6.8 5.3-3.8 1.7H7.6z" fill="url(#gg)"></path></svg>40</a>
+<a class="orb" href="EditMenu.html" aria-label="Menu, 1 needs you"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg><span class="dot">1</span></a>
+</div>
+<div style="display:flex;gap:8px;padding:0 16px 10px;overflow:hidden">
+<span class="tag" style="border-color:#d795e4;color:#f2ead6">Warmer torches</span><span class="tag">Forest road</span><span class="tag">Merchant stall</span>
+</div>
+<div class="thread" style="flex:1;min-height:0;overflow:hidden;padding:4px 16px 10px;justify-content:flex-end">
+<div class="msg me">The torches look too cold. Make them warmer.</div>
+<div class="step"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#94d742" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Found the torch light settings</div>
+<div class="step"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#94d742" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Rendered two looks</div>
+<div class="msg a" style="max-width:100%">Which one?
+<div style="display:flex;gap:8px;margin-top:10px">
+<button aria-label="A" style="flex:1;padding:0;border:0;border-radius:12px;overflow:hidden;aspect-ratio:4/3;background:#000"><img src="../../assets-local/review/design-ogm-glass/img/land-bg.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:sepia(.3) saturate(1.25);margin:0"></button>
+<button aria-label="B" style="flex:1;padding:0;border:2px solid #ff9133;border-radius:12px;overflow:hidden;aspect-ratio:4/3;background:#000"><img src="../../assets-local/review/design-ogm-glass/img/land-bg.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:sepia(.6) saturate(1.6) hue-rotate(-12deg);margin:0"></button>
+</div></div>
+</div>
+<div style="padding:0 14px 16px">
+<div class="composer pane" style="box-shadow:none">
+<button class="orb sm" aria-label="Attach"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+<span class="in">Ask for a change</span>
+<button class="orb sm" aria-label="Dictate"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"></path></svg></button>
+<a class="orb sm live" href="VoiceLive.html" aria-label="Talk live" style="color:#1d1b16"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12h1M8 8v8M12 5v14M16 8v8M20 12h-1"></path></svg></a>
+</div>
+</div>
+</aside>
+</div>
+<script src="fallback.js"></script>
+</body>
+</html>

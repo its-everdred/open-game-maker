@@ -73,6 +73,8 @@ export type UserDirectory = {
   userIdForEmail(email: string): Promise<string | null>;
 };
 export interface IssueStateWriter {
+  close?(repo: string, issue: number): Promise<void>;
+  findByMarkers?(repo: string, jobId: string, key: string): Promise<{ number: number } | null>;
   setStateLabel(repo: string, issue: number, state: 'cancelled', prefix?: string): Promise<void>;
 }
 
@@ -119,8 +121,9 @@ export interface Registry {
         ticket: string,
         slugs: string[],
         owned: boolean,
-      ) => Promise<{ text: string }[]>)
+      ) => Promise<{ text: string; at?: string }[]>)
     | null;
+  plannerBaseVerifier: import('../previews/planner-base.js').PlannerBaseVerifier | null;
   issueStateWriter: IssueStateWriter | null;
   // Swaps a ticket's `phase:`/`model:` labels when the creator approves its rung from a review card (#1124).
   fidelityWriter: Pick<import('../review-rounds/issues.js').ReviewIssues, 'setFidelity'> | null;
@@ -150,6 +153,7 @@ export function createRegistry(): Registry {
     trackerTicket: null,
     reviewEpisode: null,
     ticketConversation: null,
+    plannerBaseVerifier: null,
     issueStateWriter: null,
     fidelityWriter: null,
     energyReadings: null,

@@ -4,7 +4,7 @@ import { installAuthRoutes } from './fixtures/auth-routes';
 import { installGameApi } from './support/mock-game-api';
 
 const jobId = 'j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
-const imageUrl = 'https://media.example.test/image.svg';
+const imageUrl = '/proto/art/goblin-play.webp';
 const clipUrl = 'https://media.example.test/clip.mp4';
 
 const job = {
@@ -75,6 +75,21 @@ test('phone build dock opens the streamed chat and posts text once', async ({ pa
 
   await expect(page.locator('.studio-library-volume button')).toHaveAttribute('data-building', 'true');
   await openBuildChat(page);
+
+  const title = page.locator('.build-chat-chat-head h3');
+  await expect(title).toHaveText('Add the moonlit door');
+  await expect(title).toHaveCSS('text-overflow', 'ellipsis');
+  const titleBox = await title.boundingBox();
+  const studioControls = await page.locator('.studio-menu-control').boundingBox();
+  expect(titleBox).not.toBeNull();
+  expect(studioControls).not.toBeNull();
+  expect(titleBox!.x + titleBox!.width).toBeLessThan(studioControls!.x);
+  await expect(page.locator('.studio-logo')).toBeHidden();
+  const selectedTab = page.getByRole('tab', { name: 'Chat' });
+  await expect(selectedTab).toHaveAttribute('aria-selected', 'true');
+  await expect(selectedTab).toHaveCSS('background-color', 'rgb(116, 200, 237)');
+  await expect(selectedTab).toHaveCSS('border-width', '0px');
+  await expect(page.locator('.conversation-tabs')).toHaveCSS('border-radius', '999px');
 
   const panel = page.locator('.build-chat-panel');
   await expect(panel).toBeVisible();
@@ -341,7 +356,7 @@ test('names a blocked microphone and a refused voice token at 390x844', async ({
   const composer = page.locator('#chat-dock-slot aiur-composer');
   const alert = page.locator('.build-chat-panel [role="alert"]');
   await composer.getByRole('button', { name: 'Dictate' }).click();
-  await composer.getByRole('button', { name: 'Stop dictation' }).click();
+  await composer.getByRole('button', { name: 'Stop and send' }).click();
   await expect(alert).toHaveText(/^Microphone blocked\..*Safari.*\(dictation: mic_denied\)$/);
   await page.screenshot({ path: testInfo.outputPath('mic-denied.png') });
   await expect.poll(() => reports).toContainEqual(expect.objectContaining({ action: 'dictation', code: 'mic_denied' }));
@@ -412,16 +427,9 @@ async function installBuildRoutes(page: Page, options: { brokenPicker?: boolean;
       .join('\n');
     await route.fulfill({ status: 200, contentType: 'text/event-stream', body: `${body}\n` });
   });
-  await page.route('**/media.example.test/**', async (route) => {
-    if (route.request().url().includes('.mp4')) {
-      return route.fulfill({ status: 200, contentType: 'video/mp4', body: '' });
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'image/svg+xml',
-      body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="100%" height="100%" fill="#7b4f9d"/></svg>',
-    });
-  });
+  await page.route('**/media.example.test/**', async (route) =>
+    route.fulfill({ status: 200, contentType: 'video/mp4', body: '' }),
+  );
 }
 
 async function openBuildChat(page: Page) {
@@ -458,3 +466,223 @@ function media(url: string) {
 async function json(route: Route, body: unknown, status = 200) {
   await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
+
+test('build composer keeps voice controls at the right through dictation and live voice', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'The review stills use the phone portrait layout.');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installAuthRoutes(page, { signedIn: true });
+  await installBuildRoutes(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+      configurable: true,
+      value: async () => {
+        const audio = new AudioContext();
+        const oscillator = audio.createOscillator();
+        const gain = audio.createGain();
+        const destination = audio.createMediaStreamDestination();
+        gain.gain.value = 0.45;
+        const modulation = audio.createOscillator();
+        const modulationDepth = audio.createGain();
+        modulation.frequency.value = 0.8;
+        modulationDepth.gain.value = 0.2;
+        modulation.connect(modulationDepth).connect(gain.gain);
+        modulation.start();
+        oscillator.connect(gain).connect(destination);
+        oscillator.start();
+        await audio.resume();
+        return destination.stream;
+      },
+    });
+  });
+  await page.route('**/api/v1/voice/dictation-token', (route) =>
+    json(route, { token: 'dictation-token', url: 'wss://dictation.example.test/session' }),
+  );
+  await page.route('**/api/v1/voice/token', (route) =>
+    json(route, { token: 'voice-token', url: 'wss://voice.example.test/session' }),
+  );
+  await page.routeWebSocket('wss://dictation.example.test/**', (socket) => {
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as { type: string };
+      if (frame.type === 'audio')
+        socket.send(JSON.stringify({ v: 1, type: 'transcript', kind: 'partial', text: 'Make the moonlight warmer' }));
+      if (frame.type === 'commit') {
+        socket.send(JSON.stringify({ v: 1, type: 'transcript', kind: 'final', text: 'Make the moonlight warmer' }));
+        socket.send(JSON.stringify({ v: 1, type: 'ended' }));
+      }
+    });
+  });
+  let receivedVoiceText = '';
+  await page.routeWebSocket('wss://voice.example.test/**', (socket) => {
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as { type: string; text?: string };
+      if (frame.type === 'start')
+        socket.send(JSON.stringify({ v: 1, type: 'state', state: 'ready', capabilities: { text: true } }));
+      if (frame.type === 'text') {
+        receivedVoiceText = frame.text ?? '';
+        socket.send(JSON.stringify({ v: 1, type: 'transcript', kind: 'final', text: receivedVoiceText }));
+        socket.send(
+          JSON.stringify({ v: 1, type: 'agent_text', turn_id: 'turn-1', text: 'I started the run.', final: true }),
+        );
+      }
+    });
+  });
+  await page.context().grantPermissions(['microphone']);
+  await page.goto('/all?test');
+  await openBuildChat(page);
+  const composer = page.locator('aiur-composer');
+  const card = composer.locator('[part="card"]');
+  const attach = composer.locator('[part="attach"]');
+  const mic = composer.locator('[part="mic"]');
+  const voice = composer.locator('[part="voice"]');
+  const send = composer.locator('[part="send"]');
+  const input = composer.locator('[part="input"]');
+  const composerStack = page.locator('.build-chat-composer-stack');
+
+  const idleMic = await mic.boundingBox();
+  const idleSend = await send.boundingBox();
+  expect(idleMic).not.toBeNull();
+  expect(idleSend).not.toBeNull();
+  expect(idleMic!.x).toBeLessThan(idleSend!.x);
+  expect(idleMic!.width).toBe(40);
+  expect(idleSend!.width).toBe(40);
+  expect(await card.evaluate((node) => getComputedStyle(node).borderRadius)).toBe('28px');
+  await expect(card).toHaveCSS('border-top-width', '1px');
+  await expect(card).toHaveCSS('border-right-width', '1px');
+  await expect(card).toHaveCSS('border-top-color', 'rgba(242, 234, 214, 0.32)');
+  await expect(card).toHaveCSS('border-right-color', 'rgba(0, 0, 0, 0.6)');
+  expect(await card.evaluate((node) => getComputedStyle(node).boxShadow)).toContain('0px 12px 32px');
+  await expect(attach).toHaveCSS('border-width', '0px');
+  await expect(attach).toHaveCSS('box-shadow', 'none');
+  await expect(mic).toHaveCSS('border-width', '0px');
+  await expect(mic).toHaveCSS('box-shadow', 'none');
+  await expect(mic).toHaveCSS('border-radius', '999px');
+  await expect(send).toHaveCSS('border-radius', '999px');
+  await expect(send).toHaveCSS('background-color', 'rgb(116, 200, 237)');
+  await expect(send).toHaveCSS('opacity', '1');
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-idle.png', animations: 'disabled' });
+
+  await mic.click();
+  await expect(composer).toHaveAttribute('data-recording', '');
+  await expect(mic).toBeVisible();
+  await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
+  await expect
+    .poll(() => mic.evaluate((button) => getComputedStyle(button).backgroundColor))
+    .toBe('rgb(116, 200, 237)');
+  await expect(input).toHaveValue('Make the moonlight warmer');
+  await expect(input).toHaveCSS('overflow-wrap', 'break-word');
+  await expect(input).toHaveCSS('word-break', 'normal');
+  await expect(composer.locator('[part="waveform"]')).toBeVisible();
+  await expect(composer.locator('[part="voice"]')).toBeVisible();
+  await expect
+    .poll(() =>
+      composer.evaluate((node) => {
+        const heights = Array.from(node.shadowRoot!.querySelectorAll<HTMLElement>('[part="waveform"] i')).map(
+          (bar) => bar.getBoundingClientRect().height,
+        );
+        return Math.max(...heights);
+      }),
+    )
+    .toBeGreaterThan(2);
+  await expect
+    .poll(() =>
+      composer.evaluate((node) => {
+        const heights = Array.from(node.shadowRoot!.querySelectorAll<HTMLElement>('[part="waveform"] i')).map(
+          (bar) => bar.getBoundingClientRect().height,
+        );
+        return Math.max(...heights) - Math.min(...heights);
+      }),
+    )
+    .toBeGreaterThan(1);
+  expect(await input.inputValue()).toBe('Make the moonlight warmer');
+  const recordingMic = await mic.boundingBox();
+  const recordingSend = await send.boundingBox();
+  const inputBox = await input.boundingBox();
+  const composerBox = await composer.boundingBox();
+  expect(Math.abs(recordingMic!.x - idleMic!.x)).toBeLessThan(1);
+  expect(Math.abs(recordingSend!.x - idleSend!.x)).toBeLessThan(1);
+  expect(inputBox!.width).toBeGreaterThan(composerBox!.width * 0.9);
+  expect(inputBox!.y + inputBox!.height).toBeLessThan((await composer.locator('[part="voice"]').boundingBox())!.y);
+  const dictationStackBox = await composerStack.boundingBox();
+  expect(inputBox!.x).toBeGreaterThanOrEqual(dictationStackBox!.x);
+  expect(inputBox!.x + inputBox!.width).toBeLessThanOrEqual(dictationStackBox!.x + dictationStackBox!.width + 1);
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-dictating.png', animations: 'disabled' });
+
+  await mic.click();
+  await expect(mic).toHaveAttribute('aria-label', 'Unmute microphone');
+  await expect(mic).toHaveAttribute('aria-pressed', 'true');
+  await expect
+    .poll(() => mic.evaluate((button) => getComputedStyle(button).backgroundColor))
+    .toBe('rgb(116, 200, 237)');
+  await expect(mic).toHaveCSS('opacity', '0.58');
+  await expect
+    .poll(() =>
+      composer.evaluate((node) =>
+        Math.max(
+          ...Array.from(node.shadowRoot!.querySelectorAll<HTMLElement>('[part="waveform"] i')).map(
+            (bar) => bar.getBoundingClientRect().height,
+          ),
+        ),
+      ),
+    )
+    .toBeLessThanOrEqual(3);
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-dictating-muted.png', animations: 'disabled' });
+  await mic.click();
+  await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
+  await composer.locator('[part="voice"]').click();
+  await expect(composer).toHaveAttribute('data-voice-live', '');
+  await expect(voice).toHaveAttribute('aria-pressed', 'true');
+  await expect(composer.locator('[part="voice"] svg path').first()).toHaveAttribute('stroke-width', '1.5');
+  await expect(composer.locator('[part="voice"] svg path').first()).toHaveAttribute('fill', 'var(--blue-b)');
+  await expect(composer.locator('[part="waveform"]')).toBeVisible();
+  await expect
+    .poll(() =>
+      composer.evaluate((node) =>
+        Math.max(
+          ...Array.from(node.shadowRoot!.querySelectorAll<HTMLElement>('[part="waveform"] i')).map(
+            (bar) => bar.getBoundingClientRect().height,
+          ),
+        ),
+      ),
+    )
+    .toBeGreaterThan(2);
+  await expect
+    .poll(() =>
+      composer.evaluate((node) => {
+        const heights = Array.from(node.shadowRoot!.querySelectorAll<HTMLElement>('[part="waveform"] i')).map(
+          (bar) => bar.getBoundingClientRect().height,
+        );
+        return Math.max(...heights) - Math.min(...heights);
+      }),
+    )
+    .toBeGreaterThan(1);
+  await expect(mic).toBeVisible();
+  await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
+  await expect.poll(() => receivedVoiceText).toBe('Make the moonlight warmer');
+  const liveConversation = page.getByRole('log', { name: 'Live voice conversation' });
+  await expect(liveConversation.getByText('Make the moonlight warmer')).toBeVisible();
+  await expect(liveConversation.getByText('I started the run.')).toBeVisible();
+  const userBubble = liveConversation.locator('[aria-label="you"]');
+  const agentBubble = liveConversation.locator('[aria-label="agent"]');
+  await expect(userBubble).toHaveClass(/creator/);
+  await expect(agentBubble).toHaveClass(/agent/);
+  await expect(userBubble).toHaveCSS('overflow-wrap', 'break-word');
+  await expect(userBubble).toHaveCSS('word-break', 'normal');
+  await expect(userBubble).toHaveCSS(
+    'background-color',
+    await agentBubble.evaluate((node) => getComputedStyle(node).backgroundColor),
+  );
+  await expect(userBubble).toHaveCSS('max-width', '84%');
+  await expect(userBubble).toHaveCSS('padding', '10px 14px');
+  await expect(userBubble).toHaveCSS('font-size', '15px');
+  await expect(agentBubble).toHaveCSS('align-self', 'flex-start');
+  await expect(userBubble).toHaveCSS('align-self', 'flex-end');
+  const userBubbleBox = await userBubble.boundingBox();
+  const agentBubbleBox = await agentBubble.boundingBox();
+  expect(userBubbleBox!.x).toBeGreaterThan(agentBubbleBox!.x);
+  expect(userBubbleBox!.y).toBeLessThan(agentBubbleBox!.y);
+  expect(userBubbleBox!.y + userBubbleBox!.height).toBeLessThan((await voice.boundingBox())!.y);
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-two-way-voice.png', animations: 'disabled' });
+  await composer.locator('[part="voice"]').click();
+});

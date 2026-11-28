@@ -18,16 +18,17 @@ import { resolveBranch, StaleBaseRev } from '../design/store.js';
 import { isTerminal } from '../jobs/state.js';
 import { markTerminal } from '../jobs/spend-cap.js';
 import { releaseRuntimeFor } from '../releases/routes.js';
-import { registerBuild, updateBuild } from '../releases/service.js';
+import { publish, registerBuild, ReleaseError, updateBuild } from '../releases/service.js';
 import { withArtifactMutation } from './artifact-lock.js';
-import { BuildCacheError, completeBuildCache, sharedBuildFileUrls, storeDisplayImageBlobs } from './cache-plan.js';
-import { untarGz } from './untar.js';
+import { BuildCacheError, completeBuildCache } from './cache-plan.js';
+import { BadArchive, untarGz } from './untar.js';
 import { makeDisplayImages, type DisplayImage } from './display-images.js';
 
 // Jobs whose merged PR must become a playable build before the job is done; a scope job ships no build.
 export const BUILD_KINDS = ['new_game', 'feature', 'repair'] as const;
 
 const SYSTEM_ACTOR = 'system:builder';
+const SYSTEM_PUBLISH_ACTOR = 'u_00000000000000000000000000';
 const SWITCH_ATTEMPTS = 3;
 
 // `.staging` never matches the games-host id pattern, so nothing under it is ever served.
@@ -36,6 +37,23 @@ const stagedDir = (deps: AppDeps, jobId: string) => join(stagingRoot(deps), jobI
 const completedRoot = (deps: AppDeps) => join(deps.config.gamesRoot, '.completed');
 const displayQueue = (deps: AppDeps) => join(deps.config.gamesRoot, '.display-pending');
 const displayMarker = (deps: AppDeps, buildId: string) => join(displayQueue(deps), buildId);
+const jobLocks = new Map<string, Promise<void>>();
+
+async function withJobLock<T>(jobId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = jobLocks.get(jobId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  jobLocks.set(jobId, current);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    if (jobLocks.get(jobId) === current) jobLocks.delete(jobId);
+    release();
+  }
+}
 
 function jobRow(deps: AppDeps, jobId: string) {
   return deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).get();
@@ -43,6 +61,14 @@ function jobRow(deps: AppDeps, jobId: string) {
 
 export function awaitsBuild(deps: AppDeps, jobId: string): boolean {
   const job = jobRow(deps, jobId);
+  if (job?.kind === 'new_game') {
+    const planner = deps.db
+      .select({ id: schema.jobTickets.issueNumber })
+      .from(schema.jobTickets)
+      .where(and(eq(schema.jobTickets.jobId, jobId), eq(schema.jobTickets.key, 'new-game-plan')))
+      .get();
+    if (planner) return false;
+  }
   return job !== undefined && (BUILD_KINDS as readonly string[]).includes(job.kind) && !isTerminal(job.state);
 }
 
@@ -57,12 +83,30 @@ export function runCompleted(deps: AppDeps, jobId: string): boolean {
 }
 
 // Unpacks the hook's archive beside the games root and swaps it in whole, replacing an earlier upload.
-export async function stageArtifact(deps: AppDeps, jobId: string, gitSha: string, archive: Buffer): Promise<void> {
+export async function stageArtifact(
+  deps: AppDeps,
+  jobId: string,
+  gitSha: string,
+  archive: Buffer,
+  checkId?: string,
+): Promise<void> {
+  return withJobLock(jobId, () => stageArtifactLocked(deps, jobId, gitSha, archive, checkId));
+}
+
+async function stageArtifactLocked(
+  deps: AppDeps,
+  jobId: string,
+  gitSha: string,
+  archive: Buffer,
+  checkId?: string,
+): Promise<void> {
+  if (!awaitsBuild(deps, jobId)) throw new BadArchive('job_not_awaiting_build');
   const temporary = join(stagingRoot(deps), `.${jobId}.${randomUUID()}`);
   try {
     await mkdir(join(temporary, 'build'), { recursive: true });
     await untarGz(archive, join(temporary, 'build'));
     await writeFile(join(temporary, 'git-sha'), gitSha);
+    if (checkId) await writeFile(join(temporary, 'check-id'), checkId);
     await rm(stagedDir(deps, jobId), { recursive: true, force: true });
     await rename(temporary, stagedDir(deps, jobId));
   } finally {
@@ -80,6 +124,10 @@ export const isPublishing = (jobId: string) => publishing.has(jobId);
 // the job's branch to it, mark it tested, then finish the job. A failure before the switch removes the build and fails
 // the job; once the switch has committed, the branch points at the build, so it is kept and only the failure is logged.
 export async function publishStaged(deps: AppDeps, jobId: string): Promise<PublishOutcome> {
+  return withJobLock(jobId, () => publishStagedLocked(deps, jobId));
+}
+
+async function publishStagedLocked(deps: AppDeps, jobId: string): Promise<PublishOutcome> {
   if (publishing.has(jobId) || !awaitsBuild(deps, jobId) || !existsSync(stagedDir(deps, jobId))) return null;
   let release: ReturnType<typeof releaseRuntimeFor>;
   let design: ReturnType<typeof getDesignRuntime>;
@@ -94,6 +142,7 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
   let buildId: string | undefined;
   let target: string | undefined;
   let switched = false;
+  const checkId = await readFile(join(stagedDir(deps, jobId), 'check-id'), 'utf8').catch(() => '');
   try {
     const staged = stagedDir(deps, jobId);
     const files = join(staged, 'build');
@@ -135,12 +184,8 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
         buildId: build.id,
         previousBuildId,
         sdkVersion: manifest.data.sdk,
+        privateAssets: true,
       });
-      const sharedUrls = await sharedBuildFileUrls(files, [
-        'media/thumbnail.png',
-        ...(manifest.data.logo ? [manifest.data.logo] : []),
-        ...(manifest.data.loading ? [manifest.data.loading.portrait, manifest.data.loading.landscape] : []),
-      ]);
       await rename(files, buildTarget);
       await writeFile(
         join(buildTarget, '.ogm-display.json'),
@@ -150,7 +195,6 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
           genres: manifest.data.genres,
           description: manifest.data.description,
           tags: manifest.data.tags,
-          sharedUrls,
           pending: true,
         }),
       );
@@ -161,13 +205,72 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
       switched = true;
       return { branchId: branch.id, buildId: build.id, switchTx };
     });
+    if (checkId)
+      deps.db
+        .update(schema.publishChecks)
+        .set({ buildId: published.buildId })
+        .where(eq(schema.publishChecks.id, checkId))
+        .run();
     const displayTarget = buildDir(deps.config.gamesRoot, job.gameId, published.buildId);
     scheduleDisplayImages(deps, displayTarget, displayMarker(deps, published.buildId), manifest.data);
     void precompressBuild(deps.config.gamesRoot, displayTarget).catch((error: unknown) =>
       deps.log({ event: 'build_precompress_failed', buildId: published.buildId, reason: errorName(error) }),
     );
     design.stream.publish(published.branchId, published.switchTx.transaction);
-    await updateBuild(deps, release, published.buildId, 'tested');
+    // Legacy hooks can preserve the editor's build, but cannot make it eligible for a manual release either.
+    await updateBuild(deps, release, published.buildId, checkId ? 'tested' : 'failed');
+
+    const game = deps.db
+      .select({ visibility: schema.games.visibility })
+      .from(schema.games)
+      .where(eq(schema.games.id, job.gameId))
+      .get();
+    const branch = deps.db
+      .select({ name: schema.branches.name })
+      .from(schema.branches)
+      .where(eq(schema.branches.id, published.branchId))
+      .get();
+    let publishResult: 'published' | 'skipped' | 'failed' = 'skipped';
+    if (!checkId && game?.visibility === 'listed' && branch?.name === 'main') {
+      deps.log({
+        event: 'build_auto_publish_skipped',
+        jobId,
+        gameId: job.gameId,
+        buildId: published.buildId,
+        reason: 'legacy_hook',
+      });
+    }
+    if (checkId && game?.visibility === 'listed' && branch?.name === 'main') {
+      try {
+        await publish(deps, release, {
+          gameId: job.gameId,
+          buildId: published.buildId,
+          actor: SYSTEM_PUBLISH_ACTOR,
+          requireListed: true,
+          activeJobId: jobId,
+        });
+        publishResult = 'published';
+      } catch (error) {
+        publishResult =
+          error instanceof ReleaseError && ['game_unpublished', 'job_not_active'].includes(error.code)
+            ? 'skipped'
+            : 'failed';
+        deps.log({
+          event: 'build_auto_publish_failed',
+          jobId,
+          gameId: job.gameId,
+          buildId: published.buildId,
+          reason: errorName(error),
+        });
+      }
+    }
+    if (checkId)
+      deps.db.update(schema.publishChecks).set({ publishResult }).where(eq(schema.publishChecks.id, checkId)).run();
+
+    if (publishResult === 'failed') {
+      settle(deps, jobId, 'failed');
+      return { state: 'failed', reason: 'auto_publish_failed' };
+    }
 
     settle(deps, jobId, 'done');
     deps.log({ event: 'build_published', jobId, gameId: job.gameId, buildId: published.buildId });
@@ -175,6 +278,12 @@ export async function publishStaged(deps: AppDeps, jobId: string): Promise<Publi
   } catch (error) {
     const reason =
       error instanceof PublishFailure || error instanceof BuildCacheError ? error.message : errorName(error);
+    if (checkId)
+      deps.db
+        .update(schema.publishChecks)
+        .set({ publishResult: 'failed' })
+        .where(eq(schema.publishChecks.id, checkId))
+        .run();
     if (switched && buildId) {
       settle(deps, jobId, 'done');
       deps.log({ event: 'build_publish_incomplete', jobId, gameId: job.gameId, buildId, reason });
@@ -213,7 +322,7 @@ function scheduleDisplayImages(
   // Limit expensive encoders to one build at a time; the sweep picks up the remainder.
   if (deriving.size > 0) return;
   deriving.add(target);
-  void writeDisplayImages(deps, target, manifest)
+  void writeDisplayImages(target, manifest)
     .then(() => rm(marker, { force: true }))
     .catch((error: unknown) => deps.log({ event: 'build_display_images_failed', reason: errorName(error) }))
     .finally(() => {
@@ -263,21 +372,14 @@ async function retryDisplayImages(deps: AppDeps, attempted = new Set<string>()):
 // Publish the metadata atomically only after every referenced variant exists. Until then readers use originals.
 // The list's card art (thumbnail and logo) is published first: a build's loading screens can take the encoder many
 // minutes, and until its card art has variants every phone downloads the multi-megabyte originals.
-async function writeDisplayImages(deps: AppDeps, target: string, manifest: DisplayManifest): Promise<void> {
+async function writeDisplayImages(target: string, manifest: DisplayManifest): Promise<void> {
   const current = await readJson(join(target, '.ogm-display.json'));
   let cards =
     current && typeof current === 'object' && 'partial' in current && current.partial === true && 'images' in current
       ? (current.images as Record<string, DisplayImage>)
       : undefined;
   if (!cards) {
-    cards = await publishDisplayImages(
-      deps,
-      target,
-      manifest,
-      {},
-      await makeDisplayImages(target, manifest.logo),
-      true,
-    );
+    cards = await publishDisplayImages(target, manifest, {}, await makeDisplayImages(target, manifest.logo), true);
   }
   const rest = await makeDisplayImages(
     target,
@@ -286,21 +388,16 @@ async function writeDisplayImages(deps: AppDeps, target: string, manifest: Displ
     Object.values(manifest.images ?? {}).flatMap((slot) => Object.values(slot.variants ?? {})),
     Object.keys(cards),
   );
-  await publishDisplayImages(deps, target, manifest, cards, rest, false);
+  await publishDisplayImages(target, manifest, cards, rest, false);
 }
 
 async function publishDisplayImages(
-  deps: AppDeps,
   target: string,
   manifest: DisplayManifest,
   published: Record<string, DisplayImage>,
   fresh: Record<string, DisplayImage>,
   partial: boolean,
 ): Promise<Record<string, DisplayImage>> {
-  await withArtifactMutation(() => storeDisplayImageBlobs(deps.config.gamesRoot, target, fresh));
-  for (const image of Object.values(fresh))
-    for (const format of ['avif', 'webp', 'png'] as const)
-      for (const entry of image.sources[format]) entry.path = `/a/${entry.path.split('/').at(-1)}`;
   const images = { ...published, ...fresh };
   const temporary = join(target, `.ogm-display-${randomUUID()}.tmp`);
   try {
@@ -366,7 +463,7 @@ export async function sweepBuilds(deps: AppDeps, graceMs: number, now = new Date
     .all();
   await mkdir(completedRoot(deps), { recursive: true });
   for (const job of completed) {
-    if (isTerminal(job.state) || publishing.has(job.jobId)) continue;
+    if (isTerminal(job.state) || publishing.has(job.jobId) || !awaitsBuild(deps, job.jobId)) continue;
     try {
       if (existsSync(stagedDir(deps, job.jobId))) {
         await publishStaged(deps, job.jobId);

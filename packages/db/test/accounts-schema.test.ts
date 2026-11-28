@@ -42,6 +42,9 @@ describe('accounts schema', () => {
       .run();
 
     expect(db.select().from(invitations).get()).toMatchObject({ kind: 'play', gameId: 'g-1' });
+    expect(db.select().from(games).get()).toMatchObject({ releaseState: 'released' });
+    sqlite.prepare("UPDATE games SET release_state = 'coming_soon' WHERE id = ?").run('g-1');
+    expect(db.select().from(games).get()).toMatchObject({ releaseState: 'coming_soon' });
     sqlite.close();
   });
 

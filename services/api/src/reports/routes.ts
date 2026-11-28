@@ -188,6 +188,7 @@ const routes = new Hono<ApiBindings>()
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      releaseState: game.releaseState,
       granted: hasGameGrant(deps.db, game.id, actor.userId),
     };
     requireAuthorization(authorize(actor, 'game.play', resource));

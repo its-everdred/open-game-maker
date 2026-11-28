@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,19 +9,44 @@ import { schema } from '@ogm/db';
 import { describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 
-import { finishRun, publishStaged, sweepBuilds } from '../../src/builds/publish.js';
+import { finishRun, publishStaged, stageArtifact, sweepBuilds } from '../../src/builds/publish.js';
 import { getDesignRuntime } from '../../src/design/routes.js';
 import { appendTransaction, resolveBranch } from '../../src/design/store.js';
 import { BadArchive, untarGz } from '../../src/builds/untar.js';
 import { tarGz } from '../../src/internal/tarball.js';
-import { builtFiles, completeRun, gamesHost, ids, jobState, SECRET, SHA, TICKET, world } from './fixtures.js';
+import { builtFiles, CHECK_ID, completeRun, gamesHost, ids, jobState, SECRET, SHA, TICKET, world } from './fixtures.js';
 
 const archiveOf = (dir: string) => execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', dir, '.']);
 
-function upload(app: ReturnType<typeof world>['app'], body: Buffer, headers: Record<string, string> = {}) {
+async function upload(app: ReturnType<typeof world>['app'], body: Buffer, headers: Record<string, string> = {}) {
+  const sha = headers['x-gm-sha'] ?? SHA;
+  let checkId = CHECK_ID;
+  if (/^[0-9a-f]{40}$/.test(sha)) {
+    const response = await app.request(`http://127.0.0.1:4000/internal/jobs/by-ticket/${TICKET}/publish-checks`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'x-gm-sha': sha, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        gitSha: sha,
+        artifactSha256: createHash('sha256').update(body).digest('hex'),
+        surface: 'game',
+        sizes: [],
+        checks: [
+          { name: 'pnpm run build', result: 'passed' },
+          { name: 'pnpm run test', result: 'passed' },
+        ],
+      }),
+    });
+    if (response.ok) checkId = ((await response.json()) as { id: string }).id;
+  }
   return app.request(`http://127.0.0.1:4000/internal/jobs/by-ticket/${TICKET}/build`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${SECRET}`, 'x-gm-sha': SHA, 'content-type': 'application/gzip', ...headers },
+    headers: {
+      authorization: `Bearer ${SECRET}`,
+      'x-gm-sha': SHA,
+      'x-gm-check-id': checkId,
+      'content-type': 'application/gzip',
+      ...headers,
+    },
     body,
   });
 }
@@ -36,7 +62,57 @@ function latestBuildId(deps: ReturnType<typeof world>['deps']) {
 }
 
 describe('publishing a merged build', () => {
-  it('serves the build, marks it tested and points the branch at it when the upload follows the merge', async () => {
+  it('keeps a legacy upload available to the editor without automatically releasing it', async () => {
+    const { deps, app } = world();
+    deps.sqlite.prepare("UPDATE games SET visibility = 'listed' WHERE id = ?").run(ids.game);
+    completeRun(deps);
+    const response = await upload(app, archiveOf(builtFiles()), { 'x-gm-check-id': '' });
+    expect(response.status).toBe(201);
+    expect(builds(deps)).toEqual([expect.objectContaining({ status: 'failed' })]);
+    expect(latestBuildId(deps)).not.toBeNull();
+    expect(deps.db.select().from(schema.releases).all()).toEqual([]);
+  });
+
+  it('refuses a different archive for a passing record at the same commit', async () => {
+    const { deps, app } = world();
+    completeRun(deps);
+    const expected = archiveOf(builtFiles());
+    const record = await app.request(`http://127.0.0.1:4000/internal/jobs/by-ticket/${TICKET}/publish-checks`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'x-gm-sha': SHA, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        gitSha: SHA,
+        artifactSha256: createHash('sha256').update(expected).digest('hex'),
+        surface: 'game',
+        sizes: [],
+        checks: [
+          { name: 'pnpm run build', result: 'passed' },
+          { name: 'pnpm run test', result: 'passed' },
+        ],
+      }),
+    });
+    const { id } = (await record.json()) as { id: string };
+    const response = await upload(app, Buffer.from('different archive'), { 'x-gm-check-id': id });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: { code: 'checks_required' } });
+    expect(builds(deps)).toEqual([]);
+  });
+
+  it('does not replace a claimed checked build with a concurrent legacy upload', async () => {
+    const { deps, app } = world();
+    const original = archiveOf(builtFiles());
+    expect((await upload(app, original)).status).toBe(202);
+    completeRun(deps);
+    const replacement = archiveOf(builtFiles());
+    const [published, late] = await Promise.allSettled([
+      publishStaged(deps, ids.job),
+      stageArtifact(deps, ids.job, SHA, replacement),
+    ]);
+    expect(published).toMatchObject({ status: 'fulfilled', value: { state: 'done' } });
+    expect(late).toMatchObject({ status: 'rejected', reason: { message: 'job_not_awaiting_build' } });
+    expect(builds(deps)).toEqual([expect.objectContaining({ status: 'tested' })]);
+  });
+  it('marks a build tested and points the branch at it without making it public', async () => {
     const { deps, app } = world();
     completeRun(deps);
 
@@ -60,16 +136,15 @@ describe('publishing a merged build', () => {
     const host = await gamesHost(deps.config.gamesRoot);
     try {
       const page = await fetch(`${host.base}/g/${ids.game}/${buildId}/`);
-      expect(page.status).toBe(200);
-      expect(await page.text()).toContain('<title>Fixture</title>');
-      expect((await fetch(`${host.base}/g/${ids.game}/${buildId}/assets/main.js`)).status).toBe(200);
+      expect(page.status).toBe(404);
+      expect((await fetch(`${host.base}/g/${ids.game}/${buildId}/assets/main.js`)).status).toBe(404);
     } finally {
       await host.close();
     }
   });
 
   // Live Brotli of a game bundle took seconds on a loaded host and games missed their ready timeout (#1319).
-  it('writes a Brotli copy of every shared code file once the build is live', async () => {
+  it('keeps draft code private and precompresses it inside the build', async () => {
     const { deps, app } = world();
     completeRun(deps);
     const { buildId } = (await (await upload(app, archiveOf(builtFiles()))).json()) as { buildId: string };
@@ -77,12 +152,37 @@ describe('publishing a merged build', () => {
     const plan = JSON.parse(
       readFileSync(join(deps.config.gamesRoot, ids.game, buildId, 'assets', 'cache-plan.json'), 'utf8'),
     ) as { entries: { url: string; kind: string }[] };
-    const code = plan.entries.filter(({ url, kind }) => kind === 'code' && url.startsWith('/a/'));
+    const code = plan.entries.filter(({ kind }) => kind === 'code');
     expect(code.length).toBeGreaterThan(0);
+    expect(plan.entries.every(({ url }) => !url.startsWith('/a/'))).toBe(true);
     await vi.waitFor(() => {
       for (const { url } of code)
-        expect(existsSync(join(deps.config.gamesRoot, '_a', `${url.slice('/a/'.length)}.br`))).toBe(true);
+        expect(existsSync(join(deps.config.gamesRoot, ids.game, buildId, `${url}.br`))).toBe(true);
     });
+  });
+
+  it('keeps absolute asset references inside the private build', async () => {
+    const { deps, app } = world();
+    completeRun(deps);
+    const files = builtFiles();
+    const hash = 'a'.repeat(64);
+    writeFileSync(
+      join(files, 'assets', 'main.js'),
+      `fetch('/a/${hash}.png'); fetch('https://cdn.example/a/${hash}.png'); fetch('//cdn.example/a/${hash}.png'); fetch('https://cdn.example/foo( /a/${hash}.png)');`,
+    );
+    const response = await upload(app, archiveOf(files));
+    expect(response.status).toBe(201);
+    const { buildId } = (await response.json()) as { buildId: string };
+    const root = join(deps.config.gamesRoot, ids.game, buildId);
+    const script = readFileSync(join(root, 'assets', 'main.js'), 'utf8');
+    expect(script).toContain(`/g/${ids.game}/${buildId}/a/${hash}.png`);
+    expect(script).toContain(`https://cdn.example/a/${hash}.png`);
+    expect(script).toContain(`//cdn.example/a/${hash}.png`);
+    expect(script).toContain(`https://cdn.example/foo( /a/${hash}.png)`);
+    const plan = JSON.parse(readFileSync(join(root, 'assets', 'cache-plan.json'), 'utf8')) as {
+      entries: { url: string }[];
+    };
+    expect(plan.entries.some(({ url }) => url === `/g/${ids.game}/${buildId}/assets/main.js`)).toBe(true);
   });
 
   it('stages an upload that lands before the merge and publishes it when the run completes', async () => {
@@ -189,12 +289,9 @@ describe('publishing a merged build', () => {
     expect(display.images['media/p.png'].sources.webp[0].width).toBe(320);
     expect(display.images['media/l.png'].sources.avif[0].width).toBe(320);
     const imagePath = image.sources.avif[0].path as string;
-    expect(imagePath).toMatch(/^\/a\/[0-9a-f]{64}\.avif$/u);
-    expect(existsSync(join(deps.config.gamesRoot, '_a', imagePath.slice('/a/'.length)))).toBe(true);
-    const cachePlan = JSON.parse(readFileSync(join(build, 'assets', 'cache-plan.json'), 'utf8')) as {
-      entries: Array<{ url: string }>;
-    };
-    expect(cachePlan.entries).toContainEqual(expect.objectContaining({ url: imagePath }));
+    expect(imagePath).toMatch(/^media\/ogm-variants\/[0-9a-f]{64}\.avif$/u);
+    expect(existsSync(join(build, imagePath))).toBe(true);
+    expect(existsSync(join(deps.config.gamesRoot, '_a', imagePath.split('/').at(-1)!))).toBe(false);
     expect(existsSync(join(build, '.complete'))).toBe(true);
   });
 
@@ -335,10 +432,12 @@ describe('finishRun', () => {
     const { deps, app } = world();
     expect((await upload(app, archiveOf(builtFiles()))).status).toBe(202);
     finishRun(deps, ids.job, 'done');
-    await expect.poll(() => jobState(deps)).toBe('done');
+    await expect.poll(() => jobState(deps), { timeout: 15_000 }).toBe('done');
     expect(builds(deps)).toEqual([expect.objectContaining({ jobId: ids.job, status: 'tested' })]);
     // Let the background publish release its claim before the next test reuses the job id.
-    await expect.poll(() => existsSync(join(deps.config.gamesRoot, '.staging', ids.job))).toBe(false);
+    await expect
+      .poll(() => existsSync(join(deps.config.gamesRoot, '.staging', ids.job)), { timeout: 15_000 })
+      .toBe(false);
   });
 });
 

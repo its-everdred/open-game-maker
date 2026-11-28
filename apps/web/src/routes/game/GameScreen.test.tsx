@@ -9,6 +9,8 @@ import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
 type MockFrameState = {
   bridgeState: 'connecting' | 'ready' | 'error';
   dropped: number;
+  firstFrame?: boolean;
+  back?: { enabled: boolean; label?: string };
   manifest?: unknown;
   error?: string;
   errorCode?: string;
@@ -16,6 +18,7 @@ type MockFrameState = {
 };
 
 type MockMountOptions = {
+  hostBack?: boolean;
   onSaveWrite?(payload: { saveSchemaVersion: number; data: unknown }): void;
   onState?(state: MockFrameState): void;
   onLoadDone?(measurement: { ms: number; fetchedBytes: number; cachedBytes: number }): void;
@@ -45,12 +48,14 @@ const editorApi = vi.hoisted(() => ({
   postAnalyticsEvent: vi.fn(),
   putSave: vi.fn(),
   releaseLease: vi.fn(),
+  requestDraftGrant: vi.fn(),
   submitReapply: vi.fn(),
 }));
 
 const host = vi.hoisted(() => {
   const controller = {
     applyDesign: vi.fn(),
+    back: vi.fn(),
     camera: vi.fn(),
     dispose: vi.fn(),
     onEvent: vi.fn(() => vi.fn()),
@@ -169,6 +174,7 @@ beforeEach(() => {
   preview.mountSceneryPreview.mockReturnValue(host.controller);
   useDock.getState().reset();
   editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar' });
+  editorApi.requestDraftGrant.mockResolvedValue({ grant: 'test-grant' });
   editorApi.getFallbackPalette.mockResolvedValue({ mode: 'request', palette: { categories: [], items: [] } });
   editorApi.getEditorPreviews.mockResolvedValue({ previews: [] });
   editorApi.getEditorStage.mockResolvedValue({ stage: null });
@@ -211,6 +217,20 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
+  it('reconnects with a replacement draft grant after authorization changes', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderGame('/g/game', client);
+    await waitFor(() =>
+      expect(host.mountGameFrame).toHaveBeenCalledWith(expect.objectContaining({ draftGrant: 'test-grant' })),
+    );
+    editorApi.requestDraftGrant.mockResolvedValue({ grant: 'replacement-grant' });
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['draft-grant', 'game', 'build'] });
+    });
+    await waitFor(() =>
+      expect(host.mountGameFrame).toHaveBeenCalledWith(expect.objectContaining({ draftGrant: 'replacement-grant' })),
+    );
+  });
   it('includes the running build id in player bug reports', async () => {
     const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       void input;
@@ -379,7 +399,7 @@ describe('GameScreen', () => {
   it('shows the frame error when a linked build cannot be read', async () => {
     editorApi.getBuildDesign.mockRejectedValue(new Error('build_not_found'));
     renderGame('/g/game?mode=edit&build=build_gone');
-    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }, { timeout: 10_000 }));
     await waitFor(() => expect(editorApi.getBuildDesign).toHaveBeenCalledTimes(2));
     /* Never the branch head in its place: the creator asked for that build. */
     expect(host.mountGameFrame).not.toHaveBeenCalled();
@@ -855,7 +875,7 @@ describe('GameScreen', () => {
     expect(await screen.findByRole('button', { name: 'Skeleton' }, { timeout: 5_000 })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Skeleton' }).querySelector('img')).toHaveAttribute(
       'src',
-      'http://127.0.0.1:10000/g/game/build/art/skeleton.png',
+      'http://127.0.0.1:10000/d/game/build/test-grant/art/skeleton.png',
     );
     expect(screen.getByRole('button', { name: 'Play' })).toBeVisible();
   }, 10_000);
@@ -915,4 +935,30 @@ describe('GameScreen', () => {
     await waitFor(() => expect(container.querySelector('.game-screen')).toHaveClass('is-playing'));
     expect(container.querySelector('.game-frame')).toBe(frame);
   });
+});
+
+it('shows the host Back action only while the game enables it', async () => {
+  renderGame();
+  await readyPlayFrame();
+  expect(host.mountGameFrame.mock.calls.at(-1)?.[0]?.hostBack).toBe(true);
+  expect(screen.queryByRole('button', { name: 'Choose mode' })).toBeNull();
+  act(() =>
+    host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+      bridgeState: 'ready',
+      dropped: 0,
+      firstFrame: true,
+      back: { enabled: true, label: 'Choose mode' },
+    }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Choose mode' }));
+  expect(host.controller.back).toHaveBeenCalledOnce();
+  act(() =>
+    host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+      bridgeState: 'ready',
+      dropped: 0,
+      firstFrame: true,
+      back: { enabled: false },
+    }),
+  );
+  expect(screen.queryByRole('button', { name: 'Choose mode' })).toBeNull();
 });

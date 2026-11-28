@@ -8,35 +8,47 @@ const fake = vi.hoisted(() => ({
   end: vi.fn(),
   sendText: vi.fn(),
   start: vi.fn().mockResolvedValue(undefined),
+  dictationMuted: vi.fn(),
+  voiceMuted: vi.fn(),
+  voiceLevel: undefined as ((level: number) => void) | undefined,
   defaultUpload: vi.fn(),
 }));
 vi.mock('./attachments', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./attachments')>()),
   uploadChatAttachment: fake.defaultUpload,
 }));
-vi.mock('@ogm/voice-client', () => ({
-  Dictation: class {
-    static isSupported() {
-      return true;
-    }
-    on(name: string, callback: (value: unknown) => void) {
-      fake.listeners.set(name, callback);
-      return () => fake.listeners.delete(name);
-    }
-    pressStart() {}
-    pressEnd() {}
-    cancel() {}
-  },
-  VoiceClient: class {
-    on(name: string, callback: (value: unknown) => void) {
-      fake.listeners.set(`voice:${name}`, callback);
-      return () => fake.listeners.delete(`voice:${name}`);
-    }
-    startFromGesture = fake.start;
-    end = fake.end;
-    sendText = fake.sendText;
-  },
-}));
+vi.mock('@ogm/voice-client', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@ogm/voice-client')>();
+  return {
+    ...original,
+    Dictation: class {
+      static isSupported() {
+        return true;
+      }
+      on(name: string, callback: (value: unknown) => void) {
+        fake.listeners.set(name, callback);
+        return () => fake.listeners.delete(name);
+      }
+      pressStart() {}
+      pressEnd() {}
+      setMuted = fake.dictationMuted;
+      cancel() {}
+    },
+    VoiceClient: class {
+      constructor(options: { onLevel?: (level: number) => void }) {
+        fake.voiceLevel = options.onLevel;
+      }
+      on(name: string, callback: (value: unknown) => void) {
+        fake.listeners.set(`voice:${name}`, callback);
+        return () => fake.listeners.delete(`voice:${name}`);
+      }
+      startFromGesture = fake.start;
+      end = fake.end;
+      sendText = fake.sendText;
+      setMuted = fake.voiceMuted;
+    },
+  };
+});
 vi.mock('./voice', () => ({
   connectDictation: vi.fn(),
   voiceProbeFailure: (error: unknown) => ({ available: false, code: String(error) }),
@@ -167,6 +179,37 @@ it('reports microphone errors that arrive before dictation stops', async () => {
   await expect(session.stop()).rejects.toThrow('Microphone denied');
 });
 
+it('keeps an unconfirmed dictation from being sent or passed to voice until edited', async () => {
+  const postText = vi.fn().mockResolvedValue(undefined);
+  const { container } = render(<AiurComposer jobId="job-1" voiceTarget={voiceTarget} postText={postText} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
+  const session = await composer.adapters.dictation!.start({ onPartial: vi.fn(), onLevel: vi.fn() });
+  fake.listeners.get('transcript')!({ kind: 'partial', text: 'partial words' });
+  fake.listeners.get('error')!({ code: 'incomplete_transcript', message: 'Final words missing' });
+  await expect(session.stop()).rejects.toThrow('Final words missing');
+  await expect(composer.onSend!('partial words', [])).rejects.toThrow('Review the dictation');
+  await expect(composer.adapters.voice!.start({ onEnd: vi.fn(), initialText: 'partial words' })).rejects.toThrow(
+    'Review the dictation',
+  );
+  expect(postText).not.toHaveBeenCalled();
+  composer.shadowRoot!.querySelector('textarea')!.dispatchEvent(new Event('input', { bubbles: true }));
+  await composer.onSend!('corrected words', []);
+  expect(postText).toHaveBeenCalledWith('job-1', 'corrected words', undefined);
+});
+
+it('allows a voice attempt after microphone denial without a transcript', async () => {
+  const { container } = render(<AiurComposer jobId="job-1" voiceTarget={voiceTarget} postText={vi.fn()} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
+  const session = await composer.adapters.dictation!.start({ onPartial: vi.fn(), onLevel: vi.fn() });
+  fake.listeners.get('error')!({ code: 'mic_denied', message: 'Microphone denied' });
+  await expect(session.stop()).rejects.toThrow('Microphone denied');
+  await waitFor(async () =>
+    expect(await composer.adapters.voice!.start({ onEnd: vi.fn(), initialText: '' })).toBeDefined(),
+  );
+});
+
 it('carries opening text into voice and keeps the session when the job refreshes', async () => {
   fake.end.mockClear();
   fake.sendText.mockClear();
@@ -202,6 +245,77 @@ it('sends the dictated opening when switching to voice and keeps the end control
   expect(voiceButton.hidden).toBe(false);
   voiceButton.click();
   await waitFor(() => expect(fake.end).toHaveBeenCalled());
+});
+
+it('keeps the microphone as a mute control and shows both live voice transcripts', async () => {
+  fake.dictationMuted.mockClear();
+  fake.voiceMuted.mockClear();
+  const { container } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
+  const mic = composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="mic"]')!;
+  const twoWay = composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="voice"]')!;
+  expect(twoWay.innerHTML).toContain('fill="var(--blue-b)"');
+  mic.click();
+  await waitFor(() => expect(composer.hasAttribute('data-recording')).toBe(true));
+  await waitFor(() => expect(mic.getAttribute('aria-label')).toBe('Mute microphone'));
+  const waveform = composer.shadowRoot!.querySelector<HTMLElement>('[part="waveform"]')!;
+  fake.listeners.get('level')!(0.6);
+  expect(waveform.hidden).toBe(false);
+  expect(waveform.querySelector('i')?.style.transform).not.toBe('scaleY(0.1)');
+  expect(mic.hidden).toBe(false);
+  expect(mic.style.opacity).toBe('1');
+
+  mic.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, button: 0 }));
+  expect(fake.dictationMuted).toHaveBeenCalledWith(true);
+  expect(mic.getAttribute('aria-label')).toBe('Unmute microphone');
+  expect(mic.style.opacity).toBe('0.58');
+  fake.listeners.get('level')!(0.6);
+  expect(Array.from(waveform.querySelectorAll('i')).every((bar) => bar.style.transform === 'scaleY(0.10)')).toBe(true);
+
+  composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="voice"]')!.click();
+  fake.listeners.get('transcript')!({ kind: 'final', text: 'Start run' });
+  await waitFor(() => expect(composer.hasAttribute('data-voice-live')).toBe(true));
+  await waitFor(() => expect(mic.getAttribute('aria-label')).toBe('Mute microphone'));
+  expect(mic.hidden).toBe(false);
+  fake.voiceLevel?.(0.8);
+  expect(waveform.querySelector('i')?.style.transform).not.toBe('scaleY(0.1)');
+
+  mic.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, button: 0 }));
+  expect(fake.voiceMuted).toHaveBeenCalledWith(true);
+  fake.voiceLevel?.(0.8);
+  expect(Array.from(waveform.querySelectorAll('i')).every((bar) => bar.style.transform === 'scaleY(0.10)')).toBe(true);
+  fake.listeners.get('voice:transcript')!({ type: 'transcript', kind: 'final', text: 'Start run' });
+  fake.listeners.get('voice:agent_text')!({ type: 'agent_text', turn_id: 'turn-1', text: 'Run started.', final: true });
+  await waitFor(() => expect(container.querySelector('[aria-label="Live voice conversation"]')).not.toBeNull());
+  expect(container).toHaveTextContent('Start run');
+  expect(container).toHaveTextContent('Run started.');
+  const transcript = container.querySelector('[aria-label="Live voice conversation"]')!;
+  const lines = Array.from(transcript.querySelectorAll('.build-chat-row'));
+  expect(lines.map((line) => line.classList.contains('creator'))).toEqual([true, false]);
+  expect(lines.map((line) => line.classList.contains('agent'))).toEqual([false, true]);
+});
+
+it.each(['Enter', 'Space'])('starts dictation on idle microphone %s and mutes on the next activation', async (code) => {
+  fake.dictationMuted.mockClear();
+  const { container } = render(<AiurComposer jobId="draft" voiceTarget={voiceTarget} postText={vi.fn()} />);
+  const composer = container.querySelector('aiur-composer') as ComposerElement;
+  await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
+  const mic = composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="mic"]')!;
+  mic.focus();
+  const activate = () => {
+    mic.dispatchEvent(
+      new KeyboardEvent('keydown', { key: code === 'Space' ? ' ' : 'Enter', code, bubbles: true, composed: true }),
+    );
+    mic.dispatchEvent(new MouseEvent('click', { detail: 0, bubbles: true, composed: true }));
+  };
+
+  activate();
+  await waitFor(() => expect(composer.hasAttribute('data-recording')).toBe(true));
+  expect(fake.dictationMuted).not.toHaveBeenCalled();
+
+  activate();
+  expect(fake.dictationMuted).toHaveBeenCalledWith(true);
 });
 
 it('restores unsent opening words when voice ends before text is available', async () => {

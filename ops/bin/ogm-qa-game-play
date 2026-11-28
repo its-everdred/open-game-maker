@@ -32,6 +32,8 @@ import shlex
 import sqlite3
 import subprocess
 import sys
+import urllib.request
+from urllib.parse import quote, urlsplit
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -52,7 +54,26 @@ def env_file(path):
 
 def clean(text, limit=300):
     """Game-sent text is untrusted: one line, no control characters, bounded, so it cannot forge attention lines."""
-    return re.sub(r'[\x00-\x1f\x7f]+', ' ', str(text))[:limit]
+    redacted = re.sub(r'(/d/[^/]+/[^/]+/)[^/\s]+', r'\1<redacted>', str(text))
+    return re.sub(r'[\x00-\x1f\x7f]+', ' ', redacted)[:limit]
+
+
+def scoped_url(api, games, game_id, build_id):
+    port, token = api.get('OGM_API_PORT'), api.get('OGM_INTERNAL_TOKEN')
+    if not port or not port.isdigit() or not token:
+        return f'{games}/g/{quote(game_id, safe="")}/{quote(build_id, safe="")}/'
+    request = urllib.request.Request(
+        f'http://127.0.0.1:{port}/internal/operator/games/{quote(game_id, safe="")}/builds/{quote(build_id, safe="")}/access',
+        data=b'', headers={'x-ogm-internal': token}, method='POST')
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            url = json.load(response)['url']
+        actual, expected = urlsplit(url), urlsplit(games)
+        if (actual.scheme, actual.netloc) != (expected.scheme, expected.netloc):
+            raise ValueError('unexpected games origin')
+        return url
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise RuntimeError('scoped build access unavailable') from error
 
 
 def trace_line(report):
@@ -143,11 +164,20 @@ def main(argv):
         rows = conn.execute(
             """select g.id, g.slug, (select b.id from builds b where b.game_id = g.id and b.status = 'tested'
                                       order by b.created_at desc limit 1)
-               from games g where g.delisted_at is null and g.slug not like 'qa-%' order by g.slug"""
+               from games g where g.delisted_at is null and g.visibility = 'listed' and g.release_state = 'released' and g.slug not like 'qa-%' order by g.slug"""
         ).fetchall()
     if args.get('--game'):
         rows = [row for row in rows if row[1] == args['--game']]
         if not rows:
+            with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as conn:
+                protected = conn.execute(
+                    "select 1 from games where slug = ? and delisted_at is null and release_state = 'coming_soon'",
+                    (args['--game'],),
+                ).fetchone()
+            if protected:
+                print(f"{clean(args['--game'])}: not checked (coming soon)")
+                print('exit=0 qa-game-play')
+                return 0
             print(f"ogm-qa-game-play: no published game {args['--game']}", file=sys.stderr)
             return 64
         if args.get('--build'):
@@ -174,7 +204,11 @@ def main(argv):
             with open(attention, 'a') as handle:
                 handle.write(f'{stamp()} qa-frame-check failed: {line}\n')
     else:
-        frame_url = f'{games}/g/{framed[0]}/{framed[2]}/'
+        try:
+            frame_url = scoped_url(api, games, framed[0], framed[2])
+        except RuntimeError as error:
+            print(f'frames {framed[1]} {framed[2]}: {error}')
+            return 1
         code, output = frame_check(gm, repo, frame_url, apps)
         if code != 0:
             print(f'frames {framed[1]} {framed[2]}: first check failed ({clean(output)}), checking again')

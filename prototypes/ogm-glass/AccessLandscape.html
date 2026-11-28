@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Game access landscape</title>
+<link rel="stylesheet" href="./glass.css">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&amp;family=Nunito:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0f0e16}a{color:#74c8ed}a:hover{color:#f2ead6}
+.gb{border:1px solid;border-color:rgba(242,234,214,.34) rgba(0,0,0,.42) rgba(242,234,214,.34) rgba(0,0,0,.42);box-shadow:0 6px 18px -6px rgba(0,0,0,.55)}
+.orb.gb{background:rgba(57,54,67,.55)}
+.orb.blue{background:var(--gloss),#74c8ed;color:#1d1b16}
+.card{border-radius:20px;background:rgba(36,33,46,.62);-webkit-backdrop-filter:blur(22px) saturate(1.4);backdrop-filter:blur(22px) saturate(1.4);overflow:hidden}
+.card .r{display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 10px 10px 14px;width:100%;border:0;background:transparent;color:#f2ead6;text-align:left;font:inherit}
+.card .r+.r{box-shadow:inset 0 1px 0 rgba(242,234,214,.08)}
+.r .grow{flex:1;min-width:0}
+.r .t{font:600 17px/1.2 Fredoka,Nunito,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r .s{font:700 13px/1.3 Nunito,sans-serif;color:#c4beb0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font:700 17px Fredoka;color:#f2ead6;flex:none;background:var(--gloss),rgba(116,200,237,.26)}
+.sg{display:flex;gap:2px;padding:3px;border-radius:999px;background:rgba(15,14,22,.55);flex:none}
+.sg button{height:36px;min-width:54px;padding:0 10px;border:0;border-radius:999px;background:transparent;color:#c4beb0;font:700 14px Nunito,sans-serif}
+.sg button[aria-pressed="true"]{background:var(--gloss),#74c8ed;color:#1d1b16}
+.sg button:disabled{opacity:.3;cursor:default}
+.sg.wide{display:grid;grid-template-columns:repeat(3,1fr)}
+.sg.wide button{height:44px;font-size:15px}
+.in{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 16px;min-height:56px}
+.in input{flex:1;min-width:0;height:44px;border:0;background:transparent;outline:none;padding:0;color:#f2ead6;font:600 16px Nunito,sans-serif}
+.in input::placeholder{color:rgba(242,234,214,.45)}
+.flat{width:40px;height:40px;flex:none;border:0;border-radius:50%;display:grid;place-items:center;padding:0;background:transparent;color:#c4beb0}
+.btn.blue,.g a.btn.blue{color:#1d1b16;background:var(--gloss),#74c8ed}
+.seg button[aria-pressed="true"]{background:var(--gloss),#74c8ed;color:#1d1b16}
+.chev{color:#c4beb0}</style>
+</head>
+<body>
+<div class="g" style="width:844px;height:390px">
+<div class="glows" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<div class="top" style="height:64px;padding:12px 14px 0 16px">
+<a class="orb sm gb" href="AccessEntry.html" aria-label="Back"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+<h1 class="h1" style="font-size:26px;line-height:40px;flex:1">Access</h1>
+</div>
+<div style="position:absolute;top:64px;left:14px;width:400px;display:flex;flex-direction:column;gap:12px">
+<div class="card gb"><div class="r"><span class="av">K</span><div class="grow"><div class="t">Kevin</div><div class="s">Owner</div></div></div></div>
+<div class="card gb">
+<div class="r"><span class="av">A</span><div class="grow"><div class="t">Alexis</div><div class="s">Editor</div></div><div class="sg" role="group" aria-label="Alexis access"><button type="button" aria-pressed="false">Hide</button><button type="button" aria-pressed="false">Play</button><button type="button" aria-pressed="true">Edit</button></div></div>
+</div>
+</div>
+<div style="position:absolute;top:64px;right:14px;width:400px;display:flex;flex-direction:column;gap:12px">
+<div class="card gb">
+<div class="r"><span class="av">K</span><div class="grow"><div class="t">Kim</div><div class="s">Editor</div></div><div class="sg" role="group" aria-label="Kim access"><button type="button" aria-pressed="false">Hide</button><button type="button" aria-pressed="true">Play</button><button type="button" aria-pressed="false">Edit</button></div></div>
+<div class="r"><span class="av">P</span><div class="grow"><div class="t">[Player]</div><div class="s">Player</div></div><div class="sg" role="group" aria-label="[Player] access"><button type="button" aria-pressed="false">Hide</button><button type="button" aria-pressed="true">Play</button><button type="button" aria-pressed="false" disabled>Edit</button></div></div>
+<div class="r"><span class="av">T</span><div class="grow"><div class="t">[Tester]</div><div class="s">Player</div></div><div class="sg" role="group" aria-label="[Tester] access"><button type="button" aria-pressed="true">Hide</button><button type="button" aria-pressed="false">Play</button><button type="button" aria-pressed="false" disabled>Edit</button></div></div>
+</div>
+</div>
+</div>
+</body>
+</html>

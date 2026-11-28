@@ -52,6 +52,8 @@ export interface AppDeps {
     creatorJobLimit: number;
     defaultDailyAllowanceConfigured?: boolean;
     resetZoneDefault: string;
+    testerNewGamesPerDay?: number;
+    plannerTicketLimit?: number;
     intakeDir?: string;
     reportBundleMaxBytes: number;
     blobPutMaxBytes: number;

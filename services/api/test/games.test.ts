@@ -2,15 +2,20 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { sweepPlaySessions } from '../src/analytics/retention.js';
 import { createGameRow } from '../src/games/games.js';
 import { CommitServiceRepoProvisioner, NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
 import { writeQaState } from '../src/qa/state.js';
+import { signIn } from './auth-helpers.js';
 
 const now = '2026-11-01T00:00:00.000Z';
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 const familyId = 'f-family';
 const creator: TestUser = {
   kind: 'user',
@@ -69,6 +74,168 @@ async function createGame(
 }
 
 describe('games routes', () => {
+  it('exposes only the selected coming soon card image', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    const game = createGameRow(deps.db, {
+      familyId,
+      ownerId: creator.userId,
+      title: 'Card',
+      repoVisibility: 'private',
+    });
+    deps.db.update(schema.games).set({ releaseState: 'coming_soon' }).where(eq(schema.games.id, game.id)).run();
+    deps.db
+      .insert(schema.branches)
+      .values({
+        id: 'branch-card',
+        gameId: game.id,
+        name: 'main',
+        gitRef: 'main',
+        latestBuildId: 'build1',
+        status: 'active',
+        createdBy: creator.userId,
+        createdAt: now,
+      })
+      .run();
+    const directory = join(deps.config.gamesRoot, game.id, 'build1');
+    mkdirSync(join(directory, 'media'), { recursive: true });
+    writeFileSync(join(directory, 'media', 'thumbnail.png'), 'card image');
+    writeFileSync(join(directory, 'media', 'secret.png'), 'secret');
+    writeFileSync(join(directory, '.complete'), '');
+    const { app } = await makeApp(deps);
+    const body = (await (await app.request('/api/v1/games', { headers: asUser(player.userId) })).json()) as {
+      games: Array<{ coverUrl: string }>;
+    };
+    const card = await app.request(body.games[0]!.coverUrl);
+    expect(card.status).toBe(200);
+    expect(card.headers.get('content-security-policy')).toContain('sandbox');
+    expect(await card.text()).toBe('card image');
+    const ownerList = (await (await app.request('/api/v1/games', { headers: asUser(creator.userId) })).json()) as {
+      games: Array<{ coverUrl: string }>;
+    };
+    expect((await app.request(ownerList.games[0]!.coverUrl)).status).toBe(200);
+    const detail = (await (
+      await app.request(`/api/v1/games/${game.id}`, { headers: asUser(creator.userId) })
+    ).json()) as {
+      coverUrl: string;
+    };
+    expect((await app.request(detail.coverUrl)).status).toBe(200);
+    const secret = `https://games.example.test/g/${game.id}/build1/media/secret.png`;
+    const token = Buffer.from(secret).toString('base64url');
+    expect((await app.request(`/api/v1/games/${game.id}/card-image/${token}`)).status).toBe(404);
+  }, 60_000);
+  it('lists coming soon games while denying ungranted players access', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.db
+      .insert(schema.allowedUsers)
+      .values({ email: player.email, role: 'player', addedBy: admin.userId, addedAt: now })
+      .run();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: 'g-soon',
+        familyId,
+        ownerId: creator.userId,
+        title: 'Soon',
+        slug: 'soon',
+        visibility: 'private',
+        releaseState: 'coming_soon',
+        repoVisibility: 'private',
+        createdAt: now,
+      })
+      .run();
+    const outsider: TestUser = { ...player, userId: 'u-outside', email: 'outside@example.com', familyId: 'f-outside' };
+    const outsideAdmin: TestUser = {
+      ...admin,
+      userId: 'u-admin-outside',
+      email: 'other-admin@example.com',
+      familyId: 'f-outside',
+    };
+    installUsers(deps, [creator, admin, player, outsider, outsideAdmin]);
+    deps.db
+      .insert(schema.families)
+      .values({ id: 'f-outside', name: 'Other', ownerUserId: outsider.userId, createdAt: now })
+      .run();
+    deps.db
+      .insert(schema.familyMembers)
+      .values({ familyId: 'f-outside', userId: outsider.userId, role: 'owner', capability: 'player', joinedAt: now })
+      .run();
+    const { app } = await makeApp(deps);
+    expect(await (await app.request('/api/v1/games', { headers: asUser(outsideAdmin.userId) })).json()).toMatchObject({
+      games: [{ id: 'g-soon', canPlay: true, canManageRelease: true }],
+    });
+    expect(
+      (await app.request('/api/v1/admin/games/g-soon/early-access', { headers: asUser(outsideAdmin.userId) })).status,
+    ).toBe(200);
+    expect(await (await app.request('/api/v1/games', { headers: asUser(outsider.userId) })).json()).toMatchObject({
+      games: [{ id: 'g-soon', canPlay: false, repo: null }],
+    });
+    expect((await app.request('/api/v1/games/g-soon/builds', { headers: asUser(outsider.userId) })).status).toBe(403);
+    expect(
+      await (await app.request('/api/v1/games/resolve/soon', { headers: asUser(outsider.userId) })).json(),
+    ).toMatchObject({ error: 'coming_soon' });
+    deps.db
+      .insert(schema.allowedUsers)
+      .values({ email: outsider.email, role: 'player', addedBy: admin.userId, addedAt: now })
+      .run();
+    expect(
+      (
+        await app.request('/api/v1/admin/games/g-soon/early-access', {
+          method: 'POST',
+          headers: { ...asUser(outsideAdmin.userId), 'content-type': 'application/json' },
+          body: JSON.stringify({ email: outsider.email }),
+        })
+      ).status,
+    ).toBe(204);
+    expect((await app.request('/api/v1/games/g-soon', { headers: asUser(outsider.userId) })).status).toBe(200);
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(outsider.userId) })).status).toBe(200);
+    expect(
+      (await app.request('/api/v1/games/g-soon/branches/main/design', { headers: asUser(outsider.userId) })).status,
+    ).toBe(200);
+    expect(
+      (
+        await app.request(`/api/v1/admin/games/g-soon/early-access/${outsider.userId}`, {
+          method: 'DELETE',
+          headers: asUser(admin.userId),
+        })
+      ).status,
+    ).toBe(204);
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(outsider.userId) })).status).toBe(403);
+    const list = await app.request('/api/v1/games', { headers: asUser(player.userId) });
+    expect(await list.json()).toMatchObject({ games: [{ id: 'g-soon', releaseState: 'coming_soon', canPlay: false }] });
+    const denied = await app.request('/api/v1/games/resolve/soon', { headers: asUser(player.userId) });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ error: 'coming_soon' });
+    const anonymous = await app.request('/api/v1/games/resolve/soon');
+    expect(anonymous.status).toBe(403);
+    expect(await anonymous.json()).toMatchObject({ error: 'coming_soon' });
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(creator.userId) })).status).toBe(200);
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(admin.userId) })).status).toBe(200);
+    const grantUrl = `/api/v1/admin/games/g-soon/early-access/${player.userId}`;
+    expect((await app.request(grantUrl, { method: 'PUT', headers: asUser(player.userId) })).status).toBe(403);
+    expect((await app.request(grantUrl, { method: 'PUT', headers: asUser(admin.userId) })).status).toBe(204);
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(player.userId) })).status).toBe(200);
+    expect((await app.request(grantUrl, { method: 'DELETE', headers: asUser(admin.userId) })).status).toBe(204);
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(player.userId) })).status).toBe(403);
+    expect(
+      (
+        await app.request('/api/v1/games/g-soon', {
+          method: 'PATCH',
+          headers: { ...asUser(player.userId), 'content-type': 'application/json' },
+          body: JSON.stringify({ releaseState: 'released' }),
+        })
+      ).status,
+    ).toBe(403);
+    const release = await app.request('/api/v1/games/g-soon', {
+      method: 'PATCH',
+      headers: { ...asUser(outsideAdmin.userId), 'content-type': 'application/json' },
+      body: JSON.stringify({ releaseState: 'released' }),
+    });
+    expect(release.status).toBe(200);
+    expect(await release.json()).toMatchObject({ releaseState: 'released', visibility: 'listed' });
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(player.userId) })).status).toBe(200);
+  }, 60_000);
   it('isolates the QA creator before provisioning and refuses an unsafe repository', async () => {
     const deps = makeDeps();
     seedFamily(deps);
@@ -209,6 +376,17 @@ describe('games routes', () => {
     const { app } = await makeApp(deps);
     const created = await createGame(app);
     const { id } = (await created.json()) as { id: string };
+    const outbox = () =>
+      deps.sqlite.prepare('SELECT text FROM mail_outbox ORDER BY created_at').all() as { text: string }[];
+    const { session } = await signIn(app, outbox, 'kevin@example.com');
+    const owner = deps.db.select().from(schema.user).where(eq(schema.user.email, 'kevin@example.com')).get()!;
+    deps.db.update(schema.games).set({ ownerId: owner.id }).where(eq(schema.games.id, id)).run();
+    deps.db
+      .insert(schema.familyMembers)
+      .values({ familyId, userId: owner.id, role: 'member', capability: 'creator', joinedAt: now })
+      .run();
+    installUsers(deps, [{ ...creator, userId: owner.id, email: owner.email }]);
+    const ownerHeaders = { ...asUser(owner.id), cookie: session };
     deps.db
       .insert(schema.branches)
       .values({
@@ -235,7 +413,7 @@ describe('games routes', () => {
       writeFileSync(join(directory, 'media', file), file);
     const list = async () =>
       (
-        (await (await app.request('/api/v1/games', { headers: asUser(creator.userId) })).json()) as {
+        (await (await app.request('/api/v1/games', { headers: ownerHeaders })).json()) as {
           games: Array<Record<string, unknown>>;
         }
       ).games[0]!;
@@ -304,21 +482,25 @@ describe('games routes', () => {
         ),
       }),
     );
+    const draftPath = (path: string) =>
+      expect.stringMatching(
+        new RegExp(
+          `^https://games\\.example\\.test/d/${id}/build1/[A-Za-z0-9_-]{44,2048}/${path.replace('.', '\\.')}$`,
+        ),
+      );
     const pendingMedia = await list();
-    expect(pendingMedia.logoUrl).toBe('https://games.example.test/a/' + `${'1'.repeat(64)}.png`);
-    expect(pendingMedia.coverUrl).toBe('https://games.example.test/a/' + `${'2'.repeat(64)}.png`);
+    expect(pendingMedia.logoUrl).toEqual(draftPath(`a/${'1'.repeat(64)}.png`));
+    expect(pendingMedia.coverUrl).toEqual(draftPath(`a/${'2'.repeat(64)}.png`));
     expect(pendingMedia.loadingUrls).toMatchObject({
-      portrait: `https://games.example.test/a/${'3'.repeat(64)}.png`,
-      landscape: `https://games.example.test/a/${'4'.repeat(64)}.png`,
+      portrait: draftPath(`a/${'3'.repeat(64)}.png`),
+      landscape: draftPath(`a/${'4'.repeat(64)}.png`),
     });
     expect(await list()).toMatchObject({
       tagline: 'Published description',
       tags: ['Cozy'],
       logoUrl: expect.any(String),
     });
-    expect(
-      (await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: asUser(creator.userId) })).status,
-    ).toBe(200);
+    expect((await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: ownerHeaders })).status).toBe(200);
     const sources = Object.fromEntries(
       ['avif', 'webp', 'png'].map((format) => [
         format,
@@ -352,9 +534,7 @@ describe('games routes', () => {
       coverImage: {
         width: 640,
         sources: {
-          avif: [
-            { width: 320, path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` },
-          ],
+          avif: [{ width: 320, path: draftPath(`media/ogm-variants/${'a'.repeat(64)}.avif`) }],
         },
       },
       logoImage: { height: 360 },
@@ -362,19 +542,19 @@ describe('games routes', () => {
         tile: {
           'phone-portrait': {
             sources: {
-              avif: [{ path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` }],
+              avif: [{ path: draftPath(`media/ogm-variants/${'a'.repeat(64)}.avif`) }],
             },
           },
         },
       },
     });
-    const detail = await (await app.request(`/api/v1/games/${id}`, { headers: asUser(creator.userId) })).json();
+    const detail = await (await app.request(`/api/v1/games/${id}`, { headers: ownerHeaders })).json();
     expect(detail).toMatchObject({
-      loadingUrls: { portrait: `https://games.example.test/a/${'3'.repeat(64)}.png` },
+      loadingUrls: { portrait: draftPath(`a/${'3'.repeat(64)}.png`) },
       loadingImages: {
         portrait: {
           sources: {
-            avif: [{ path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` }],
+            avif: [{ path: draftPath(`media/ogm-variants/${'a'.repeat(64)}.avif`) }],
           },
         },
       },
@@ -385,16 +565,16 @@ describe('games routes', () => {
       tagline: 'Match colour blobs and drop blocks in a forest duel.',
       tags: ['Versus', 'Cozy'],
       loadingUrls: {
-        portrait: `https://games.example.test/a/${'3'.repeat(64)}.png`,
-        landscape: `https://games.example.test/a/${'4'.repeat(64)}.png`,
+        portrait: draftPath(`a/${'3'.repeat(64)}.png`),
+        landscape: draftPath(`a/${'4'.repeat(64)}.png`),
       },
-      trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
+      trailerUrl: draftPath(`media/trailer-landscape.mp4`),
     });
     // The web renders tile art only when logoUrl/coverUrl are set (Cover.tsx, Tile.tsx): the image objects add
     // srcsets on top, so dropping the URLs blanked every tile on prod (2026-11-21).
     expect(await list()).toMatchObject({
-      logoUrl: `https://games.example.test/a/${'1'.repeat(64)}.png`,
-      coverUrl: `https://games.example.test/a/${'2'.repeat(64)}.png`,
+      logoUrl: draftPath(`a/${'1'.repeat(64)}.png`),
+      coverUrl: draftPath(`a/${'2'.repeat(64)}.png`),
     });
     // An older build's portrait cut is never offered: every game shows its one 16:9 trailer.
     expect(await list()).not.toHaveProperty('portraitTrailerUrl');
@@ -414,7 +594,7 @@ describe('games routes', () => {
       );
       const game = await list();
       expect(game).not.toHaveProperty('coverImage');
-      expect(game.coverUrl).toBe(`https://games.example.test/a/${'2'.repeat(64)}.png`);
+      expect(game.coverUrl).toEqual(draftPath(`a/${'2'.repeat(64)}.png`));
     }
   });
 
@@ -580,6 +760,61 @@ describe('games routes', () => {
     expect(deps.db.select().from(schema.githubConnections).all()).toEqual([]);
     const response = await createGame(app);
     expect(response.status).toBe(201);
+    expect(deps.db.select().from(schema.games).all()).toHaveLength(1);
+  });
+
+  it('enforces the daily game cap before provisioning, even for concurrent creates', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.config.testerNewGamesPerDay = 1;
+    deps.registry.repoProvisioner = new NullRepoProvisioner();
+    const { app } = await makeApp(deps);
+    const results = await Promise.all([createGame(app), createGame(app)]);
+    expect(results.map((result) => result.status).sort()).toEqual([201, 402]);
+    expect(deps.db.select().from(schema.games).all()).toHaveLength(1);
+    expect((await createGame(app, admin)).status).toBe(201);
+  });
+
+  it('counts a game queued on a prior day before provisioning another today', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.config.testerNewGamesPerDay = 1;
+    deps.registry.repoProvisioner = new NullRepoProvisioner();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: 'g_queued',
+        familyId,
+        ownerId: creator.userId,
+        title: 'Queued',
+        visibility: 'private',
+        repoVisibility: 'private',
+        createdAt: '2020-01-01T00:00:00.000Z',
+      })
+      .run();
+    deps.db
+      .insert(schema.jobs)
+      .values({
+        id: 'j_queued',
+        gameId: 'g_queued',
+        branchId: 'main',
+        familyId,
+        creatorId: creator.userId,
+        kind: 'new_game',
+        complexity: 1,
+        state: 'queued',
+        start: 'at_reset',
+        startAt: new Date().toISOString(),
+        slot: 'new_game',
+        plan: '{}',
+        reservation: '{}',
+        hardCapMicroUsd: 1,
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+      })
+      .run();
+    const { app } = await makeApp(deps);
+    expect((await createGame(app)).status).toBe(402);
     expect(deps.db.select().from(schema.games).all()).toHaveLength(1);
   });
 

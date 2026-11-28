@@ -1,3 +1,4 @@
+import { schema } from '@ogm/db';
 import { describe, expect, it } from 'vitest';
 
 import { seededApp, X, Y } from './admin-fixture.js';
@@ -7,7 +8,20 @@ import type { TestUser } from './helpers.js';
 // family Y's admin gets 200 with only Y's data on list routes and 404 on X's ids, never X's rows.
 type Actor = 'owner' | 'admin' | 'member' | 'otherAdmin';
 const ACTORS: Record<Actor, TestUser> = { owner: X.owner, admin: X.admin, member: X.player, otherAdmin: Y.admin };
-type Row = { method: string; path: string; body?: unknown; expect: Record<Actor, number> };
+type Row = {
+  method: string;
+  path: string;
+  body?: unknown;
+  seed?: (deps: Awaited<ReturnType<typeof seededApp>>['deps']) => void;
+  expect: Record<Actor, number>;
+};
+
+function allowTester(deps: Awaited<ReturnType<typeof seededApp>>['deps']) {
+  deps.db
+    .insert(schema.allowedUsers)
+    .values({ email: X.player.email, role: 'player', addedBy: X.owner.userId, addedAt: '2026-01-01T00:00:00.000Z' })
+    .run();
+}
 
 const ok = (status: number, other = 200) => ({ owner: status, admin: status, member: 403, otherAdmin: other });
 const ROUTES: Row[] = [
@@ -67,6 +81,22 @@ const ROUTES: Row[] = [
     body: { reason: 'spam' },
     expect: ok(201, 404),
   },
+  // Platform admins grant early access to any family's game, so another family's admin reaches X's game here.
+  { method: 'GET', path: `/games/${X.game}/early-access`, expect: ok(200, 200) },
+  {
+    method: 'POST',
+    path: `/games/${X.game}/early-access`,
+    body: { email: X.player.email },
+    seed: allowTester,
+    expect: ok(204, 204),
+  },
+  {
+    method: 'PUT',
+    path: `/games/${X.game}/early-access/${X.player.userId}`,
+    seed: allowTester,
+    expect: ok(204, 204),
+  },
+  { method: 'DELETE', path: `/games/${X.game}/early-access/${X.player.userId}`, expect: ok(204, 204) },
   { method: 'GET', path: '/builds', expect: ok(200) },
   { method: 'GET', path: '/gameplay', expect: ok(200) },
   { method: 'PATCH', path: '/gameplay', body: { paidApisDuringGameplay: false }, expect: ok(200) },
@@ -130,8 +160,9 @@ describe('admin policy table', () => {
     expect(new Set(ROUTES.map((row) => `${row.method} ${template(row.path)}`))).toEqual(new Set(mounted));
   });
 
-  it.each(rows)('$method $path as $actor -> $status', async ({ method, path, body, actor, status }) => {
-    const { call } = await seededApp();
+  it.each(rows)('$method $path as $actor -> $status', async ({ method, path, body, seed, actor, status }) => {
+    const { call, deps } = await seededApp();
+    seed?.(deps);
     const response = await call(ACTORS[actor], method, path, body);
     expect(response.status).toBe(status);
     // A 404 must come from an admin route refusing X's id, not from a missing route.

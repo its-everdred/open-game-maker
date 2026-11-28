@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -8,7 +8,17 @@ import { describe, expect, it } from 'vitest';
 
 import { scanBuild } from '../../src/gameplay/paid-integrations.js';
 import { setPaidApisDuringGameplay } from '../../src/gameplay/policy.js';
-import { builtFiles, completeRun, jobState, SECRET, SHA, TICKET, world } from '../builds/fixtures.js';
+import {
+  allowArchive,
+  builtFiles,
+  CHECK_ID,
+  completeRun,
+  jobState,
+  SECRET,
+  SHA,
+  TICKET,
+  world,
+} from '../builds/fixtures.js';
 import { ids, insertBuild, publish, setup } from '../release-fixtures.js';
 import { asUser, makeApp } from '../helpers.js';
 
@@ -19,6 +29,8 @@ const ELEVENLABS_KEY = `sk_${'0123456789abcdef'.repeat(3)}`;
 
 function dir(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), 'ogm-scan-'));
+  writeFileSync(join(root, '.complete'), 'complete');
+  writeFileSync(join(root, 'index.html'), '<title>g</title>');
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(join(root, path, '..'), { recursive: true });
     writeFileSync(join(root, path), text);
@@ -64,10 +76,17 @@ async function ingest(edit: (root: string) => void, allowed = false) {
   completeRun(deps);
   const root = builtFiles();
   edit(root);
+  const archive = archiveOf(root);
+  allowArchive(deps, archive);
   const response = await app.request(`http://127.0.0.1:4000/internal/jobs/by-ticket/${TICKET}/build`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${SECRET}`, 'x-gm-sha': SHA, 'content-type': 'application/gzip' },
-    body: archiveOf(root),
+    headers: {
+      authorization: `Bearer ${SECRET}`,
+      'x-gm-sha': SHA,
+      'x-gm-check-id': CHECK_ID,
+      'content-type': 'application/gzip',
+    },
+    body: archive,
   });
   return { deps, response };
 }
@@ -98,7 +117,7 @@ describe('release validation', () => {
     const { deps, source, commit } = setup();
     insertBuild(deps, source);
     const artifact = dir({ 'index.html': '<title>g</title>', 'assets/main.js': CALLS_OPENAI });
-    deps.db.update(schema.builds).set({ artifactPath: artifact }).run();
+    cpSync(artifact, join(deps.config.gamesRoot, ids.game, ids.build), { recursive: true });
     const { app } = await makeApp(deps);
 
     const refused = await publish(app);
@@ -115,10 +134,9 @@ describe('release validation', () => {
     const { deps, source } = setup();
     setPaidApisDuringGameplay(deps.db, true);
     insertBuild(deps, source);
-    deps.db
-      .update(schema.builds)
-      .set({ artifactPath: dir({ 'assets/main.js': CALLS_OPENAI }) })
-      .run();
+    cpSync(dir({ 'assets/main.js': CALLS_OPENAI }), join(deps.config.gamesRoot, ids.game, ids.build), {
+      recursive: true,
+    });
     const { app } = await makeApp(deps);
     const first = (await (await publish(app)).json()) as { id: string };
     setPaidApisDuringGameplay(deps.db, false);
@@ -137,10 +155,7 @@ describe('release validation', () => {
     const { deps, source, commit } = setup();
     setPaidApisDuringGameplay(deps.db, true);
     insertBuild(deps, source);
-    deps.db
-      .update(schema.builds)
-      .set({ artifactPath: dir({ 'assets/k.js': `"${KEY}"` }) })
-      .run();
+    cpSync(dir({ 'assets/k.js': `"${KEY}"` }), join(deps.config.gamesRoot, ids.game, ids.build), { recursive: true });
     const { app } = await makeApp(deps);
 
     const response = await publish(app);

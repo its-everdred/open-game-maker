@@ -21,6 +21,9 @@ export type Round = {
   /** The reviewed build started in its scenario, which the card plays in place (#1281). */
   sliceUrl?: string | null;
   id: string;
+  postedAt?: string;
+  verdict?: 'approved' | 'needs_work' | 'kill' | null;
+  verdictAt?: string | null;
   ticket: string;
   question: string | null;
   media: { kind: 'still' | 'clip' | 'audio'; url: string; role?: 'target'; meta?: MediaMetaValue }[];
@@ -95,6 +98,8 @@ export function RoundCard({
     refetchInterval: 5000,
     retry: false,
   });
+  const needsPreview =
+    Boolean(round.buildId) && round.track !== 'prototype-publish' && round.buildId !== `live-${round.id}`;
   const media = (
     <>
       <RoundMedia media={round.media} />
@@ -146,9 +151,7 @@ export function RoundCard({
       ) : null}
       {swipe ? (
         <SwipeVerdict
-          disabled={
-            answer.isPending || answer.isSuccess || (Boolean(round.buildId) && round.track !== 'prototype-publish')
-          }
+          disabled={answer.isPending || answer.isSuccess || needsPreview}
           onPendingChange={onPendingChange}
           onSend={async (verdict, answerNote) => {
             await answer.mutateAsync({ verdict, note: answerNote });
@@ -162,7 +165,7 @@ export function RoundCard({
           <label>
             Note (optional)
             <textarea
-              disabled={Boolean(round.buildId) && round.track !== 'prototype-publish'}
+              disabled={needsPreview}
               value={note}
               maxLength={3900}
               onChange={(event) => setNote(event.target.value)}
@@ -171,18 +174,14 @@ export function RoundCard({
           <div className="review-deck-actions">
             <button
               type="button"
-              disabled={
-                answer.isPending || answer.isSuccess || (Boolean(round.buildId) && round.track !== 'prototype-publish')
-              }
+              disabled={answer.isPending || answer.isSuccess || needsPreview}
               onClick={() => answer.mutate({ verdict: 'approved', note })}
             >
               Looks right
             </button>
             <button
               type="button"
-              disabled={
-                answer.isPending || answer.isSuccess || (Boolean(round.buildId) && round.track !== 'prototype-publish')
-              }
+              disabled={answer.isPending || answer.isSuccess || needsPreview}
               onClick={() => answer.mutate({ verdict: 'needs_work', note })}
             >
               Needs work

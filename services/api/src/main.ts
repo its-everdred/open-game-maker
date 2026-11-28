@@ -1,3 +1,4 @@
+import { createPlannerTerminals } from './jobs/planner-terminals.js';
 import { startPreviewRelay } from './previews/relay.js';
 import { previewTicketVerifier } from './previews/ticket.js';
 import { homedir } from 'node:os';
@@ -31,12 +32,14 @@ import { createChatJobDirectory } from './build-chat/job-directory.js';
 import { createDraftScopeAssistant } from './new-game/draft-assistant.js';
 import { startDraftCleanup } from './game-drafts/cleanup.js';
 import { finishRun, startBuildSweep } from './builds/publish.js';
+import { plannerBaseVerifier } from './previews/planner-base.js';
 import { createDaemonDirectory, daemonRowForGame } from './jobs/daemons.js';
 import { recordDaemonReadTokenStatus } from './job-commands/health.js';
 import { activeJobs, activeJobsForSlug, byTicket, findJobRow } from './jobs/repo.js';
 import { applyAiurEvent, applyIssueSnapshot, applyProgress, reconcileFiledTickets } from './jobs/projection.js';
 import { createTicketRecovery, resetTicketSequences } from './jobs/ticket-recovery.js';
 import { startScheduler } from './jobs/scheduler.js';
+import { ticketJobResolver } from './internal/ticket-job.js';
 import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
 import { createDecisionWaitPoller } from './decision-waits/poller.js';
 import { createReviewSync } from './review-rounds/runner.js';
@@ -53,6 +56,7 @@ import { createTicketLookup } from './worker-progress/lookup.js';
 import { createReviewEpisodeReader } from './worker-progress/review-episode.js';
 import { createTicketConversationReader } from './worker-progress/conversation.js';
 import { startBriefingPush } from './voice/briefing-push.js';
+import { startAppCheckQueue } from './builds/app-check-queue.js';
 import { questionSession } from './voice/question-session.js';
 import { createQaAiurClient, withQaAiur } from './qa/aiur.js';
 
@@ -71,6 +75,7 @@ const fleet = createFleet({
     builderBotLogin: env.OGM_BUILDER_BOT_LOGIN,
     intakeLogin: env.OGM_INTAKE_BOT_LOGIN,
     assetsLocalDir: join(home, 'games', 'open-game-maker-2000', 'assets-local'),
+    blobRoot: env.OGM_BLOB_ROOT,
     apiPort: env.OGM_API_PORT,
   },
   alert: (message) => log({ event: 'daemon_alert', message }),
@@ -120,6 +125,8 @@ const deps: AppDeps = {
     creatorJobLimit: env.OGM_CREATOR_JOB_LIMIT,
     defaultDailyAllowanceConfigured: env.defaultDailyAllowanceConfigured,
     resetZoneDefault: env.OGM_RESET_ZONE_DEFAULT,
+    testerNewGamesPerDay: env.OGM_TESTER_NEW_GAMES_PER_DAY,
+    plannerTicketLimit: env.OGM_NEW_GAME_PLAN_TICKET_LIMIT,
     intakeDir: env.OGM_INTAKE_DIR,
     reportBundleMaxBytes: env.OGM_REPORT_BUNDLE_MAX_BYTES,
     blobPutMaxBytes: env.OGM_BLOB_PUT_MAX_BYTES,
@@ -179,6 +186,8 @@ deps.registry.reviewEpisode = createReviewEpisodeReader(env.OGM_INTAKE_GITHUB_TO
 deps.registry.ticketConversation = createTicketConversationReader(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.issueStateWriter = issues;
 deps.registry.fidelityWriter = createReviewIssues(env.OGM_INTAKE_GITHUB_TOKEN);
+deps.registry.plannerBaseVerifier = plannerBaseVerifier(env.OGM_INTAKE_GITHUB_TOKEN);
+deps.registry.ticketJobResolver = ticketJobResolver(db);
 startPreviewRelay(deps, previewTicketVerifier(env.OGM_INTAKE_GITHUB_TOKEN));
 
 const budgetDefaults = {
@@ -188,6 +197,12 @@ const budgetDefaults = {
   resetZone: deps.config.resetZoneDefault,
 };
 const lifecycleDeps = { db, sqlite, events: deps.events, defaults: budgetDefaults };
+const plannerTerminals = createPlannerTerminals(
+  db,
+  (jobId, state) => finishRun(deps, jobId, state),
+  (error) => log({ event: 'planner_terminal_error', error: error instanceof Error ? error.name : 'unknown' }),
+);
+
 const projectionDeps = {
   db,
   events: deps.events,
@@ -196,7 +211,7 @@ const projectionDeps = {
     markRunning: (jobId: string) => void markRunning(lifecycleDeps, jobId),
     markPaused: (jobId: string, reason: 'over_reservation' | 'budget_exhausted' | 'admin') =>
       void markPaused(lifecycleDeps, jobId, reason),
-    markTerminal: (jobId: string, state: 'done' | 'failed' | 'cancelled') => finishRun(deps, jobId, state),
+    markTerminal: (jobId: string, state: 'done' | 'failed' | 'cancelled') => void plannerTerminals.apply(jobId, state),
   },
 };
 
@@ -210,13 +225,13 @@ const intake = createIntake({
     return running.client;
   },
   shippedSkills: skillPack().discovery.map(({ name }) => name),
+  plannerTicketLimit: env.OGM_NEW_GAME_PLAN_TICKET_LIMIT,
   coreRepo: env.OGM_CORE_BUMP_CORE_REPO || undefined,
   failJob: (jobId) => void markTerminal(lifecycleDeps, jobId, 'failed'),
-  // A New Game request's parent issue hands the Build Order to the Executor, so the request job ends at filing.
-  completeJob: (jobId) => void markTerminal(lifecycleDeps, jobId, 'done'),
+  cancelJob: (jobId) => void markTerminal(lifecycleDeps, jobId, 'cancelled'),
   subscribeAdmitted(listener) {
     return deps.events.on('job.changed', ({ jobId, state }) => {
-      if (state === 'admitted') listener(jobId);
+      if (state === 'admitted' || state === 'queued') listener(jobId);
     });
   },
   onJobChanged: (event) => {
@@ -237,10 +252,13 @@ const stopAnalyticsRetention = startAnalyticsRetention({
   retentionDays: deps.config.analyticsRetentionDays,
   log,
 });
+await plannerTerminals.reconcile();
 intake.start();
 const stopDraftCleanup = startDraftCleanup(deps);
 const stopScheduler = startScheduler({ ...lifecycleDeps, log });
+const stopPlannerTerminals = plannerTerminals.start();
 const stopEstimateRefinement = startEstimateRefinement({ db, events: deps.events, log });
+const stopAppCheckQueue = startAppCheckQueue(deps);
 const stopBuildSweep = startBuildSweep(deps, { graceMs: 30 * 60_000, intervalMs: 60_000 });
 // Tickets parked on a decision start as soon as it is answered, with no Executor step (#680).
 const decisionWaits = createDecisionWaitPoller({
@@ -344,6 +362,11 @@ setInterval(() => {
 recordReconcileHeartbeat(db, Date.now());
 decisionWaits.start(env.OGM_COMMAND_POLL_MS);
 
+await fleet
+  .refreshManagedHooks()
+  .catch((error: unknown) =>
+    log({ event: 'daemon_hooks_refresh_failed', reason: error instanceof Error ? error.name : 'unknown_error' }),
+  );
 const server = serve({ fetch: app.fetch, hostname: API_HOST, port: env.OGM_API_PORT });
 server.once('listening', () => log({ event: 'listening', host: API_HOST, port: env.OGM_API_PORT }));
 process.once('SIGTERM', () => {
@@ -352,13 +375,19 @@ process.once('SIGTERM', () => {
   stopDraftCleanup();
   stopAnalyticsRetention();
   stopScheduler();
+  stopPlannerTerminals();
   stopEstimateRefinement();
   stopBuildSweep();
+  const appCheckQueueDone = stopAppCheckQueue();
   decisionWaits.stop();
   reviewNotifications.stop();
   stopBriefingPush();
   usageReconciler.stop();
-  void Promise.all([feed.stop(), usageReconciler.idle(), reviewNotifications.idle(), resourceMailPending]).finally(() =>
-    server.close(() => sqlite.close()),
-  );
+  void Promise.all([
+    feed.stop(),
+    usageReconciler.idle(),
+    reviewNotifications.idle(),
+    appCheckQueueDone,
+    resourceMailPending,
+  ]).finally(() => server.close(() => sqlite.close()));
 });

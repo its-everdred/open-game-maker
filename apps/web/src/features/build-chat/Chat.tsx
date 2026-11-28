@@ -15,6 +15,7 @@ import type { EditDraft } from './dock';
 import { editJobRequest } from './edit';
 import { gameJobsQueryKey, isTerminal, myJobsQueryKey } from './jobs';
 import { MessageList } from './MessageList';
+import { ConversationReviews } from '../worker-builds/ConversationReviews';
 import { reduceMessages, subscribeChat, type StreamedChatMessage } from './stream';
 import './chat.css';
 
@@ -52,6 +53,7 @@ export function Chat({
     : (draft ?? { gameId: '', branchId: 'main', title: '' });
   const canPost = streamId !== undefined && !(job && job.id === streamId && isTerminal(job.state));
   const [messages, setMessages] = useState<StreamedChatMessage[]>([]);
+  const [tab, setTab] = useState<'chat' | 'reviews'>('chat');
   const [pendingText, setPendingText] = useState('');
   const [refusal, setRefusal] = useState<Refusal>();
   const [waitingForAdmin, setWaitingForAdmin] = useState(false);
@@ -164,53 +166,88 @@ export function Chat({
           <h3>{job?.plan.title ?? target.title}</h3>
         </header>
       ) : null}
-      <MessageList messages={messages} />
-      {refusal && !waitingForAdmin ? (
-        <Offers
-          offers={refusal.offers}
-          message={energyRefusalText(refusal.window, refusal.resetsAt, refusal.reason)}
-          disabled={submitting}
-          onChoose={(offer) => void choose(offer)}
-        />
-      ) : null}
-      {refusal && waitingForAdmin ? (
-        <AllowanceStatus
-          budget={budget.data}
-          fallback={refusal}
-          disabled={submitting}
-          slot="edit"
-          onTry={() => void retry('now')}
-        />
-      ) : null}
-      {admissionError ? (
-        <p className="scope-admission-error" role="alert">
-          {admissionError}
-        </p>
-      ) : null}
-      {useAiurComposer ? (
-        <AiurComposer
-          reading={composerReading}
-          dictationTarget={dictationTarget}
-          jobId={streamId ?? `edit-${target.gameId}-${target.branchId}`}
-          voiceTarget={voiceTarget}
-          postText={postChatText}
-          startJob={canPost ? undefined : (text) => admit(text, 'now')}
-          wasAdmissionReused={() => admissionReused.current}
-          onOptimistic={addMessage}
-          onPosted={addMessage}
-          onFailed={removeMessage}
-        />
-      ) : (
-        <Composer
-          jobId={streamId ?? `edit-${target.gameId}-${target.branchId}`}
-          voiceTarget={voiceTarget}
-          postText={postChatText}
-          startJob={canPost ? undefined : (text) => admit(text, 'now')}
-          onOptimistic={addMessage}
-          onPosted={addMessage}
-          onFailed={removeMessage}
-        />
+      {job?.aiurIssueNumber != null && (
+        <div className="conversation-tabs" role="tablist" aria-label="Conversation">
+          <button
+            className="tap-secondary"
+            type="button"
+            role="tab"
+            aria-selected={tab === 'chat'}
+            onClick={() => setTab('chat')}
+          >
+            Chat
+          </button>
+          <button
+            className="tap-secondary"
+            type="button"
+            role="tab"
+            aria-selected={tab === 'reviews'}
+            onClick={() => setTab('reviews')}
+          >
+            Reviews
+          </button>
+        </div>
       )}
+      {job?.aiurIssueNumber != null && (
+        <div style={{ display: tab === 'reviews' ? 'contents' : 'none' }}>
+          <ConversationReviews
+            gameId={job.gameId}
+            ticket={String(job.aiurIssueNumber)}
+            creatorId={job.creatorId}
+            jobId={job.id}
+            visible={tab === 'reviews'}
+          />
+        </div>
+      )}
+      <div style={{ display: tab === 'chat' ? 'contents' : 'none' }}>
+        <MessageList messages={messages} />
+        {refusal && !waitingForAdmin ? (
+          <Offers
+            offers={refusal.offers}
+            message={energyRefusalText(refusal.window, refusal.resetsAt, refusal.reason)}
+            disabled={submitting}
+            onChoose={(offer) => void choose(offer)}
+          />
+        ) : null}
+        {refusal && waitingForAdmin ? (
+          <AllowanceStatus
+            budget={budget.data}
+            fallback={refusal}
+            disabled={submitting}
+            slot="edit"
+            onTry={() => void retry('now')}
+          />
+        ) : null}
+        {admissionError ? (
+          <p className="scope-admission-error" role="alert">
+            {admissionError}
+          </p>
+        ) : null}
+        {useAiurComposer ? (
+          <AiurComposer
+            reading={composerReading}
+            dictationTarget={dictationTarget}
+            jobId={streamId ?? `edit-${target.gameId}-${target.branchId}`}
+            voiceTarget={voiceTarget}
+            postText={postChatText}
+            startJob={canPost ? undefined : (text) => admit(text, 'now')}
+            wasAdmissionReused={() => admissionReused.current}
+            onOptimistic={addMessage}
+            onPosted={addMessage}
+            onFailed={removeMessage}
+          />
+        ) : (
+          <Composer
+            jobId={streamId ?? `edit-${target.gameId}-${target.branchId}`}
+            voiceTarget={voiceTarget}
+            postText={postChatText}
+            startJob={canPost ? undefined : (text) => admit(text, 'now')}
+            onOptimistic={addMessage}
+            onPosted={addMessage}
+            onFailed={removeMessage}
+          />
+        )}
+      </div>
     </section>
   );
 }

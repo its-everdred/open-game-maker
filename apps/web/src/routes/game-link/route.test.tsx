@@ -117,6 +117,11 @@ afterEach(() => {
 });
 
 describe('short game links', () => {
+  it('shows Coming Soon when access is restricted', async () => {
+    mockedApi.mockRejectedValue(new ApiError(403, { error: 'coming_soon' }));
+    renderAt('/dusk-helm');
+    expect(await screen.findByText(/Coming Soon/)).toBeVisible();
+  });
   it('unsubscribes from the session atom', () => {
     const atom = authClient.$store.atoms.session;
     const unsubscribe = atom.listen(() => {});

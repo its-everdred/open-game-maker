@@ -1,4 +1,4 @@
-import type { AiurClient } from '@ogm/aiur-client';
+import { AiurHttpError, type AiurClient } from '@ogm/aiur-client';
 import { migrate, openDb, schema, type Db } from '@ogm/db';
 import { isDaemonLabel } from '@ogm/game-repo-template';
 import { eq } from 'drizzle-orm';
@@ -115,7 +115,7 @@ function seed(db: Db, kind: 'new_game' | 'feature' = 'new_game') {
     .run();
 }
 
-function harness(kind: 'new_game' | 'feature' = 'new_game') {
+function harness(kind: 'new_game' | 'feature' = 'new_game', plannerShipped = true) {
   const { sqlite, db } = openDb(':memory:');
   migrate({ sqlite });
   seed(db, kind);
@@ -139,6 +139,13 @@ function harness(kind: 'new_game' | 'feature' = 'new_game') {
       calls.push(`label:${number}:${label}`);
     }),
     removeLabel: vi.fn(async () => undefined),
+    blockBy: vi.fn(async (_repo, number, parent) => {
+      calls.push(`block:${number}:${parent}`);
+    }),
+    unblockBy: vi.fn(async (_repo, number, parent) => {
+      calls.push(`unblock:${number}:${parent}`);
+    }),
+    close: vi.fn(async () => undefined),
     setStateLabel: vi.fn(async () => undefined),
   };
   const aiur: Pick<AiurClient, 'setSpendCap' | 'nudgeTodo'> = {
@@ -154,17 +161,6 @@ function harness(kind: 'new_game' | 'feature' = 'new_game') {
   const failJob = vi.fn((jobId: string) => {
     db.update(schema.jobs)
       .set({ state: 'failed', terminalAt: NOW.toISOString(), updatedAt: NOW.toISOString() })
-      .where(eq(schema.jobs.id, jobId))
-      .run();
-  });
-  const completeJob = vi.fn((jobId: string) => {
-    db.update(schema.jobs)
-      .set({
-        state: 'done',
-        terminalAt: NOW.toISOString(),
-        releasedAt: NOW.toISOString(),
-        updatedAt: NOW.toISOString(),
-      })
       .where(eq(schema.jobs.id, jobId))
       .run();
   });
@@ -188,15 +184,14 @@ function harness(kind: 'new_game' | 'feature' = 'new_game') {
     fleet,
     issues,
     aiurForGame: async () => aiur,
-    shippedSkills: ['gm-core', 'gm-verify', 'gm-prototype'],
+    shippedSkills: ['gm-core', 'gm-verify', 'gm-prototype', ...(plannerShipped ? ['gm-new-game-plan'] : [])],
     coreRepo: 'example/core',
     failJob,
-    completeJob,
     now: () => NOW,
     sleep: async () => undefined,
     alert: (event) => alerts.push(event),
   });
-  return { sqlite, db, calls, issues, aiur, fleet, intake, alerts, failJob, completeJob, created };
+  return { sqlite, db, calls, issues, aiur, fleet, intake, alerts, failJob, created };
 }
 
 function close(input: ReturnType<typeof harness>) {
@@ -205,6 +200,13 @@ function close(input: ReturnType<typeof harness>) {
 }
 
 describe('New Game parent issue', () => {
+  it('does not dispatch a planner when its skill has not shipped', async () => {
+    const input = harness('new_game', false);
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'aiur' });
+    expect(input.issues.create).not.toHaveBeenCalled();
+    close(input);
+  });
+
   it('is only a New Game request: an editor chat request never takes the parent path', () => {
     const { sqlite, db } = openDb(':memory:');
     migrate({ sqlite });
@@ -291,21 +293,24 @@ describe('New Game parent issue', () => {
     close(input);
   });
 
-  it('files one parent with no dispatch label, spend cap or aiur nudge, then completes the request', async () => {
+  it('files the parent and queues a capped planner while the request remains active', async () => {
     const input = harness();
 
-    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ filed: true, issues: [1] });
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ filed: true, issues: [1, 2] });
 
-    expect(input.created).toHaveLength(1);
+    expect(input.created).toHaveLength(2);
     expect(input.created[0]?.labels).toEqual([PARENT_LABEL, 'feature:gm-j_1']);
     // Nothing a daemon dispatches on: not the game's `<slug>:todo`, not any lifecycle label.
     expect(input.created[0]?.labels.filter((label) => isDaemonLabel(label))).toEqual([]);
     expect(input.created[0]?.body).not.toContain('castle-run:todo');
-    expect(input.calls).toEqual(['ensure:request:new-game', 'ensure:feature:gm-j_1', 'create:1']);
-    expect(input.issues.addLabel).not.toHaveBeenCalled();
-    expect(input.aiur.setSpendCap).not.toHaveBeenCalled();
-    expect(input.aiur.nudgeTodo).not.toHaveBeenCalled();
-    expect(input.db.select().from(schema.jobTickets).get()).toMatchObject({
+    expect(input.created[1]?.body).toContain('request in #1');
+    expect(
+      JSON.parse(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!.plan)._plannerTicketLimit,
+    ).toBe(1);
+    expect(input.calls).toContain('cap:2:9.000001');
+    expect(input.calls).toContain('label:2:lantern-bay:todo');
+    expect(input.calls).toContain('nudge:2');
+    expect(input.db.select().from(schema.jobTickets).where(eq(schema.jobTickets.key, 'new-game')).get()).toMatchObject({
       jobId: 'j_1',
       key: 'new-game',
       issueNumber: 1,
@@ -314,14 +319,13 @@ describe('New Game parent issue', () => {
       capSetAt: null,
     });
     expect(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()).toMatchObject({
-      state: 'done',
+      state: 'filed',
       aiurRepo: 'owner/game',
-      aiurIssueNumber: 1,
+      aiurIssueNumber: 2,
     });
-    expect(input.completeJob).toHaveBeenCalledWith('j_1');
 
-    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ skipped: 'state:done' });
-    expect(input.issues.create).toHaveBeenCalledTimes(1);
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ skipped: 'state:filed' });
+    expect(input.issues.create).toHaveBeenCalledTimes(2);
     close(input);
   });
 
@@ -364,10 +368,9 @@ describe('New Game parent issue', () => {
       .values({ jobId: 'j_1', key: 'new-game', issueNumber: 7, repo: 'owner/game', sig: 'sig' })
       .run();
 
-    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ filed: true, issues: [7] });
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ filed: true, issues: [7, 1] });
 
-    expect(input.issues.create).not.toHaveBeenCalled();
-    expect(input.calls).toEqual(['ensure:request:new-game', 'ensure:feature:gm-j_1']);
+    expect(input.issues.create).toHaveBeenCalledTimes(1);
     close(input);
   });
 
@@ -379,10 +382,10 @@ describe('New Game parent issue', () => {
       labels: [PARENT_LABEL],
     });
 
-    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ filed: true, issues: [12] });
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ filed: true, issues: [12, 1] });
 
-    expect(input.issues.create).not.toHaveBeenCalled();
-    expect(input.db.select().from(schema.jobs).get()).toMatchObject({ aiurIssueNumber: 12, state: 'done' });
+    expect(input.issues.create).toHaveBeenCalledTimes(1);
+    expect(input.db.select().from(schema.jobs).get()).toMatchObject({ aiurIssueNumber: 1, state: 'filed' });
     close(input);
   });
 
@@ -393,8 +396,49 @@ describe('New Game parent issue', () => {
     await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'github' });
 
     expect(input.db.select().from(schema.jobs).get()).toMatchObject({ state: 'admitted', aiurIssueNumber: null });
-    expect(input.completeJob).not.toHaveBeenCalled();
     expect(input.alerts).toEqual([expect.objectContaining({ code: 'github_failed', jobId: 'j_1' })]);
+    close(input);
+  });
+
+  it('resumes a planner after a todo-label failure without creating or capping it twice', async () => {
+    const input = harness();
+    vi.mocked(input.issues.addLabel).mockRejectedValueOnce(new Error('offline'));
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'github' });
+    expect(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()?.state).toBe('filed');
+    input.db
+      .update(schema.jobs)
+      .set({ updatedAt: new Date(NOW.getTime() - 120_000).toISOString() })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    await input.intake.sweep();
+    expect(
+      input.db.select().from(schema.jobTickets).where(eq(schema.jobTickets.key, 'new-game-plan')).get()?.todoAt,
+    ).not.toBeNull();
+    expect(input.issues.create).toHaveBeenCalledTimes(2);
+    expect(input.aiur.setSpendCap).toHaveBeenCalledTimes(1);
+    close(input);
+  });
+
+  it('does not dispatch if cancellation wins while the spend cap is being installed', async () => {
+    const input = harness();
+    vi.mocked(input.aiur.setSpendCap).mockImplementationOnce(async (_id, amount) => {
+      input.db.update(schema.jobs).set({ state: 'cancelled' }).where(eq(schema.jobs.id, 'j_1')).run();
+      return { amount, currency: 'USD' };
+    });
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ skipped: 'state:cancelled' });
+    expect(input.issues.addLabel).not.toHaveBeenCalled();
+    expect(input.aiur.nudgeTodo).not.toHaveBeenCalled();
+    close(input);
+  });
+
+  it('does not queue a planner if its spend cap cannot be installed', async () => {
+    const input = harness();
+    vi.mocked(input.aiur.setSpendCap).mockRejectedValueOnce(new Error('offline'));
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'aiur' });
+    expect(input.issues.addLabel).not.toHaveBeenCalled();
+    expect(input.aiur.nudgeTodo).not.toHaveBeenCalled();
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ filed: true, issues: [1, 2] });
+    expect(input.issues.create).toHaveBeenCalledTimes(2);
     close(input);
   });
 
@@ -420,6 +464,263 @@ describe('New Game parent issue', () => {
       'label:1:lantern-bay:todo',
       'nudge:1',
     ]);
+    close(input);
+  });
+
+  it('files a planner child with its game, role, parent and decision references before dispatch', async () => {
+    const input = harness('feature');
+    const job = input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!;
+    input.db
+      .insert(schema.jobs)
+      .values({ ...job, id: 'j_parent', kind: 'new_game', idempotencyKey: null })
+      .run();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_parent', key: 'new-game', issueNumber: 42, repo: 'owner/game', sig: 'parent' })
+      .run();
+    input.db
+      .update(schema.jobs)
+      .set({
+        idempotencyKey: 'planner:j_parent:starter',
+        state: 'queued',
+        plan: JSON.stringify({
+          ...PLAN,
+          tickets: [{ ...PLAN.tickets[0], skills: ['gm-core', 'role:gameplay', 'decision:D-01'] }],
+        }),
+      })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    vi.mocked(input.aiur.setSpendCap).mockRejectedValueOnce(
+      new AiurHttpError(409, 'spend_cap_exhausted', 'spent', 'http://127.0.0.1:4101'),
+    );
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'aiur' });
+    expect(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()?.state).toBe('queued');
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ filed: true, issues: [1] });
+    expect(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()).toMatchObject({
+      state: 'queued',
+      aiurIssueNumber: 1,
+    });
+    expect(input.calls).toContain('label:1:lantern-bay:todo');
+    expect(input.calls.indexOf('cap:1:9.000001')).toBeLessThan(input.calls.indexOf('block:1:42'));
+    expect(input.calls.indexOf('block:1:42')).toBeLessThan(input.calls.indexOf('label:1:lantern-bay:todo'));
+    expect(input.calls).not.toContain('nudge:1');
+    input.db.update(schema.games).set({ githubRepo: 'new-game' }).where(eq(schema.games.id, 'g_1')).run();
+    // A cancellation projection can survive a restart before the parent job row is updated.
+    input.db
+      .insert(schema.jobProjections)
+      .values({
+        jobId: 'j_parent',
+        daemonSlug: 'lantern-bay',
+        ticket: '42',
+        stage: 'working',
+        stageText: 'Working',
+        lifecycle: 'cancelled',
+        updatedAt: NOW.toISOString(),
+      })
+      .run();
+    vi.mocked(input.issues.close!).mockRejectedValueOnce(new Error('temporary GitHub failure'));
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'github' });
+    expect(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()?.state).toBe('queued');
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ skipped: 'parent_terminal' });
+    expect(input.issues.close).toHaveBeenCalledWith('owner/game', 1);
+    expect(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()?.state).toBe('failed');
+    close(input);
+  });
+
+  it('dispatches a staged child after it is admitted', async () => {
+    const input = harness('feature');
+    const job = input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!;
+    input.db
+      .insert(schema.jobs)
+      .values({ ...job, id: 'j_parent', kind: 'new_game', idempotencyKey: null })
+      .run();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_parent', key: 'new-game', issueNumber: 42, repo: 'owner/game', sig: 'parent' })
+      .run();
+    input.db
+      .update(schema.jobs)
+      .set({
+        state: 'queued',
+        idempotencyKey: 'planner:j_parent:starter',
+        plan: JSON.stringify({
+          ...PLAN,
+          tickets: [{ ...PLAN.tickets[0], skills: ['gm-core', 'role:gameplay', 'decision:D-01'] }],
+        }),
+      })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    await input.intake.fileJob('j_1');
+    input.db.update(schema.jobs).set({ state: 'admitted' }).where(eq(schema.jobs.id, 'j_1')).run();
+    vi.mocked(input.aiur.nudgeTodo).mockImplementationOnce(async (ids) => {
+      input.calls.push(`nudge:${ids.join(',')}`);
+      input.db.update(schema.jobs).set({ state: 'running' }).where(eq(schema.jobs.id, 'j_1')).run();
+    });
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ filed: true, issues: [1] });
+    expect(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()?.state).toBe('running');
+    expect(input.created).toHaveLength(1);
+    expect(input.created[0]?.labels).toEqual(
+      expect.arrayContaining(['game:lantern-bay', 'role:gameplay', 'priority:1']),
+    );
+    expect(input.created[0]?.body).toContain('Refs #42');
+    expect(input.created[0]?.body).toContain('games/lantern-bay/docs/decisions.json');
+    expect(input.created[0]?.body).toContain('## Creator decisions\n- D-01');
+    expect(input.calls.indexOf('cap:1:9.000001')).toBeLessThan(input.calls.indexOf('label:1:lantern-bay:todo'));
+    expect(input.calls).toContain('unblock:1:42');
+    close(input);
+  });
+  it('keeps an admitted child recoverable when dispatch preflight fails', async () => {
+    const input = harness('feature');
+    const job = input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!;
+    input.db
+      .insert(schema.jobs)
+      .values({ ...job, id: 'j_parent', kind: 'new_game', idempotencyKey: null })
+      .run();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_1', key: 'T1', issueNumber: 7, repo: 'old/game', sig: 'child' })
+      .run();
+    input.db
+      .update(schema.jobs)
+      .set({ idempotencyKey: 'planner:j_parent:starter', aiurIssueNumber: 7 })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    input.db.update(schema.games).set({ slug: null }).where(eq(schema.games.id, 'g_1')).run();
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'aiur' });
+    expect(input.issues.close).not.toHaveBeenCalled();
+    expect(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()?.state).toBe('admitted');
+    close(input);
+  });
+
+  it('closes an admitted child when its parent fails before dispatch', async () => {
+    const input = harness('feature');
+    const job = input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!;
+    input.db
+      .insert(schema.jobs)
+      .values({ ...job, id: 'j_parent', kind: 'new_game', state: 'failed', idempotencyKey: null })
+      .run();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_1', key: 'T1', issueNumber: 7, repo: 'owner/game', sig: 'child' })
+      .run();
+    input.db
+      .update(schema.jobs)
+      .set({ idempotencyKey: 'planner:j_parent:starter', aiurIssueNumber: 7 })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ skipped: 'parent_terminal' });
+    expect(input.issues.close).toHaveBeenCalledWith('owner/game', 7);
+    expect(input.calls).not.toContain('label:7:lantern-bay:todo');
+    close(input);
+  });
+
+  it('keeps a staged child queued when preflight fails before its cap is set', async () => {
+    const input = harness('feature');
+    const job = input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!;
+    input.db
+      .insert(schema.jobs)
+      .values({ ...job, id: 'j_parent', kind: 'new_game', idempotencyKey: null })
+      .run();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_1', key: 'T1', issueNumber: 7, repo: 'owner/game', sig: 'child' })
+      .run();
+    input.db
+      .update(schema.jobs)
+      .set({ state: 'queued', idempotencyKey: 'planner:j_parent:starter' })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    input.db.update(schema.games).set({ slug: null }).where(eq(schema.games.id, 'g_1')).run();
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'aiur' });
+    expect(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()?.state).toBe('queued');
+    expect(input.issues.close).not.toHaveBeenCalled();
+    close(input);
+  });
+
+  it('does not file a child in a different repository from its planner', async () => {
+    const input = harness('feature');
+    const job = input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!;
+    input.db
+      .insert(schema.jobs)
+      .values({ ...job, id: 'j_parent', kind: 'new_game', idempotencyKey: null })
+      .run();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_parent', key: 'new-game', issueNumber: 42, repo: 'old/game', sig: 'parent' })
+      .run();
+    input.db
+      .update(schema.jobs)
+      .set({
+        state: 'queued',
+        idempotencyKey: 'planner:j_parent:starter',
+        plan: JSON.stringify({ ...PLAN, tickets: [{ ...PLAN.tickets[0], skills: ['role:gameplay'] }] }),
+      })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'github' });
+    expect(input.issues.create).not.toHaveBeenCalled();
+    close(input);
+  });
+
+  it('recovers a child create in the planner repository when game metadata changes', async () => {
+    const input = harness('feature');
+    const job = input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!;
+    input.db
+      .insert(schema.jobs)
+      .values({ ...job, id: 'j_parent', kind: 'new_game', state: 'failed', idempotencyKey: null })
+      .run();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_parent', key: 'new-game-plan', issueNumber: 42, repo: 'old/game', sig: 'parent' })
+      .run();
+    input.db
+      .update(schema.jobs)
+      .set({ state: 'queued', idempotencyKey: 'planner:j_parent:starter' })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    input.db
+      .update(schema.games)
+      .set({ githubOwner: null, githubRepo: null, slug: null })
+      .where(eq(schema.games.id, 'g_1'))
+      .run();
+    vi.mocked(input.issues.findByMarkers).mockResolvedValue({ number: 7, url: 'https://example.test/7', labels: [] });
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ skipped: 'parent_terminal' });
+    expect(input.issues.findByMarkers).toHaveBeenCalledWith('old/game', 'j_1', 'T1');
+    expect(input.issues.close).toHaveBeenCalledWith('old/game', 7);
+    close(input);
+  });
+
+  it('dispatches when admission arrives during queued child filing', async () => {
+    const input = harness('feature');
+    const job = input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!;
+    input.db
+      .insert(schema.jobs)
+      .values({ ...job, id: 'j_parent', kind: 'new_game', idempotencyKey: null })
+      .run();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_parent', key: 'new-game', issueNumber: 42, repo: 'owner/game', sig: 'parent' })
+      .run();
+    input.db
+      .update(schema.jobs)
+      .set({
+        state: 'queued',
+        idempotencyKey: 'planner:j_parent:starter',
+        plan: JSON.stringify({ ...PLAN, tickets: [{ ...PLAN.tickets[0], skills: ['role:gameplay'] }] }),
+      })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    let promoted: Promise<unknown> | undefined;
+    vi.mocked(input.aiur.setSpendCap).mockImplementationOnce(async (_id, usd) => {
+      input.db.update(schema.jobs).set({ state: 'admitted' }).where(eq(schema.jobs.id, 'j_1')).run();
+      promoted = input.intake.fileJob('j_1');
+      return { amount: usd, currency: 'USD' } as Awaited<ReturnType<AiurClient['setSpendCap']>>;
+    });
+    await input.intake.fileJob('j_1');
+    await promoted;
+    expect(input.calls).toContain('label:1:lantern-bay:todo');
+    expect(input.calls).toContain('nudge:1');
+    expect(input.created).toHaveLength(1);
     close(input);
   });
 });

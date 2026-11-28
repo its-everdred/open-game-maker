@@ -13,8 +13,8 @@ type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPa
 /** Spoken by Piper's public-domain LJSpeech voice, 16 kHz mono; together 3.2 s, under the ticket's 10 s cap. */
 export const CLIPS = { dictate: 'say.wav', talk: 'hello.wav' } as const;
 export const CLIP_SECONDS = { dictate: 1.61, talk: 1.62 } as const;
-/** What the dictation clip says; the box must show at least one of its words, so stray text cannot pass. */
-export const DICTATED = /\b(sky|blue)\b/iu;
+/** The clip's distinctive words must both reach the box in order. */
+export const DICTATED = /\bsk(?:y|ies)\b.*\bblue\b/iu;
 const MEDIA_DIR = new URL('../qa/voice-e2e/', import.meta.url);
 const VIEWPORT = { width: 390, height: 844 };
 const TITLE = 'QA voice';
@@ -274,6 +274,17 @@ async function until(check: () => boolean | Promise<boolean>, timeoutMs: number)
   }
 }
 
+/** Wait for the composer to finish committing, and reject its reported errors. */
+export async function waitForDictationCommit(
+  isSettled: () => Promise<boolean>,
+  error: () => Promise<string | null>,
+  timeoutMs: number,
+): Promise<void> {
+  if (!(await until(isSettled, timeoutMs))) throw new StepFailed('dictation did not finish committing');
+  const message = await error();
+  if (message) throw new StepFailed(`dictation failed: ${message}`);
+}
+
 export async function openChat(page: Page, origin: string, title = TITLE): Promise<void> {
   const timeout = { timeout: 20_000 };
   await page.goto(`${origin}/all`, { waitUntil: 'load', timeout: 60_000 });
@@ -339,6 +350,9 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       await openChat(page, config.origin);
       const mic = dialog.getByRole('button', { name: LABELS.dictate });
       await mic.waitFor({ timeout: 20_000 });
+      await dialog.locator('aiur-composer').evaluate((composer) => {
+        composer.addEventListener('aiur-composer-error', () => composer.setAttribute('data-qa-dictation-error', ''));
+      });
       const box = (await mic.boundingBox())!;
       const textbox = dialog.locator('textarea').first();
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -352,6 +366,18 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       cost.audioSentSeconds += CLIP_SECONDS.dictate;
       await page.waitForTimeout(CLIP_SECONDS.dictate * 1000 + 800);
       await page.mouse.up();
+      // Partials appear while recording; only inspect the draft after the final commit settles.
+      const alert = dialog.getByRole('alert');
+      await waitForDictationCommit(
+        async () => textbox.evaluate((input) => !(input as HTMLTextAreaElement).readOnly),
+        async () =>
+          (await dialog.locator('aiur-composer').getAttribute('data-qa-dictation-error')) !== null
+            ? 'the composer reported an error'
+            : (await alert.isVisible())
+              ? await alert.innerText()
+              : null,
+        wait,
+      );
       await until(async () => dictationFailure(await textbox.inputValue()) === null, wait);
       const text = await textbox.inputValue();
       const failure = dictationFailure(text);

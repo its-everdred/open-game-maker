@@ -40,6 +40,12 @@ with no repository metadata or release. The default is a dry run; `--dry-run` ma
 remove only those audited rows. The command uses the host's `OGM_INTERNAL_TOKEN` and
 `OGM_API_PORT` from `api.env`; `--api` can select a loopback API explicitly.
 
+## Live workspace prototype
+
+Run `gm live-build` in the game folder after each change. It builds into a separate workspace generation and switches
+the live pointer only after the build succeeds. A signed-in reviewer can open
+`/live/<slug>/<ticket>?scenario=<name>` on the app to play the latest completed generation.
+
 ## Preview an unmerged build
 
 ```text
@@ -60,6 +66,8 @@ gm review post <submission.json>
 ```
 
 In a configured worker workspace, the submission uses that ticket's scoped relay credential.
+For a live gameplay round, run `gm live-build` first and use a build media item with `"ref": "live"` and its
+`"scenario"`. The round links to the workspace's current completed generation without uploading a preview.
 
 Host merge tools can call `gm review close-check <game> <ticket> <sha>` before closing a ticket. It exits successfully
 only when the API confirms that the ticket's review phases permit closure; missing configuration and API errors refuse it.
@@ -86,6 +94,13 @@ the target and work side by side.
 gm publish <slug> [--sha <ref>] [--checkout <path>] [--api <url>]
 ```
 
+The game must provide a `test` script. The publisher runs it against the candidate build in the game's checkout;
+a failed check prevents the upload. It records the source commit and check results for the Releases screen. Listed
+games are automatically released after a passing build; private games remain private.
+For `gm test`, the publisher retains the production artifact while building a separate test-mode smoke build; the test
+script must use the default `dist` directory. Release numbers can skip after a failed or interrupted publication so an orphaned
+tag cannot block the next release.
+
 After a successful publish, `gm publish` checks merged PRs since the last reviewed build and posts one prototype review
 for creator-visible changes. It captures the hosted build with `gm qa playtest --all-modes`; when capture fails, it
 posts any stills that were produced and marks the clip unchecked. A missing `## Prototype review` section posts the
@@ -94,7 +109,7 @@ play link with “Limitations not stated” and reports the merged PRs that need
 limitations and eligible decision ids. When the merged PRs' Play links name a `scenario=`, the latest one rides on the
 build, and the review card embeds that slice (`/g/<gameId>/play?build=<buildId>&scenario=<name>`) to play in place.
 
-The publish host's `api.env` supplies `OGM_GAMES_ORIGIN` so the review link opens the exact published build. Set
+The publish host's `api.env` supplies `OGM_APP_ORIGIN` for the owner link and `OGM_GAMES_ORIGIN` for scoped capture. Set
 `OGM_PUBLISH_BUILD_TIMEOUT_MS` in that file to change the production build deadline in milliseconds; it defaults to
 1,800,000 (30 minutes). A timed-out build reports its deadline directly and is not reported as missing `dist/` output.
 
@@ -113,9 +128,9 @@ logo and thumbnail URLs, HTTP status, transferred bytes, duration, response `Cac
 duration. A zero transfer size means no network bytes were transferred; Chromium does not identify whether the source
 was memory or disk cache. The default game is `blobs`. `--origin` must match the app origin configured for the QA host.
 After a no-op `gm publish`, pass its build ID with `--after-publish`; the command loads that build and its predecessor
-in one browser context, totals bytes transferred for the game's files, and fails if a file other than the build
-manifest or `index.html` changed URL, or if an unchanged URL transferred bytes. This mode also needs
-`OGM_GAMES_ORIGIN` in the QA host's `api.env`.
+in one browser context, totals bytes transferred and compares content hashes. It fails if a file other than the build
+manifest or `index.html` changes. Restricted artifacts use `no-store`, so repeated transfers are expected. This mode
+needs `OGM_GAMES_ORIGIN`, `OGM_API_PORT` and `OGM_INTERNAL_TOKEN` in the QA host's `api.env`.
 
 ```text
 gm qa games-cache [--origin <app origin>] [--game <slug>] [--after-publish <buildId>] [--json]
@@ -446,7 +461,7 @@ turn. `--limit` caps the tickets and the decisions listed (default 10).
 ## Check ticket roles
 
 ```text
-gm plan check --tickets <issues.json> [--game <slug>]
+gm plan check --tickets <issues.json> [--game <slug>] [--first-playable] [--max-tickets <count>]
 ```
 
 `gm plan check` reads `--tickets` (from `gh issue list --json number,title,labels`) and fails each ticket that lacks
@@ -455,6 +470,10 @@ carries a role the table does not list. The roles come from the platform skill p
 the same table the builder uses. The new-game parent (`request:new-game`) is skipped, and with `--game` so is a ticket
 carrying exactly one other game's label. It prints one line per failing ticket (or `plan ok`), `--json` prints the
 report, and it exits 1 on any failure or when no ticket was left to check.
+With `--game`, the check also validates ticket decision references against the game's inventory. Use
+`--first-playable` for a bounded starter plan to leave later inventory decisions unassigned.
+`--max-tickets` also checks the game child count, excluding its parent and planner; supply all issues, including closed
+ones, when using this limit.
 
 ## Agree a scope session
 

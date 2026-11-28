@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import previewRoutes from '../../src/previews/routes.js';
 import roundRoutes from '../../src/review-rounds/routes.js';
 import { answerPreview, previewDirectory } from '../../src/previews/store.js';
-import { getRound, postRound } from '../../src/review-rounds/store.js';
+import { getRound, postRound, submitRound } from '../../src/review-rounds/store.js';
 import { createReviewSync } from '../../src/review-rounds/runner.js';
 import type { AiurClient } from '@ogm/aiur-client';
 import { scanPreviewRelay } from '../../src/previews/relay.js';
@@ -25,12 +25,25 @@ import { buildRoutes } from '../../src/builds/routes.js';
 import { mintPreviewToken } from '../../src/builds/preview-token.js';
 import { hookPreviewToken } from '../../src/internal/bundle.js';
 import { asUser } from '../helpers.js';
+import { validPreview } from '../../src/artifacts/grants.js';
 import { builtFiles, ids, REPO, SECRET, SHA, world } from '../builds/fixtures.js';
 
 const archive = () => execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', builtFiles(), '.']);
 
-function setup() {
+function setup(authorizedLive = false) {
   const { deps } = world();
+  deps.registry.principalResolvers.push(async (c) =>
+    c.req.header('cookie') === 'session=test'
+      ? {
+          kind: 'user',
+          userId: ids.user,
+          familyId: ids.family,
+          displayName: 'Owner',
+          platformRole: 'none',
+          capability: 'creator',
+        }
+      : null,
+  );
   const app = createApp(deps);
   const publishLog = vi.fn(async () => {});
   app.route(
@@ -46,6 +59,13 @@ function setup() {
         ],
       }),
       publishLog,
+      authorizedLive,
+      ...(authorizedLive
+        ? {
+            submitReview: async (context, gameId, value, effort, audioVerified) =>
+              submitRound(context.db, gameId, value, effort, audioVerified),
+          }
+        : {}),
     }),
   );
   const [owner, repo] = REPO.split('/');
@@ -61,9 +81,13 @@ function setup() {
       body,
     });
   const list = () =>
-    app.request(`http://example.test/api/v1/games/${ids.game}/previews`, { headers: asUser(ids.user) });
+    app.request(`http://example.test/api/v1/games/${ids.game}/previews`, {
+      headers: { ...asUser(ids.user), cookie: 'session=test' },
+    });
   const editorList = () =>
-    app.request(`http://example.test/api/v1/games/${ids.game}/editor/previews`, { headers: asUser(ids.user) });
+    app.request(`http://example.test/api/v1/games/${ids.game}/editor/previews`, {
+      headers: { ...asUser(ids.user), cookie: 'session=test' },
+    });
   const answer = (buildId: string, note = 'Great') =>
     app.request(`http://example.test/api/v1/games/${ids.game}/previews/12/answer`, {
       method: 'POST',
@@ -634,6 +658,54 @@ describe('review round previews', () => {
       }),
     });
     expect(response.status).toBe(422);
+    const id = 'd9428888-122b-4b0e-b1c8-9f7900000003';
+    const unscoped = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        track: 'game',
+        phase: 'concept',
+        category: 'gameplay',
+        ticket: '12',
+        sha: SHA,
+        media: [{ kind: 'build', ref: `live-${id}`, scenario: 'yard' }],
+        question: 'Is it fun?',
+      }),
+    });
+    expect(unscoped.status).toBe(422);
+  });
+  it('accepts an authorized live round and exposes its scenario for review', async () => {
+    const { app, deps } = setup(true);
+    enableTracks(deps);
+    const id = 'd9428888-122b-4b0e-b1c8-9f7900000002';
+    const response = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        track: 'game',
+        phase: 'concept',
+        category: 'gameplay',
+        ticket: '12',
+        sha: SHA,
+        media: [{ kind: 'build', ref: `live-${id}`, scenario: 'yard' }],
+        question: 'Is it fun?',
+      }),
+    });
+    expect(response.status).toBe(201);
+    const list = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds?includeGameplay=1`, {
+      headers: asUser(ids.user),
+    });
+    expect(await list.json()).toMatchObject({
+      rounds: [{ buildId: `live-${id}`, playUrl: expect.stringContaining('/live/castle-game/12?scenario=yard') }],
+    });
+    const answer = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds/${id}/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ verdict: 'approved' }),
+    });
+    expect(answer.status).toBe(200);
   });
   it('records a verdict against the posted build and retains the prior build', async () => {
     const { deps, app, upload, answer, message, publishLog } = setup();
@@ -663,13 +735,15 @@ describe('review round previews', () => {
       verdictSource: 'preview',
     });
     const before = (await (
-      await app.request(`http://example.test/api/v1/games/${ids.game}/editor/previews`, { headers: asUser(ids.user) })
+      await app.request(`http://example.test/api/v1/games/${ids.game}/editor/previews`, {
+        headers: { ...asUser(ids.user), cookie: 'session=test' },
+      })
     ).json()) as { previews: { accessId: string }[] };
     expect((await upload()).status).toBe(201);
     expect(existsSync(join(previewDirectory(deps, ids.game, first.buildId), 'index.html'))).toBe(true);
     const history = (await (
       await app.request(`http://example.test/api/v1/games/${ids.game}/editor/preview-history`, {
-        headers: asUser(ids.user),
+        headers: { ...asUser(ids.user), cookie: 'session=test' },
       })
     ).json()) as { previews: { buildId: string; accessId: string }[] };
     expect(history.previews).toHaveLength(1);
@@ -679,6 +753,8 @@ describe('review round previews', () => {
       root: deps.config.gamesRoot,
       appOrigin: 'https://app.example.test',
       version: 'test',
+      authorize: async ({ preview }) => !!preview,
+      resolvePreview: (game, accessId) => validPreview(deps, game, accessId),
     });
     expect((await host.request(`/p/${ids.game}/${before.previews[0]!.accessId}/index.html`)).status).toBe(404);
     expect((await host.request(`/p/${ids.game}/${history.previews[0]!.accessId}/index.html`)).status).toBe(200);
@@ -686,6 +762,10 @@ describe('review round previews', () => {
 });
 
 describe('preview builds', () => {
+  it('requires a signed-in user before issuing live access', async () => {
+    const { app } = setup();
+    expect((await app.request(`http://example.test/api/v1/games/${ids.game}/live/12`)).status).toBe(401);
+  });
   it('rejects closed tickets and changed game labels', async () => {
     let state = 'open';
     let label = 'game:castle-game';
@@ -734,6 +814,169 @@ describe('preview builds', () => {
         .token;
       const dir = join(workspace, '.gm/preview');
       mkdirSync(dir);
+      deps.db
+        .insert(schema.jobs)
+        .values({
+          id: 'j_planner',
+          gameId: ids.game,
+          branchId: 'main',
+          familyId: ids.family,
+          creatorId: ids.user,
+          kind: 'new_game',
+          aiurRepo: REPO,
+          aiurIssueNumber: 12,
+          complexity: 1,
+          state: 'filed',
+          start: 'now',
+          slot: 'new_game',
+          plan: '{}',
+          reservation: '{}',
+          hardCapMicroUsd: 1,
+          createdAt: '2026-11-13T00:00:00Z',
+          updatedAt: '2026-11-13T00:00:00Z',
+        })
+        .run();
+      deps.db
+        .insert(schema.jobTickets)
+        .values({
+          jobId: 'j_planner',
+          key: 'new-game-plan',
+          issueNumber: 12,
+          repo: REPO,
+          sig: 'sig',
+        })
+        .run();
+      const contextRequest = randomUUID();
+      writeFileSync(
+        join(dir, `${contextRequest}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token,
+          ticket: '12',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+          kind: 'new-game-context',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${contextRequest}.response`), 'utf8'))).toMatchObject({
+        state: 'done',
+        result: expect.objectContaining({ request: 'j_planner' }),
+      });
+      deps.registry.plannerBaseVerifier = vi.fn().mockResolvedValue(true);
+      const submitChild = async (key: string) => {
+        const requestId = randomUUID();
+        writeFileSync(
+          join(dir, `${requestId}.json`),
+          JSON.stringify({
+            state: 'pending',
+            token,
+            ticket: '12',
+            slug: 'castle-game',
+            sha: SHA,
+            branch: 'main',
+            kind: 'new-game-child',
+            plannerBranch: 'aiur/12',
+            child: {
+              key,
+              role: 'role:gameplay',
+              decisions: [],
+              complexity: 1,
+              plan: {
+                title: 'Starter',
+                summary: 'Build the starter',
+                scope: { included: [], excluded: [] },
+                tickets: [{ key: 'build', skills: [], dependsOn: [], acceptanceCriteria: ['playable'] }],
+              },
+            },
+          }),
+        );
+        await scanPreviewRelay(deps, home, async () => true);
+        return JSON.parse(readFileSync(join(dir, `${requestId}.response`), 'utf8'));
+      };
+      const submitted = await submitChild('starter');
+      expect(submitted).toMatchObject({ state: 'done', result: { jobId: expect.any(String) } });
+      expect(await submitChild('extra')).toMatchObject({ state: 'failed', error: 'planner_ticket_limit' });
+      deps.db
+        .insert(schema.jobTickets)
+        .values({ jobId: submitted.result.jobId, key: 'build', issueNumber: 13, repo: REPO, sig: 'child' })
+        .run();
+      const childWorkspace = join(home, 'workspaces', '13');
+      mkdirSync(childWorkspace, { recursive: true });
+      execFileSync('git', ['init', '-q', childWorkspace]);
+      execFileSync(process.execPath, [hook, 'create'], {
+        ...hookOptions,
+        cwd: childWorkspace,
+        env: { ...hookOptions.env, AIUR_HOOK_TICKET_IDENTIFIER: '13' },
+      });
+      const childToken = JSON.parse(readFileSync(join(childWorkspace, '.gm/context/preview.json'), 'utf8')).token;
+      const childDir = join(childWorkspace, '.gm/preview');
+      mkdirSync(childDir);
+      const notAdmitted = randomUUID();
+      writeFileSync(
+        join(childDir, `${notAdmitted}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token: childToken,
+          ticket: '13',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+          kind: 'planner-worker-context',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(childDir, `${notAdmitted}.response`), 'utf8')).state).toBe('failed');
+      deps.db.update(schema.jobs).set({ state: 'admitted' }).where(eq(schema.jobs.id, submitted.result.jobId)).run();
+      const childRequest = randomUUID();
+      writeFileSync(
+        join(childDir, `${childRequest}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token: childToken,
+          ticket: '13',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+          kind: 'planner-worker-context',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(childDir, `${childRequest}.response`), 'utf8'))).toMatchObject({
+        state: 'done',
+        result: { plannerChild: true, base: { branch: `ogm/planner-checkpoints/${SHA}`, sha: SHA }, answers: [] },
+      });
+      const wrongTicket = randomUUID();
+      writeFileSync(
+        join(dir, `${wrongTicket}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token,
+          ticket: '13',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+          kind: 'new-game-context',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${wrongTicket}.response`), 'utf8')).state).toBe('failed');
+      const wrongChild = randomUUID();
+      writeFileSync(
+        join(dir, `${wrongChild}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token,
+          ticket: '13',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+          kind: 'planner-worker-context',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${wrongChild}.response`), 'utf8')).state).toBe('failed');
       const id = randomUUID();
       writeFileSync(join(dir, `${id}.tgz`), archive());
       writeFileSync(
@@ -1003,6 +1246,8 @@ describe('preview builds', () => {
       root: deps.config.gamesRoot,
       appOrigin: 'https://app.example.test',
       version: 'test',
+      authorize: async ({ preview }) => !!preview,
+      resolvePreview: (game, accessId) => validPreview(deps, game, accessId),
     });
     expect((await host.request(`/p/${ids.game}/${before.previews[0]!.accessId}/index.html`)).status).toBe(404);
     expect((await host.request(`/p/${ids.game}/${after.previews[0]!.accessId}/index.html`)).status).toBe(200);
@@ -1121,6 +1366,8 @@ describe('preview builds', () => {
       appOrigin: 'https://app.example.test',
       version: 'test',
       workerScript: '/missing',
+      authorize: async ({ preview }) => !!preview,
+      resolvePreview: (game, accessId) => validPreview(deps, game, accessId),
     });
     expect((await host.request(`/g/${ids.game}/${preview.buildId}/index.html`)).status).toBe(404);
     expect((await host.request(`/a/${hash}.png`)).status).toBe(404);
