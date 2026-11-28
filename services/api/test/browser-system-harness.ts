@@ -25,7 +25,7 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
     OGM_APP_ORIGIN: appOrigin,
     OGM_SESSION_SECRET: 'local-test-session-secret-0123456789',
     OGM_WS_TOKEN_SECRET: 'local-test-websocket-secret-0123456789',
-    OGM_ALLOWED_EMAILS: 'player@example.test',
+    OGM_ALLOWED_EMAILS: 'player@example.test,peer@example.test',
     OGM_MAINTAINER_EMAILS: '',
     GOOGLE_CLIENT_ID: '',
     GOOGLE_CLIENT_SECRET: '',
@@ -87,6 +87,22 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
     const apiOrigin = `http://127.0.0.1:${address.port}`;
     return {
       origin: apiOrigin,
+      configureRooms(url: string, internalSecret: string, grantSecret: string) {
+        deps!.config.roomsInternalUrl = url;
+        deps!.config.roomsInternalSecret = internalSecret;
+        deps!.config.roomGrantSecret = grantSecret;
+        deps!.config.publicOrigin = url;
+      },
+      addPeerToFamily() {
+        const peer = deps!.sqlite.prepare('SELECT id FROM user WHERE email = ?').get('peer@example.test') as
+          { id: string } | undefined;
+        if (!peer) throw new Error('sign in the peer first');
+        deps!.sqlite
+          .prepare(
+            "INSERT INTO family_members (family_id, user_id, role, capability, joined_at) SELECT id, ?, 'member', 'player', created_at FROM families",
+          )
+          .run(peer.id);
+      },
       configureVoice(url: string) {
         deps!.config.voiceTokenSecret = 'local-test-voice-secret-0123456789';
         deps!.config.voiceWsUrl = url;

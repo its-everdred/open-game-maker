@@ -1,7 +1,14 @@
-import { chromium, expect, test as base, type Locator, type Page } from '@playwright/test';
+import { chromium, expect, test as base, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 import { startBrowserSystem } from '../../../services/api/test/browser-system-harness';
-import { joinOptions, newRoom, startHarness } from '../../../services/rooms/test/helpers';
+import {
+  GRANT_SECRET,
+  INTERNAL_SECRET,
+  defaultTimings,
+  joinOptions,
+  newRoom,
+  startHarness,
+} from '../../../services/rooms/test/helpers';
 import { startDictationSystemServer } from '../../../packages/voice-client/e2e/dictation-system-server';
 
 import { launchArgs } from './support/gpu';
@@ -64,14 +71,15 @@ test.use({
   launchOptions: { args: [...launchArgs(), '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] },
 });
 
-async function signIn(page: Page, system: System) {
+async function signIn(page: Page, system: System, email = 'player@example.test') {
+  const sentBefore = system.outbox().length;
   await page.goto('/all', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/signin/, { timeout: 30_000 });
-  await page.getByLabel('Email').fill('player@example.test');
+  await page.getByLabel('Email').fill(email);
   await page.getByRole('button', { name: 'Send sign-in link' }).tap();
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
-  expect(system.outbox()).toHaveLength(1);
-  const link = system.outbox()[0]?.text.match(/https?:\/\/\S+/)?.[0];
+  expect(system.outbox()).toHaveLength(sentBefore + 1);
+  const link = system.outbox()[sentBefore]?.text.match(/https?:\/\/\S+/)?.[0];
   if (!link) throw new Error('local outbox has no magic link');
   await page.goto(link, { waitUntil: 'domcontentloaded' });
   const offer = page.getByRole('button', { name: 'Not now' });
@@ -132,6 +140,74 @@ for (const viewport of [
       const commands = await page.evaluate(() => fetch('/api/v1/me/commands').then((response) => response.status));
       expect(commands).toBe(200);
       expect(system.reviewLog()).toContain('creator_commands');
+    });
+
+    test('room invites admit a separate signed-in player', async ({ page, system, browser }) => {
+      test.setTimeout(600_000);
+      await signIn(page, system);
+      system.seedChat();
+      const game = await system.seedEditor();
+      const rooms = await startHarness({ timings: { ...defaultTimings, idleDisposeSec: 300 } }, 0);
+      let context: BrowserContext | undefined;
+      try {
+        context = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport, hasTouch: true });
+        const address = rooms.gameServer.transport.server?.address();
+        if (!address || typeof address === 'string') throw new Error('rooms server did not bind');
+        system.configureRooms(`http://127.0.0.1:${address.port}`, INTERNAL_SECRET, GRANT_SECRET);
+        const peer = await context.newPage();
+        await peer.route(/\/(auth|api)\//, async (route) => {
+          const incoming = new URL(route.request().url());
+          if (incoming.origin !== new URL(page.url()).origin) return route.continue();
+          const target = new URL(incoming.pathname + incoming.search, system.origin);
+          if (incoming.pathname === '/api/v1/notifications/stream' || incoming.pathname === '/auth/get-session')
+            return route.continue({ url: target.href });
+          try {
+            await route.fulfill({ response: await route.fetch({ url: target.href, maxRedirects: 0 }) });
+          } catch {
+            await route.abort('failed').catch(() => undefined);
+          }
+        });
+        await signIn(peer, system, 'peer@example.test');
+        system.addPeerToFamily();
+        const created = await page.evaluate(async ({ gameId, branchId, buildId }) => {
+          const response = await fetch(`/api/v1/games/${gameId}/rooms`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ branchId, buildId, protocol: 2, mode: 'per-seat', maxPlayers: 2 }),
+          });
+          return { status: response.status, body: await response.json() };
+        }, game);
+        expect(created.status).toBe(201);
+        const roomId = created.body.roomId as string;
+        expect(roomId).toBeTruthy();
+        expect(await peer.evaluate((id) => fetch(`/api/v1/rooms/${id}/grant`).then((r) => r.status), roomId)).toBe(403);
+        const invitation = await page.evaluate(async (id) => {
+          const response = await fetch(`/api/v1/rooms/${id}/invites`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({}),
+          });
+          return { status: response.status, body: await response.json() };
+        }, roomId);
+        expect(invitation.status).toBe(201);
+        await peer.goto(new URL(invitation.body.url as string).pathname, { waitUntil: 'domcontentloaded' });
+        await expect(peer).toHaveURL(new RegExp(`/g/${game.gameId}.*room=${roomId}`), { timeout: 120_000 });
+        const admitted = await peer.evaluate(async (id) => {
+          const response = await fetch(`/api/v1/rooms/${id}/grant`);
+          return { status: response.status, body: await response.json() };
+        }, roomId);
+        expect(admitted).toMatchObject({
+          status: 200,
+          body: { roomId, pin: { gameId: game.gameId, buildId: game.buildId } },
+        });
+        expect(admitted.body.grant).not.toBe(created.body.grant);
+      } finally {
+        try {
+          await context?.close();
+        } finally {
+          await rooms.testServer.shutdown();
+        }
+      }
     });
 
     test('build chat stores the message', async ({ page, system }) => {
