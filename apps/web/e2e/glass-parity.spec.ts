@@ -35,6 +35,37 @@ const selectedScreens = paritySelection(selected);
 const root = resolve(process.cwd(), '../..');
 const baseline = resolve(root, 'tests/design-baselines/ogm-glass');
 const runId = randomUUID();
+const parityGames = [
+  {
+    id: 'blobs',
+    coverUrl: 'https://example.test/glass/blobs.png',
+    title: 'Blobs VS Blocks',
+    tags: ['Puzzle', 'Versus', 'Bots', 'Online'],
+    stats: { version: '14' },
+    ownerId: 'u1',
+    familyId: 'f1',
+    visibility: 'listed',
+    createdAt: '2026-11-01T00:00:00Z',
+  },
+  {
+    id: 'dusk',
+    coverUrl: 'https://example.test/glass/dusk.png',
+    title: 'Dusk Helm',
+    ownerId: 'u1',
+    familyId: 'f1',
+    visibility: 'listed',
+    createdAt: '2026-10-01T00:00:00Z',
+  },
+  {
+    id: 'goblin',
+    coverUrl: 'https://example.test/glass/goblin.webp',
+    title: 'Goblin Cellar',
+    ownerId: 'u1',
+    familyId: 'f1',
+    visibility: 'private',
+    createdAt: '2026-09-01T00:00:00Z',
+  },
+];
 test.use({ trace: 'off' });
 test.setTimeout(300_000);
 const screens = [
@@ -314,39 +345,7 @@ for (const target of screens) {
           );
           await page.route('**/api/v1/games', (route) =>
             route.fulfill({
-              json: {
-                games: [
-                  {
-                    id: 'blobs',
-                    coverUrl: 'https://example.test/glass/blobs.png',
-                    title: 'Blobs VS Blocks',
-                    tags: ['Puzzle', 'Versus', 'Bots', 'Online'],
-                    stats: { version: '14' },
-                    ownerId: 'u1',
-                    familyId: 'f1',
-                    visibility: 'listed',
-                    createdAt: '2026-11-01T00:00:00Z',
-                  },
-                  {
-                    id: 'dusk',
-                    coverUrl: 'https://example.test/glass/dusk.png',
-                    title: 'Dusk Helm',
-                    ownerId: 'u1',
-                    familyId: 'f1',
-                    visibility: 'listed',
-                    createdAt: '2026-10-01T00:00:00Z',
-                  },
-                  {
-                    id: 'goblin',
-                    coverUrl: 'https://example.test/glass/goblin.webp',
-                    title: 'Goblin Cellar',
-                    ownerId: 'u1',
-                    familyId: 'f1',
-                    visibility: 'private',
-                    createdAt: '2026-09-01T00:00:00Z',
-                  },
-                ],
-              },
+              json: { games: parityGames },
             }),
           );
         }
@@ -378,6 +377,14 @@ for (const target of screens) {
         await page.locator(selector).first().click();
         await expect(page.locator('.worker-tracker-panel')).toBeVisible();
         await expect(page.locator('.worker-tracker-panel').getByText('Forest road')).toBeVisible();
+        await page.waitForFunction(
+          (ids) => {
+            const api = window.__ogmHost?.activity;
+            return api?.settled('u1', ids) === true;
+          },
+          parityGames.filter((game) => game.ownerId === 'u1').map((game) => game.id),
+          { timeout: 30_000 },
+        );
         await expect(page.locator('.worker-tracker-panel')).not.toContainText('Could not load all reviews');
       }
       if (target.screen === 'GameSheet') {
