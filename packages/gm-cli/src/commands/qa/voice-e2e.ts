@@ -5,7 +5,7 @@ import { join, relative, resolve } from 'node:path';
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { printJson } from '../../context.js';
 import { withBrowser } from '../../qa.js';
-import { costLine, elevenLabsUsage, voiceE2e } from '../../qa-voice-e2e.js';
+import { costLine, elevenLabsUsage, voiceE2e, voiceE2eStepsPassed } from '../../qa-voice-e2e.js';
 import { readEnvFile } from '../publish/index.js';
 
 // Each run replaces the QA game's voice build, so two runs at once (the deploy hook and a manual run) would delete each
@@ -95,7 +95,7 @@ export const command: GmCommand = {
     } finally {
       lock?.release();
     }
-    const ok = result.steps.length === 2 && result.steps.every((step) => step.ok);
+    const ok = voiceE2eStepsPassed(result.steps);
     if (ctx.json) printJson(ctx, { ok, out: relative(ctx.cwd, out) || '.', ...result });
     else {
       for (const step of result.steps)

@@ -1,9 +1,12 @@
 import type { AppDeps } from '../app/types.js';
 import { gameDrafts, type GameDraft } from '../new-game/drafts.js';
+import { readQaState, updateQaState } from '../qa/state.js';
 
 export async function discardGameDraft(deps: AppDeps, draft: GameDraft): Promise<void> {
+  const qaVoiceFixture = readQaState(deps.db)?.voiceDraftId === draft.id;
   await closeDraftAssistant(deps, draft);
   const jobId = `draft:${draft.id}`;
+  let discarded = false;
   deps.sqlite
     .transaction(() => {
       if (!gameDrafts.deleteUnfinished(deps.db, draft.id)) {
@@ -14,11 +17,21 @@ export async function discardGameDraft(deps: AppDeps, draft: GameDraft): Promise
       deps.sqlite.prepare('DELETE FROM build_chat_attachments WHERE job_id = ?').run(jobId);
       deps.sqlite.prepare('DELETE FROM build_chat_messages WHERE job_id = ?').run(jobId);
       deps.sqlite.prepare('DELETE FROM build_chat_workspaces WHERE job_id = ?').run(jobId);
+      discarded = true;
     })
     .immediate();
+  if (qaVoiceFixture && discarded) {
+    updateQaState(deps.db, (qa) => {
+      if (qa.voiceDraftId === draft.id) {
+        delete qa.voiceDraftId;
+        delete qa.voiceDraftRun;
+      }
+    });
+  }
 }
 
 async function closeDraftAssistant(deps: AppDeps, draft: GameDraft): Promise<void> {
+  if (readQaState(deps.db)?.voiceDraftId === draft.id) return;
   if (!draft.ticketRepo) return;
   const assistant = deps.registry.draftScopeAssistant;
   if (!assistant) throw new Error('draft_scope_close_unavailable');

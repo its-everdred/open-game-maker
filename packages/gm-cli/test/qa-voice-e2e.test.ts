@@ -9,10 +9,12 @@ import {
   endVoiceConversation,
   elevenLabsUsage,
   LABELS,
+  openNewGameChat,
   startVoiceFromDictation,
   tallyFrames,
   twoWayFailure,
   voiceE2e,
+  voiceE2eStepsPassed,
   waitForDictationCommit,
 } from '../src/qa-voice-e2e.js';
 import { gm, tempDir } from './helpers.js';
@@ -63,6 +65,43 @@ it('opens dictation before switching to two-way voice', async () => {
   };
   await startVoiceFromDictation(dialog as unknown as Parameters<typeof startVoiceFromDictation>[0]);
   expect(clicks).toEqual(['Dictate', 'Switch to voice conversation']);
+});
+
+it('routes New Game draft creation to the seeded QA fixture and blocks a second create', async () => {
+  let handler: ((route: unknown) => Promise<unknown>) | undefined;
+  const fulfill = vi.fn(async () => {});
+  const abort = vi.fn(async () => {});
+  const request = { request: () => ({ method: () => 'POST' }), fulfill, abort };
+  const context = {
+    route: vi.fn(async (_pattern: string, callback: (route: unknown) => Promise<unknown>) => {
+      handler = callback;
+    }),
+  };
+  const page = {
+    goto: vi.fn(async () => {
+      await handler!(request);
+    }),
+    locator: () => ({ waitFor: vi.fn(async () => {}) }),
+  };
+  await openNewGameChat(
+    page as unknown as Parameters<typeof openNewGameChat>[0],
+    context as unknown as Parameters<typeof openNewGameChat>[1],
+    'https://app.example.test',
+    'd_qa-voice',
+  );
+  expect(context.route).toHaveBeenCalledWith('**/api/v1/game-drafts', expect.any(Function));
+  expect(page.goto).toHaveBeenCalledWith('https://app.example.test/new?step=talk', {
+    waitUntil: 'load',
+    timeout: 60_000,
+  });
+  expect(fulfill).toHaveBeenCalledWith({
+    status: 201,
+    contentType: 'application/json',
+    body: JSON.stringify({ draftId: 'd_qa-voice', jobId: 'draft:d_qa-voice', status: 'open' }),
+  });
+  expect(fulfill).toHaveBeenCalledTimes(1);
+  await handler!(request);
+  expect(abort).toHaveBeenCalledWith('blockedbyclient');
 });
 
 it('cancels a failed dictation before releasing the mouse', async () => {
@@ -126,6 +165,7 @@ it.each([false, true])('records each voice failure even when screenshot capture 
   };
   const context = {
     grantPermissions: vi.fn(async () => {}),
+    route: vi.fn(async () => {}),
     addCookies: async () => {},
     addInitScript: async () => {},
     newPage: async () => page,
@@ -134,7 +174,11 @@ it.each([false, true])('records each voice failure even when screenshot capture 
   const browser = { newContext: async () => context } as unknown as Parameters<typeof voiceE2e>[0];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => Response.json({})),
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes('/voice-fixtures') && init?.method === 'POST'
+        ? Response.json({ draftId: 'd_qa-voice' })
+        : Response.json({}),
+    ),
   );
   const result = await voiceE2e(browser, {
     origin: 'https://app.example.test',
@@ -144,11 +188,11 @@ it.each([false, true])('records each voice failure even when screenshot capture 
     out,
     stamp: 'run-1',
   });
-  expect(page.goto).toHaveBeenCalledTimes(2);
+  expect(page.goto).toHaveBeenCalledTimes(3);
   expect(context.grantPermissions).toHaveBeenCalledWith(['local-network-access'], {
     origin: 'https://app.example.test',
   });
-  expect(result.stills).toHaveLength(captureFails ? 0 : 2);
+  expect(result.stills).toHaveLength(captureFails ? 0 : 3);
   for (const step of result.steps) {
     expect(step).toMatchObject({ ok: false, url: 'https://app.example.test/all' });
     expect(step.failure).toContain('waiting for QA voice');
@@ -236,6 +280,21 @@ describe('verdicts', () => {
     expect(twoWayFailure(tally, 1, [{ actor: 'creator', text: 'Hello' }])).toBe(
       'the voice socket sent errors: transcript_store_failed',
     );
+  });
+});
+
+describe('voice E2E pass gate', () => {
+  const steps = [
+    { name: 'new-game-dictation', ok: true },
+    { name: 'dictation', ok: true },
+    { name: 'two-way', ok: true },
+  ] as const;
+
+  it('requires all three deployed voice steps to pass', () => {
+    expect(voiceE2eStepsPassed(steps)).toBe(true);
+    expect(voiceE2eStepsPassed(steps.slice(1))).toBe(false);
+    const failed = steps.map((step) => ({ ...step, ok: step.name !== 'dictation' }));
+    expect(voiceE2eStepsPassed(failed)).toBe(false);
   });
 });
 
