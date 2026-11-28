@@ -188,7 +188,7 @@ export function AiurComposer({
         ? new Dictation({ connection: () => connectDictation(transcriptionTarget) })
         : undefined;
     if (twoWay)
-      twoWay.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h8.5a2 2 0 0 1 2 2v4.5a2 2 0 0 1-2 2H7l-4 3v-4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" fill="#74c8ed" stroke="#74c8ed"/><path d="M10 3.5h9A1.5 1.5 0 0 1 20.5 5v5.5A1.5 1.5 0 0 1 19 12h-1v4l-4-4h-3A1.5 1.5 0 0 1 9.5 10.5V5A1.5 1.5 0 0 1 11 3.5Z" fill="none" stroke="#f2ead6" stroke-width="2"/></svg>`;
+      twoWay.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h9a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2H7l-4 3v-4a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2Z" fill="#74c8ed" stroke="#74c8ed" stroke-width="1.5"/><path d="M11.5 3.5h7.5A1.5 1.5 0 0 1 20.5 5v5.5A1.5 1.5 0 0 1 19 12h-1v4l-4-4h-2.5A1.5 1.5 0 0 1 10 10.5V5A1.5 1.5 0 0 1 11.5 3.5Z" fill="none" stroke="#f2ead6" stroke-width="2"/></svg>`;
     const isVoiceActive = () => element.hasAttribute('data-recording') || element.hasAttribute('data-voice-live');
     const syncMicrophone = () => {
       if (!microphone) return;

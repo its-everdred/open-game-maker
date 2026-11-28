@@ -263,7 +263,8 @@
 
 .build-chat-voice .build-chat-row {
   flex: none;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .build-chat-type {

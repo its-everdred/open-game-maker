@@ -605,6 +605,7 @@ test('build composer keeps voice controls at the right through dictation and liv
   await composer.locator('[part="voice"]').click();
   await expect(composer).toHaveAttribute('data-voice-live', '');
   await expect(composer.locator('[part="voice"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(composer.locator('[part="voice"] svg path').first()).toHaveAttribute('stroke-width', '1.5');
   await expect(composer.locator('[part="waveform"]')).toBeVisible();
   await expect
     .poll(() =>
@@ -637,6 +638,8 @@ test('build composer keeps voice controls at the right through dictation and liv
   const agentBubble = liveConversation.locator('[aria-label="agent"]');
   await expect(userBubble).toHaveClass(/creator/);
   await expect(agentBubble).toHaveClass(/agent/);
+  await expect(userBubble).toHaveCSS('overflow-wrap', 'break-word');
+  await expect(userBubble).toHaveCSS('word-break', 'normal');
   await expect(userBubble).toHaveCSS(
     'background-color',
     await agentBubble.evaluate((node) => getComputedStyle(node).backgroundColor),
