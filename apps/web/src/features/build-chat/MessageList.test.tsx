@@ -140,6 +140,12 @@ describe('MessageList', () => {
     expect(screen.getByText('Still readable')).toBeInTheDocument();
   });
 
+  it('does not add a read-aloud control to agent messages', () => {
+    render(<MessageList messages={[{ ...base, id: 'm_agent', kind: 'text', text: 'The door is ready.' }]} />);
+    expect(screen.getByText('The door is ready.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Read aloud' })).not.toBeInTheDocument();
+  });
+
   it('keeps a failed media row reserved and captioned', () => {
     render(
       <MessageList

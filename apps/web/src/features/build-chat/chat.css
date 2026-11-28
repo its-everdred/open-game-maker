@@ -62,13 +62,6 @@
   margin: 0;
 }
 
-.build-chat-read {
-  min-height: var(--tap-secondary);
-  margin-top: 6px;
-  padding-inline: 10px;
-  font-size: 12px;
-}
-
 .build-chat-row.progress {
   align-self: center;
   color: var(--muted);

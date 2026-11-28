@@ -550,9 +550,9 @@ test('build composer keeps voice controls at the right through dictation and liv
   expect(await card.evaluate((node) => getComputedStyle(node).borderRadius)).toBe('28px');
   await expect(card).toHaveCSS('border-top-width', '1px');
   await expect(card).toHaveCSS('border-right-width', '1px');
-  await expect(card).toHaveCSS('border-top-color', 'rgba(255, 255, 255, 0.42)');
-  await expect(card).toHaveCSS('border-right-color', 'rgba(0, 0, 0, 0.38)');
-  expect(await card.evaluate((node) => getComputedStyle(node).boxShadow)).toContain('0px 18px 44px');
+  await expect(card).toHaveCSS('border-top-color', 'rgba(242, 234, 214, 0.32)');
+  await expect(card).toHaveCSS('border-right-color', 'rgba(0, 0, 0, 0.6)');
+  expect(await card.evaluate((node) => getComputedStyle(node).boxShadow)).toContain('0px 12px 32px');
   await expect(attach).toHaveCSS('border-width', '0px');
   await expect(attach).toHaveCSS('box-shadow', 'none');
   await expect(mic).toHaveCSS('border-width', '0px');
@@ -634,7 +634,7 @@ test('build composer keeps voice controls at the right through dictation and liv
   await expect(composer).toHaveAttribute('data-voice-live', '');
   await expect(voice).toHaveAttribute('aria-pressed', 'true');
   await expect(composer.locator('[part="voice"] svg path').first()).toHaveAttribute('stroke-width', '1.5');
-  await expect(composer.locator('[part="voice"] svg path').first()).toHaveAttribute('fill', '#74c8ed');
+  await expect(composer.locator('[part="voice"] svg path').first()).toHaveAttribute('fill', 'var(--blue-b)');
   await expect(composer.locator('[part="waveform"]')).toBeVisible();
   await expect
     .poll(() =>

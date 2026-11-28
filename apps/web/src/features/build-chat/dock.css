@@ -70,7 +70,6 @@
 .build-chat-back,
 .build-chat-queued-actions button,
 .build-chat-composer-actions button,
-.build-chat-read,
 .build-chat-type {
   border: 1px solid var(--rule);
   border-radius: 999px;

@@ -1,5 +1,3 @@
-import { speak } from '@ogm/voice-client';
-
 import type { StreamedChatMessage } from '../stream';
 
 export function TextRow({ message }: { message: StreamedChatMessage }) {
@@ -16,11 +14,6 @@ export function TextRow({ message }: { message: StreamedChatMessage }) {
             </li>
           ))}
         </ul>
-      ) : null}
-      {message.actor === 'agent' ? (
-        <button className="build-chat-read tap-secondary" type="button" onClick={() => speak(message.text!)}>
-          Read aloud
-        </button>
       ) : null}
     </article>
   );
