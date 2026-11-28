@@ -8,6 +8,12 @@ Design runtime. Unlike the archived prototypes beside it, this one is the live U
   page "Developer console"). Each artboard's canvas title (shown in `index.html`) says whether it restyles a shipped screen (`existing`), is new for the Monday
   launch (`Monday`) or is designed for later (`future`).
 - **Spec:** tokens, components, screen-to-route map and tickets are in [`docs/design/ogm-glass/`](../../docs/design/ogm-glass/).
+- **Catalogue page (core #1504, 2026-11-28, awaiting review):** 13 `Cat*` artboards for the asset catalogue: home
+  (phone, landscape, desktop), animation preview and compare-2, audio A/B, model turntable, map zoom, the "useful for a
+  game" note, a game's allowlist with "used in" counts, add from the catalogue, and the editor pickers for animation and
+  music. `catalogue.css` holds the 2026-11-27 button and field material (thin border light top and bottom, dark left
+  and right, soft shadow; flat buttons inside fields) and the one-blue accent; it is page-scoped until `glass.css`
+  adopts it.
 
 ## Use it
 
@@ -37,7 +43,7 @@ of the same name. Icon buttons keep their words in `aria-label` only.
 
 1. With the Artifact tool, read `project/*.dc.html`, `project/glass.css` and `project/canvas.json` from the canvas
    artifact, and fetch any new `/_blob/<id>` assets (`scope: "assets"`).
-2. Put the blobs in one folder under the file names in `tools/convert.py` `BLOBS` (add new ids there, with `True` only
+2. Put the blobs in one folder under the file names in `tools/convert.py` `BLOBS` (the Catalogue's are `cat-*`) (add new ids there, with `True` only
    for OGM's own art), then run
    `python3 tools/convert.py <project dir> <blob dir> prototypes/ogm-glass assets-local/review/design-ogm-glass/img`
    and `python3 tools/index.py prototypes/ogm-glass`.

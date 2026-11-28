@@ -49,6 +49,10 @@
 {
 "id": "devconsole",
 "name": "Developer console"
+},
+{
+"id": "catalogue",
+"name": "Catalogue"
 }
 ],
 "boards": {
@@ -522,6 +526,122 @@
 "title": "Choice: panel as side drawer",
 "page": "devconsole",
 "radius": 38
+},
+"CatHome.dc.html": {
+"x": 0,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Catalogue home \u00b7 new",
+"page": "catalogue",
+"radius": 38
+},
+"CatAnim.dc.html": {
+"x": 470,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Animation preview \u00b7 new",
+"page": "catalogue",
+"radius": 38
+},
+"CatAnimCompare.dc.html": {
+"x": 940,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Animation compare-2 \u00b7 new",
+"page": "catalogue",
+"radius": 38
+},
+"CatAudio.dc.html": {
+"x": 1410,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Audio preview + A/B \u00b7 new",
+"page": "catalogue",
+"radius": 38
+},
+"CatModel.dc.html": {
+"x": 1880,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Model turntable \u00b7 new",
+"page": "catalogue",
+"radius": 38
+},
+"CatMap.dc.html": {
+"x": 2350,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Map preview + zoom \u00b7 new",
+"page": "catalogue",
+"radius": 38
+},
+"CatFlag.dc.html": {
+"x": 2820,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Useful for a game \u00b7 new",
+"page": "catalogue",
+"radius": 38
+},
+"CatAllowlist.dc.html": {
+"x": 0,
+"y": 964,
+"w": 390,
+"h": 844,
+"title": "Game allowlist + used in \u00b7 new",
+"page": "catalogue",
+"radius": 38
+},
+"CatAllowAdd.dc.html": {
+"x": 470,
+"y": 964,
+"w": 390,
+"h": 844,
+"title": "Allowlist: add from catalogue \u00b7 new",
+"page": "catalogue",
+"radius": 38
+},
+"CatEditorAnim.dc.html": {
+"x": 940,
+"y": 964,
+"w": 390,
+"h": 844,
+"title": "Editor picker: animation \u00b7 new",
+"page": "catalogue",
+"radius": 38
+},
+"CatEditorMusic.dc.html": {
+"x": 1410,
+"y": 964,
+"w": 390,
+"h": 844,
+"title": "Editor picker: music \u00b7 new",
+"page": "catalogue",
+"radius": 38
+},
+"CatHomeLandscape.dc.html": {
+"x": 0,
+"y": 1928,
+"w": 844,
+"h": 390,
+"title": "Catalogue home \u00b7 phone landscape",
+"page": "catalogue",
+"radius": 30
+},
+"CatHomeDesktop.dc.html": {
+"x": 924,
+"y": 1928,
+"w": 1440,
+"h": 900,
+"title": "Catalogue home \u00b7 desktop",
+"page": "catalogue"
 }
 },
 "order": [
@@ -577,7 +697,20 @@
 "EditorPicks.dc.html",
 "DevPanelKit.dc.html",
 "PicksTabs.dc.html",
-"PanelDrawer.dc.html"
+"PanelDrawer.dc.html",
+"CatHome.dc.html",
+"CatAnim.dc.html",
+"CatAnimCompare.dc.html",
+"CatAudio.dc.html",
+"CatModel.dc.html",
+"CatMap.dc.html",
+"CatFlag.dc.html",
+"CatAllowlist.dc.html",
+"CatAllowAdd.dc.html",
+"CatEditorAnim.dc.html",
+"CatEditorMusic.dc.html",
+"CatHomeLandscape.dc.html",
+"CatHomeDesktop.dc.html"
 ],
 "notes": {},
 "designSystems": []
