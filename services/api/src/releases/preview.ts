@@ -3,9 +3,9 @@ import { schema } from '@ogm/db';
 import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 
 import type { AppDeps } from '../app/types.js';
-import { createVersionCounts } from '../branches/version-counts.js';
 import { ReleaseError } from './errors.js';
 import type { ReleaseRuntime } from './service.js';
+import { nextReleaseVersion } from './tag-reservations.js';
 
 export type Changelog = { summary: string; items: ChangeNote[] };
 export type PreparedChangelog = { changelog: Changelog; noteIds: string[] };
@@ -42,8 +42,7 @@ export function requireMainBuild(deps: AppDeps, gameId: string, buildId: string)
 }
 
 export async function releaseVersion(deps: AppDeps, runtime: ReleaseRuntime, gameId: string): Promise<string> {
-  const publishCount = await createVersionCounts(deps.sqlite).publishCount(gameId);
-  return runtime.deriveVersion({ publishCount: publishCount + 1, buildsSinceFork: 0, txSinceLatestBuild: 0 });
+  return nextReleaseVersion(deps, runtime, gameId);
 }
 
 function lintText(text: string): string {

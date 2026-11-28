@@ -11,6 +11,28 @@ function requestError(status: number, data: unknown, headers: Record<string, str
 }
 
 describe('GitHub issues writer', () => {
+  it('verifies the planner capacity gate and recovers an uncertain add or removal', async () => {
+    let blocked = false;
+    const request = vi.fn<GitHubRequest>(async (route) => {
+      if (route === 'GET /repos/{owner}/{repo}/issues/{issue_number}') return response(200, { id: 42, state: 'open' });
+      if (route === 'GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by')
+        return response(200, blocked ? [{ id: 42 }] : []);
+      if (route.startsWith('POST ') && route.includes('/dependencies/')) {
+        blocked = true;
+        throw requestError(422, {});
+      }
+      if (route.startsWith('DELETE ') && route.includes('/dependencies/')) {
+        blocked = false;
+        throw requestError(404, {});
+      }
+      throw new Error(`unexpected route ${route}`);
+    });
+    const client = createIssuesClient({ token: 'fixture', request });
+    await expect(client.blockBy!('owner/game', 7, 8)).resolves.toBeUndefined();
+    expect(blocked).toBe(true);
+    await expect(client.unblockBy!('owner/game', 7, 8)).resolves.toBeUndefined();
+    expect(blocked).toBe(false);
+  });
   it('checks the game pinned core commit contains gm-prototype', async () => {
     const sha = 'a'.repeat(40);
     const manifest = Buffer.from(JSON.stringify({ core: { sha, ref: 'main' } })).toString('base64');

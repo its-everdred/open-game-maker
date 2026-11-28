@@ -1,11 +1,17 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { AiurConfigError, AiurHttpError, type AiurClient } from '@ogm/aiur-client';
+import { withJobDispatchLock } from '@ogm/builder';
 import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../../src/app/app.js';
+import { HttpError } from '../../src/app/errors.js';
 import type { IssueStateWriter } from '../../src/app/registry.js';
 import { createControlsRoutes } from '../../src/jobs/controls.js';
+import { markRunning, markTerminal } from '../../src/jobs/spend-cap.js';
 import { asUser, installUsers, makeDeps } from '../helpers.js';
 
 const NOW = new Date('2026-11-01T22:00:00.000Z');
@@ -95,6 +101,7 @@ function appWith(
   deps: ReturnType<typeof setup>,
   input: {
     client?: Partial<AiurClient> | null;
+    daemonFor?: () => Promise<AiurClient | null>;
     issues?: IssueStateWriter;
     sleep?: (ms: number) => Promise<void>;
   } = {},
@@ -104,7 +111,7 @@ function appWith(
   app.route(
     '/api/v1/jobs',
     createControlsRoutes({
-      daemonFor: async () => (input.client === null ? null : (input.client as AiurClient)),
+      daemonFor: input.daemonFor ?? (async () => (input.client === null ? null : (input.client as AiurClient))),
       issues: () => issues,
       sleep: input.sleep ?? (async () => undefined),
       now: () => NOW,
@@ -121,6 +128,203 @@ const post = (app: ReturnType<typeof createApp>, path: string, userId = ids.owne
   });
 
 describe('job controls', () => {
+  it('accepts a staged child worker event before the filed checkpoint', () => {
+    const deps = setup('queued');
+    deps.db
+      .update(schema.jobs)
+      .set({
+        state: 'admitted',
+        idempotencyKey: 'planner:j_parent:starter',
+        aiurIssueNumber: 42,
+        aiurRepo: 'owner/game',
+      })
+      .where(eq(schema.jobs.id, ids.job))
+      .run();
+    const lifecycle = {
+      db: deps.db,
+      sqlite: deps.sqlite,
+      events: deps.events,
+      defaults: {
+        dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+        defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
+        resetZone: deps.config.resetZoneDefault,
+      },
+      now: () => NOW,
+    };
+    markRunning(lifecycle, ids.job);
+    expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, ids.job)).get()?.state).toBe('running');
+  });
+  it('recovers an uncertain child create in the parent planner repository', async () => {
+    const deps = setup('queued');
+    const child = deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, ids.job)).get()!;
+    deps.db
+      .insert(schema.jobs)
+      .values({ ...child, id: 'j_parent', kind: 'new_game', idempotencyKey: null })
+      .run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_parent', key: 'new-game-plan', issueNumber: 41, repo: 'old/game', sig: 'sig' })
+      .run();
+    deps.db
+      .update(schema.jobs)
+      .set({ idempotencyKey: 'planner:j_parent:starter' })
+      .where(eq(schema.jobs.id, ids.job))
+      .run();
+    deps.db
+      .update(schema.games)
+      .set({ githubOwner: 'new', githubRepo: 'game' })
+      .where(eq(schema.games.id, ids.game))
+      .run();
+    const findByMarkers = vi.fn().mockResolvedValue({ number: 142 });
+    const close = vi.fn().mockResolvedValue(undefined);
+    const { app } = appWith(deps, { client: null, issues: { findByMarkers, close, setStateLabel: vi.fn() } });
+    expect((await post(app, 'cancel')).status).toBe(200);
+    expect(findByMarkers).toHaveBeenCalledWith('old/game', ids.job, 'T1');
+    expect(close).toHaveBeenCalledWith('old/game', 142);
+  });
+  it('closes a child recorded before its spend cap when cancelled', async () => {
+    const deps = setup('queued');
+    deps.db
+      .update(schema.jobs)
+      .set({ idempotencyKey: 'planner:j_parent:starter' })
+      .where(eq(schema.jobs.id, ids.job))
+      .run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: ids.job, key: 'T1', issueNumber: 142, repo: 'old/game', sig: 'sig' })
+      .run();
+    const close = vi.fn().mockResolvedValue(undefined);
+    const { app } = appWith(deps, { client: null, issues: { close, setStateLabel: vi.fn() } });
+    expect((await post(app, 'cancel')).status).toBe(200);
+    expect(close).toHaveBeenCalledWith('old/game', 142);
+    expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, ids.job)).get()).toMatchObject({
+      state: 'cancelled',
+      releasedAt: expect.any(String),
+    });
+  });
+  it('refuses to claim a planner cancellation when its daemon prefix cannot be determined', async () => {
+    const deps = setup('filed');
+    deps.db.update(schema.jobs).set({ kind: 'new_game' }).where(eq(schema.jobs.id, ids.job)).run();
+    const setStateLabel = vi.fn().mockResolvedValue(undefined);
+    const { app } = appWith(deps, { client: null, issues: { setStateLabel } });
+    expect((await post(app, 'cancel')).status).toBe(503);
+    expect(setStateLabel).not.toHaveBeenCalled();
+    expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, ids.job)).get()?.state).toBe('filed');
+  });
+  it('falls back to issue labels when daemon credentials are unavailable', async () => {
+    const deps = setup('filed');
+    const setStateLabel = vi.fn().mockResolvedValue(undefined);
+    const daemonFor = vi.fn().mockRejectedValue(new HttpError(503, 'daemon_credentials_unavailable'));
+    const { app } = appWith(deps, { daemonFor, issues: { setStateLabel } });
+    expect((await post(app, 'cancel')).status).toBe(200);
+    expect(setStateLabel).toHaveBeenCalledOnce();
+  });
+  it('releases a queued child reservation on permanent preflight failure', () => {
+    const deps = setup('queued');
+    markTerminal(
+      {
+        db: deps.db,
+        sqlite: deps.sqlite,
+        events: deps.events,
+        defaults: {
+          dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+          defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
+          resetZone: deps.config.resetZoneDefault,
+        },
+        now: () => NOW,
+      },
+      ids.job,
+      'failed',
+    );
+    const row = deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, ids.job)).get()!;
+    expect(row.state).toBe('failed');
+    expect(row.releasedAt).not.toBeNull();
+  });
+  it('uses the shared daemon dispatch prefix when cancelling a waiting ticket', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ogm-daemon-prefix-'));
+    try {
+      mkdirSync(join(root, '.aiur'));
+      writeFileSync(join(root, '.aiur/config'), 'tracker:\n  github:\n    label_prefix: shared\n');
+      const deps = setup('filed');
+      deps.db
+        .update(schema.games)
+        .set({ githubOwner: 'owner', githubRepo: 'game' })
+        .where(eq(schema.games.id, ids.game))
+        .run();
+      deps.db
+        .insert(schema.gameDaemons)
+        .values({
+          slug: 'other-game',
+          port: 12345,
+          repo: 'owner/game',
+          checkoutPath: root,
+          unit: 'fixture',
+          envFile: '/fixture',
+          status: 'running',
+          createdAt: NOW.toISOString(),
+        })
+        .run();
+      const setStateLabel = vi.fn().mockResolvedValue(undefined);
+      const { app } = appWith(deps, { client: null, issues: { setStateLabel } });
+      expect((await post(app, 'cancel')).status).toBe(200);
+      expect(setStateLabel).toHaveBeenCalledWith('owner/game', 142, 'cancelled', 'shared');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it('cancels a staged queued child without deferring its reservation release', async () => {
+    const deps = setup('queued');
+    deps.db
+      .update(schema.jobs)
+      .set({ aiurRepo: 'owner/game', aiurIssueNumber: 142, idempotencyKey: 'planner:j_parent:starter' })
+      .where(eq(schema.jobs.id, ids.job))
+      .run();
+    const cancel = vi.fn();
+    const daemonFor = vi.fn().mockRejectedValue(new HttpError(503, 'daemon_credentials_unavailable'));
+    const setStateLabel = vi.fn().mockResolvedValue(undefined);
+    const close = vi.fn().mockResolvedValue(undefined);
+    const { app } = appWith(deps, { client: { cancel }, daemonFor, issues: { setStateLabel, close } });
+    expect((await post(app, 'cancel')).status).toBe(200);
+    const row = deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, ids.job)).get()!;
+    expect(row.state).toBe('cancelled');
+    expect(row.releasedAt).not.toBeNull();
+    expect(cancel).not.toHaveBeenCalled();
+    expect(daemonFor).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledWith('owner/game', 142);
+    expect(setStateLabel).not.toHaveBeenCalled();
+  });
+  it('waits for in-flight dispatch before cancelling its planner ticket', async () => {
+    const deps = setup('queued');
+    deps.db.update(schema.jobs).set({ state: 'admitted' }).where(eq(schema.jobs.id, ids.job)).run();
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const dispatch = withJobDispatchLock(ids.job, async () => {
+      entered();
+      await gate;
+      deps.db
+        .update(schema.jobs)
+        .set({ state: 'filed', aiurRepo: 'owner/game', aiurIssueNumber: 99 })
+        .where(eq(schema.jobs.id, ids.job))
+        .run();
+    });
+    await started;
+    const cancel = vi.fn().mockResolvedValue({ process: { status: 'exited' } });
+    const { app } = appWith(deps, { client: { cancel } });
+    const response = post(app, 'cancel');
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(cancel).not.toHaveBeenCalled();
+    release();
+    await dispatch;
+    expect((await response).status).toBe(200);
+    expect(cancel).toHaveBeenCalledWith('99');
+    expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, ids.job)).get()?.state).toBe('cancelled');
+  });
   it('authorizes before making an aiur call', async () => {
     const deps = setup();
     const cancel = vi.fn();

@@ -11,6 +11,10 @@
     "./layout": {
       "types": "./dist/layout.d.ts",
       "import": "./dist/layout.js"
+    },
+    "./live-files": {
+      "types": "./dist/live-files.d.ts",
+      "import": "./dist/live-files.js"
     }
   },
   "scripts": {

@@ -11,6 +11,7 @@ import { gameHeaders, healthHeaders } from './headers.js';
 import { FRAME_OBSERVER, FRAME_OBSERVER_FILE, observeFrameHtml } from './frame-observer.js';
 import { BadBlobName, BadId, blobPath, buildDir, isComplete, resolveFile } from './layout.js';
 import { isCompressiblePath, mimeForPath } from './mime.js';
+import { liveAsset, liveEntry } from './live-route.js';
 import { bootstrapPreviewHtml, PREVIEW_BOOTSTRAP, PREVIEW_BOOTSTRAP_FILE } from './preview-bootstrap.js';
 import { artifactBlobIndex } from './blob-index.js';
 import { rewriteRootReferences } from './root-references.js';
@@ -22,6 +23,9 @@ export interface GamesHostOptions {
   uptimeSec?: () => number;
   version: string;
   workerScript: string;
+  /** Off (the default until #1505 ships private releases and their backfill): /g/ and /a/ serve every complete
+   * build as they did before #1473; draft grants (/d/) and previews (/p/) are checked either way. */
+  releaseGate?: boolean;
   authorize?: (request: {
     gameId?: string;
     buildId?: string;
@@ -42,13 +46,13 @@ export function createApp(options: GamesHostOptions): Hono {
     for (const [name, value] of gameHeaderEntries) {
       context.res.headers.set(name, value);
     }
-    if (/^\/(?:p|d)\//u.test(new URL(context.req.url).pathname)) {
+    if (/^\/(?:p|d|l)\//u.test(new URL(context.req.url).pathname)) {
       context.res.headers.set('Access-Control-Allow-Origin', '*');
       const policy = context.res.headers.get('Content-Security-Policy');
       if (policy)
         context.res.headers.set('Content-Security-Policy', `${policy}; sandbox allow-scripts allow-pointer-lock`);
     }
-    if (context.res.status !== 200 || /^(?:\/p\/|\/d\/|\/g\/|\/a\/)/u.test(new URL(context.req.url).pathname)) {
+    if (context.res.status !== 200 || /^(?:\/p\/|\/d\/|\/l\/|\/g\/|\/a\/)/u.test(new URL(context.req.url).pathname)) {
       context.res.headers.set('Cache-Control', 'no-store');
     } else if (new URL(context.req.url).pathname === '/game-cache.js') {
       context.res.headers.set('Cache-Control', 'no-cache');
@@ -57,6 +61,7 @@ export function createApp(options: GamesHostOptions): Hono {
   };
   app.use('/g/*', secureResponse);
   app.use('/p/*', secureResponse);
+  app.use('/l/*', secureResponse);
   app.use('/d/*', secureResponse);
   app.use('/a/*', secureResponse);
   app.use('/game-cache.js', secureResponse);
@@ -107,6 +112,7 @@ export function createApp(options: GamesHostOptions): Hono {
     if (isDraft && (!grant || !/^[A-Za-z0-9_-]{43,2048}$/u.test(grant))) return context.text('Not Found', 404);
     if (
       !new URL(context.req.url).pathname.startsWith('/p/') &&
+      (options.releaseGate || isDraft) &&
       !(await options.authorize?.({ gameId, buildId, ...(grant ? { grant } : {}) }).catch(() => false))
     ) {
       return context.text('Not Found', 404);
@@ -224,7 +230,8 @@ export function createApp(options: GamesHostOptions): Hono {
       throw error;
     }
 
-    if (!(await options.authorize?.({ blob: file }).catch(() => false))) return context.text('Not Found', 404);
+    if (options.releaseGate && !(await options.authorize?.({ blob: file }).catch(() => false)))
+      return context.text('Not Found', 404);
     return serveFile(context, path, { ETag: `"${file.slice(0, 64)}"` });
   };
 
@@ -239,12 +246,16 @@ export function createApp(options: GamesHostOptions): Hono {
       }
       throw error;
     }
-    if (!(await options.authorize?.({ gameId, buildId }).catch(() => false))) return context.text('Not Found', 404);
+    if (options.releaseGate && !(await options.authorize?.({ gameId, buildId }).catch(() => false)))
+      return context.text('Not Found', 404);
     return context.redirect(`/g/${gameId}/${buildId}/`, 308);
   });
   app.on(['GET', 'HEAD'], '/g/:gameId/:buildId/*', serveGame);
   app.on(['GET', 'HEAD'], '/d/:gameId/:buildId/:grant/*', serveGame);
   app.on(['GET', 'HEAD'], '/p/:gameId/:buildId/*', serveGame);
+  app.on(['GET', 'HEAD'], '/l/:gameId/:accessId', liveEntry(options.root, options.resolvePreview));
+  app.on(['GET', 'HEAD'], '/l/:gameId/:accessId/', liveEntry(options.root, options.resolvePreview));
+  app.on(['GET', 'HEAD'], '/l/:gameId/:accessId/:version/*', liveAsset(options.root, options.resolvePreview));
   app.on(['GET', 'HEAD'], '/a/:file', serveBlob);
   app.on(['GET', 'HEAD'], '/game-cache.js', (context) =>
     serveFile(context, options.workerScript, { 'Service-Worker-Allowed': '/g/' }),

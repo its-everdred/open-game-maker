@@ -79,6 +79,11 @@ The API file must set `OGM_APP_ORIGIN`, `OGM_COMMIT_INTERNAL_URL`, and `OGM_COMM
 `OGM_GAME_TEMPLATE_REF` defaults to `game-2d@1` when left blank. Job admission defaults each member to
 `OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD=5000000` and resets that allowance at midnight in
 `OGM_RESET_ZONE_DEFAULT` (the host's IANA time zone when blank). Family budget settings override both defaults.
+`OGM_TESTER_NEW_GAMES_PER_DAY` limits each non-admin creator's game creations and New Game requests per day in the family's
+reset zone; it defaults to 1. A provisioning retry uses its existing game record and does not consume another slot.
+Set it to a positive integer in `api.env` and restart the API to change it. Admins and maintainers are exempt.
+`OGM_NEW_GAME_PLAN_TICKET_LIMIT` sets the automated planner's maximum child tickets per game, defaulting to 1 for the
+starter scope. Set a positive integer in `api.env` and restart the API to change the limit for new plans.
 
 The commit file must also set the shared `OGM_INTERNAL_TOKEN` so boundary checks can read active repositories and
 creator PII terms. The Aiur Executor's unit needs the same `OGM_INTERNAL_TOKEN`: it reads a New Game request's private
@@ -530,14 +535,15 @@ token in `x-ogm-internal`.
 
 ## Check voice on prod
 
-`gm qa voice-e2e --sha <deployed sha>` checks one-way and two-way voice in the deployed app as the QA creator, at
-390×844. It seeds a build named `QA voice` on the QA game (filed and released, so it takes no job slot and no daemon
-runs it), opens its chat from the menu's builds sheet, and replaces the microphone with recorded speech
-(`packages/gm-cli/qa/voice-e2e/`, 3.2 s in all):
+`gm qa voice-e2e --sha <deployed sha>` checks New Game dictation, edit-chat dictation and two-way voice in the deployed
+app as the QA creator, at 390×844. It seeds a QA-only New Game draft and a build named `QA voice` (filed and released,
+so the build takes no job slot and no daemon runs it), opens New Game chat and the build chat from the menu's builds
+sheet, and replaces the microphone with recorded speech (`packages/gm-cli/qa/voice-e2e/`, 4.84 s in all):
 
-1. One-way: holds "Hold to talk" while "Make the sky blue." plays, and passes when the message box shows the clip's
-   words. The words are cleared, never sent.
-2. Two-way: taps "Start voice chat", plays "Hello, can you hear me?" once the session is listening, and passes when the
+1. New Game: dictates "Make the sky blue." and passes when the composer shows the clip's words. The words are cleared,
+   never sent; the runner uses a QA draft fixture instead of filing a real request.
+2. Edit chat: repeats the same dictation check in the seeded build chat. The words are cleared, never sent.
+3. Two-way: taps "Start voice chat", plays "Hello, can you hear me?" once the session is listening, and passes when the
    agent's audio streams back over the socket, the app plays it, and the creator's spoken turn is stored in the build's
    chat. It hangs up as soon as the reply arrives.
 
@@ -601,8 +607,6 @@ more than waiting does. A swipe that moves nothing is reported as unchecked inst
 the game's move stick (a `move` stick without `touch: "self"`). One game plays at a time, in the capture slot, and
 each play has a load-adjusted wall-time budget capped at 340 s; capture-slot waiting is capped at 90 s. Published JSON fetches retry transient failures and report their final cause. A boot timeout is inconclusive. A game that fails is played once more and fails only when both plays fail: a loaded host
 can miss one boot, a broken game misses both.
-The default sweep selects listed games; `--game <slug>` also permits an explicitly requested private game with a valid
-current release. Its privileged smoke does not prove an owner or invited player can load it; check those sessions too.
 
 The QA account cannot read another family's private game, so the check answers that game's own API routes from its
 published build (`design/design.json`) and absorbs its writes; the shell, auth, the rest of the API and the games host

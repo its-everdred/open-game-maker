@@ -222,6 +222,7 @@ describe('artifact access', () => {
   });
   it('requires a release or a live creator session and limits shared blobs to release references', async () => {
     const { deps, source } = setup();
+    deps.config.artifactReleaseGate = true;
     insertBuild(deps, source, { id: buildId });
     const dir = join(deps.config.gamesRoot, ids.game, buildId);
     mkdirSync(join(dir, 'assets'), { recursive: true });
@@ -281,6 +282,7 @@ describe('artifact access', () => {
       appOrigin: 'https://app.example.test',
       version: 'test',
       workerScript: join(dir, 'unused'),
+      releaseGate: true,
       authorize: allowed,
       resolvePreview: async (gameId, preview) => {
         const response = await post('authorize', { gameId, preview });
@@ -461,6 +463,7 @@ describe('artifact access', () => {
   });
   it('keeps a coming soon build off the public path and serves it only to an early-access tester', async () => {
     const { deps, source } = setup();
+    deps.config.artifactReleaseGate = true;
     insertBuild(deps, source, { id: buildId });
     deps.db
       .insert(schema.overrideSnapshots)
@@ -529,6 +532,7 @@ describe('artifact access', () => {
       appOrigin: 'https://app.example.test',
       version: 'test',
       workerScript: join(deps.config.gamesRoot, 'unused'),
+      releaseGate: true,
       authorize: allowed,
     });
 

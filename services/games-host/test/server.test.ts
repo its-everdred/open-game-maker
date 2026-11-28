@@ -54,6 +54,7 @@ describe('games-host server', () => {
       appOrigin: 'https://app.example.test',
       version: 'test',
       workerScript,
+      releaseGate: true,
       authorize: async ({ grant }) => Boolean(grant && allowed),
     });
     const token = 'a'.repeat(43);
@@ -64,8 +65,36 @@ describe('games-host server', () => {
     expect(draft.headers.get('content-security-policy')).toContain('sandbox allow-scripts allow-pointer-lock');
     allowed = false;
     expect((await host.request(`/d/demo/b1/${token}/game.js`)).status).toBe(404);
-    const unavailable = createApp({ root, appOrigin: 'https://app.example.test', version: 'test', workerScript });
+    const unavailable = createApp({
+      root,
+      appOrigin: 'https://app.example.test',
+      version: 'test',
+      workerScript,
+      releaseGate: true,
+    });
     expect((await unavailable.request('/g/demo/b1/')).status).toBe(404);
+  });
+
+  // No game has a release until #1505 backfills them, so the gate stays off and private family games keep loading.
+  it('serves every complete build and blob as before #1473 while the release gate is off, still checking draft grants', async () => {
+    const checked: object[] = [];
+    const host = createApp({
+      root,
+      appOrigin: 'https://app.example.test',
+      version: 'test',
+      workerScript,
+      authorize: async (request) => {
+        checked.push(request);
+        return false;
+      },
+    });
+    expect((await host.request('/g/demo/b1')).status).toBe(308);
+    expect((await host.request('/g/demo/b1/')).status).toBe(200);
+    expect((await host.request('/g/demo/b1/game.js')).status).toBe(200);
+    expect((await host.request(`/a/${blobSha}.webp`)).status).toBe(200);
+    expect(checked).toEqual([]);
+    expect((await host.request(`/d/demo/b1/${'a'.repeat(43)}/`)).status).toBe(404);
+    expect(checked).toEqual([{ gameId: 'demo', buildId: 'b1', grant: 'a'.repeat(43) }]);
   });
 
   it('streams a complete build with the game header contract', async () => {

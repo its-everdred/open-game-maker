@@ -124,9 +124,10 @@ describe('game slugs', () => {
       await createGame(app, 'Play'),
       await createGame(app, 'Docs'),
       await createGame(app, 'Setup'),
+      await createGame(app, 'Live'),
     ];
 
-    expect(games.map((game) => game.slug)).toEqual(['new-2', 'settings-2', 'play-2', 'docs-2', 'setup-2']);
+    expect(games.map((game) => game.slug)).toEqual(['new-2', 'settings-2', 'play-2', 'docs-2', 'setup-2', 'live-2']);
   });
 
   it('skips a reserved slug on rename too', async () => {

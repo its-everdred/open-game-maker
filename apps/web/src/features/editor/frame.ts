@@ -44,13 +44,17 @@ export type GameFrameState = {
   load?: Pick<GameLoadProgress, 'phase' | 'loaded' | 'total'> & { done: boolean };
   /** The game's latest `host.pause.visible`; unset means visible, and a remount starts unset. */
   hostPauseVisible?: boolean;
+  back?: { enabled: boolean; label?: string };
   /** Unset until the game reports; a game without the SDK's HD-2D never does. */
   hd2d?: Hd2dReport;
 };
 
 /** The game hides the host Pause control only in play, while its bridge is up; any failure shows it again. */
-export function hidesHostPause(mode: 'play' | 'edit', state: Pick<GameFrameState, 'bridgeState' | 'hostPauseVisible'>) {
-  return mode === 'play' && state.bridgeState === 'ready' && state.hostPauseVisible === false;
+export function hidesHostPause(
+  mode: 'play' | 'edit',
+  state: Pick<GameFrameState, 'bridgeState' | 'hostPauseVisible' | 'back'>,
+) {
+  return mode === 'play' && state.bridgeState === 'ready' && state.hostPauseVisible === false && !state.back?.enabled;
 }
 
 export type GameFrameController = {
@@ -70,6 +74,8 @@ export type GameFrameController = {
   onScreen(
     callback: (position: { id: string; x: number; y: number } | { id: string; offscreen: true }) => void,
   ): () => void;
+  /** Send Back to a running game; static editor previews do not implement it. */
+  back?(): void;
   pause(): void;
   resume(): void;
   restoreSave(save: SaveData<unknown>): Promise<SaveData<unknown>>;
@@ -97,6 +103,10 @@ export type MountGameFrameOptions = {
   gameId: string;
   buildId: string;
   preview?: boolean;
+  live?: boolean;
+  liveVersion?: string;
+  /** The embedding surface renders and handles the shared Back button. */
+  hostBack?: boolean;
   draftGrant?: string;
   mode: 'play' | 'edit';
   design: { rev: number; doc: DesignDoc };
@@ -238,7 +248,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   const observeOrigin = (event: MessageEvent) => {
     if (event.origin === trustedOrigin) return;
     if (
-      (options.preview || options.draftGrant) &&
+      (options.preview || options.live || options.draftGrant) &&
       event.origin === 'null' &&
       event.source === options.container.querySelector('iframe')?.contentWindow
     )
@@ -256,13 +266,16 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       gameId: options.gameId,
       buildId: options.buildId,
       ...(options.preview ? { preview: true } : {}),
+      ...(options.live ? { live: true } : {}),
+      ...(options.liveVersion ? { liveVersion: options.liveVersion } : {}),
       ...(options.draftGrant ? { draftGrant: options.draftGrant } : {}),
+
       build: options.build ?? 'draft',
       ...(options.params === undefined ? {} : { params: options.params }),
       mode: options.mode,
       ...(options.startupRestore ? { startupHold: true } : {}),
       playerIndex: 0,
-      capabilities: [],
+      capabilities: options.hostBack ? ['host.back'] : [],
       role: () => 'owner',
       /*
        * The handshake waits for the game's entry module to download and run. Over Funnel from a busy host that took
@@ -401,6 +414,11 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     current = { ...current, hostPauseVisible: visible };
     publish();
   });
+  const stopBack = frame.on('host.back', (back) => {
+    if (disposed) return;
+    current = { ...current, back };
+    publish();
+  });
   const stopHd2d = frame.on('hd2d.scene', (report) => {
     if (disposed) return;
     current = { ...current, hd2d: report };
@@ -458,6 +476,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
         placementQueue.push({ prefab, pose, timeoutMs, resolve });
         sendNextPlacement();
       }),
+    back: () => frame.send('navigation.back', {}),
     onPicked: (callback) => frame.on('editor.picked', ({ targets }) => callback(targets)),
     onScreen: (callback) => frame.on('editor.screen', callback),
     pause: () => {
@@ -542,6 +561,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       stopStartupWrites();
       stopPlacement();
       stopHostPause();
+      stopBack();
       stopHd2d();
       for (const stop of stopRoomMessages) stop();
       if (activePlacement !== undefined) {

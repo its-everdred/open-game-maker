@@ -30,6 +30,7 @@ import {
   type ReleaseRuntime,
 } from './service.js';
 import { publishPreview, rollbackPreview } from './preview.js';
+import { listCheckRecords } from '../builds/check-records.js';
 
 export const prefix = '/';
 export type { ReleaseRuntime } from './service.js';
@@ -181,6 +182,10 @@ const routes = new Hono<ApiBindings>()
   .get('/api/v1/games/:gameId/builds', (c) => {
     requirePublisher(c, c.req.param('gameId'));
     return c.json({ builds: listBuilds(c.get('deps'), c.req.param('gameId')) });
+  })
+  .get('/api/v1/games/:gameId/publish-checks', (c) => {
+    requirePublisher(c, c.req.param('gameId'));
+    return c.json({ records: listCheckRecords(c.get('deps'), c.req.param('gameId')) });
   })
   .get('/api/v1/games/:gameId/publish-preview', async (c) => {
     requirePublisher(c, c.req.param('gameId'));

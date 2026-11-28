@@ -15,12 +15,21 @@ export interface GamesHostEnv {
   root: string;
   workerScript: string;
   apiInternalUrl?: string;
+  releaseGate: boolean;
 }
 
 export function loadGamesHostEnv(environment: NodeJS.ProcessEnv = processEnvironment): GamesHostEnv {
-  const { OGM_GAMES_SW: configuredWorkerScript, OGM_API_INTERNAL_URL: apiInternalUrl } = loadEnv(
+  const {
+    OGM_GAMES_SW: configuredWorkerScript,
+    OGM_API_INTERNAL_URL: apiInternalUrl,
+    OGM_ARTIFACT_RELEASE_GATE: releaseGate,
+  } = loadEnv(
     'games',
-    { OGM_GAMES_SW: { kind: 'path', required: false }, OGM_API_INTERNAL_URL: { kind: 'string', required: false } },
+    {
+      OGM_GAMES_SW: { kind: 'path', required: false },
+      OGM_API_INTERNAL_URL: { kind: 'string', required: false },
+      OGM_ARTIFACT_RELEASE_GATE: { kind: 'bool', required: false },
+    },
     environment,
   );
   const host = environment.OGM_GAMES_BIND ?? GAMES_HOST;
@@ -57,6 +66,7 @@ export function loadGamesHostEnv(environment: NodeJS.ProcessEnv = processEnviron
     root: resolve(required(environment, 'OGM_GAMES_ROOT')),
     workerScript: configuredWorkerScript ? resolve(configuredWorkerScript) : DEFAULT_WORKER_SCRIPT,
     ...(apiInternalUrl ? { apiInternalUrl } : {}),
+    releaseGate: releaseGate === true,
   };
 }
 

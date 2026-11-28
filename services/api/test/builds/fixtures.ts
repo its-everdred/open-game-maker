@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,6 +18,13 @@ export const SECRET = 'hook-secret-for-build-tests';
 export const REPO = 'everdred-games/gm-g2';
 export const TICKET = '12';
 export const SHA = 'e'.repeat(40);
+export const CHECK_ID = 'pc_fixture';
+
+export function allowArchive(deps: ReturnType<typeof world>['deps'], body: Buffer) {
+  deps.sqlite
+    .prepare('UPDATE publish_checks SET artifact_sha256 = ? WHERE id = ?')
+    .run(createHash('sha256').update(body).digest('hex'), CHECK_ID);
+}
 
 export function manifest(): GameManifest {
   return {
@@ -62,6 +70,27 @@ type JobKind = (typeof schema.jobs.$inferInsert)['kind'];
 // A game with its main branch, a running job for ticket 12 and the build route mounted with a fixed hook secret.
 export function world(kind: JobKind = 'feature') {
   const { deps } = setupRelease();
+  for (const [id, sha] of [
+    [CHECK_ID, SHA],
+    ['pc_newer', 'f'.repeat(40)],
+  ] as const) {
+    deps.db
+      .insert(schema.publishChecks)
+      .values({
+        id,
+        gameId: ids.game,
+        gitSha: sha,
+        surface: 'game',
+        sizesJson: '[]',
+        checksJson: JSON.stringify([
+          { name: 'pnpm run test', result: 'passed' },
+          { name: 'pnpm run build', result: 'passed' },
+        ]),
+        result: 'passed',
+        createdAt: now,
+      })
+      .run();
+  }
   setupDesign(deps);
   deps.db
     .insert(schema.jobs)
@@ -136,6 +165,8 @@ export async function gamesHost(root: string) {
     OGM_GAMES_PORT: String(port),
     OGM_GAMES_ROOT: root,
     OGM_APP_ORIGIN: 'https://app.example.test',
+    // These tests check #1473's privacy, which holds only with the release gate on (#1505).
+    OGM_ARTIFACT_RELEASE_GATE: '1',
   });
   await new Promise((resolve) => server.once('listening', resolve));
   return { base: `http://127.0.0.1:${port}`, close: () => new Promise((resolve) => server.close(resolve)) };

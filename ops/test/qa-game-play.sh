@@ -19,18 +19,15 @@ db=$scratch/ogm.sqlite3
 python3 - "$db" << 'PY'
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
-c.execute("create table games (id text, slug text, delisted_at text, visibility text default 'listed', release_state text default 'released', published_release_id text)")
-c.execute("create table builds (id text, game_id text, status text, created_at text, artifact text default 'present')")
-c.execute('create table releases (id text, game_id text, build_id text, snapshot_id text)')
-c.execute('create table override_snapshots (id text, game_id text, build_id text)')
+c.execute("create table games (id text, slug text, delisted_at text, visibility text default 'listed', release_state text default 'released')")
+c.execute('create table builds (id text, game_id text, status text, created_at text)')
 c.executemany('insert into games (id, slug, delisted_at) values (?, ?, null)',
               [('g_ok', 'ok'), ('g_bad', 'bad'), ('g_qa', 'qa-review'), ('g_new', 'new')])
-c.execute("insert into games (id, slug, visibility) values ('g_private', 'private', 'private')")
-c.executemany('insert into builds (id, game_id, status, created_at) values (?, ?, ?, ?)', [
+c.execute("insert into games (id, slug, delisted_at, visibility) values ('g_fam', 'fam', null, 'private')")
+c.executemany('insert into builds values (?, ?, ?, ?)', [
   ('build_old', 'g_ok', 'tested', '2026-11-20'), ('build_new', 'g_ok', 'tested', '2026-11-21'),
   ('build_bad', 'g_bad', 'tested', '2026-11-21'), ('build_qa', 'g_qa', 'tested', '2026-11-21'),
-  ('build_queued', 'g_new', 'queued', '2026-11-21'), ('build_private', 'g_private', 'tested', '2026-11-21'),
-  ('build_private_draft', 'g_private', 'tested', '2026-11-22')])
+  ('build_queued', 'g_new', 'queued', '2026-11-21'), ('build_fam', 'g_fam', 'tested', '2026-11-21')])
 c.commit()
 PY
 
@@ -83,9 +80,11 @@ set -e
 assert_eq 1 "$rc" 'a game stuck on Try again fails'
 assert_eq "qa play-check g_bad build_bad --out $stack/assets-local/review/app/play-check/build_bad
 qa play-check g_bad build_bad --out $stack/assets-local/review/app/play-check/build_bad
+qa play-check g_fam build_fam --out $stack/assets-local/review/app/play-check/build_fam
 qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/build_new" "$(cat "$scratch/calls")" \
-  'each published game is played at its latest tested build, a failing one twice; QA games are skipped'
+  'each published game, private family games included, is played at its latest tested build, a failing one twice; QA games are skipped'
 assert_grep 'ok build_new: ok' "$scratch/out"
+assert_grep 'fam build_fam: ok' "$scratch/out"
 assert_grep 'new: no tested build, not played' "$scratch/out"
 # A type the game sent with a newline in it is shown as ?, so it cannot forge an attention line.
 line="bad build_bad: bridge error; the shell shows Try again; trace hello>load.progress x65>[?]; host load [0-9]+; stills $stack/assets-local/review/app/play-check/build_bad"
@@ -100,56 +99,6 @@ grep -qE "qa-game-play failed: $line" "$attention" || fail 'attention line lacks
 assert_eq "qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/build_new" "$(cat "$scratch/calls")" \
   '--game plays one game'
 assert_grep 'exit=0 qa-game-play' "$scratch/out"
-
-# An explicitly requested private game can be checked without adding it to the default listed-game sweep.
-: > "$scratch/calls"
-set +e
-"$check" --db "$db" --repo "$stack" --game private > "$scratch/out" 2>&1
-rc=$?
-set -e
-assert_eq 1 "$rc" 'a private game without a release cannot pass'
-assert_grep 'no valid published release' "$scratch/out"
-[[ ! -s "$scratch/calls" ]] || fail 'an unreleased private game was played'
-python3 - "$db" << 'PY'
-import sqlite3, sys
-c = sqlite3.connect(sys.argv[1])
-c.execute("insert into releases values ('rel_private', 'g_private', 'build_private', 'snap_private')")
-c.execute("insert into override_snapshots values ('snap_private', 'g_private', 'build_private')")
-c.execute("update games set published_release_id = 'rel_private' where id = 'g_private'")
-c.commit()
-PY
-"$check" --db "$db" --repo "$stack" --game private > "$scratch/out"
-assert_eq "qa play-check g_private build_private --out $stack/assets-local/review/app/play-check/build_private" "$(cat "$scratch/calls")" \
-  '--game selects an explicitly requested private game'
-assert_grep 'exit=0 qa-game-play' "$scratch/out"
-assert_grep 'privileged build smoke; verify real player access separately' "$scratch/out"
-: > "$scratch/calls"
-"$check" --db "$db" --repo "$stack" --game private --build build_private > "$scratch/out"
-assert_eq "qa play-check g_private build_private --out $stack/assets-local/review/app/play-check/build_private" "$(cat "$scratch/calls")" \
-  '--build accepts the current private release'
-assert_grep 'exit=0 qa-game-play' "$scratch/out"
-python3 - "$db" << 'PY'
-import sqlite3, sys
-c = sqlite3.connect(sys.argv[1])
-c.execute("delete from override_snapshots where id = 'snap_private'")
-c.commit()
-PY
-set +e
-"$check" --db "$db" --repo "$stack" --game private > /dev/null 2>&1
-rc=$?
-set -e
-assert_eq 1 "$rc" 'a private release with a missing snapshot cannot pass'
-python3 - "$db" << 'PY'
-import sqlite3, sys
-c = sqlite3.connect(sys.argv[1])
-c.execute("insert into override_snapshots values ('snap_private', 'g_private', 'build_private')")
-c.commit()
-PY
-set +e
-"$check" --db "$db" --repo "$stack" --game private --build build_private_draft > /dev/null 2>&1
-rc=$?
-set -e
-assert_eq 64 "$rc" 'a private draft cannot be checked as the published build'
 
 # A game that fails one play and passes the next (a loaded host) is ok, and wakes no one.
 : > "$scratch/calls"

@@ -15,8 +15,10 @@ export function createVersionCounts(sqlite: Sqlite): VersionCounts {
   const counts: VersionCounts = {
     publishCount: async (gameId) =>
       sqlite
-        .prepare<[string], TransactionCountRow>('SELECT COUNT(*) AS count FROM releases WHERE game_id = ?')
-        .get(gameId)?.count ?? 0,
+        .prepare<[string, string], TransactionCountRow>(
+          `SELECT MAX((SELECT COUNT(*) FROM releases WHERE game_id = ?), COALESCE((SELECT CAST(substr(version, 1, instr(version, '.') - 1) AS INTEGER) FROM releases WHERE game_id = ? ORDER BY seq DESC LIMIT 1), 0)) AS count`,
+        )
+        .get(gameId, gameId)?.count ?? 0,
     buildsSinceFork: async (branch) => {
       const since =
         branch.forkPoint === null

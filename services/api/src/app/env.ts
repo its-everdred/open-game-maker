@@ -16,6 +16,8 @@ export const apiEnvSpec = {
   OGM_CORE_BUMP_CORE_REPO: { kind: 'string', required: false },
   OGM_ANALYTICS_RETENTION_DAYS: { kind: 'int', default: '90' },
   OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD: { kind: 'int', default: '5000000' },
+  OGM_TESTER_NEW_GAMES_PER_DAY: { kind: 'int', default: '1' },
+  OGM_NEW_GAME_PLAN_TICKET_LIMIT: { kind: 'int', default: '1' },
   OGM_RESET_ZONE_DEFAULT: { kind: 'string', default: hostTimeZone },
   OGM_INTAKE_DIR: { kind: 'path', required: false },
   OGM_REPORT_BUNDLE_MAX_BYTES: { kind: 'int', default: '2097152' },
@@ -67,10 +69,21 @@ export const apiEnvSpec = {
   OGM_DESIGN_DEFAULT_MS: { kind: 'int', default: '300000' },
   // How many queued product questions offer the creator a quick voice chat (#612).
   OGM_VOICE_QUESTIONS_AT: { kind: 'int', default: '5' },
+  OGM_ARTIFACT_RELEASE_GATE: { kind: 'bool', required: false },
 } as const;
 
 export function loadApiEnv(source?: Record<string, string | undefined>) {
   const env = loadEnv('api', apiEnvSpec, source);
+  if (env.OGM_TESTER_NEW_GAMES_PER_DAY <= 0) {
+    throw new ConfigError('api', [], [{ name: 'OGM_TESTER_NEW_GAMES_PER_DAY', reason: 'must be a positive integer' }]);
+  }
+  if (env.OGM_NEW_GAME_PLAN_TICKET_LIMIT <= 0) {
+    throw new ConfigError(
+      'api',
+      [],
+      [{ name: 'OGM_NEW_GAME_PLAN_TICKET_LIMIT', reason: 'must be a positive integer' }],
+    );
+  }
   if (env.OGM_ANALYTICS_RETENTION_DAYS <= 0) {
     throw new ConfigError('api', [], [{ name: 'OGM_ANALYTICS_RETENTION_DAYS', reason: 'must be a positive integer' }]);
   }

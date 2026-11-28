@@ -2,7 +2,8 @@
 """OGM post-deploy game play check (#1272): play every published game's latest tested build in the production app shell.
 
 ogm-qa-game-boot only proves a game's files return 200; on 2026-11-22 every game still showed "Try again" for a day
-(#1252, #1266, #1267). For each game with a tested build (QA games excluded), this runs `gm qa play-check`: the
+(#1252, #1266, #1267). For each released game with a tested build, private family games included (the QA account is a family member
+with play invites; 2026-11-28 the check skipped Blobs and Dusk Helm), QA games excluded, this runs `gm qa play-check`: the
 production shell at 390x844 with the QA session, the bridge handshake and first frame, the game's first tap path, and
 one input that must change the frame. One game at a time; each play has a load-adjusted wall-time budget capped at 340 s. A game that
 fails is played once more and fails only if both plays fail: a loaded host can miss one boot, a broken game misses both.
@@ -16,7 +17,7 @@ logo must load and stay visible for 5 s. It also runs with --frames-only; a fail
 
 usage: ogm-qa-game-play [--db <ogm.sqlite3>] [--game <slug> [--build <id>]] [--repo <checkout>] [--attention <file>]
                         [--frames-only]
-  --game         play only this game, including an explicitly named private game
+  --game         play only this game (the publish hook passes the game it published)
   --build        play this build of that game instead of its latest tested one (the build just published)
   --attention    append one line per failing game: its failures, bridge trace, play-check.json and stills
   --frames-only  run only the frame check (web deploys)
@@ -164,49 +165,23 @@ def main(argv):
         rows = conn.execute(
             """select g.id, g.slug, (select b.id from builds b where b.game_id = g.id and b.status = 'tested'
                                       order by b.created_at desc limit 1)
-               from games g where g.delisted_at is null and g.visibility = 'listed'
-               and g.release_state = 'released' and g.slug not like 'qa-%' order by g.slug""",
+               from games g where g.delisted_at is null and g.release_state = 'released' and g.slug not like 'qa-%' order by g.slug"""
         ).fetchall()
-    selected_private = False
     if args.get('--game'):
         rows = [row for row in rows if row[1] == args['--game']]
         if not rows:
             with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as conn:
-                private_game = conn.execute(
-                    "select 1 from games where slug = ? and slug not like 'qa-%' and delisted_at is null and visibility = 'private' and release_state = 'released'",
-                    (args['--game'],),
-                ).fetchone()
-                if private_game:
-                    rows = conn.execute(
-                        """select g.id, g.slug, b.id from games g
-                           join releases r on r.id = g.published_release_id and r.game_id = g.id
-                           join builds b on b.id = r.build_id and b.game_id = g.id
-                           join override_snapshots s on s.id = r.snapshot_id and s.game_id = g.id and s.build_id = b.id
-                           where g.slug = ? and b.status = 'tested' and b.artifact = 'present'""",
-                        (args['--game'],),
-                    ).fetchall()
                 protected = conn.execute(
                     "select 1 from games where slug = ? and delisted_at is null and release_state = 'coming_soon'",
                     (args['--game'],),
                 ).fetchone()
-            if private_game:
-                if not rows:
-                    print(f"{clean(args['--game'])}: no valid published release", file=sys.stderr)
-                    print('exit=1 qa-game-play')
-                    return 1
-                selected_private = True
-                print(f"{clean(args['--game'])}: privileged build smoke; verify real player access separately")
-            elif protected:
+            if protected:
                 print(f"{clean(args['--game'])}: not checked (coming soon)")
                 print('exit=0 qa-game-play')
                 return 0
-            else:
-                print(f"ogm-qa-game-play: no published game {args['--game']}", file=sys.stderr)
-                return 64
+            print(f"ogm-qa-game-play: no published game {args['--game']}", file=sys.stderr)
+            return 64
         if args.get('--build'):
-            if selected_private and args['--build'] != rows[0][2]:
-                print(f"ogm-qa-game-play: {args['--game']} build is not the current release", file=sys.stderr)
-                return 64
             with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as conn:
                 found = conn.execute(
                     'select 1 from builds where id = ? and game_id = ?', (args['--build'], rows[0][0])
