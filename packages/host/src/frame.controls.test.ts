@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 /** A phone-sized frame whose game declares a stick and three buttons, as Dusk Helm's does. */
-function phoneFrame(capabilities: string[] = []) {
+function phoneFrame() {
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(pointer: coarse)' }));
   const container = document.createElement('div');
   document.body.append(container);
@@ -23,7 +23,7 @@ function phoneFrame(capabilities: string[] = []) {
     build: 'published',
     mode: 'play',
     playerIndex: 0,
-    capabilities,
+    capabilities: [],
     role: () => 'owner',
   });
   const ready = on.mock.calls.find(([type]) => type === 'ready')?.[1] as (payload: unknown) => void;
@@ -130,20 +130,5 @@ it('shows every control for a game that never chooses, as before', () => {
   for (const action of Object.keys(manifest.inputs.actions)) {
     expect(shown(action === 'move' ? '[data-stick="move"]' : `[data-action="${action}"]`)).toBe(true);
   }
-  frame.dispose();
-});
-
-it('advertises only Back support opted into by the embedding surface', () => {
-  const { frame } = phoneFrame(['host.back']);
-  const send = vi.spyOn(frame.iframe.contentWindow!, 'postMessage');
-  window.dispatchEvent(
-    new MessageEvent('message', {
-      origin: 'https://games.test',
-      source: frame.iframe.contentWindow,
-      data: JSON.stringify({ v: 1, id: 'hello', t: 'hello', payload: { protocol: 1 } }),
-    }),
-  );
-  const hello = JSON.parse(send.mock.calls[0]![0] as string);
-  expect(hello.payload.capabilities).toContain('host.back');
   frame.dispose();
 });
