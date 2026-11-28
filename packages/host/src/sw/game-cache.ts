@@ -1,6 +1,15 @@
-// Build access can change after a release. A network request must reach the games host on every load, including
-// requests for shared content-addressed files, so an old cache entry cannot bypass the current access policy.
-export const RETIRED = ['gm-assets', 'gm-pages', 'gm-blobs-v1', 'gm-builds-v1'] as const;
+export const BLOB_CACHE = 'gm-blobs-v1';
+export const BUILD_CACHE = 'gm-builds-v1';
+export const RETIRED = ['gm-assets', 'gm-pages', BLOB_CACHE, BUILD_CACHE] as const;
+
+export type CacheRoute = { strategy: 'pass' } | { strategy: 'cache-first'; cacheName: string };
+
+export function classifyGameRequest(request: Request, workerOrigin = location.origin): CacheRoute {
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || url.origin !== workerOrigin) return { strategy: 'pass' };
+  // Release and role changes must be checked by the host on every request.
+  return { strategy: 'pass' };
+}
 
 interface ExtendableEventLike extends Event {
   waitUntil(promise: Promise<unknown>): void;
@@ -9,13 +18,6 @@ interface ExtendableEventLike extends Event {
 interface FetchEventLike extends ExtendableEventLike {
   request: Request;
   respondWith(response: Promise<Response>): void;
-}
-
-export function needsAccessCheck(request: Request, origin: string): boolean {
-  const url = new URL(request.url);
-  return (
-    request.method === 'GET' && url.origin === origin && (/^\/g\//u.test(url.pathname) || /^\/a\//u.test(url.pathname))
-  );
 }
 
 interface WorkerScopeLike {
@@ -27,6 +29,7 @@ interface WorkerScopeLike {
 }
 
 const worker = globalThis as unknown as WorkerScopeLike;
+
 if (typeof worker.addEventListener === 'function' && 'clients' in worker) {
   worker.addEventListener('install', ((event: ExtendableEventLike) => {
     event.waitUntil(worker.skipWaiting());
@@ -35,12 +38,34 @@ if (typeof worker.addEventListener === 'function' && 'clients' in worker) {
     event.waitUntil(retireCaches(worker.caches).then(() => worker.clients.claim()));
   }) as (event: never) => void);
   worker.addEventListener('fetch', ((event: FetchEventLike) => {
-    if (needsAccessCheck(event.request, worker.location.origin)) {
-      event.respondWith(fetch(new Request(event.request, { cache: 'no-store' })));
-    }
+    const route = classifyGameRequest(event.request, worker.location.origin);
+    if (route.strategy === 'pass') return;
+    event.respondWith(cacheFirst(event.request, route.cacheName, event));
   }) as (event: never) => void);
 }
 
 export async function retireCaches(cacheStorage: CacheStorage): Promise<void> {
   await Promise.all(RETIRED.map((name) => cacheStorage.delete(name).catch(() => false)));
+}
+
+export async function cacheFirst(
+  request: Request,
+  cacheName: string,
+  lifetime?: Pick<ExtendableEventLike, 'waitUntil'>,
+): Promise<Response> {
+  let cache: Cache;
+  try {
+    cache = await caches.open(cacheName);
+    const cached = await cache.match(request);
+    if (cached) return cached;
+  } catch {
+    return fetch(request);
+  }
+
+  const response = await fetch(request);
+  if (response.ok) {
+    const cacheWrite = cache.put(request, response.clone()).catch(() => undefined);
+    lifetime?.waitUntil(cacheWrite);
+  }
+  return response;
 }

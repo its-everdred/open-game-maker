@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OGM Glass components</title>
+<link rel="stylesheet" href="./glass.css">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&amp;family=Nunito:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0f0e16}
+a{color:#74c8ed}a:hover{color:#f2ead6}
+.grp{display:flex;flex-direction:column;gap:16px}
+.line{display:flex;flex-wrap:wrap;align-items:center;gap:14px}
+</style>
+</head>
+<body>
+<div class="g wide" style="width:1440px;height:1560px;padding:72px 80px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:56px 48px;align-content:start">
+<div class="glows" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+<section class="grp" style="position:relative">
+<div class="cap">Orbs · icon only, words in aria-label</div>
+<div class="line">
+<button class="orb" aria-label="Menu"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg><span class="dot">2</span></button>
+<button class="orb go" aria-label="Play"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"></path></svg></button>
+<button class="orb new" aria-label="Edit"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13.5 6.5l4 4"></path></svg></button>
+<button class="orb" aria-label="Ask for a change"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-5 4v-4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"></path></svg></button>
+<button class="orb" aria-label="Dictate"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"></path></svg></button>
+<button class="orb live" aria-label="Talk live"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 12h1M8 8v8M12 5v14M16 8v8M20 12h-1"></path></svg></button>
+<button class="orb" aria-label="Report a bug" style="color:#ff9b8f"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="8" width="10" height="12" rx="5"></rect><path d="M12 11v9M7 13H3M21 13h-4M7 18l-3 2M17 18l3 2M9.5 8a2.5 2.5 0 0 1 5 0"></path></svg></button>
+<button class="orb sm" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+<button class="orb sm" aria-label="Back"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+</div>
+<p class="spec" style="margin:0">Gloss: white 24% → 4% on the top half, hard edge at 51%. Solid colour only for go, create, record and live; others stay glass. Badge dot is always orange (needs you).</p>
+</section>
+
+<section class="grp" style="position:relative">
+<div class="cap">Pills</div>
+<div class="line">
+<button class="btn go">Play</button>
+<button class="btn new">New game</button>
+<button class="btn warn">Review</button>
+<button class="btn info">Open</button>
+</div>
+<div class="line">
+<button class="btn">Not now</button>
+<button class="btn ghost">Cancel</button>
+<button class="btn danger">Unpublish</button>
+<button class="btn go" aria-disabled="true">Send</button>
+</div>
+<div class="line">
+<button class="btn glassy" style="--c:#94d742">Start</button>
+<button class="btn glassy" style="--c:#ffbf32">Edit</button>
+<button class="btn sm">Retry</button>
+</div>
+</section>
+
+<section class="grp" style="position:relative">
+<div class="cap">Status</div>
+<div class="line">
+<span class="pill work">Working</span><span class="pill you">Waiting on you</span><span class="pill done">Done</span><span class="pill fail">Failed</span><span class="pill wait">Queued</span><span class="pill soon">Coming soon</span>
+</div>
+<div class="line">
+<span class="tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"></path></svg>Published</span>
+<span class="tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Private</span>
+<span class="tag">Estimate</span>
+</div>
+</section>
+
+<section class="grp" style="position:relative">
+<div class="cap">Top corner and activity banner</div>
+<div class="pane" style="height:150px;overflow:hidden;border-radius:24px;padding:0;background:#1a1824">
+<div class="top" style="position:relative">
+<img class="logo" src="img/gm.webp" alt="Open Game Maker 2000">
+<div class="sp"></div>
+<span class="res" role="img" aria-label="Minerals 62 percent, Gas 40 percent"><img src="img/minerals.svg" alt="">62<span class="sep"></span><svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b7f171"></stop><stop offset=".55" stop-color="#46c46a"></stop><stop offset="1" stop-color="#1f8a52"></stop></linearGradient></defs><path d="M4 18.5 6.2 11l4-2.6 4.6 1.2 3.4 3.6.8 5.3-3.8 1.7H7.6z" fill="url(#gg)"></path><path d="M11 6.6c0-1.6 1.6-1.6 1.6-3M14.2 7.2c0-1.4 1.4-1.4 1.4-2.6" stroke="#b7f171" stroke-width="1.3" stroke-linecap="round" fill="none"></path></svg>40</span>
+<button class="orb" aria-label="Menu"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg><span class="dot">1</span></button>
+</div>
+<div style="position:relative;padding:0 14px">
+<a class="banner" href="Activity.html" style="color:#f2ead6"><span class="pulse"></span><span class="t">3 agents working · Forest road 55%</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg></a>
+</div>
+</div>
+<p class="spec" style="margin:0">Corner order is fixed: resources, then menu. Banner shows only while agents work and never in play view.</p>
+</section>
+
+<section class="grp" style="position:relative">
+<div class="cap">Work row and review card</div>
+<div class="row" style="flex-direction:column;align-items:stretch;gap:8px">
+<div style="display:flex;align-items:baseline;gap:8px"><span class="sub">#41</span><span class="t" style="flex:1">Forest road</span><span class="num" style="color:#74c8ed">55%</span></div>
+<div class="bar"><b style="width:55%"></b></div>
+<div style="display:flex;align-items:center;gap:8px;min-width:0"><span class="pill work">Working</span><span class="s">Placing tree clusters from the forest set</span></div>
+</div>
+<div class="row" style="border-color:rgba(255,145,51,.55);background:linear-gradient(180deg,rgba(255,145,51,.16),rgba(255,145,51,.06));padding:8px">
+<img src="../../assets-local/review/design-ogm-glass/img/thumb-16.jpg" alt="" style="width:64px;height:64px;border-radius:14px;object-fit:cover">
+<div class="grow"><div class="t">UI kit · liquid orbs</div><div class="s">Round 4</div></div>
+<button class="btn warn sm">Review</button>
+</div>
+</section>
+
+<section class="grp" style="position:relative">
+<div class="cap">Forms</div>
+<div class="field"><label for="c-email">Email</label><input id="c-email" class="input" placeholder="you@example.com"></div>
+<div class="row" style="min-height:56px"><span class="grow t" style="font-size:16px">Two-way voice</span><button class="switch" role="switch" aria-checked="true" aria-label="Two-way voice"></button></div>
+<div class="seg" role="group" aria-label="Text size"><button aria-pressed="false">Small</button><button aria-pressed="true">Medium</button><button aria-pressed="false">Large</button></div>
+<div class="slider"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"></path><path d="M16.5 8.5a5 5 0 0 1 0 7"></path></svg><div class="track" role="slider" aria-label="Music" aria-valuenow="70" tabindex="0"><b style="width:70%"></b><i style="left:70%"></i></div></div>
+</section>
+
+<section class="grp" style="position:relative">
+<div class="cap">Resource meters and limits</div>
+<div class="meter"><div class="hd"><img src="img/minerals.svg" alt="" style="width:22px;height:22px">Minerals<b>62%</b></div><div class="bar thin min"><b style="width:62%"></b></div><div class="r">Resets Thu 09:00</div></div>
+<div class="meter" style="box-shadow:inset 0 0 0 1px #ff9133"><div class="hd"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 18.5 6.2 11l4-2.6 4.6 1.2 3.4 3.6.8 5.3-3.8 1.7H7.6z" fill="url(#gg)"></path></svg>Gas<b style="color:#ff9133">6%</b></div><div class="bar thin gas"><b style="width:6%"></b></div><div class="r">$0.30 of $5.00 left · does not refill</div></div>
+<div class="meter" style="box-shadow:inset 0 0 0 1px #f76d67"><div class="hd"><img src="img/minerals.svg" alt="" style="width:22px;height:22px;filter:grayscale(.7)">Minerals<b style="color:#ff9b8f">0%</b></div><div class="bar thin min"><b style="width:0"></b></div><div class="r">Agents pause until Thu 09:00. Play and hand edits stay free.</div></div>
+</section>
+
+<section class="grp" style="position:relative">
+<div class="cap">Chat surfaces</div>
+<div class="pane" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+<div class="thread">
+<div class="msg me">Make the torches warmer</div>
+<div class="step"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#94d742" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Read the lighting settings</div>
+<div class="step"><span class="pulse" style="width:8px;height:8px;background:#74c8ed;box-shadow:none"></span>Trying two warmer tints</div>
+<div class="msg a">Which one?<img src="../../assets-local/review/design-ogm-glass/img/play-bg.jpg" alt="Warmer torch preview" style="height:110px"></div>
+</div>
+<div class="composer pane" style="box-shadow:none">
+<button class="orb sm" aria-label="Attach"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+<span class="in">Ask for a change</span>
+<button class="orb sm" aria-label="Dictate"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"></path></svg></button>
+<button class="orb sm live" aria-label="Talk live"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12h1M8 8v8M12 5v14M16 8v8M20 12h-1"></path></svg></button>
+</div>
+</div>
+<p class="spec" style="margin:0">One composer everywhere (aiur's, restyled): attach, type, dictate, talk live. Send replaces dictate once there is text.</p>
+</section>
+
+<section class="grp" style="position:relative">
+<div class="cap">Game cards and choice tiles</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+<div class="cover" style="aspect-ratio:16/9"><img src="../../assets-local/review/design-ogm-glass/img/blobs.jpg" alt=""><div class="shade"></div><div class="meta"><span class="name">Blobs VS Blocks</span></div></div>
+<div class="cover" style="aspect-ratio:16/9"><img src="../../assets-local/review/design-ogm-glass/img/dusk.jpg" alt="" style="filter:saturate(.75) brightness(.8)"><div class="shade"></div><div class="meta"><span class="name">Dusk Helm</span></div><span class="pill soon" style="position:absolute;top:10px;right:10px">Coming soon</span></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+<button class="opt" aria-pressed="true" style="--k:hsl(141 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(141 72% 66%)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6v4h4v6h-4v6H9v-6H5V8h4z"></path></svg>Puzzle</button>
+<button class="opt" aria-pressed="false"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(47 72% 66%)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4 20 9.5 9.5 20H4v-5.5z"></path><path d="M12 7l5 5"></path></svg>RPG</button>
+<button class="opt" aria-pressed="false"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(189 72% 66%)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="14" cy="5" r="2"></circle><path d="M5 20l4-6 3 2 2-5 5 3M9 14l-2-3 5-3"></path></svg>Platformer</button>
+</div>
+</section>
+
+<section class="grp" style="position:relative">
+<div class="cap">Menu sheet rows</div>
+<div class="pane strong" style="padding:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<a class="row" href="Activity.html" style="min-height:52px"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#d795e4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"></path></svg><span class="t grow" style="font-size:16px">Activity</span><span class="cnt">3</span></a>
+<a class="row" href="Settings.html" style="min-height:52px"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"></path></svg><span class="t grow" style="font-size:16px">Settings</span></a>
+<a class="row" href="Admin.html" style="min-height:52px"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"></path></svg><span class="t grow" style="font-size:16px">Admin</span></a>
+<button class="row" style="min-height:52px;color:#ff9b8f"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10"></path></svg><span class="t grow" style="font-size:16px">Sign out</span></button>
+</div>
+</section>
+
+<section class="grp" style="position:relative">
+<div class="cap">Toast and empty state</div>
+<div class="pane strong" style="display:flex;align-items:center;gap:12px;padding:12px 12px 12px 16px;border-radius:24px">
+<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#94d742" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+<span style="flex:1;font:700 15px Nunito">Forest road is ready to try</span><button class="btn go sm">Play</button>
+</div>
+<div class="pane" style="padding:28px;display:flex;flex-direction:column;align-items:center;gap:14px">
+<span class="h3" style="color:#c4beb0">Nothing in progress</span>
+<button class="btn go">Ask for a change</button>
+</div>
+</section>
+</div>
+<script src="fallback.js"></script>
+</body>
+</html>

@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import type { Page, Route } from '@playwright/test';
 
 import type { Branch, Build, MergePlan, Release } from '@ogm/contracts/browser';
-import { isGameLaunch } from '../support/game-launch';
 
 type VersionBranch = Branch & { version: string };
 type CapturedBody = Record<string, unknown>;
@@ -56,7 +55,6 @@ export async function installVersioningRoutes(page: Page): Promise<VersioningApi
   const lands: CapturedBody[] = [];
 
   await page.route('**/api/v1/**', async (route) => {
-    if (isGameLaunch(route.request().url())) return route.fallback();
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname.slice('/api/v1'.length);

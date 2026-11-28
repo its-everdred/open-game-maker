@@ -24,6 +24,7 @@ import {
 import { fetchBuildJson, loadFactor } from '../../qa-play-fetch.js';
 import { niceCapture } from '../run/index.js';
 import { readEnvFile } from '../publish/index.js';
+import { operatorArtifactUrl } from '../../qa-artifact-access.js';
 
 /*
  * The games host is a tailnet address and the app a public one: desktop Chromium's Local Network Access check blocks
@@ -83,9 +84,27 @@ export const command: GmCommand = {
       return EXIT.failed;
     }
 
-    const build = `${games}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/`;
+    let build = `${games}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/`;
+    if (api.OGM_INTERNAL_TOKEN && api.OGM_API_PORT) {
+      try {
+        build = await operatorArtifactUrl({
+          apiPort: api.OGM_API_PORT,
+          token: api.OGM_INTERNAL_TOKEN,
+          game: gameId,
+          build: buildId,
+          gamesOrigin: games,
+        });
+      } catch {
+        ctx.err('qa play-check: scoped build access unavailable');
+        return EXIT.failed;
+      }
+    }
     const fetched = await Promise.all(
-      ['manifest.json', 'design/design.json'].map((name) => fetchBuildJson(new URL(name, build))),
+      ['manifest.json', 'design/design.json'].map(async (name) => {
+        const result = await fetchBuildJson(new URL(name, build));
+        if (result.error) result.error = result.error.replace(/(\/d\/[^/]+\/[^/]+\/)[^/]+/u, '$1<redacted>');
+        return result;
+      }),
     );
     const [manifestResult, docResult] = fetched;
     const manifest = manifestResult?.value as PlayManifest | undefined;
@@ -93,13 +112,17 @@ export const command: GmCommand = {
     const out = resolve(ctx.cwd, flags.out);
     mkdirSync(out, { recursive: true });
     const report = (observation: PlayObservation, errors: string[]) => {
-      const verdict = judgePlay(observation);
+      const redact = (value: string) =>
+        value.replace(/(\/(?:d\/[^/\s"?]+\/[^/\s"?]+|p\/[^/\s"?]+)\/)[^/\s"?]+/gu, '$1<redacted>');
+      const safeObservation = JSON.parse(redact(JSON.stringify(observation))) as PlayObservation;
+      const safeErrors = errors.map(redact);
+      const verdict = judgePlay(safeObservation);
       verdict.failures = verdict.failures.map((line) =>
         line.startsWith('the check stopped:') ? line : `game/shell problem: ${line}`,
       );
       writeFileSync(
         join(out, 'play-check.json'),
-        `${JSON.stringify({ gameId, buildId, viewport: '390x844', ...verdict, observation, errors }, null, 2)}\n`,
+        `${JSON.stringify({ gameId, buildId, viewport: '390x844', ...verdict, observation: safeObservation, errors: safeErrors }, null, 2)}\n`,
       );
       const shown = relative(ctx.cwd, out) || '.';
       if (ctx.json) printJson(ctx, { verdict: verdict.failures.length ? 'fail' : 'pass', out: shown, ...verdict });
@@ -177,6 +200,17 @@ export const command: GmCommand = {
       await context.addCookies([{ name: qa.OGM_QA_SESSION_COOKIE_NAME, value: qa.OGM_QA_SESSION_COOKIE, url: app }]);
       await context.addInitScript(installPlayTrace, stall * 1000);
       const page = await context.newPage();
+      const scoped = new URL(build).pathname.match(/^\/d\/[^/]+\/[^/]+\/([A-Za-z0-9_-]{43,2048})\//u);
+      if (scoped)
+        await page.route(`${app}/api/v1/artifacts/grant`, async (route) => {
+          const body = route.request().postDataJSON() as { gameId?: unknown; buildId?: unknown };
+          if (body?.gameId !== gameId || body.buildId !== buildId) return route.fallback();
+          return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ grant: scoped[1] }),
+          });
+        });
       page.on('pageerror', (error) => errors.push(`pageerror: ${error.message.slice(0, 300)}`));
       const prefix = `/api/v1/games/${gameId}`;
       const title = manifest.title ?? gameId;
@@ -201,7 +235,9 @@ export const command: GmCommand = {
 
       const opened = Date.now();
       progress('opening the game');
-      await page.goto(`${app}/g/${encodeURIComponent(gameId)}?test=1`, { timeout: left(30_000 * factor) });
+      await page.goto(`${app}/g/${encodeURIComponent(gameId)}?test=1&build=${encodeURIComponent(buildId)}`, {
+        timeout: left(30_000 * factor),
+      });
       const state = () =>
         page
           .evaluate(() => {

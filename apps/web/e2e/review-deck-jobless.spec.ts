@@ -5,7 +5,6 @@ import { expect, test, type Page, type Route, type TestInfo } from '@playwright/
 import type { GameCommand } from '@ogm/contracts';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
-import { isGameLaunch } from './support/game-launch';
 
 // A registered game's Command has no job (#577); its option media comes from the game's own aiur instance, signed by
 // the API like a job's. The Blobs staging Command showed text only (#611). Its clip has no poster aiur can serve, so the
@@ -112,7 +111,6 @@ test('shows a jobless Command’s still, clip and sample on their cards', async 
 
 async function installApi(page: Page) {
   await page.route('**/api/v1/**', async (route) => {
-    if (isGameLaunch(route.request().url())) return route.fallback();
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/v1/notifications/stream') {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });

@@ -9,10 +9,7 @@ import { createGameRow } from '../src/games/games.js';
 import { CommitServiceRepoProvisioner, NullRepoProvisioner } from '../src/games/repo-provisioner.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
 import { writeQaState } from '../src/qa/state.js';
-import * as authRoutes from '../src/auth/routes.js';
-import { createApp as createGamesHost } from '../../games-host/src/server.js';
-import { markComplete } from '../../games-host/src/layout.js';
-import { signBuildAccess } from '../src/games/build-access-token.js';
+import { signIn } from './auth-helpers.js';
 
 const now = '2026-11-01T00:00:00.000Z';
 afterEach(() => {
@@ -196,53 +193,6 @@ describe('games routes', () => {
     expect(
       (await app.request('/api/v1/games/g-soon/branches/main/design', { headers: asUser(outsider.userId) })).status,
     ).toBe(200);
-    deps.db
-      .insert(schema.user)
-      .values({
-        id: outsider.userId,
-        name: 'Tester',
-        email: outsider.email,
-        emailVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
-    deps.db
-      .insert(schema.session)
-      .values({
-        id: 'outsider-session',
-        userId: outsider.userId,
-        token: 'other-session-token',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        expiresAt: new Date(Date.now() + 60_000),
-      })
-      .run();
-    const outsiderToken = signBuildAccess(
-      { gameId: 'g-soon', userId: outsider.userId, familyId: outsider.familyId, sessionId: 'outsider-session' },
-      deps.config.jobTokenSecret,
-    );
-    const outsiderCheck = () =>
-      app.request('/api/v1/internal/games/g-soon/build-access', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token: outsiderToken }),
-      });
-    expect((await outsiderCheck()).status).toBe(204);
-    deps.db.delete(schema.familyMembers).where(eq(schema.familyMembers.userId, outsider.userId)).run();
-    const familylessToken = signBuildAccess(
-      { gameId: 'g-soon', userId: outsider.userId, familyId: '', sessionId: 'outsider-session' },
-      deps.config.jobTokenSecret,
-    );
-    expect(
-      (
-        await app.request('/api/v1/internal/games/g-soon/build-access', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ token: familylessToken }),
-        })
-      ).status,
-    ).toBe(204);
     expect(
       (
         await app.request(`/api/v1/admin/games/g-soon/early-access/${outsider.userId}`, {
@@ -251,16 +201,7 @@ describe('games routes', () => {
         })
       ).status,
     ).toBe(204);
-    expect((await outsiderCheck()).status).toBe(403);
-    expect(
-      (
-        await app.request('/api/v1/internal/games/g-soon/build-access', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ token: familylessToken }),
-        })
-      ).status,
-    ).toBe(403);
+    expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(outsider.userId) })).status).toBe(403);
     const list = await app.request('/api/v1/games', { headers: asUser(player.userId) });
     expect(await list.json()).toMatchObject({ games: [{ id: 'g-soon', releaseState: 'coming_soon', canPlay: false }] });
     const denied = await app.request('/api/v1/games/resolve/soon', { headers: asUser(player.userId) });
@@ -275,68 +216,6 @@ describe('games routes', () => {
     expect((await app.request(grantUrl, { method: 'PUT', headers: asUser(player.userId) })).status).toBe(403);
     expect((await app.request(grantUrl, { method: 'PUT', headers: asUser(admin.userId) })).status).toBe(204);
     expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(player.userId) })).status).toBe(200);
-    deps.db
-      .insert(schema.user)
-      .values({
-        id: player.userId,
-        name: 'Player',
-        email: player.email,
-        emailVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
-    deps.db
-      .insert(schema.session)
-      .values({
-        id: 'session-test',
-        userId: player.userId,
-        token: 'session-token',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        expiresAt: new Date(Date.now() + 60_000),
-      })
-      .run();
-    const sessionSpy = vi.spyOn(authRoutes, 'authContextFor').mockReturnValue({
-      auth: { api: { getSession: async () => ({ user: { id: player.userId }, session: { id: 'session-test' } }) } },
-    } as unknown as ReturnType<typeof authRoutes.authContextFor>);
-    const launch = await app.request('/api/v1/games/g-soon/launch/build1', { headers: asUser(player.userId) });
-    expect(launch.status).toBe(302);
-    const location = new URL(launch.headers.get('location')!);
-    const token = /^\/t\/([^/]+)\/g\/g-soon\/build1\/index\.html$/u.exec(location.pathname)?.[1];
-    expect(token).toBeTruthy();
-    const buildDir = join(deps.config.gamesRoot, 'g-soon', 'build1');
-    mkdirSync(buildDir, { recursive: true });
-    writeFileSync(join(buildDir, 'index.html'), '<h1>game</h1>');
-    await markComplete(buildDir);
-    vi.stubGlobal('fetch', (url: string, init: RequestInit) => app.request(url, init));
-    const host = createGamesHost({
-      root: deps.config.gamesRoot,
-      appOrigin: 'https://app.test',
-      version: 'test',
-      workerScript: '',
-      accessApi: 'http://127.0.0.1:4300',
-    });
-    expect((await host.request('/g/g-soon/build1/index.html')).status).toBe(403);
-    const launched = await host.request(`${location.pathname}?frameObserver=2`);
-    expect(launched.status).toBe(200);
-    expect(launched.headers.get('content-security-policy')).toContain('sandbox allow-scripts allow-pointer-lock');
-    const check = () =>
-      app.request('/api/v1/internal/games/g-soon/build-access', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token }),
-      });
-    expect((await check()).status).toBe(204);
-    sessionSpy.mockRestore();
-    expect((await app.request(grantUrl, { method: 'DELETE', headers: asUser(admin.userId) })).status).toBe(204);
-    expect((await check()).status).toBe(403);
-    // Revoking the grant revokes the capability already in the player's frame.
-    expect((await host.request(location.pathname)).status).toBe(403);
-    vi.unstubAllGlobals();
-    expect((await app.request(grantUrl, { method: 'PUT', headers: asUser(admin.userId) })).status).toBe(204);
-    deps.db.delete(schema.session).where(eq(schema.session.id, 'session-test')).run();
-    expect((await check()).status).toBe(403);
     expect((await app.request(grantUrl, { method: 'DELETE', headers: asUser(admin.userId) })).status).toBe(204);
     expect((await app.request('/api/v1/games/resolve/soon', { headers: asUser(player.userId) })).status).toBe(403);
     expect(
@@ -497,6 +376,17 @@ describe('games routes', () => {
     const { app } = await makeApp(deps);
     const created = await createGame(app);
     const { id } = (await created.json()) as { id: string };
+    const outbox = () =>
+      deps.sqlite.prepare('SELECT text FROM mail_outbox ORDER BY created_at').all() as { text: string }[];
+    const { session } = await signIn(app, outbox, 'kevin@example.com');
+    const owner = deps.db.select().from(schema.user).where(eq(schema.user.email, 'kevin@example.com')).get()!;
+    deps.db.update(schema.games).set({ ownerId: owner.id }).where(eq(schema.games.id, id)).run();
+    deps.db
+      .insert(schema.familyMembers)
+      .values({ familyId, userId: owner.id, role: 'member', capability: 'creator', joinedAt: now })
+      .run();
+    installUsers(deps, [{ ...creator, userId: owner.id, email: owner.email }]);
+    const ownerHeaders = { ...asUser(owner.id), cookie: session };
     deps.db
       .insert(schema.branches)
       .values({
@@ -523,7 +413,7 @@ describe('games routes', () => {
       writeFileSync(join(directory, 'media', file), file);
     const list = async () =>
       (
-        (await (await app.request('/api/v1/games', { headers: asUser(creator.userId) })).json()) as {
+        (await (await app.request('/api/v1/games', { headers: ownerHeaders })).json()) as {
           games: Array<Record<string, unknown>>;
         }
       ).games[0]!;
@@ -592,21 +482,25 @@ describe('games routes', () => {
         ),
       }),
     );
+    const draftPath = (path: string) =>
+      expect.stringMatching(
+        new RegExp(
+          `^https://games\\.example\\.test/d/${id}/build1/[A-Za-z0-9_-]{44,2048}/${path.replace('.', '\\.')}$`,
+        ),
+      );
     const pendingMedia = await list();
-    expect(pendingMedia.logoUrl).toBe('https://games.example.test/a/' + `${'1'.repeat(64)}.png`);
-    expect(pendingMedia.coverUrl).toBe('https://games.example.test/a/' + `${'2'.repeat(64)}.png`);
+    expect(pendingMedia.logoUrl).toEqual(draftPath(`a/${'1'.repeat(64)}.png`));
+    expect(pendingMedia.coverUrl).toEqual(draftPath(`a/${'2'.repeat(64)}.png`));
     expect(pendingMedia.loadingUrls).toMatchObject({
-      portrait: `https://games.example.test/a/${'3'.repeat(64)}.png`,
-      landscape: `https://games.example.test/a/${'4'.repeat(64)}.png`,
+      portrait: draftPath(`a/${'3'.repeat(64)}.png`),
+      landscape: draftPath(`a/${'4'.repeat(64)}.png`),
     });
     expect(await list()).toMatchObject({
       tagline: 'Published description',
       tags: ['Cozy'],
       logoUrl: expect.any(String),
     });
-    expect(
-      (await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: asUser(creator.userId) })).status,
-    ).toBe(200);
+    expect((await app.request(`/api/v1/games/${id}/play`, { method: 'POST', headers: ownerHeaders })).status).toBe(200);
     const sources = Object.fromEntries(
       ['avif', 'webp', 'png'].map((format) => [
         format,
@@ -640,9 +534,7 @@ describe('games routes', () => {
       coverImage: {
         width: 640,
         sources: {
-          avif: [
-            { width: 320, path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` },
-          ],
+          avif: [{ width: 320, path: draftPath(`media/ogm-variants/${'a'.repeat(64)}.avif`) }],
         },
       },
       logoImage: { height: 360 },
@@ -650,19 +542,19 @@ describe('games routes', () => {
         tile: {
           'phone-portrait': {
             sources: {
-              avif: [{ path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` }],
+              avif: [{ path: draftPath(`media/ogm-variants/${'a'.repeat(64)}.avif`) }],
             },
           },
         },
       },
     });
-    const detail = await (await app.request(`/api/v1/games/${id}`, { headers: asUser(creator.userId) })).json();
+    const detail = await (await app.request(`/api/v1/games/${id}`, { headers: ownerHeaders })).json();
     expect(detail).toMatchObject({
-      loadingUrls: { portrait: `https://games.example.test/a/${'3'.repeat(64)}.png` },
+      loadingUrls: { portrait: draftPath(`a/${'3'.repeat(64)}.png`) },
       loadingImages: {
         portrait: {
           sources: {
-            avif: [{ path: `https://games.example.test/g/${id}/build1/media/ogm-variants/${'a'.repeat(64)}.avif` }],
+            avif: [{ path: draftPath(`media/ogm-variants/${'a'.repeat(64)}.avif`) }],
           },
         },
       },
@@ -673,16 +565,16 @@ describe('games routes', () => {
       tagline: 'Match colour blobs and drop blocks in a forest duel.',
       tags: ['Versus', 'Cozy'],
       loadingUrls: {
-        portrait: `https://games.example.test/a/${'3'.repeat(64)}.png`,
-        landscape: `https://games.example.test/a/${'4'.repeat(64)}.png`,
+        portrait: draftPath(`a/${'3'.repeat(64)}.png`),
+        landscape: draftPath(`a/${'4'.repeat(64)}.png`),
       },
-      trailerUrl: `https://games.example.test/g/${id}/build1/media/trailer-landscape.mp4`,
+      trailerUrl: draftPath(`media/trailer-landscape.mp4`),
     });
     // The web renders tile art only when logoUrl/coverUrl are set (Cover.tsx, Tile.tsx): the image objects add
     // srcsets on top, so dropping the URLs blanked every tile on prod (2026-11-21).
     expect(await list()).toMatchObject({
-      logoUrl: `https://games.example.test/a/${'1'.repeat(64)}.png`,
-      coverUrl: `https://games.example.test/a/${'2'.repeat(64)}.png`,
+      logoUrl: draftPath(`a/${'1'.repeat(64)}.png`),
+      coverUrl: draftPath(`a/${'2'.repeat(64)}.png`),
     });
     // An older build's portrait cut is never offered: every game shows its one 16:9 trailer.
     expect(await list()).not.toHaveProperty('portraitTrailerUrl');
@@ -702,7 +594,7 @@ describe('games routes', () => {
       );
       const game = await list();
       expect(game).not.toHaveProperty('coverImage');
-      expect(game.coverUrl).toBe(`https://games.example.test/a/${'2'.repeat(64)}.png`);
+      expect(game.coverUrl).toEqual(draftPath(`a/${'2'.repeat(64)}.png`));
     }
   });
 

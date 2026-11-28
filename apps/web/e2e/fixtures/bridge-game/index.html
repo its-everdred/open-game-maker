@@ -24,7 +24,7 @@
   <body>
     <div id="canvas">Bridge fixture</div>
     <script type="module">
-      const HOST_ORIGIN = new URL(document.referrer || new URLSearchParams(location.search).get('e2eHost')).origin;
+      const HOST_ORIGIN = new URL(document.referrer).origin;
       const manifest = await (await fetch('./manifest.json')).json();
 
       let port;

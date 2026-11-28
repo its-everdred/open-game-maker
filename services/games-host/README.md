@@ -1,12 +1,11 @@
 # Games host
 
 `@ogm/games-host` serves completed game builds from a loopback-only process. Tailscale ingress owns the public
-games origin; this service serves authorized build files and sets the browser security headers around untrusted game code.
+games origin; this service owns immutable file responses and the browser security headers around untrusted game code.
 
 ## Environment
 
 - `OGM_GAMES_PORT`: loopback port for the HTTP server.
-- `OGM_GAMES_ACCESS_API`: loopback API origin (for example `http://127.0.0.1:4300`); build requests fail closed if the API is unavailable.
 - `OGM_GAMES_ROOT`: directory containing `<gameId>/<buildId>/` build trees.
 - `OGM_APP_ORIGIN`: one or more space-separated HTTP(S) origins allowed by CSP `frame-ancestors`.
 - `OGM_GAMES_BIND`: optional assertion; if set, it must be `127.0.0.1`.
@@ -18,10 +17,6 @@ A build is invisible until its directory contains `.complete`. Publishers should
 The API's build publisher (`services/api/src/builds`) is the production writer.
 
 The service exposes `GET /healthz`, `GET|HEAD /g/<gameId>/<buildId>/<path>`, shared content-addressed blobs at
-`GET|HEAD /a/<sha256>.<ext>`, and the cache worker at `GET|HEAD /game-cache.js`. Protected builds and their blobs are
-served only under `/t/<capability>/g/...` and `/t/<capability>/a/...`: the API's launch endpoint puts a short-lived
-build capability in the path, never a cookie, and the host rechecks it with the API on every request. Those responses
-carry a CSP `sandbox` so the game is an opaque document, and absolute `/a/` and `/g/` paths in text files are rewritten
-to keep the capability. The host never lists a directory and applies the game security headers to every game, blob,
-and worker response. Text responses negotiate
+`GET|HEAD /a/<sha256>.<ext>`, and the cache worker at `GET|HEAD /game-cache.js`. It never sets cookies, never lists a
+directory, and applies the game security headers to every game, blob, and worker response. Text responses negotiate
 Brotli or gzip; media files are never compressed.

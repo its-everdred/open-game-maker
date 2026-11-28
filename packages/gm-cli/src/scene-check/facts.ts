@@ -5,6 +5,16 @@ export interface AssetFacts {
   edges?: Partial<Record<Facing, CellEdge>>;
   alpha?: Partial<Record<Facing, Bounds>>;
   size?: readonly [number, number];
+  /** Measured socket for one exact scaled and elevated post; do not inherit through derived assets. */
+  postSocket?: {
+    facing: Facing;
+    scale: number;
+    elevation: number;
+    x: number;
+    y: number;
+    fenceAsset: string;
+    fenceEdge: CellEdge;
+  };
 }
 
 /** What the checks need from a pack adapter. */
@@ -42,6 +52,8 @@ export function smallScaleIntFacts(adapter: Record<string, unknown>): PackFacts 
   const footprint = tile?.footprint;
   const cardFacts = typeof adapter.structuralCardFacts === 'function' ? adapter.structuralCardFacts : undefined;
   const images = record(record(adapter.structuralImageBounds)?.value);
+  const post = record(record(adapter.inspectedGatePost)?.value);
+  const socket = record(post?.socket);
   return {
     set: 'smallscaleint',
     tile: Array.isArray(footprint) ? [Number(footprint[0]), Number(footprint[1])] : [128, 64],
@@ -51,6 +63,26 @@ export function smallScaleIntFacts(adapter: Record<string, unknown>): PackFacts 
       const card = record((cardFacts as ((id: string) => unknown) | undefined)?.(id));
       if (!card) return undefined;
       const facts: AssetFacts = {};
+      if (
+        post?.asset === id &&
+        typeof post.facing === 'string' &&
+        FACINGS.includes(post.facing as Facing) &&
+        typeof post.scale === 'number' &&
+        typeof post.elevation === 'number' &&
+        typeof socket?.x === 'number' &&
+        typeof socket.y === 'number' &&
+        typeof post.fenceAsset === 'string' &&
+        post.fenceEdge === 'yMax'
+      )
+        facts.postSocket = {
+          facing: post.facing as Facing,
+          scale: post.scale,
+          elevation: post.elevation,
+          x: socket.x,
+          y: socket.y,
+          fenceAsset: post.fenceAsset,
+          fenceEdge: post.fenceEdge,
+        };
       const edges: Partial<Record<Facing, CellEdge>> = {};
       const alpha: Partial<Record<Facing, Bounds>> = {};
       for (const facing of FACINGS) {

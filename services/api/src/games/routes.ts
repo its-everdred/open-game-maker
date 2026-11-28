@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
+import { invalidateArtifactGrants } from '../artifacts/session-grants.js';
 import { z } from 'zod';
 
 import { schema } from '@ogm/db';
@@ -29,8 +30,6 @@ import { gameStats } from './stats.js';
 import { assignSlug, findGameBySlugOrId } from './slug.js';
 import { CommitServiceRepoProvisioner } from './repo-provisioner.js';
 import { readQaState } from '../qa/state.js';
-import { signBuildAccess, verifyBuildAccess } from './build-access-token.js';
-import { authContextFor } from '../auth/routes.js';
 import { publicCardMedia, readPublicCardImage } from './public-card.js';
 
 export const prefix = '/api/v1';
@@ -146,88 +145,6 @@ const routes = new Hono<ApiBindings>()
     c.header('Cache-Control', 'no-store');
     return c.body(new Uint8Array(image.bytes));
   })
-  .post('/internal/games/:id/build-access', async (c) => {
-    const deps = c.get('deps');
-    const game = findGame(deps.db, c.req.param('id'));
-    if (game.delistedAt !== null) throw new HttpError(403, 'forbidden');
-    if (game.releaseState === 'released' && game.visibility === 'listed') return c.body(null, 204);
-    const body = await parseBody(c, z.object({ token: z.string().max(4096).optional() }).strict());
-    const claims = body.token ? verifyBuildAccess(body.token, deps.config.jobTokenSecret) : null;
-    if (!claims || claims.gameId !== game.id) throw new HttpError(403, 'forbidden');
-    const session = deps.db
-      .select()
-      .from(schema.session)
-      .where(and(eq(schema.session.id, claims.sessionId), eq(schema.session.userId, claims.userId)))
-      .get();
-    if (!session || session.expiresAt.getTime() <= Date.now()) throw new HttpError(403, 'forbidden');
-    const member = deps.db
-      .select()
-      .from(schema.familyMembers)
-      .where(and(eq(schema.familyMembers.familyId, claims.familyId), eq(schema.familyMembers.userId, claims.userId)))
-      .get();
-    if (!member && (claims.familyId !== '' || !hasGameGrant(deps.db, game.id, claims.userId)))
-      throw new HttpError(403, 'forbidden');
-    const email = await deps.registry.userDirectory?.emailForUser(claims.userId);
-    const allowed = email
-      ? deps.db
-          .select({ role: schema.allowedUsers.role })
-          .from(schema.allowedUsers)
-          .where(eq(schema.allowedUsers.email, email.trim().toLowerCase()))
-          .get()
-      : undefined;
-    if (!allowed) throw new HttpError(403, 'forbidden');
-    requireAuthorization(
-      authorize(
-        {
-          userId: claims.userId,
-          familyId: claims.familyId,
-          platformRole: allowed.role === 'admin' ? 'admin' : 'none',
-          capability: allowed.role === 'player' ? 'player' : 'creator',
-        },
-        'game.play',
-        {
-          familyId: game.familyId,
-          ownerId: game.ownerId,
-          visibility: game.visibility,
-          releaseState: game.releaseState,
-          granted: hasGameGrant(deps.db, game.id, claims.userId),
-        },
-      ),
-    );
-    return c.body(null, 204);
-  })
-  .get('/games/:id/launch/:buildId', async (c) => {
-    const principal = requirePrincipal(c, ['user']);
-    const deps = c.get('deps');
-    const session = await authContextFor(deps)?.auth.api.getSession({ headers: c.req.raw.headers });
-    if (!session || session.user.id !== principal.userId) throw new HttpError(401, 'unauthenticated');
-    const game = findGameForPlay(deps.db, c.req.param('id'), actorFromPrincipal(principal));
-    requireAuthorization(
-      authorize(actorFromPrincipal(principal), 'game.play', {
-        familyId: game.familyId,
-        ownerId: game.ownerId,
-        visibility: game.visibility,
-        releaseState: game.releaseState,
-        granted: hasGameGrant(deps.db, game.id, principal.userId),
-      }),
-    );
-    const buildId = c.req.param('buildId');
-    if (!/^[a-zA-Z0-9_-]{1,80}$/u.test(buildId)) throw new HttpError(400, 'invalid_build');
-    // The capability rides in the path, never a cookie, and the games host serves it as an opaque document, so one
-    // game cannot read another with the player's access.
-    const token = signBuildAccess(
-      { gameId: game.id, userId: principal.userId, familyId: principal.familyId, sessionId: session.session.id },
-      deps.config.jobTokenSecret,
-    );
-    const target = new URL(
-      `/t/${token}/g/${encodeURIComponent(game.id)}/${encodeURIComponent(buildId)}/index.html`,
-      deps.config.gamesOrigin,
-    );
-    for (const [key, value] of new URL(c.req.url).searchParams) target.searchParams.append(key, value);
-    c.header('Cache-Control', 'no-store');
-    c.header('Referrer-Policy', 'no-referrer');
-    return c.redirect(target.toString(), 302);
-  })
   .post('/games', async (c) => {
     const principal = requirePrincipal(c, ['user']);
     requireAuthorization(authorize(actorFromPrincipal(principal), 'game.create', { familyId: principal.familyId }));
@@ -263,6 +180,7 @@ const routes = new Hono<ApiBindings>()
     }
   })
   .get('/games', async (c) => {
+    c.header('Cache-Control', 'no-store');
     const principal = requirePrincipal(c, ['user']);
     requireAuthorization(
       authorize(actorFromPrincipal(principal), 'game.play', {
@@ -277,6 +195,13 @@ const routes = new Hono<ApiBindings>()
     const media = await gameMedia(
       c.get('deps'),
       games.map((game) => game.id),
+      { principal, headers: c.req.raw.headers },
+    );
+    /* A coming soon card shows the same artwork to everyone, so it is read without the viewer's build access, as the
+       card-image route checks it. */
+    const cardMedia = await gameMedia(
+      c.get('deps'),
+      games.filter((game) => game.releaseState === 'coming_soon').map((game) => game.id),
     );
     const stats = gameStats(db, games);
     // A game with a published release is live: the menu's status shows it beside the game (#854).
@@ -315,7 +240,9 @@ const routes = new Hono<ApiBindings>()
               ownerId: game.ownerId,
             }).ok,
           canPlay,
-          ...(game.releaseState === 'coming_soon' ? publicCardMedia(game.id, media.get(game.id)) : media.get(game.id)),
+          ...(game.releaseState === 'coming_soon'
+            ? publicCardMedia(game.id, cardMedia.get(game.id))
+            : media.get(game.id)),
           stats: stats.get(game.id),
           lastPlayedAt: playedAt.get(game.id) ?? null,
           live: live.has(game.id),
@@ -324,6 +251,7 @@ const routes = new Hono<ApiBindings>()
     });
   })
   .get('/games/:id', async (c) => {
+    c.header('Cache-Control', 'no-store');
     const principal = requirePrincipal(c, ['user']);
     const game = findGameForPlay(c.get('deps').db, c.req.param('id'), actorFromPrincipal(principal));
     requireAuthorization(
@@ -335,11 +263,14 @@ const routes = new Hono<ApiBindings>()
         granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
       }),
     );
-    const media = await gameMedia(c.get('deps'), [game.id]);
+    const media =
+      game.releaseState === 'coming_soon'
+        ? publicCardMedia(game.id, (await gameMedia(c.get('deps'), [game.id])).get(game.id))
+        : (await gameMedia(c.get('deps'), [game.id], { principal, headers: c.req.raw.headers })).get(game.id);
     const stats = gameStats(c.get('deps').db, [game]);
     return c.json({
       ...gameResponse(game),
-      ...(game.releaseState === 'coming_soon' ? publicCardMedia(game.id, media.get(game.id)) : media.get(game.id)),
+      ...media,
       stats: stats.get(game.id),
     });
   })
@@ -455,10 +386,17 @@ const routes = new Hono<ApiBindings>()
       title !== undefined && title !== game.title && !preserveSlug
         ? assignSlug(db, title, { gameId: game.id, slug: game.slug })
         : game.slug;
-    db.update(schema.games)
-      .set({ ...changes, slug })
-      .where(eq(schema.games.id, game.id))
-      .run();
+    db.transaction((tx) => {
+      tx.update(schema.games)
+        .set({ ...changes, slug })
+        .where(eq(schema.games.id, game.id))
+        .run();
+      if (
+        (changes.visibility !== undefined && changes.visibility !== game.visibility) ||
+        (changes.releaseState !== undefined && changes.releaseState !== game.releaseState)
+      )
+        invalidateArtifactGrants(tx, 'game', game.id);
+    });
     return c.json(gameResponse(findGame(db, game.id)));
   })
   .post('/games/:id/provision', async (c) => {

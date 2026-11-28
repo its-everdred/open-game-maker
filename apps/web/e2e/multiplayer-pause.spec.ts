@@ -10,6 +10,9 @@ import { installAuthRoutes } from './fixtures/auth-routes';
 import { buildId, installGameApi } from './support/mock-game-api';
 import { launchArgs } from './support/gpu';
 
+// eslint-disable-next-line no-restricted-properties
+const bridgeOrigin = `http://127.0.0.1:${process.env.OGM_WEB_BRIDGE_PORT ?? '10001'}`;
+
 test.use({
   serviceWorkers: 'block',
   launchOptions: {
@@ -63,19 +66,13 @@ test('a room pause freezes both game frames until the shared countdown ends', as
             },
           }),
         );
-        await target.route('http://127.0.0.1:10001/g/game/**/index.html*', async (route) =>
+        await target.route(`${bridgeOrigin}/d/game/**/index.html*`, async (route) =>
           route.fulfill({
             contentType: 'text/html',
-            body: await readFile(new URL('./fixtures/fall-game/index.html', import.meta.url)),
-          }),
-        );
-        /* A routed page is not on loopback to Chrome, so its own fetches are routed too: an opaque frame may not reach
-           loopback. */
-        await target.route('http://127.0.0.1:10001/g/game/**/manifest.json', async (route) =>
-          route.fulfill({
-            contentType: 'application/json',
-            headers: { 'access-control-allow-origin': '*' },
-            body: await readFile(new URL('./fixtures/fall-game/manifest.json', import.meta.url)),
+            body: (await readFile(new URL('./fixtures/fall-game/index.html', import.meta.url), 'utf8')).replace(
+              "await (await fetch('./manifest.json')).json()",
+              await readFile(new URL('./fixtures/fall-game/manifest.json', import.meta.url), 'utf8'),
+            ),
           }),
         );
         await target.goto(`/g/game?room=${room.roomId}&test`);
@@ -152,14 +149,13 @@ test('two SDK clients stop and resume on the same per-seat tick', async ({ brows
           },
         }),
       );
-      await page.route('http://127.0.0.1:10001/g/game/**/index.html*', (route) =>
+      await page.route(`${bridgeOrigin}/d/game/**/index.html*`, (route) =>
         route.fulfill({
           contentType: 'text/html',
           body: '<html><body><script type="module" src="./per-seat-game.js"></script></body></html>',
         }),
       );
-      await page.route('http://127.0.0.1:10001/g/game/**/per-seat-game.js', (route) =>
-        /* The game runs as an opaque document, so its module script needs CORS. */
+      await page.route(`${bridgeOrigin}/d/game/**/per-seat-game.js`, (route) =>
         route.fulfill({
           contentType: 'text/javascript',
           headers: { 'access-control-allow-origin': '*' },
@@ -214,17 +210,17 @@ async function roomState(page: Page): Promise<string | undefined> {
 }
 
 async function framePaused(page: Page): Promise<boolean | undefined> {
-  const frame = page.frames().find((item) => item.url().startsWith('http://127.0.0.1:10001/g/'));
+  const frame = page.frames().find((item) => item.url().startsWith(`${bridgeOrigin}/d/`));
   return frame?.evaluate(() => (window as Window & { __fixture?: { paused?: boolean } }).__fixture?.paused);
 }
 
 async function framePosition(page: Page): Promise<number | undefined> {
-  const frame = page.frames().find((item) => item.url().startsWith('http://127.0.0.1:10001/g/'));
+  const frame = page.frames().find((item) => item.url().startsWith(`${bridgeOrigin}/d/`));
   return frame?.evaluate(() => (window as Window & { __fixture?: { firstY?: number } }).__fixture?.firstY);
 }
 
 async function sdkState(page: Page): Promise<{ tick: number; paused: boolean } | undefined> {
-  const frame = page.frames().find((item) => item.url().startsWith('http://127.0.0.1:10001/g/'));
+  const frame = page.frames().find((item) => item.url().startsWith(`${bridgeOrigin}/d/`));
   if (!frame || frame.isDetached()) return undefined;
   try {
     return await frame.evaluate(() => {

@@ -6,7 +6,6 @@ import {
   PREVIEW_BOOTSTRAP,
   PREVIEW_BOOTSTRAP_FILE,
 } from '../../../services/games-host/src/preview-bootstrap';
-import { isGameLaunch } from './support/game-launch';
 
 const gameId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01';
 const first = 'preview-11111111-1111-4111-8111-111111111111';
@@ -53,7 +52,6 @@ test('plays a preview, sends a verdict and shows a newer push', async ({ page },
     return route.fulfill({ response, headers, body: bootstrapPreviewHtml(html) });
   });
   await page.route('**/api/v1/**', async (route) => {
-    if (isGameLaunch(route.request().url())) return route.fallback();
     const url = new URL(route.request().url());
     const path = url.pathname;
     const json = (body: unknown) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });

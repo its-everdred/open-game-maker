@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { DesignSnapshot } from '../../../features/editor/api';
@@ -19,6 +19,7 @@ const frame = vi.hoisted(() => {
 });
 
 vi.mock('../../../features/editor/frame', () => ({ mountGameFrame: frame.mountGameFrame }));
+vi.mock('../../../features/editor/api', () => ({ requestDraftGrant: vi.fn().mockResolvedValue({ grant: 'grant' }) }));
 
 import { SideBySide } from './SideBySide';
 
@@ -36,7 +37,7 @@ afterEach(() => {
 });
 
 describe('SideBySide', () => {
-  it('selects after readiness and leaves the other side visible when one frame fails', () => {
+  it('selects after readiness and leaves the other side visible when one frame fails', async () => {
     const view = render(
       <SideBySide
         gameId="game"
@@ -48,8 +49,8 @@ describe('SideBySide', () => {
       />,
     );
 
-    expect(frame.mountGameFrame).toHaveBeenCalledTimes(2);
-    expect(frame.options).toEqual(expect.arrayContaining([expect.objectContaining({ authenticated: true })]));
+    await waitFor(() => expect(frame.mountGameFrame).toHaveBeenCalledTimes(2));
+    expect(frame.options[0]).toMatchObject({ draftGrant: 'grant' });
     act(() => frame.options[0]?.onState?.({ bridgeState: 'ready', dropped: 0 }));
     act(() => frame.options[1]?.onState?.({ bridgeState: 'error', dropped: 0 }));
 

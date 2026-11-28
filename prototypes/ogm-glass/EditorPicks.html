@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Editor picks</title>
+<link rel="stylesheet" href="./glass.css">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&amp;family=Nunito:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0f0e16}a{color:#74c8ed}a:hover{color:#f2ead6}
+.ba{position:absolute;left:0;top:0;width:100%;height:430px;overflow:hidden}
+.ba img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:52% 60%}
+.ba .before{clip-path:inset(0 50% 0 0);filter:saturate(.75) brightness(.92) contrast(.95)}
+.ba .after{filter:saturate(1.2) contrast(1.06) sepia(.12)}
+.ba .line{position:absolute;top:0;bottom:0;left:50%;width:2px;margin-left:-1px;background:#f2ead6;box-shadow:0 0 12px rgba(0,0,0,.5)}
+.ba .handle{position:absolute;left:50%;top:50%;translate:-50% -50%}
+.tagb{position:absolute;top:66px;font:800 11px Nunito;letter-spacing:.08em;padding:4px 8px;border-radius:8px;background:rgba(15,14,22,.7);color:#f2ead6}</style>
+</head>
+<body>
+<div class="g phone">
+<img src="../../assets-local/review/design-ogm-glass/img/land-bg.jpg" alt="Dusk Helm map" style="position:absolute;left:0;top:0;width:100%;height:430px;object-fit:cover;object-position:52% 60%">
+<a class="orb sm" href="Editor.html" aria-label="Back to the editor" style="position:absolute;left:10px;top:10px"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+<a class="orb" href="EditMenu.html" aria-label="Menu" style="position:absolute;right:10px;top:10px"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></a>
+<nav class="picks pane" aria-label="Editor" style="position:absolute;left:10px;top:66px">
+<button class="pick" aria-label="Map" aria-pressed="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"></path><path d="M9 4v14M15 6v14"></path></svg></button>
+<a class="pick" href="Arena.html" aria-label="Arena" style="color:#f2ead6"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l11 11M4 4h4M4 4v4M20 4 9 15M20 4h-4M20 4v4M6 18l-2 2M18 18l2 2M7 13l4 4M17 13l-4 4"></path></svg></a>
+<button class="pick" aria-label="Visuals" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg></button>
+<button class="pick" aria-label="Characters" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg></button>
+<button class="pick" aria-label="Tuning" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"></path><circle cx="16" cy="6" r="2"></circle><circle cx="10" cy="12" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg></button>
+<button class="pick" aria-label="Audio" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="17" cy="16" r="3"></circle></svg></button>
+<a class="pick" href="AgentChat.html" aria-label="Chat" style="color:#f2ead6"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-5 4v-4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"></path></svg></a>
+</nav>
+<section class="pane strong dp" aria-label="Map" style="position:absolute;left:0;right:0;bottom:0;top:410px;border-radius:26px 26px 0 0">
+<div class="dp-hd"><span class="h3">Map</span><button class="orb sm" aria-label="Collapse panel"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button></div>
+<div class="dp-body" style="gap:10px">
+<div style="position:relative"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#c4beb0" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="position:absolute;left:14px;top:12px"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg><input class="input" aria-label="Search assets" placeholder="Search" style="padding-left:44px;height:44px"></div>
+<div class="seg" role="tablist" aria-label="Browse by" style="padding:3px"><button aria-pressed="true" style="height:34px">Type</button><button aria-pressed="false" style="height:34px">Set</button><button aria-pressed="false" style="height:34px">Tags</button></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><span class="tag" style="border-color:#94d742;color:#f2ead6">Ground</span><span class="tag">Trees</span><span class="tag">Rocks</span><span class="tag">Props</span><span class="tag">Water</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+<button aria-label="Forest road tiles" style="padding:0;border:2px solid #ffbf32;border-radius:12px;overflow:hidden;aspect-ratio:1"><img src="../../assets-local/review/design-ogm-glass/img/thumb-41.jpg" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></button>
+<button aria-label="Meadow" style="padding:0;border:1px solid rgba(242,234,214,.14);border-radius:12px;overflow:hidden;aspect-ratio:1"><img src="../../assets-local/review/design-ogm-glass/img/blobs.jpg" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></button>
+<button aria-label="Cave floor" style="padding:0;border:1px solid rgba(242,234,214,.14);border-radius:12px;overflow:hidden;aspect-ratio:1"><img src="../../assets-local/review/design-ogm-glass/img/dusk.jpg" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></button>
+<button aria-label="Tavern floor" style="padding:0;border:1px solid rgba(242,234,214,.14);border-radius:12px;overflow:hidden;aspect-ratio:1"><img src="../../assets-local/review/design-ogm-glass/img/thumb-16.jpg" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></button>
+</div>
+</div>
+<div class="dp-ft"><button class="btn ghost sm" style="flex:1">Undo</button><button class="btn go sm" style="flex:2">Save map</button></div>
+</section>
+</div>
+<script src="fallback.js"></script>
+</body>
+</html>

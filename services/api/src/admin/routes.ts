@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 
 import type { Context } from 'hono';
 import { Hono } from 'hono';
+import { invalidateArtifactGrants } from '../artifacts/session-grants.js';
 import { z } from 'zod';
 
 import { daemonPaths, unitName } from '@ogm/builder';
@@ -319,10 +320,13 @@ const routes = new Hono<ApiBindings>()
     const { db } = c.get('deps');
     const actor = admin(c, 'game.delist');
     const game = findGameForFamily(db, c.req.param('id'), actor.familyId);
-    db.update(schema.games)
-      .set({ delistedAt: game.delistedAt ?? new Date().toISOString() })
-      .where(eq(schema.games.id, game.id))
-      .run();
+    db.transaction((tx) => {
+      tx.update(schema.games)
+        .set({ delistedAt: game.delistedAt ?? new Date().toISOString() })
+        .where(eq(schema.games.id, game.id))
+        .run();
+      if (!game.delistedAt) invalidateArtifactGrants(tx, 'game', game.id);
+    });
     return c.json(gameResponse(findGame(db, game.id)));
   })
   .post('/games/:id/relist', (c) => {

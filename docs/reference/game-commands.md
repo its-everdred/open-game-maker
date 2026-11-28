@@ -194,7 +194,11 @@ element's `aiur-answer` event. Every URL in that scope is an Open Game Maker rou
 ## Ticket discussions
 
 The Builds panel opens the existing build chat for tickets associated with a job. For a running or completed ticket
-without a job (an Executor-filed ticket), it shows only issue comments explicitly marked `<!-- gm:creator-visible -->`. Adding that marker makes the comment
-visible to the game's creator; unmarked operator discussion, agent workpads and Aiur agent-authored bookkeeping stay private. The API rechecks the
-issue's current game label before reading its discussion. This view is read-only until the per-ticket thread
-(aiur-team/aiur#8082) lets the creator send to the worker.
+without a job (an Executor-filed ticket), it shows shared comments, agent workpads and comments, and the daemon's
+recent worker progress and assistant replies. The creator can send a message to the ticket's worker from this view;
+sent messages are stored with the game and ticket. The API rechecks the issue's
+current game label before reading or sending. The view refreshes periodically; delivery follows the daemon's existing
+message policy.
+
+The conversation's Reviews tab collects that ticket's open and past reviews in time order, with the newest at the
+bottom. Review cards also remain in the chat.

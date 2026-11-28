@@ -36,7 +36,7 @@ function latestBuildId(deps: ReturnType<typeof world>['deps']) {
 }
 
 describe('publishing a merged build', () => {
-  it('serves the build, marks it tested and points the branch at it when the upload follows the merge', async () => {
+  it('marks a build tested and points the branch at it without making it public', async () => {
     const { deps, app } = world();
     completeRun(deps);
 
@@ -57,21 +57,18 @@ describe('publishing a merged build', () => {
       .get(ids.main);
     expect(head?.base_build_id).toBe(buildId);
 
-    // A private build needs a launch capability (test/games.test.ts); a listed game's build is public.
-    deps.sqlite.prepare("UPDATE games SET visibility = 'listed' WHERE id = ?").run(ids.game);
-    const host = await gamesHost(deps.config.gamesRoot, app);
+    const host = await gamesHost(deps.config.gamesRoot);
     try {
       const page = await fetch(`${host.base}/g/${ids.game}/${buildId}/`);
-      expect(page.status).toBe(200);
-      expect(await page.text()).toContain('<title>Fixture</title>');
-      expect((await fetch(`${host.base}/g/${ids.game}/${buildId}/assets/main.js`)).status).toBe(200);
+      expect(page.status).toBe(404);
+      expect((await fetch(`${host.base}/g/${ids.game}/${buildId}/assets/main.js`)).status).toBe(404);
     } finally {
       await host.close();
     }
   });
 
   // Live Brotli of a game bundle took seconds on a loaded host and games missed their ready timeout (#1319).
-  it('writes a Brotli copy of every shared code file once the build is live', async () => {
+  it('keeps draft code private and precompresses it inside the build', async () => {
     const { deps, app } = world();
     completeRun(deps);
     const { buildId } = (await (await upload(app, archiveOf(builtFiles()))).json()) as { buildId: string };
@@ -79,12 +76,37 @@ describe('publishing a merged build', () => {
     const plan = JSON.parse(
       readFileSync(join(deps.config.gamesRoot, ids.game, buildId, 'assets', 'cache-plan.json'), 'utf8'),
     ) as { entries: { url: string; kind: string }[] };
-    const code = plan.entries.filter(({ url, kind }) => kind === 'code' && url.startsWith('/a/'));
+    const code = plan.entries.filter(({ kind }) => kind === 'code');
     expect(code.length).toBeGreaterThan(0);
+    expect(plan.entries.every(({ url }) => !url.startsWith('/a/'))).toBe(true);
     await vi.waitFor(() => {
       for (const { url } of code)
-        expect(existsSync(join(deps.config.gamesRoot, '_a', `${url.slice('/a/'.length)}.br`))).toBe(true);
+        expect(existsSync(join(deps.config.gamesRoot, ids.game, buildId, `${url}.br`))).toBe(true);
     });
+  });
+
+  it('keeps absolute asset references inside the private build', async () => {
+    const { deps, app } = world();
+    completeRun(deps);
+    const files = builtFiles();
+    const hash = 'a'.repeat(64);
+    writeFileSync(
+      join(files, 'assets', 'main.js'),
+      `fetch('/a/${hash}.png'); fetch('https://cdn.example/a/${hash}.png'); fetch('//cdn.example/a/${hash}.png'); fetch('https://cdn.example/foo( /a/${hash}.png)');`,
+    );
+    const response = await upload(app, archiveOf(files));
+    expect(response.status).toBe(201);
+    const { buildId } = (await response.json()) as { buildId: string };
+    const root = join(deps.config.gamesRoot, ids.game, buildId);
+    const script = readFileSync(join(root, 'assets', 'main.js'), 'utf8');
+    expect(script).toContain(`/g/${ids.game}/${buildId}/a/${hash}.png`);
+    expect(script).toContain(`https://cdn.example/a/${hash}.png`);
+    expect(script).toContain(`//cdn.example/a/${hash}.png`);
+    expect(script).toContain(`https://cdn.example/foo( /a/${hash}.png)`);
+    const plan = JSON.parse(readFileSync(join(root, 'assets', 'cache-plan.json'), 'utf8')) as {
+      entries: { url: string }[];
+    };
+    expect(plan.entries.some(({ url }) => url === `/g/${ids.game}/${buildId}/assets/main.js`)).toBe(true);
   });
 
   it('stages an upload that lands before the merge and publishes it when the run completes', async () => {
@@ -191,12 +213,9 @@ describe('publishing a merged build', () => {
     expect(display.images['media/p.png'].sources.webp[0].width).toBe(320);
     expect(display.images['media/l.png'].sources.avif[0].width).toBe(320);
     const imagePath = image.sources.avif[0].path as string;
-    expect(imagePath).toMatch(/^\/a\/[0-9a-f]{64}\.avif$/u);
-    expect(existsSync(join(deps.config.gamesRoot, '_a', imagePath.slice('/a/'.length)))).toBe(true);
-    const cachePlan = JSON.parse(readFileSync(join(build, 'assets', 'cache-plan.json'), 'utf8')) as {
-      entries: Array<{ url: string }>;
-    };
-    expect(cachePlan.entries).toContainEqual(expect.objectContaining({ url: imagePath }));
+    expect(imagePath).toMatch(/^media\/ogm-variants\/[0-9a-f]{64}\.avif$/u);
+    expect(existsSync(join(build, imagePath))).toBe(true);
+    expect(existsSync(join(deps.config.gamesRoot, '_a', imagePath.split('/').at(-1)!))).toBe(false);
     expect(existsSync(join(build, '.complete'))).toBe(true);
   });
 

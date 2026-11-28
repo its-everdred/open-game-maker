@@ -2,7 +2,6 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installGameApi } from './support/mock-game-api';
-import { isGameLaunch } from './support/game-launch';
 
 type GameHook = { bridgeState: string };
 type FixtureHook = { messages: Array<{ t: string }>; send(type: string, payload: object): void };
@@ -49,11 +48,11 @@ const workers = [
 /** The game's tickets, a review ready with a still, a decision waiting on #969, and Energy readings. */
 async function installMenuData(page: Page) {
   await page.route('**/api/v1/**', async (route) => {
-    if (isGameLaunch(route.request().url())) return route.fallback();
     const url = new URL(route.request().url());
     const path = url.pathname.slice('/api/v1'.length);
     const json = (body: unknown) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    if (path === '/artifacts/grant') return json({ grant: 'fixture-grant' });
     if (path === '/games' && route.request().method() === 'GET')
       return json({ games: [{ id: 'game', title: 'Goblin Cellar', ownerId: 'u1', live: true }] });
     if (path === '/games/game' && route.request().method() === 'GET')
@@ -113,7 +112,7 @@ async function installMenuData(page: Page) {
 async function openGame(page: Page, query: string) {
   await page.goto(`/g/game?${query}`);
   await expect.poll(() => gameState(page).then((state) => state?.bridgeState), { timeout: 60_000 }).toBe('ready');
-  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`));
   await frame?.evaluate(() => (window as Window & { __fixture: FixtureHook }).__fixture.send('load.frame', {}));
 }
 

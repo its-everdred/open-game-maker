@@ -35,7 +35,6 @@ export function AiurComposer({
   const ref = useRef<ComposerElement>(null);
   const voiceRef = useRef<VoiceClient | undefined>(undefined);
   const voiceStarting = useRef(false);
-  const dictationResult = useRef<Promise<string> | undefined>(undefined);
   const cancelDictation = useRef<(() => void) | undefined>(undefined);
   const voiceAvailability = useRef<VoiceAvailability>({ available: false });
   const pendingAdmission = useRef<{ text: string; jobId: string } | undefined>(undefined);
@@ -99,11 +98,16 @@ export function AiurComposer({
       .spacer { display:none; }
       .attach { order:0; } textarea { order:1; flex:1; min-width:0; }
       .mic { order:2; } .voice { order:3; } .send { order:4; }
-      :host(:not([data-recording])) .voice { display:none; }
+      :host(:not([data-recording]):not([data-voice-live])) .voice { display:none; }
     `
         : '';
     element.shadowRoot?.append(style);
     const input = element.shadowRoot?.querySelector('textarea');
+    let dictationFailed = false;
+    const edited = () => {
+      dictationFailed = false;
+    };
+    input?.addEventListener('input', edited);
     const fileInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[type="file"]');
     const paste = (event: ClipboardEvent) => {
       const clipboard = event.clipboardData;
@@ -153,27 +157,40 @@ export function AiurComposer({
       ...(dictation
         ? {
             dictation: {
-              start: async () => {
+              start: async ({ onPartial }) => {
+                dictationFailed = false;
+                let hadDictationText = false;
                 let resolveCancelled: () => void = () => {};
+                let cleanup: () => void = () => {};
                 const result = new Promise<string>((resolve, reject) => {
-                  resolveCancelled = () => resolve('');
+                  resolveCancelled = () => {
+                    cleanup();
+                    resolve('');
+                  };
                   const offTranscript = dictation.on('transcript', (value) => {
-                    if (value.kind !== 'final') return;
-                    offTranscript();
-                    offError();
+                    if (value.kind !== 'final') {
+                      hadDictationText = Boolean(value.text.trim());
+                      onPartial(value.text);
+                      return;
+                    }
+                    cleanup();
                     resolve(value.text);
                   });
                   const offError = dictation.on('error', (value) => {
-                    offTranscript();
-                    offError();
+                    dictationFailed = hadDictationText;
+                    cleanup();
                     reject(codedError(value.code, value.message));
                   });
+                  cleanup = () => {
+                    offTranscript();
+                    offError();
+                  };
                 });
                 // The microphone or token can fail before the user releases the button.
                 void result.catch(() => {});
-                dictationResult.current = result;
                 cancelDictation.current = () => {
                   dictation.cancel();
+                  cleanup();
                   resolveCancelled();
                 };
                 dictation.pressStart();
@@ -191,7 +208,10 @@ export function AiurComposer({
       ...(voiceTarget
         ? {
             voice: {
-              start: async ({ onEnd }) => {
+              start: async ({ onEnd, initialText }) => {
+                if (dictationFailed)
+                  throw codedError('incomplete_transcript', 'Review the dictation before continuing');
+                if (!element.isConnected) throw codedError('cancelled', 'The conversation was closed');
                 if (voiceStarting.current || voiceRef.current)
                   throw codedError('starting', 'Voice is already starting');
                 if (
@@ -205,9 +225,17 @@ export function AiurComposer({
                 if (!available.available)
                   throw codedError(available.code ?? 'voice_unavailable', 'Voice is unavailable');
                 const voice = new VoiceClient({ url: available.url, token: available.token, target: voiceTarget });
+                let openingPending = initialText;
+                const restoreOpening = () => {
+                  if (openingPending && element.isConnected) {
+                    element.value = [openingPending, element.value.trim()].filter(Boolean).join(' ');
+                    openingPending = '';
+                  }
+                };
                 voiceStarting.current = true;
                 voiceRef.current = voice;
                 voice.on('ended', () => {
+                  restoreOpening();
                   if (voiceRef.current === voice) voiceRef.current = undefined;
                   element.removeAttribute('data-recording');
                   onEnd();
@@ -216,18 +244,13 @@ export function AiurComposer({
                   const capabilities = (frame as unknown as { capabilities?: { text?: boolean } }).capabilities;
                   if (!capabilities?.text) return;
                   offState();
-                  void Promise.resolve(dictationResult.current)
-                    .catch(() => undefined)
-                    .then(async () => {
-                      // Let the upstream composer insert the final transcript before reading it.
-                      await Promise.resolve();
-                      const openingText = element.value.trim();
-                      if (!openingText || voiceRef.current !== voice) return;
-                      voice.sendText(openingText);
-                      if (element.value.trim() === openingText) element.value = '';
-                    });
+                  if (openingPending && voiceRef.current === voice) {
+                    voice.sendText(openingPending);
+                    openingPending = '';
+                  }
                 });
                 try {
+                  if (input) input.readOnly = true;
                   await voice.startFromGesture();
                 } catch (error) {
                   voice.end();
@@ -235,9 +258,11 @@ export function AiurComposer({
                   throw error;
                 } finally {
                   voiceStarting.current = false;
+                  if (input) input.readOnly = false;
                 }
                 return {
                   stop: async () => {
+                    restoreOpening();
                     voice.end();
                     if (voiceRef.current === voice) voiceRef.current = undefined;
                   },
@@ -248,6 +273,8 @@ export function AiurComposer({
         : {}),
     };
     element.onSend = async (text, attachments) => {
+      if (dictationFailed) throw codedError('incomplete_transcript', 'Review the dictation before sending');
+      if (!element.isConnected) throw codedError('cancelled', 'The conversation was closed');
       const { startJob, postText, onPosted, onOptimistic, onFailed, uploadAttachment, wasAdmissionReused } =
         callbacks.current;
       const instruction = text.trim();
@@ -319,6 +346,7 @@ export function AiurComposer({
       element.removeEventListener('keydown', recording);
       element.removeEventListener('keyup', recording);
       input?.removeEventListener('paste', paste);
+      input?.removeEventListener('input', edited);
       style.remove();
     };
   }, [jobId, voiceTarget, dictationTarget, reading]);

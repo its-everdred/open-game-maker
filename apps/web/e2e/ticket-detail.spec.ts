@@ -5,7 +5,6 @@ import { expect, test, type Page, type Route } from '@playwright/test';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { openClosedTicket, openRunningTicket, openTicketBuilds } from '../../../packages/gm-cli/src/qa-review-checks';
 import { openChat } from '../../../packages/gm-cli/src/qa-voice-e2e';
-import { isGameLaunch } from './support/game-launch';
 
 // Kevin opens the hammer, taps a running ticket and a closed one, and sees each one's summary, status, media and
 // timeline on his phone (#873). The API's ticket detail is mocked in the shape services/api answers.
@@ -101,7 +100,6 @@ async function fits(page: Page) {
 
 async function installApi(page: Page) {
   await page.route('**/api/v1/**', async (route) => {
-    if (isGameLaunch(route.request().url())) return route.fallback();
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/v1/notifications/stream')
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });

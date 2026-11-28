@@ -1,6 +1,6 @@
 import { createReadStream, type Stats } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { join, posix } from 'node:path';
 import { Readable } from 'node:stream';
 import { constants as zlib, createBrotliCompress, createGzip } from 'node:zlib';
 
@@ -9,44 +9,46 @@ import { cachePlanSchema } from '@ogm/contracts';
 
 import { gameHeaders, healthHeaders } from './headers.js';
 import { FRAME_OBSERVER, FRAME_OBSERVER_FILE, observeFrameHtml } from './frame-observer.js';
-import { BadBlobName, BadId, blobPath, buildDir, isComplete, isServableId, resolveFile } from './layout.js';
+import { BadBlobName, BadId, blobPath, buildDir, isComplete, resolveFile } from './layout.js';
 import { isCompressiblePath, mimeForPath } from './mime.js';
 import { bootstrapPreviewHtml, PREVIEW_BOOTSTRAP, PREVIEW_BOOTSTRAP_FILE } from './preview-bootstrap.js';
-import { blobOwners, mayReadGame } from './access.js';
+import { artifactBlobIndex } from './blob-index.js';
+import { rewriteRootReferences } from './root-references.js';
+import { scanLegacyText } from './text-scan.js';
 
 export interface GamesHostOptions {
-  accessApi?: string;
-  accessCheck?: (gameId: string, token: string | undefined) => Promise<boolean>;
-  blobOwners?: (root: string, file: string) => Promise<string[] | null>;
   appOrigin: string;
   root: string;
   uptimeSec?: () => number;
   version: string;
   workerScript: string;
+  authorize?: (request: {
+    gameId?: string;
+    buildId?: string;
+    blob?: string;
+    grant?: string;
+    preview?: string;
+  }) => Promise<boolean>;
+  resolvePreview?: (gameId: string, accessId: string) => Promise<string | null>;
 }
 
 export function createApp(options: GamesHostOptions): Hono {
   const app = new Hono();
   const gameHeaderEntries = Object.entries(gameHeaders(options.appOrigin));
   const uptimeSec = options.uptimeSec ?? (() => process.uptime());
-  // Requests that arrived under /t/<token>/ carry their build capability here, never in a cookie, so a game in another
-  // frame cannot borrow the player's access to this one.
-  const pathTokens = new WeakMap<Request, string>();
 
   const secureResponse: MiddlewareHandler = async (context, next) => {
     await next();
     for (const [name, value] of gameHeaderEntries) {
       context.res.headers.set(name, value);
     }
-    if (new URL(context.req.url).pathname.startsWith('/p/')) {
+    if (/^\/(?:p|d)\//u.test(new URL(context.req.url).pathname)) {
       context.res.headers.set('Access-Control-Allow-Origin', '*');
+      const policy = context.res.headers.get('Content-Security-Policy');
+      if (policy)
+        context.res.headers.set('Content-Security-Policy', `${policy}; sandbox allow-scripts allow-pointer-lock`);
     }
-    if (
-      new URL(context.req.url).pathname.startsWith('/g/') ||
-      new URL(context.req.url).pathname.startsWith('/a/') ||
-      context.res.status !== 200 ||
-      new URL(context.req.url).pathname.startsWith('/p/')
-    ) {
+    if (context.res.status !== 200 || /^(?:\/p\/|\/d\/|\/g\/|\/a\/)/u.test(new URL(context.req.url).pathname)) {
       context.res.headers.set('Cache-Control', 'no-store');
     } else if (new URL(context.req.url).pathname === '/game-cache.js') {
       context.res.headers.set('Cache-Control', 'no-cache');
@@ -55,46 +57,9 @@ export function createApp(options: GamesHostOptions): Hono {
   };
   app.use('/g/*', secureResponse);
   app.use('/p/*', secureResponse);
+  app.use('/d/*', secureResponse);
   app.use('/a/*', secureResponse);
   app.use('/game-cache.js', secureResponse);
-
-  {
-    const check =
-      options.accessCheck ??
-      ((gameId: string, token: string | undefined) =>
-        options.accessApi ? mayReadGame(options.accessApi, gameId, token) : Promise.resolve(false));
-    const ownersFor = options.blobOwners ?? blobOwners;
-    app.use('/g/*', async (context, next) => {
-      const url = new URL(context.req.url);
-      const gameId = url.pathname.split('/')[2] ?? '';
-      const buildId = url.pathname.split('/')[3] ?? '';
-      if (
-        !isServableId(gameId) ||
-        !isServableId(buildId) ||
-        buildId.startsWith('pv-') ||
-        buildId.startsWith('preview-')
-      )
-        return context.text('Not Found', 404);
-      if (!/^[A-Za-z0-9_-]{1,80}$/u.test(gameId)) return context.text('Forbidden', 403);
-      if (!(await check(gameId, pathTokens.get(context.req.raw)))) return context.text('Forbidden', 403);
-      await next();
-    });
-    app.use('/a/*', async (context, next) => {
-      const file = new URL(context.req.url).pathname.split('/')[2] ?? '';
-      if (!/^[0-9a-f]{64}\.[a-z0-9]{1,12}$/u.test(file)) return context.text('Not Found', 404);
-      try {
-        if (!(await stat(blobPath(options.root, file))).isFile()) return context.text('Not Found', 404);
-      } catch {
-        return context.text('Not Found', 404);
-      }
-      const owners = await ownersFor(options.root, file);
-      if (owners === null || owners.length === 0) return context.text('Forbidden', 403);
-      const token = pathTokens.get(context.req.raw);
-      if (!(await Promise.all(owners.map((game) => check(game, token)))).some(Boolean))
-        return context.text('Forbidden', 403);
-      await next();
-    });
-  }
 
   app.get('/healthz', (context) =>
     context.json(
@@ -115,8 +80,13 @@ export function createApp(options: GamesHostOptions): Hono {
     let directory: string;
     try {
       if (buildId.startsWith('preview-')) return context.text('Not Found', 404);
+      const previewId = new URL(context.req.url).pathname.startsWith('/p/')
+        ? await options.resolvePreview?.(gameId, buildId).catch(() => null)
+        : undefined;
       directory = new URL(context.req.url).pathname.startsWith('/p/')
-        ? ((await previewDirectory(options.root, gameId, buildId)) ?? '')
+        ? previewId
+          ? ((await previewDirectory(options.root, gameId, previewId)) ?? '')
+          : ''
         : buildDir(options.root, gameId, buildId);
       if (buildId.startsWith('pv-') && !new URL(context.req.url).pathname.startsWith('/p/'))
         return context.text('Not Found', 404);
@@ -132,11 +102,30 @@ export function createApp(options: GamesHostOptions): Hono {
       return context.text('Not Found', 404);
     }
 
-    const urlPath = new URL(context.req.url).pathname.split('/').slice(4).join('/');
-    const isPreview = new URL(context.req.url).pathname.startsWith('/p/');
-    const opaque = isPreview || pathTokens.has(context.req.raw);
+    const isDraft = new URL(context.req.url).pathname.startsWith('/d/');
+    const grant = isDraft ? context.req.param('grant') : undefined;
+    if (isDraft && (!grant || !/^[A-Za-z0-9_-]{43,2048}$/u.test(grant))) return context.text('Not Found', 404);
     if (
-      !opaque &&
+      !new URL(context.req.url).pathname.startsWith('/p/') &&
+      !(await options.authorize?.({ gameId, buildId, ...(grant ? { grant } : {}) }).catch(() => false))
+    ) {
+      return context.text('Not Found', 404);
+    }
+    const isPreview = new URL(context.req.url).pathname.startsWith('/p/');
+    const draftIndex = !isPreview ? await artifactBlobIndex(directory, gameId, buildId) : undefined;
+    const forkSource =
+      draftIndex?.source && (draftIndex.source.gameId !== gameId || draftIndex.source.buildId !== buildId)
+        ? draftIndex.source
+        : undefined;
+
+    const urlPath = new URL(context.req.url).pathname
+      .split('/')
+      .slice(isDraft ? 5 : 4)
+      .join('/');
+    if (
+      !isPreview &&
+      !isDraft &&
+      !forkSource &&
       (urlPath === '' || urlPath === 'index.html') &&
       !new URL(context.req.url).searchParams.has('frameObserver')
     ) {
@@ -156,21 +145,67 @@ export function createApp(options: GamesHostOptions): Hono {
     }
     if (urlPath === FRAME_OBSERVER_FILE)
       return context.body(FRAME_OBSERVER, 200, { 'content-type': 'text/javascript; charset=utf-8' });
-    if (opaque && urlPath === PREVIEW_BOOTSTRAP_FILE)
+    if ((isPreview || isDraft) && urlPath === PREVIEW_BOOTSTRAP_FILE)
       return context.body(PREVIEW_BOOTSTRAP, 200, { 'content-type': 'text/javascript; charset=utf-8' });
-    const file = await resolveFile(directory, urlPath);
+    let file = await resolveFile(directory, urlPath);
+    if (isDraft && file === null && /^a\/[0-9a-f]{64}\.[a-z0-9]{1,12}$/u.test(urlPath)) {
+      const name = urlPath.slice(2);
+      if (draftIndex?.names.has(name)) file = blobPath(options.root, name);
+    }
     if (file === null) {
       return context.text('Not Found', 404);
     }
 
-    const relativePath = relative(directory, file).split(sep).join('/');
+    // resolveFile returns a real path, which may be inside a fork's source
+    // directory. URL resolution must instead follow the requested build path.
+    const decodedPath = decodeURIComponent(urlPath);
+    const relativePath = !decodedPath || decodedPath.endsWith('/') ? `${decodedPath}index.html` : decodedPath;
     const observeFrame = new URL(context.req.url).searchParams.get('frameObserver') === '2';
-    if ((opaque || observeFrame) && relativePath === 'index.html') {
-      let html = await readFile(file, 'utf8');
-      if (opaque) html = bootstrapPreviewHtml(html);
+    if ((isPreview || observeFrame) && relativePath === 'index.html') {
+      let html = await readFile(file, 'utf8').catch(() => null);
+      if (html === null) return context.text('Not Found', 404);
+      if (isPreview || isDraft) html = bootstrapPreviewHtml(html);
       if (observeFrame) html = observeFrameHtml(html);
+      if (isDraft) html = scopeLegacyAssets(html, gameId, buildId, 'index.html', draftIndex?.source);
+      else if (forkSource) html = scopeForkAssets(html, gameId, buildId, forkSource, false, true);
       context.header('content-type', 'text/html; charset=utf-8');
       return context.req.method === 'HEAD' ? context.body(null, 200) : context.body(html, 200);
+    }
+    if ((isDraft || !!forkSource) && /\.(?:html|js|mjs|css|json|svg)$/u.test(relativePath)) {
+      const scope = `${gameId}\0${buildId}\0${relativePath}\0${draftIndex?.source?.gameId ?? ''}\0${draftIndex?.source?.buildId ?? ''}\0${isDraft}`;
+      const roots = [
+        `/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/`,
+        ...(draftIndex?.source
+          ? [`/g/${encodeURIComponent(draftIndex.source.gameId)}/${encodeURIComponent(draftIndex.source.buildId)}/`]
+          : []),
+      ];
+      const rewrite = (text: string) =>
+        isDraft
+          ? scopeLegacyAssets(text, gameId, buildId, relativePath, draftIndex?.source, relativePath.endsWith('.css'))
+          : forkSource
+            ? scopeForkAssets(
+                text,
+                gameId,
+                buildId,
+                forkSource,
+                relativePath.endsWith('.css'),
+                /\.(?:html|svg)$/u.test(relativePath),
+              )
+            : text;
+      const scan = relativePath === 'index.html' ? undefined : await scanLegacyText(file, scope, roots, rewrite);
+      if (scan?.status === 'missing') return context.text('Not Found', 404);
+      if (scan?.status === 'unchanged')
+        return serveFile(context, file, { ETag: `"${buildId}:${encodeURIComponent(relativePath)}"` });
+      if (scan?.status === 'rewritten') return serveTransformed(context, scan.text, mimeForPath(file));
+      let text = await readFile(file, 'utf8').catch(() => null);
+      if (text === null) return context.text('Not Found', 404);
+      const original = text;
+      if (relativePath === 'index.html' && isDraft) text = bootstrapPreviewHtml(text);
+      text = rewrite(text);
+      if (text === original) {
+        return serveFile(context, file, { ETag: `"${buildId}:${encodeURIComponent(relativePath)}"` });
+      }
+      return serveTransformed(context, text, mimeForPath(file));
     }
     return serveFile(context, file, {
       ETag: `"${buildId}:${encodeURIComponent(relativePath)}"`,
@@ -189,10 +224,11 @@ export function createApp(options: GamesHostOptions): Hono {
       throw error;
     }
 
+    if (!(await options.authorize?.({ blob: file }).catch(() => false))) return context.text('Not Found', 404);
     return serveFile(context, path, { ETag: `"${file.slice(0, 64)}"` });
   };
 
-  app.on(['GET', 'HEAD'], '/g/:gameId/:buildId', (context) => {
+  app.on(['GET', 'HEAD'], '/g/:gameId/:buildId', async (context) => {
     const gameId = context.req.param('gameId') ?? '';
     const buildId = context.req.param('buildId') ?? '';
     try {
@@ -203,25 +239,13 @@ export function createApp(options: GamesHostOptions): Hono {
       }
       throw error;
     }
+    if (!(await options.authorize?.({ gameId, buildId }).catch(() => false))) return context.text('Not Found', 404);
     return context.redirect(`/g/${gameId}/${buildId}/`, 308);
   });
   app.on(['GET', 'HEAD'], '/g/:gameId/:buildId/*', serveGame);
+  app.on(['GET', 'HEAD'], '/d/:gameId/:buildId/:grant/*', serveGame);
   app.on(['GET', 'HEAD'], '/p/:gameId/:buildId/*', serveGame);
   app.on(['GET', 'HEAD'], '/a/:file', serveBlob);
-  app.on(['GET', 'HEAD'], '/t/:token/*', async (context) => {
-    const url = new URL(context.req.url);
-    const [, , token = '', ...rest] = url.pathname.split('/');
-    if (!/^gba1\.[A-Za-z0-9_-]{1,2048}\.[A-Za-z0-9_-]{1,128}$/u.test(token) || (rest[0] !== 'g' && rest[0] !== 'a'))
-      return context.text('Not Found', 404, { 'Cache-Control': 'no-store' });
-    url.pathname = `/${rest.join('/')}`;
-    const headers = new Headers(context.req.raw.headers);
-    headers.delete('cookie');
-    headers.delete('accept-encoding');
-    const inner = new Request(url, { method: context.req.method, headers });
-    pathTokens.set(inner, token);
-    const response = await app.fetch(inner);
-    return tokenResponse(response, `/t/${token}`, url.pathname, context.req.header('Accept-Encoding'));
-  });
   app.on(['GET', 'HEAD'], '/game-cache.js', (context) =>
     serveFile(context, options.workerScript, { 'Service-Worker-Allowed': '/g/' }),
   );
@@ -229,6 +253,65 @@ export function createApp(options: GamesHostOptions): Hono {
   app.notFound((context) => context.text('Not Found', 404, { 'Cache-Control': 'no-store' }));
 
   return app;
+}
+
+function serveTransformed(context: Context, text: string, contentType: string): Response {
+  const headers = new Headers({ 'Content-Type': contentType, Vary: 'Accept-Encoding' });
+  const encoding = preferredEncoding(context.req.header('Accept-Encoding'));
+  if (encoding) headers.set('Content-Encoding', encoding);
+  if (context.req.method === 'HEAD') return new Response(null, { headers });
+  let body: Readable = Readable.from([Buffer.from(text)]);
+  if (encoding === 'br') body = body.pipe(createBrotliCompress({ params: { [zlib.BROTLI_PARAM_QUALITY]: 5 } }));
+  else if (encoding === 'gzip') body = body.pipe(createGzip());
+  return new Response(Readable.toWeb(body) as unknown as BodyInit, { headers });
+}
+
+function scopeLegacyAssets(
+  text: string,
+  gameId: string,
+  buildId: string,
+  file: string,
+  source?: { gameId: string; buildId: string },
+  css = false,
+): string {
+  const old = `/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/`;
+  const sourcePath = source ? `/g/${encodeURIComponent(source.gameId)}/${encodeURIComponent(source.buildId)}/` : old;
+  const relativeFile = (target: string) => {
+    const path = posix.relative(posix.dirname(file), target);
+    return path.startsWith('.') ? path : `./${path}`;
+  };
+  return rewriteRootReferences(
+    text,
+    (value, moduleRelative) => {
+      if (value.startsWith(old) || value.startsWith(sourcePath)) {
+        const target = value.slice(value.startsWith(old) ? old.length : sourcePath.length);
+        return css || moduleRelative ? relativeFile(target) : `./${target}`;
+      }
+      return value.replace(/^\/a\/([0-9a-f]{64}\.[a-z0-9]{1,12})(?=$|[?#])/u, (_match, name: string) =>
+        css || moduleRelative ? relativeFile(`a/${name}`) : `./a/${name}`,
+      );
+    },
+    css,
+    /\.(?:html|svg)$/u.test(file),
+  );
+}
+
+function scopeForkAssets(
+  text: string,
+  gameId: string,
+  buildId: string,
+  source: { gameId: string; buildId: string },
+  css = false,
+  html = false,
+): string {
+  const from = `/g/${encodeURIComponent(source.gameId)}/${encodeURIComponent(source.buildId)}/`;
+  const to = `/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/`;
+  return rewriteRootReferences(
+    text,
+    (value) => (value.startsWith(from) ? to + value.slice(from.length) : value),
+    css,
+    html,
+  );
 }
 
 // Preview access IDs are short-lived capabilities issued only by the authorized review API. Resolve every request
@@ -265,47 +348,6 @@ async function previewDirectory(root: string, gameId: string, accessId: string):
     return join(directory, '.builds', row.buildId);
   }
   return null;
-}
-
-const TEXT_TYPES =
-  /^(text\/html|text\/css|text\/javascript|application\/javascript|application\/json|image\/svg\+xml)/u;
-// Built bundles name shared blobs and cyclic build files by absolute path; carry the capability into those paths too.
-const ABSOLUTE_GAME_PATH =
-  /(?<![\w./-])\/(?=a\/[0-9a-f]{64}\.[a-z0-9]{1,12}|g\/[A-Za-z0-9_-]{1,80}\/[A-Za-z0-9_-]{1,80}\/)/gu;
-
-// A capability URL is always an opaque document: the CSP sandbox holds even if an embedder allows same-origin.
-async function tokenResponse(
-  response: Response,
-  prefix: string,
-  pathname: string,
-  acceptEncoding: string | undefined,
-): Promise<Response> {
-  const headers = new Headers(response.headers);
-  headers.append('Content-Security-Policy', 'sandbox allow-scripts allow-pointer-lock');
-  headers.set('Access-Control-Allow-Origin', '*');
-  headers.set('Cache-Control', 'no-store');
-  headers.set('Referrer-Policy', 'no-referrer');
-  headers.delete('ETag');
-  const location = headers.get('Location');
-  if (location?.startsWith('/a/') || location?.startsWith('/g/')) headers.set('Location', `${prefix}${location}`);
-  if (response.body === null || response.status !== 200)
-    return new Response(response.body, { status: response.status, headers });
-  let body: ReadableStream<Uint8Array> = response.body;
-  if (TEXT_TYPES.test(headers.get('Content-Type') ?? '')) {
-    const text = (await response.text()).replace(ABSOLUTE_GAME_PATH, `${prefix}/`);
-    body = new Blob([text]).stream();
-    headers.set('Content-Length', String(Buffer.byteLength(text)));
-  }
-  if (
-    (TEXT_TYPES.test(headers.get('Content-Type') ?? '') || isCompressiblePath(pathname)) &&
-    /(^|[\s,])gzip(?!;\s*q=0(\.0*)?(\s|,|$))/u.test(acceptEncoding ?? '')
-  ) {
-    headers.set('Vary', 'Accept-Encoding');
-    headers.set('Content-Encoding', 'gzip');
-    headers.delete('Content-Length');
-    body = body.pipeThrough(new CompressionStream('gzip') as unknown as ReadableWritablePair<Uint8Array, Uint8Array>);
-  }
-  return new Response(body, { status: 200, headers });
 }
 
 async function serveFile(

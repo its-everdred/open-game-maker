@@ -1,7 +1,6 @@
 import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
-import { isGameLaunch } from './support/game-launch';
 
 const ids = {
   family: 'f_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f',
@@ -216,7 +215,6 @@ async function installAdminRoutes(page: Page, platformRole: 'admin' | 'maintaine
     createdAt: string;
   }> = [];
   await page.route('**/api/v1/**', async (route) => {
-    if (isGameLaunch(route.request().url())) return route.fallback();
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;

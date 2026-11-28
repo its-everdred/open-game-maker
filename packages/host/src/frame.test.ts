@@ -6,22 +6,21 @@ import { createGameFrame, HostError } from './frame.js';
 afterEach(() => document.body.replaceChildren());
 
 describe('createGameFrame', () => {
-  it('starts authenticated builds at the app launch endpoint in an opaque frame', () => {
+  it('places a draft grant in a scoped URL outside the game cache worker', () => {
+    const container = document.createElement('div');
     const frame = createGameFrame({
-      container: document.createElement('div'),
+      container,
       gamesOrigin: 'https://games.test',
-      appOrigin: 'https://app.test',
       gameId: 'g1',
       buildId: 'b1',
-      authenticated: true,
+      draftGrant: 'secret',
       build: 'draft',
       mode: 'play',
       playerIndex: 0,
       capabilities: [],
       role: () => 'owner',
     });
-    expect(frame.iframe.src).toBe('https://app.test/api/v1/games/g1/launch/b1?build=draft&protocol=1&frameObserver=2');
-    // Without allow-same-origin the game cannot use another game's storage or the player's games-origin cookies.
+    expect(new URL(frame.iframe.src).pathname).toBe('/d/g1/b1/secret/index.html');
     expect(frame.iframe.getAttribute('sandbox')).toBe('allow-scripts allow-pointer-lock');
     frame.dispose();
   });

@@ -1,4 +1,5 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { redactCapabilities } from './redact.js';
 import { join } from 'node:path';
 
 import type { Browser, BrowserContext } from 'playwright';
@@ -238,6 +239,7 @@ export async function qaRoom(
     unchecked,
     error,
   };
-  writeFileSync(join(dir, ROOM_RESULT), `${JSON.stringify(result, null, 2)}\n`);
-  return result;
+  const safe = redactCapabilities(result);
+  writeFileSync(join(dir, ROOM_RESULT), `${JSON.stringify(safe, null, 2)}\n`);
+  return safe;
 }

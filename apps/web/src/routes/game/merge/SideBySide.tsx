@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { DesignSnapshot } from '../../../features/editor/api';
+import { requestDraftGrant, type DesignSnapshot } from '../../../features/editor/api';
 import { mountGameFrame, type GameFrameController, type GameFrameState } from '../../../features/editor/frame';
 
 export function SideBySide({
@@ -46,22 +46,33 @@ export function FramePreview({
     const container = containerRef.current;
     if (container === null) return;
     const live: { controller?: GameFrameController } = {};
-    const controller = mountGameFrame({
-      container,
-      gamesOrigin: import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000',
-      gameId,
-      buildId: snapshot.buildId,
-      authenticated: true,
-      mode: 'play',
-      build: 'test',
-      design: snapshot,
-      onState: (next) => {
-        setState(next);
-        if (next.bridgeState === 'ready' && entityId !== undefined) live.controller?.select([entityId]);
-      },
-    });
-    live.controller = controller;
-    return () => controller.dispose();
+    let cancelled = false;
+    void requestDraftGrant(gameId, snapshot.buildId)
+      .then(({ grant }) => {
+        if (cancelled) return;
+        const controller = mountGameFrame({
+          container,
+          gamesOrigin: import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000',
+          gameId,
+          buildId: snapshot.buildId,
+          draftGrant: grant,
+          mode: 'play',
+          build: 'test',
+          design: snapshot,
+          onState: (next) => {
+            setState(next);
+            if (next.bridgeState === 'ready' && entityId !== undefined) live.controller?.select([entityId]);
+          },
+        });
+        live.controller = controller;
+      })
+      .catch(() => {
+        if (!cancelled) setState({ bridgeState: 'error', dropped: 0 });
+      });
+    return () => {
+      cancelled = true;
+      live.controller?.dispose();
+    };
   }, [entityId, gameId, snapshot]);
 
   return (

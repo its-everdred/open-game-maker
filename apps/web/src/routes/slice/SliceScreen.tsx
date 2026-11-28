@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 
 import { Icon } from '../../components/Icon';
-import { getBuildDesign, getDesignSnapshot } from '../../features/editor/api';
+import { getBuildDesign, getDesignSnapshot, requestDraftGrant } from '../../features/editor/api';
 import { mountGameFrame, type GameFrameState } from '../../features/editor/frame';
 import '../../features/commands-inbox/review-deck.css';
 import './slice.css';
@@ -29,19 +29,31 @@ export function SliceScreen() {
   useEffect(() => {
     const element = container.current;
     if (!started || element === null || snapshot === undefined) return;
-    const controller = mountGameFrame({
-      container: element,
-      gamesOrigin: import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000',
-      gameId,
-      buildId: snapshot.buildId,
-      authenticated: true,
-      mode: 'play',
-      design: snapshot,
-      params: { ...(scenario ? { scenario } : {}), ...(seed ? { seed } : {}) },
-      onState: (next) => setState(next.bridgeState),
-    });
-    element.querySelector('iframe')?.focus({ preventScroll: true });
-    return () => controller.dispose();
+    let cancelled = false;
+    let controller: ReturnType<typeof mountGameFrame> | undefined;
+    void requestDraftGrant(gameId, snapshot.buildId)
+      .then(({ grant }) => {
+        if (cancelled) return;
+        controller = mountGameFrame({
+          container: element,
+          gamesOrigin: import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000',
+          gameId,
+          buildId: snapshot.buildId,
+          draftGrant: grant,
+          mode: 'play',
+          design: snapshot,
+          params: { ...(scenario ? { scenario } : {}), ...(seed ? { seed } : {}) },
+          onState: (next) => setState(next.bridgeState),
+        });
+        element.querySelector('iframe')?.focus({ preventScroll: true });
+      })
+      .catch(() => {
+        if (!cancelled) setState('error');
+      });
+    return () => {
+      cancelled = true;
+      controller?.dispose();
+    };
   }, [gameId, scenario, seed, snapshot, started]);
 
   return (

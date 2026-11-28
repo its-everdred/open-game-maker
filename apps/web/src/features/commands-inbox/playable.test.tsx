@@ -55,6 +55,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes('/artifacts/grant')) return Response.json({ grant: 'grant' });
       // The deck loads and saves its vote drafts beside the game's design (#631).
       if (url.includes('/review-drafts')) {
         return new Response(JSON.stringify({ drafts: [] }), { headers: { 'content-type': 'application/json' } });
@@ -103,7 +104,6 @@ describe('playable review cards', () => {
     expect(mounts[0]!.options).toMatchObject({
       gameId: 'g_1',
       buildId: 'b_live',
-      authenticated: true,
       mode: 'play',
       params: { scenario: 'sandbox', speed: 'slow' },
     });

@@ -6,7 +6,6 @@ import { loadGamesHostEnv } from '../src/env.js';
 
 const validEnvironment = {
   OGM_GAMES_PORT: '3400',
-  OGM_GAMES_ACCESS_API: 'http://127.0.0.1:3401',
   OGM_GAMES_ROOT: './games',
   OGM_APP_ORIGIN: 'https://makeopen.games',
 };
@@ -16,7 +15,6 @@ describe('games-host environment', () => {
   it('loads the loopback-only service configuration', () => {
     expect(loadGamesHostEnv(validEnvironment)).toEqual({
       appOrigin: 'https://makeopen.games',
-      accessApi: 'http://127.0.0.1:3401',
       host: '127.0.0.1',
       port: 3400,
       root: resolve('./games'),
@@ -27,6 +25,15 @@ describe('games-host environment', () => {
   it('resolves an explicit cache worker path', () => {
     expect(loadGamesHostEnv({ ...validEnvironment, OGM_GAMES_SW: './worker.js' }).workerScript).toBe(
       resolve('./worker.js'),
+    );
+  });
+
+  it('accepts only a loopback API origin for artifact authorization', () => {
+    expect(
+      loadGamesHostEnv({ ...validEnvironment, OGM_API_INTERNAL_URL: 'http://127.0.0.1:4300' }).apiInternalUrl,
+    ).toBe('http://127.0.0.1:4300');
+    expect(() => loadGamesHostEnv({ ...validEnvironment, OGM_API_INTERNAL_URL: 'https://example.test' })).toThrow(
+      'OGM_API_INTERNAL_URL must be a loopback HTTP origin',
     );
   });
 

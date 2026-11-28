@@ -181,6 +181,11 @@ beforeAll(async () => {
         }
         return json(uploadAnswer.status, uploadAnswer.body);
       }
+      if (
+        request.method === 'POST' &&
+        request.url?.match(/^\/internal\/operator\/games\/blobs\/builds\/[^/]+\/access$/)
+      )
+        return json(200, JSON.stringify({ url: 'https://games.example/d/g_blobs/build/secret/' }));
       if (request.method === 'POST' && request.url === '/internal/operator/games/blobs/prototype-reviews')
         return json(201, '{"id":"review-1","round":1,"state":"posted"}');
       if (request.method === 'GET' && request.url?.includes('/prototype-review'))
@@ -240,10 +245,11 @@ describe('gm publish', () => {
     expect(run.out).toEqual([
       `building games/blobs at ${remoteSha}`,
       `published games/blobs at ${remoteSha}: build build_publish`,
-      'play https://games.example/g/g_blobs/build_publish/',
+      'play https://play.example/g/g_blobs?build=build_publish',
     ]);
     const upload = requests.find((r) => r.method === 'POST')!;
     expect(upload).toMatchObject({ url: '/internal/operator/games/blobs/builds', token: TOKEN, sha: remoteSha });
+    expect(requests.some((r) => r.url.endsWith('/builds/build_publish/access') && r.token === TOKEN)).toBe(true);
     const review = requests.find((r) => r.url.endsWith('/prototype-reviews'))!;
     expect(JSON.parse(review.body.toString())).toMatchObject({
       track: 'prototype-publish',
@@ -360,7 +366,7 @@ describe('gm publish', () => {
         sha: staleSha,
         buildId: 'build_2',
         jobId: 'j_2',
-        play: 'https://games.example/g/g_blobs/build_2/',
+        play: 'https://play.example/g/g_blobs?build=build_2',
         prototypeReview: { state: 'skipped' },
       },
     ]);

@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { installGameApi } from './support/mock-game-api';
-import { isGameLaunch } from './support/game-launch';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -13,7 +12,6 @@ test('opens a no-build diorama and requests a locked item', async ({ page }, tes
   let request: { plan?: { summary?: string } } | undefined;
   const assetUrl = '/api/v1/games/game/scenery/assets/0/hash/tree.glb';
   await page.route('**/api/v1/**', async (route) => {
-    if (isGameLaunch(route.request().url())) return route.fallback();
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/v1/jobs' && route.request().method() === 'POST') {
       request = route.request().postDataJSON() as typeof request;
@@ -71,7 +69,6 @@ test('keeps models and painted sprites together in a no-build scene', async ({ p
     { id: 'tree', path: 'tree.png', sha256: 'c', url: '/api/v1/games/game/scenery/assets/2/c/tree.png' },
   ];
   await page.route('**/api/v1/**', async (route) => {
-    if (isGameLaunch(route.request().url())) return route.fallback();
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/v1/games/game/editor/previews') return route.fulfill({ json: { previews: [] } });
     if (path === '/api/v1/games/game/editor/stage') return route.fulfill({ json: { stage: null } });
@@ -147,7 +144,6 @@ test('shows a reviewed concept and sends scope placement to the builder', async 
   const api = await installGameApi(page);
   let request: { plan?: { summary?: string } } | undefined;
   await page.route('**/api/v1/**', async (route) => {
-    if (isGameLaunch(route.request().url())) return route.fallback();
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (path === '/api/v1/games/game/branches/main/design')

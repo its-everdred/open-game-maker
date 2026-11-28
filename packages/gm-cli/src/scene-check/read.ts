@@ -84,6 +84,8 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
   const actors: Actor[] = [];
   const notes: Finding[] = [];
   const flipped = new Set<string>();
+  const unsupportedScales = new Map<string, { asset: string; cells: { x: number; y: number }[] }>();
+  const unsupportedDepths = new Map<string, { asset: string; cells: { x: number; y: number }[] }>();
   const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   for (const source of sources) {
     const map = tiledMap.parse(source.json);
@@ -123,6 +125,19 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
         }
         continue;
       }
+      if (
+        pack.set === 'smallscaleint' &&
+        !/^(?:floor|wall|decor|roof|(?:wall|decor|roof)#[1-9]\d*)$/.test(layer.name)
+      ) {
+        notes.push({
+          check: 'facts',
+          id: 'facts/unsupported-layer',
+          severity: 'high',
+          message: `tile layer ${prefix}${layer.name} is not supported by the pack renderer`,
+          cells: [],
+          objects: [`${prefix}${layer.name}`],
+        });
+      }
       layer.data.forEach((stored, index) => {
         if (stored === 0) return;
         const gid = stored & GID_MASK;
@@ -138,9 +153,32 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
           typeof declared === 'string' && ROLES.has(declared) ? (declared as Role) : roleFromName(asset, layer.name);
         const solid = prop(properties, 'solid');
         const elevation = prop(properties, 'elevation');
+        const scale = prop(properties, 'scale');
+        const depthOffset = prop(properties, 'depthOffset');
         const x = (index % layer.width) + dx;
         const y = Math.floor(index / layer.width) + dy;
+        const validScale = typeof scale === 'number' && Number.isFinite(scale) && scale > 0;
+        const validDepthOffset =
+          typeof depthOffset === 'number' &&
+          Number.isFinite(depthOffset) &&
+          (layer.name !== 'floor' || depthOffset === 0);
+        if (scale !== undefined && (!validScale || (layer.name === 'floor' && scale !== 1))) {
+          const key = `${prefix}${layer.name}:${gid}`;
+          if (!unsupportedScales.has(key)) unsupportedScales.set(key, { asset, cells: [] });
+          unsupportedScales.get(key)!.cells.push({ x, y });
+        }
+        if (
+          depthOffset !== undefined &&
+          (typeof depthOffset !== 'number' ||
+            !Number.isFinite(depthOffset) ||
+            (layer.name === 'floor' && depthOffset !== 0))
+        ) {
+          const key = `${prefix}${layer.name}:${gid}`;
+          if (!unsupportedDepths.has(key)) unsupportedDepths.set(key, { asset, cells: [] });
+          unsupportedDepths.get(key)!.cells.push({ x, y });
+        }
         const facts = assetFacts(pack, lock, asset);
+        const post = pack.asset(asset)?.postSocket;
         const facings = shippedFacings(lock, asset);
         pieces.push({
           key: `${prefix}${layer.name}:${x},${y}`,
@@ -154,6 +192,16 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
           tags: tagsOf(properties),
           under: source.under === true,
           elevation: typeof elevation === 'number' && layer.name !== 'roof' ? elevation : 0,
+          ...(validScale && (layer.name !== 'floor' || scale === 1) ? { scale } : {}),
+          ...(validDepthOffset ? { depthOffset } : {}),
+          ...(role === 'post' &&
+          post &&
+          post.facing === facing &&
+          post.scale === scale &&
+          /^decor(?:#[1-9]\d*)?$/.test(layer.name) &&
+          post.elevation === elevation
+            ? { postSocket: { x: post.x, y: post.y, fenceAsset: post.fenceAsset, fenceEdge: post.fenceEdge } }
+            : {}),
           ...(facts?.edges?.[facing] ? { edge: facts.edges[facing], edges: facts.edges } : {}),
           ...(facts?.alpha?.[facing] ? { alpha: facts.alpha[facing] } : {}),
           ...(facts?.size ? { size: facts.size } : {}),
@@ -170,6 +218,26 @@ export function readTiledScene(sources: readonly MapSource[], pack: PackFacts, l
       message: `layers ${[...flipped].join(', ')} use Tiled flip flags, which the pack adapter refuses; use a facing instead`,
       cells: [],
       objects: [...flipped],
+    });
+  }
+  for (const [key, { asset, cells }] of unsupportedScales) {
+    notes.push({
+      check: 'facts',
+      id: 'facts/unsupported-scale',
+      severity: 'high',
+      message: `${cells.length} ${asset} piece(s) have an unsupported scale; the game ignores it`,
+      cells,
+      objects: [key],
+    });
+  }
+  for (const [key, { asset, cells }] of unsupportedDepths) {
+    notes.push({
+      check: 'facts',
+      id: 'facts/unsupported-depth-offset',
+      severity: 'high',
+      message: `${cells.length} ${asset} piece(s) have a depth offset the renderer refuses`,
+      cells,
+      objects: [key],
     });
   }
   return {

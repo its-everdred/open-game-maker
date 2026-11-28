@@ -31,14 +31,13 @@ test.beforeEach(async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'the shell lifecycle is the same at every size');
   await installAuthRoutes(page, { signedIn: true });
   await installGameApi(page);
-  await page.route(`${bridgeOrigin}/g/game/**/index.html*`, (route) =>
+  await page.route(`${bridgeOrigin}/d/game/**/index.html*`, (route) =>
     route.fulfill({
       contentType: 'text/html',
       body: '<html><body><script type="module" src="./solo-sdk-game.js"></script></body></html>',
     }),
   );
-  await page.route(`${bridgeOrigin}/g/game/**/solo-sdk-game.js`, (route) =>
-    /* The game runs as an opaque document, so its module script needs CORS. */
+  await page.route(`${bridgeOrigin}/d/game/**/solo-sdk-game.js`, (route) =>
     route.fulfill({ contentType: 'text/javascript', headers: { 'access-control-allow-origin': '*' }, body: bundle }),
   );
 });

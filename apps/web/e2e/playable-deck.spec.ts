@@ -3,7 +3,6 @@ import { expect, test, type Frame, type Page, type Route, type TestInfo } from '
 import type { GameCommand } from '@ogm/contracts';
 
 import { installAuthRoutes } from './fixtures/auth-routes';
-import { isGameLaunch } from './support/game-launch';
 
 // Playable options (#608): a gameplay-feel question is answered by playing each option in the card, not by following a
 // link. The deck plays a falling-blocks slice from the games host at each fall speed in turn, pauses it for a verdict,
@@ -60,7 +59,7 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   await expect(page.locator('.review-screen a[href]')).toHaveCount(0);
   await expect(page.locator('.review-screen')).not.toContainText('://');
 
-  // The first card plays the slow slice from the games host, in an opaque sandboxed frame.
+  // The first card plays the slow slice from the games host, in a sandboxed frame.
   const slow = await gameFrame(page, 'slow');
   await expect(page.locator('.review-deck-playable iframe')).toHaveAttribute(
     'sandbox',
@@ -113,7 +112,7 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   // Each option's own slice loads in turn; the frame for that speed is the evidence it played.
   const loaded: string[] = [];
   page.on('framenavigated', (frame) => {
-    const speed = /\/g\/g_fall.*[?&]speed=(\w+)/.exec(frame.url())?.[1];
+    const speed = /\/d\/g_fall.*[?&]speed=(\w+)/.exec(frame.url())?.[1];
     if (speed !== undefined && loaded.at(-1) !== speed) loaded.push(speed);
   });
   await page.getByRole('button', { name: 'Compare every option' }).click();
@@ -157,7 +156,7 @@ async function gameFrame(page: Page, speed: string): Promise<Frame> {
     .poll(() => {
       found = page
         .frames()
-        .find((frame) => frame.url().includes('/g/g_fall') && frame.url().includes(`speed=${speed}`));
+        .find((frame) => frame.url().includes('/d/g_fall') && frame.url().includes(`speed=${speed}`));
       return found === undefined ? false : found.evaluate(() => window.__fixture !== undefined).catch(() => false);
     })
     .toBe(true);
@@ -173,8 +172,8 @@ async function judgeDislike(page: Page) {
 
 async function installApi(page: Page) {
   await page.route('**/api/v1/**', async (route) => {
-    if (isGameLaunch(route.request().url())) return route.fallback();
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/v1/artifacts/grant') return json(route, { grant: 'fixture-grant' });
     if (path === '/api/v1/notifications/stream') {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
     }

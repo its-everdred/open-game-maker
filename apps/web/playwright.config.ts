@@ -23,7 +23,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `OGM_API_PORT=${bridgePort} pnpm exec vite preview --host 127.0.0.1 --port ${previewPort} --strictPort`,
+      command: `pnpm exec vite preview --host 127.0.0.1 --port ${previewPort} --strictPort`,
       url: previewOrigin,
       reuseExistingServer: false,
       timeout: 180_000,

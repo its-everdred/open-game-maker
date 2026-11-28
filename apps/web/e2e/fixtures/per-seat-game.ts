@@ -18,8 +18,5 @@ fixture.module.mount = async (...args) => {
   };
 };
 
-const runtime = await boot(fixture.module, {
-  hostOrigin: new URL(document.referrer || new URLSearchParams(location.search).get('e2eHost') || '').origin,
-  build: 'test',
-});
+const runtime = await boot(fixture.module, { hostOrigin: new URL(document.referrer).origin, build: 'test' });
 Object.assign(window, { __pauseFixture: runtime });
