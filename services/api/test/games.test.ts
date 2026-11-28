@@ -731,6 +731,29 @@ describe('games routes', () => {
     expect(provisioner.calls).toEqual([]);
   });
 
+  it('defaults demo off, permits editors to change it, and serves it in the games list', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.registry.repoProvisioner = new NullRepoProvisioner();
+    const { app } = await makeApp(deps);
+    const created = await createGame(app);
+    const game = (await created.json()) as { id: string; demo: boolean };
+    expect(game.demo).toBe(false);
+    const patch = (userId: string, demo: boolean) =>
+      app.request(`/api/v1/games/${game.id}`, {
+        method: 'PATCH',
+        headers: { ...asUser(userId), 'content-type': 'application/json' },
+        body: JSON.stringify({ demo }),
+      });
+    expect((await patch(player.userId, true)).status).toBe(403);
+    const updated = await patch(creator.userId, true);
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({ demo: true });
+    const list = await app.request('/api/v1/games', { headers: asUser(creator.userId) });
+    expect(await list.json()).toMatchObject({ games: [{ id: game.id, demo: true }] });
+    expect((await patch(creator.userId, false)).status).toBe(200);
+  });
+
   it('stores and patches the per-game AI-generated asset setting', async () => {
     const deps = makeDeps();
     seedFamily(deps);

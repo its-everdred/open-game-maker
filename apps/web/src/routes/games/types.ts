@@ -20,6 +20,7 @@ export type GameSummary = {
   ownerId: string;
   title: string;
   allowAiGeneratedAssets?: boolean;
+  demo?: boolean;
   /** The shareable `/play/<slug>` segment; null only for a game written before slugs existed. */
   slug?: string | null;
   visibility?: 'listed' | 'private';

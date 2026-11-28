@@ -128,6 +128,7 @@ const patchBody = z
     visibility: z.enum(['listed', 'private']).optional(),
     releaseState: z.enum(['released', 'coming_soon']).optional(),
     allowAiGeneratedAssets: z.boolean().optional(),
+    demo: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -135,7 +136,8 @@ const patchBody = z
       body.title !== undefined ||
       body.visibility !== undefined ||
       body.releaseState !== undefined ||
-      body.allowAiGeneratedAssets !== undefined,
+      body.allowAiGeneratedAssets !== undefined ||
+      body.demo !== undefined,
     { message: 'no changes' },
   );
 
@@ -391,6 +393,7 @@ const routes = new Hono<ApiBindings>()
       body.title === undefined &&
       body.visibility === undefined &&
       body.allowAiGeneratedAssets === undefined &&
+      body.demo === undefined &&
       body.preserveSlug === undefined;
     const globalAdmin = principal.platformRole === 'admin' || principal.platformRole === 'maintainer';
     const game =

@@ -64,6 +64,7 @@ export const games = sqliteTable(
     forkedFromReleaseId: text('forked_from_release_id'),
     forkable: integer('forkable', { mode: 'boolean' }).notNull().default(true),
     allowAiGeneratedAssets: integer('allow_ai_generated_assets', { mode: 'boolean' }).notNull().default(true),
+    demo: integer('demo', { mode: 'boolean' }).notNull().default(false),
     createdAt: createdAt(),
     delistedAt: text('delisted_at'),
   },

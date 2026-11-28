@@ -37,6 +37,7 @@ export function gameResponse(game: GameRow) {
     createdAt: game.createdAt,
     delistedAt: game.delistedAt,
     allowAiGeneratedAssets: game.allowAiGeneratedAssets,
+    demo: game.demo,
     creationStatus: isGameProvisioning(game.id) ? 'creating' : game.repoUrl === null ? 'failed' : 'ready',
   };
 }
