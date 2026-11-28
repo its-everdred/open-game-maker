@@ -20,6 +20,14 @@
   animation: build-chat-rise 0.2s;
 }
 
+.app-chrome:has(.build-chat-dock[data-state='chat']) {
+  background: transparent;
+}
+
+.build-chat-dock[data-state='chat'] .build-chat-panel {
+  background: color-mix(in srgb, var(--surface-card) 82%, transparent);
+}
+
 .build-chat-dock[data-state='chat'] .build-chat-panel {
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100svh - var(--safe-t) - var(--safe-b) - 24px);
@@ -221,10 +229,6 @@
   .build-chat-messages {
     max-height: none;
     flex: 1;
-  }
-
-  .build-chat-voice {
-    grid-template-columns: 1fr;
   }
 }
 

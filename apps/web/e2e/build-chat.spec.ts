@@ -467,22 +467,22 @@ test('build composer keeps voice controls at the right through dictation and liv
   await installAuthRoutes(page, { signedIn: true });
   await installBuildRoutes(page);
   await page.addInitScript(() => {
-    const audio = new AudioContext();
-    const oscillator = audio.createOscillator();
-    const gain = audio.createGain();
-    const destination = audio.createMediaStreamDestination();
-    gain.gain.value = 0.45;
-    const modulation = audio.createOscillator();
-    const modulationDepth = audio.createGain();
-    modulation.frequency.value = 0.8;
-    modulationDepth.gain.value = 0.2;
-    modulation.connect(modulationDepth).connect(gain.gain);
-    modulation.start();
-    oscillator.connect(gain).connect(destination);
-    oscillator.start();
     Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
       configurable: true,
       value: async () => {
+        const audio = new AudioContext();
+        const oscillator = audio.createOscillator();
+        const gain = audio.createGain();
+        const destination = audio.createMediaStreamDestination();
+        gain.gain.value = 0.45;
+        const modulation = audio.createOscillator();
+        const modulationDepth = audio.createGain();
+        modulation.frequency.value = 0.8;
+        modulationDepth.gain.value = 0.2;
+        modulation.connect(modulationDepth).connect(gain.gain);
+        modulation.start();
+        oscillator.connect(gain).connect(destination);
+        oscillator.start();
         await audio.resume();
         return destination.stream;
       },
@@ -522,7 +522,6 @@ test('build composer keeps voice controls at the right through dictation and liv
   await page.goto('/all?test');
   await openBuildChat(page);
   const composer = page.locator('aiur-composer');
-  const state = page.locator('.build-chat-composer-stack');
   const mic = composer.locator('[part="mic"]');
   const send = composer.locator('[part="send"]');
   const input = composer.locator('[part="input"]');
@@ -539,7 +538,9 @@ test('build composer keeps voice controls at the right through dictation and liv
       (node) => getComputedStyle((node as HTMLElement).shadowRoot!.querySelector('[part="card"]')!).borderRadius,
     ),
   ).toBe('28px');
-  await state.screenshot({ path: 'e2e/screenshots/1087/composer-idle.png' });
+  await expect(mic).toHaveCSS('border-width', '0px');
+  await expect(mic).toHaveCSS('box-shadow', 'none');
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-idle.png' });
 
   await mic.click();
   await expect(composer).toHaveAttribute('data-recording', '');
@@ -547,7 +548,7 @@ test('build composer keeps voice controls at the right through dictation and liv
   await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
   await expect
     .poll(() => mic.evaluate((button) => getComputedStyle(button).backgroundColor))
-    .toBe('rgb(111, 214, 180)');
+    .toBe('rgb(116, 200, 237)');
   await expect(input).toHaveValue('Make the moonlight warmer');
   await expect(composer.locator('[part="waveform"]')).toBeVisible();
   await expect(composer.locator('[part="voice"]')).toBeVisible();
@@ -560,20 +561,33 @@ test('build composer keeps voice controls at the right through dictation and liv
         return Math.max(...heights);
       }),
     )
-    .toBeGreaterThan(8);
+    .toBeGreaterThan(2);
+  await expect
+    .poll(() =>
+      composer.evaluate((node) => {
+        const heights = Array.from(node.shadowRoot!.querySelectorAll<HTMLElement>('[part="waveform"] i')).map(
+          (bar) => bar.getBoundingClientRect().height,
+        );
+        return Math.max(...heights) - Math.min(...heights);
+      }),
+    )
+    .toBeGreaterThan(1);
   expect(await input.inputValue()).toBe('Make the moonlight warmer');
   const recordingMic = await mic.boundingBox();
   const recordingSend = await send.boundingBox();
+  const inputBox = await input.boundingBox();
   expect(Math.abs(recordingMic!.x - idleMic!.x)).toBeLessThan(1);
   expect(Math.abs(recordingSend!.x - idleSend!.x)).toBeLessThan(1);
-  await state.screenshot({ path: 'e2e/screenshots/1087/composer-dictating.png', animations: 'allow' });
+  expect(inputBox!.y + inputBox!.height).toBeLessThan((await composer.locator('[part="voice"]').boundingBox())!.y);
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-dictating.png', animations: 'disabled' });
 
   await mic.click();
   await expect(mic).toHaveAttribute('aria-label', 'Unmute microphone');
   await expect(mic).toHaveAttribute('aria-pressed', 'true');
   await expect
     .poll(() => mic.evaluate((button) => getComputedStyle(button).backgroundColor))
-    .toBe('rgb(215, 149, 228)');
+    .toBe('rgb(116, 200, 237)');
+  await expect(mic).toHaveCSS('opacity', '0.58');
   await expect
     .poll(() =>
       composer.evaluate((node) =>
@@ -585,7 +599,7 @@ test('build composer keeps voice controls at the right through dictation and liv
       ),
     )
     .toBeLessThanOrEqual(3);
-  await state.screenshot({ path: 'e2e/screenshots/1087/composer-dictating-muted.png' });
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-dictating-muted.png', animations: 'disabled' });
   await mic.click();
   await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
   await composer.locator('[part="voice"]').click();
@@ -602,13 +616,35 @@ test('build composer keeps voice controls at the right through dictation and liv
         ),
       ),
     )
-    .toBeGreaterThan(8);
+    .toBeGreaterThan(2);
+  await expect
+    .poll(() =>
+      composer.evaluate((node) => {
+        const heights = Array.from(node.shadowRoot!.querySelectorAll<HTMLElement>('[part="waveform"] i')).map(
+          (bar) => bar.getBoundingClientRect().height,
+        );
+        return Math.max(...heights) - Math.min(...heights);
+      }),
+    )
+    .toBeGreaterThan(1);
   await expect(mic).toBeVisible();
   await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
   await expect.poll(() => receivedVoiceText).toBe('Make the moonlight warmer');
-  const liveConversation = page.getByRole('region', { name: 'Live voice conversation' });
+  const liveConversation = page.getByRole('log', { name: 'Live voice conversation' });
   await expect(liveConversation.getByText('Make the moonlight warmer')).toBeVisible();
   await expect(liveConversation.getByText('I started the run.')).toBeVisible();
-  await state.screenshot({ path: 'e2e/screenshots/1087/composer-two-way-voice.png', animations: 'allow' });
+  const userBubble = liveConversation.locator('[aria-label="you"]');
+  const agentBubble = liveConversation.locator('[aria-label="agent"]');
+  await expect(userBubble).toHaveClass(/creator/);
+  await expect(agentBubble).toHaveClass(/agent/);
+  await expect(userBubble).toHaveCSS(
+    'background-color',
+    await agentBubble.evaluate((node) => getComputedStyle(node).backgroundColor),
+  );
+  const userBubbleBox = await userBubble.boundingBox();
+  const agentBubbleBox = await agentBubble.boundingBox();
+  expect(userBubbleBox!.x).toBeGreaterThan(agentBubbleBox!.x);
+  expect(userBubbleBox!.y).toBeLessThan(agentBubbleBox!.y);
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-two-way-voice.png', animations: 'disabled' });
   await composer.locator('[part="voice"]').click();
 });

@@ -26,13 +26,12 @@
   max-width: 88%;
   padding: 9px 12px;
   border-radius: 14px 14px 14px 4px;
-  background: var(--surface-raised);
+  background: color-mix(in srgb, var(--blue-b) 22%, transparent);
 }
 
 .build-chat-row.text.creator {
   align-self: flex-end;
   border-radius: 14px 14px 4px;
-  background: color-mix(in srgb, var(--blue-b) 22%, transparent);
 }
 
 .build-chat-row.text p {
@@ -252,9 +251,9 @@
 }
 
 .build-chat-voice {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  max-height: min(34svh, 280px);
+  padding: 4px 2px;
+  overflow-y: auto;
 }
 
 .build-chat-composer-stack {
@@ -262,36 +261,9 @@
   gap: 8px;
 }
 
-.build-chat-voice-side {
-  min-width: 0;
-}
-
-.build-chat-voice-side header {
-  font: 700 16px var(--display);
-}
-
-.build-chat-seismograph,
-.build-chat-orb {
-  height: 88px;
-  margin-block: 7px;
-  border-radius: 10px;
-  background: var(--aqua-b);
-}
-
-.build-chat-orb {
-  background: var(--purple-b);
-}
-
-.build-chat-captions {
-  height: 110px;
-  padding: 8px;
-  overflow-y: auto;
-  border-radius: 10px;
-  background: var(--night-2);
-}
-
-.build-chat-captions p {
-  margin: 0 0 5px;
+.build-chat-voice .build-chat-row {
+  flex: none;
+  overflow-wrap: anywhere;
 }
 
 .build-chat-type {

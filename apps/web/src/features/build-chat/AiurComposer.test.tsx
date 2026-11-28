@@ -254,6 +254,8 @@ it('keeps the microphone as a mute control and shows both live voice transcripts
   const composer = container.querySelector('aiur-composer') as ComposerElement;
   await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
   const mic = composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="mic"]')!;
+  const twoWay = composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="voice"]')!;
+  expect(twoWay.innerHTML).toContain('fill="#74c8ed"');
   mic.click();
   await waitFor(() => expect(composer.hasAttribute('data-recording')).toBe(true));
   await waitFor(() => expect(mic.getAttribute('aria-label')).toBe('Mute microphone'));
@@ -262,12 +264,12 @@ it('keeps the microphone as a mute control and shows both live voice transcripts
   expect(waveform.hidden).toBe(false);
   expect(waveform.querySelector('i')?.style.transform).not.toBe('scaleY(0.1)');
   expect(mic.hidden).toBe(false);
-  expect(mic.style.background).toBe('rgb(111, 214, 180)');
+  expect(mic.style.opacity).toBe('1');
 
   mic.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, button: 0 }));
   expect(fake.dictationMuted).toHaveBeenCalledWith(true);
   expect(mic.getAttribute('aria-label')).toBe('Unmute microphone');
-  expect(mic.style.background).toBe('rgb(215, 149, 228)');
+  expect(mic.style.opacity).toBe('0.58');
   expect(Array.from(waveform.querySelectorAll('i')).every((bar) => bar.style.transform === 'scaleY(0.10)')).toBe(true);
 
   composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="voice"]')!.click();
@@ -285,6 +287,10 @@ it('keeps the microphone as a mute control and shows both live voice transcripts
   await waitFor(() => expect(container.querySelector('[aria-label="Live voice conversation"]')).not.toBeNull());
   expect(container).toHaveTextContent('Start run');
   expect(container).toHaveTextContent('Run started.');
+  const transcript = container.querySelector('[aria-label="Live voice conversation"]')!;
+  const lines = Array.from(transcript.querySelectorAll('.build-chat-row'));
+  expect(lines.map((line) => line.classList.contains('creator'))).toEqual([true, false]);
+  expect(lines.map((line) => line.classList.contains('agent'))).toEqual([false, true]);
 });
 
 it.each(['Enter', 'Space'])('starts dictation on idle microphone %s and mutes on the next activation', async (code) => {
