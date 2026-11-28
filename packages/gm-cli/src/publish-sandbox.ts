@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, sep } from 'node:path';
 
 /** Create a network-off check profile which hides host credentials and other daemon workspaces. */
 export function writePublishSandbox(
@@ -31,7 +31,11 @@ export function writePublishSandbox(
     '.cache/ogm/assets',
   ].map((part) => join(home, part));
   denied.push(...assetRoots);
-  denied.push(profileDir);
+  // A nested deny requires bubblewrap to create a mount point inside the
+  // already-denied parent. The parent alone also hides this profile.
+  const profileFromWorkRoot = relative(workRoot, profileDir);
+  if (profileFromWorkRoot === '..' || profileFromWorkRoot.startsWith(`..${sep}`) || isAbsolute(profileFromWorkRoot))
+    denied.push(profileDir);
   denied.push(workRoot);
   const rules = [...new Set(denied)].map((path) => `${JSON.stringify(path)} = "deny"`).join('\n');
   writeFileSync(
