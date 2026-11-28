@@ -27,6 +27,17 @@ describe('built routes', () => {
     expect(links).toContain('/signin');
   });
 
+  it('ships discoverable agent introductions alongside the built homepage', () => {
+    const agentGuide = readFileSync(`${distDir}/AGENTS.md`, 'utf8');
+    const discovery = readFileSync(`${distDir}/llms.txt`, 'utf8');
+    expect(agentGuide).toBe(readFileSync(fileURLToPath(new URL('../public/AGENTS.md', import.meta.url)), 'utf8'));
+    expect(discovery).toBe(readFileSync(fileURLToPath(new URL('../public/llms.txt', import.meta.url)), 'utf8'));
+    expect(agentGuide).toContain('invite-only');
+    expect(agentGuide).toContain('[homepage](/)');
+    expect(discovery).toContain('[Agent overview](/AGENTS.md)');
+    expect(discovery).toContain('[Setup guide](/setup)');
+  });
+
   it('renders the eight setup headers in order', () => {
     const headers = [...page('setup/index.html').querySelectorAll('h2 > button')].map((button) => [
       button.querySelector('.num')?.textContent,
