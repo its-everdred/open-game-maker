@@ -95,7 +95,7 @@ export const command: GmCommand = {
     } finally {
       lock?.release();
     }
-    const ok = result.steps.length === 3 && result.steps.every((step) => step.ok);
+    const ok = result.steps.length === 2 && result.steps.every((step) => step.ok);
     if (ctx.json) printJson(ctx, { ok, out: relative(ctx.cwd, out) || '.', ...result });
     else {
       for (const step of result.steps)

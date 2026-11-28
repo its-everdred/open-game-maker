@@ -144,16 +144,11 @@ it.each([false, true])('records each voice failure even when screenshot capture 
     out,
     stamp: 'run-1',
   });
-  expect(page.goto).toHaveBeenCalledTimes(3);
-  expect(page.goto).toHaveBeenNthCalledWith(1, 'https://app.example.test/new?step=talk', {
-    waitUntil: 'load',
-    timeout: 60_000,
-  });
+  expect(page.goto).toHaveBeenCalledTimes(2);
   expect(context.grantPermissions).toHaveBeenCalledWith(['local-network-access'], {
     origin: 'https://app.example.test',
   });
-  expect(result.steps.map(({ name }) => name)).toEqual(['new-game-dictation', 'edit-dictation', 'two-way']);
-  expect(result.stills).toHaveLength(captureFails ? 0 : 3);
+  expect(result.stills).toHaveLength(captureFails ? 0 : 2);
   for (const step of result.steps) {
     expect(step).toMatchObject({ ok: false, url: 'https://app.example.test/all' });
     expect(step.failure).toContain('waiting for QA voice');

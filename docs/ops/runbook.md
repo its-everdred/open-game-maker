@@ -533,14 +533,16 @@ token in `x-ogm-internal`.
 
 ## Check voice on prod
 
-`gm qa voice-e2e --sha <deployed sha>` checks dictation in New Game and edit chat, then two-way voice in the deployed
-app as the QA creator at 390×844. It seeds a released `QA voice` build, opens `/new?step=talk` and its build chat, and
-replaces the microphone with recorded speech (`packages/gm-cli/qa/voice-e2e/`, 4.8 s total):
+`gm qa voice-e2e --sha <deployed sha>` checks one-way and two-way voice in the deployed app as the QA creator, at
+390×844. It seeds a build named `QA voice` on the QA game (filed and released, so it takes no job slot and no daemon
+runs it), opens its chat from the menu's builds sheet, and replaces the microphone with recorded speech
+(`packages/gm-cli/qa/voice-e2e/`, 3.2 s in all):
 
-1. Dictation runs in New Game scope chat and the seeded edit chat. Each passes only when all words in "Make the sky
-   blue." arrive in order; the draft is cleared and never sent.
-2. Two-way plays "Hello, can you hear me?" after listening starts. It passes when agent audio streams and plays, and
-   the creator turn is stored in the build chat. The run hangs up after the reply arrives.
+1. One-way: holds "Hold to talk" while "Make the sky blue." plays, and passes when the message box shows the clip's
+   words. The words are cleared, never sent.
+2. Two-way: taps "Start voice chat", plays "Hello, can you hear me?" once the session is listening, and passes when the
+   agent's audio streams back over the socket, the app plays it, and the creator's spoken turn is stored in the build's
+   chat. It hangs up as soon as the reply arrives.
 
 One run at a time per QA env dir: a second run waits up to 10 minutes, because each run replaces the voice build. It
 deletes the build and its chat, saves a still per step and `voice-e2e.json` (steps, socket tally, cost) in
