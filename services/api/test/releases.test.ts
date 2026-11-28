@@ -395,6 +395,7 @@ describe('release routes', () => {
 
   it('returns the published release with an ETag and honors If-None-Match', async () => {
     const { deps, source } = setup();
+    deps.db.update(schema.games).set({ visibility: 'listed' }).where(eq(schema.games.id, ids.game)).run();
     insertBuild(deps, source);
     const { app } = await makeApp(deps);
     expect((await app.request(`/api/v1/games/${ids.game}/published`)).status).toBe(401);

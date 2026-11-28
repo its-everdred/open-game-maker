@@ -374,6 +374,8 @@ after the API. The host denies artifact requests if this authorization service i
 releases alone authorize public build and legacy shared-blob URLs; owner draft URLs expire after 30 minutes without renewal and their session
 and role are rechecked for every request. The updated game cache worker stops using its old build and blob caches.
 Treat `/d/` and `/p/` URLs as credentials: exclude their paths from proxy access logs and never share them.
+The published-release API returns a session-scoped `/d/` URL for private and coming-soon releases; its response is not
+cacheable.
 Purge any reverse proxy or CDN caches for `/g/` and `/a/` during rollout and verify the new worker has activated.
 Previously downloaded or cached bytes cannot be recalled, including copies held by old clients.
 

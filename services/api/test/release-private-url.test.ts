@@ -1,0 +1,126 @@
+import { eq } from 'drizzle-orm';
+import { schema } from '@ogm/db';
+import { expect, it } from 'vitest';
+import { createApp } from '../src/app/app.js';
+import { validGrant } from '../src/artifacts/grants.js';
+import releaseRoutes from '../src/releases/routes.js';
+import { publish } from '../src/releases/service.js';
+import { signIn } from './auth-helpers.js';
+import { makeApp } from './helpers.js';
+import { ids, insertBuild, now, setup } from './release-fixtures.js';
+
+it.each([
+  { visibility: 'private' as const, releaseState: 'released' as const, gate: false },
+  { visibility: 'listed' as const, releaseState: 'coming_soon' as const, gate: false },
+  { visibility: 'private' as const, releaseState: 'released' as const, gate: true },
+])(
+  'returns a session-scoped URL for a $visibility $releaseState release (gate=$gate)',
+  async ({ gate, ...settings }) => {
+    const { deps, source, runtime } = setup();
+    deps.config.artifactReleaseGate = gate;
+    const buildId = insertBuild(deps, source);
+    deps.db.update(schema.branches).set({ latestBuildId: buildId }).where(eq(schema.branches.id, ids.main)).run();
+    deps.db.update(schema.games).set(settings).where(eq(schema.games.id, ids.game)).run();
+    deps.registry.principalResolvers.push(async (c) =>
+      c.req.header('cookie') === 'session=owner'
+        ? {
+            kind: 'user',
+            userId: ids.user,
+            familyId: ids.family,
+            displayName: 'Owner',
+            platformRole: 'none',
+            capability: 'creator',
+          }
+        : null,
+    );
+    const release = await publish(deps, runtime, { gameId: ids.game, buildId, actor: ids.user });
+    const app = createApp(deps);
+    app.route('/', releaseRoutes);
+    const response = await app.request(`/api/v1/games/${ids.game}/published`, {
+      headers: { cookie: 'session=owner', 'if-none-match': `"${release.id}"` },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    const { buildUrl } = (await response.json()) as { buildUrl: string };
+    expect(buildUrl).toContain(`/d/${ids.game}/${buildId}/`);
+    const grant = new URL(buildUrl).pathname.split('/')[4]!;
+    expect(await validGrant(deps, grant, ids.game, buildId)).toBe(true);
+    deps.db.update(schema.branches).set({ latestBuildId: null }).where(eq(schema.branches.id, ids.main)).run();
+    const unavailable = await app.request(`/api/v1/games/${ids.game}/published`, {
+      headers: { cookie: 'session=owner' },
+    });
+    expect(unavailable.status).toBe(gate ? 200 : 404);
+  },
+);
+
+it('returns a revocable private release URL to an invited player', async () => {
+  const { deps, source, runtime } = setup();
+  const buildId = insertBuild(deps, source);
+  deps.db.update(schema.branches).set({ latestBuildId: buildId }).where(eq(schema.branches.id, ids.main)).run();
+  const player = 'u_00000000-0000-4000-8000-000000000088';
+  deps.db
+    .insert(schema.invitations)
+    .values({
+      id: 'invite_private',
+      familyId: ids.family,
+      kind: 'play',
+      email: 'player@example.test',
+      tokenHash: 'hash',
+      gameId: ids.game,
+      inviterId: ids.user,
+      expiresAt: now,
+      createdAt: now,
+    })
+    .run();
+  deps.db
+    .insert(schema.gameGrants)
+    .values({ gameId: ids.game, userId: player, sourceInviteId: 'invite_private' })
+    .run();
+  deps.registry.principalResolvers.push(async (c) =>
+    c.req.header('cookie') === 'session=player'
+      ? {
+          kind: 'user',
+          userId: player,
+          familyId: 'f_other',
+          displayName: 'Player',
+          platformRole: 'none',
+          capability: 'player',
+        }
+      : null,
+  );
+  await publish(deps, runtime, { gameId: ids.game, buildId, actor: ids.user });
+  const app = createApp(deps);
+  app.route('/', releaseRoutes);
+  const response = await app.request(`/api/v1/games/${ids.game}/published`, { headers: { cookie: 'session=player' } });
+  expect(response.status).toBe(200);
+  const { buildUrl } = (await response.json()) as { buildUrl: string };
+  const grant = new URL(buildUrl).pathname.split('/')[4]!;
+  expect(await validGrant(deps, grant, ids.game, buildId)).toBe(true);
+  deps.db.delete(schema.gameGrants).where(eq(schema.gameGrants.userId, player)).run();
+  expect(await validGrant(deps, grant, ids.game, buildId)).toBe(false);
+});
+
+it('issues a private release URL tied to a real authenticated session', async () => {
+  const { deps, source, runtime } = setup();
+  const buildId = insertBuild(deps, source);
+  deps.db.update(schema.branches).set({ latestBuildId: buildId }).where(eq(schema.branches.id, ids.main)).run();
+  const { app } = await makeApp(deps);
+  const outbox = () =>
+    deps.sqlite.prepare('SELECT text FROM mail_outbox ORDER BY created_at').all() as { text: string }[];
+  const { session } = await signIn(app, outbox, 'kevin@example.com');
+  const user = deps.db.select().from(schema.user).where(eq(schema.user.email, 'kevin@example.com')).get()!;
+  deps.db.update(schema.games).set({ ownerId: user.id }).where(eq(schema.games.id, ids.game)).run();
+  deps.db
+    .insert(schema.familyMembers)
+    .values({ familyId: ids.family, userId: user.id, role: 'member', capability: 'creator', joinedAt: now })
+    .run();
+  await publish(deps, runtime, { gameId: ids.game, buildId, actor: user.id });
+  const response = await app.request(`/api/v1/games/${ids.game}/published`, { headers: { cookie: session } });
+  expect(response.status).toBe(200);
+  const { buildUrl } = (await response.json()) as { buildUrl: string };
+  expect(buildUrl).toContain(`/d/${ids.game}/${buildId}/`);
+  const grant = new URL(buildUrl).pathname.split('/')[4]!;
+  expect(await validGrant({ ...deps }, grant, ids.game, buildId)).toBe(true);
+  deps.db.delete(schema.session).where(eq(schema.session.userId, user.id)).run();
+  expect(await validGrant({ ...deps }, grant, ids.game, buildId)).toBe(false);
+});
