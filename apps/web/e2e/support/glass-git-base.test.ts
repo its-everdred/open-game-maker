@@ -29,6 +29,34 @@ it('uses the event base when a CI checkout has no origin/main ref', async () => 
   }
 }, 30_000);
 
+it('selects the PR head instead of unrelated changes in the merge checkout', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'glass-merge-'));
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+  try {
+    git('init', '-q');
+    git('config', 'user.name', 'Test');
+    git('config', 'user.email', 'test@example.com');
+    await writeFile(join(root, 'base'), 'base');
+    git('add', '.');
+    git('commit', '-qm', 'base');
+    const base = git('rev-parse', 'HEAD');
+    await writeFile(join(root, 'branch'), 'branch');
+    git('add', '.');
+    git('commit', '-qm', 'branch');
+    const head = git('rev-parse', 'HEAD');
+    await writeFile(join(root, 'other'), 'newer main');
+    git('add', '.');
+    git('commit', '-qm', 'merge checkout');
+    const event = join(root, 'event.json');
+    await writeFile(event, JSON.stringify({ pull_request: { base: { sha: base }, head: { sha: head } } }));
+    expect(git('diff', '--name-only', glassDiffBase(root, { CI: 'true', GITHUB_EVENT_PATH: event }))).toBe('branch');
+    await writeFile(event, JSON.stringify({ pull_request: { base: { sha: base }, head: { sha: '0'.repeat(40) } } }));
+    expect(() => glassDiffBase(root, { CI: 'true', GITHUB_EVENT_PATH: event })).toThrow('valid event head SHA');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 30_000);
+
 it('fetches a missing event base into a shallow checkout', async () => {
   const root = await mkdtemp(join(tmpdir(), 'glass-shallow-'));
   const source = join(root, 'source');
