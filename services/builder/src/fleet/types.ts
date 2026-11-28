@@ -48,6 +48,7 @@ export type FleetEnv = {
   builderBotLogin: string;
   intakeLogin: string;
   assetsLocalDir: string;
+  blobRoot?: string;
   aiurRoot?: string;
   apiPort?: number;
   codexHomeRoot?: string;

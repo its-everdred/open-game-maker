@@ -26,6 +26,7 @@ export function main(environment: NodeJS.ProcessEnv = env): ServerType {
     root: config.root,
     version: readGitVersion(),
     workerScript: config.workerScript,
+    releaseGate: config.releaseGate,
     authorize: async (request) => {
       return (await check(request)).allowed === true;
     },

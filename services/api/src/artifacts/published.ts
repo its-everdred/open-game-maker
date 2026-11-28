@@ -18,6 +18,19 @@ export function publishedBuilds(deps: AppDeps): PublishedBuild[] {
 }
 
 export function currentPublishedBuild(deps: AppDeps, gameId: string): string | undefined {
+  if (!deps.config.artifactReleaseGate) {
+    // Before #1473 a game's playable build was its main branch's tested build; no game has a release yet (#1505).
+    return deps.sqlite
+      .prepare<[string], { build_id: string }>(
+        `
+    SELECT b.id AS build_id FROM games g
+    JOIN branches br ON br.game_id = g.id AND br.name = 'main'
+    JOIN builds b ON b.id = br.latest_build_id AND b.game_id = g.id
+    WHERE g.id = ? AND g.delisted_at IS NULL AND b.status = 'tested' AND b.artifact = 'present'
+  `,
+      )
+      .get(gameId)?.build_id;
+  }
   return deps.sqlite
     .prepare<[string], { build_id: string }>(
       `

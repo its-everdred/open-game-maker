@@ -34,6 +34,12 @@ const CREDENTIAL =
   /(?<![\w-])(?:sk-(?:[A-Za-z0-9]+-){0,3}[A-Za-z0-9_]{20,}|sk_[0-9a-f]{40,}|AIza[0-9A-Za-z_-]{35}|r8_[A-Za-z0-9]{30,}|gsk_[A-Za-z0-9]{30,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{32})/;
 const TEXT = new Set(['.js', '.mjs', '.cjs', '.html', '.htm', '.json', '.css', '.svg', '.txt', '.webmanifest', '.map']);
 
+export function scanIntegrationText(path: string, bytes: Buffer): { paid: boolean; credential: boolean } {
+  if (!TEXT.has(extname(path).toLowerCase())) return { paid: false, credential: false };
+  const text = bytes.toString('utf8');
+  return { paid: PAID.test(text), credential: CREDENTIAL.test(text) };
+}
+
 export type IntegrationScan = { paid: string[]; credentials: string[] };
 
 // The files of a built game (relative paths) that name a paid provider or hold a provider credential.

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { schema } from '@ogm/db';
 import { ImageSlots, type SlotId, type ViewportId } from '@ogm/contracts';
 import { buildDir } from '@ogm/games-host/layout';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { AppDeps } from '../app/types.js';
 import type { DisplayImage } from '../builds/display-images.js';
 import { hasCreatorMembership, issueGrant } from '../artifacts/grants.js';
@@ -124,8 +124,24 @@ export async function gameMedia(
 ) {
   if (!gameIds.length) return new Map();
   const branches = deps.db
-    .select({ gameId: schema.branches.gameId, buildId: schema.branches.latestBuildId })
+    .select({
+      gameId: schema.branches.gameId,
+      draftBuildId: schema.branches.latestBuildId,
+      buildId: sql<
+        string | null
+      >`CASE WHEN ${schema.games.visibility} = 'listed' AND ${schema.games.publishedReleaseId} IS NOT NULL THEN ${schema.releases.buildId}
+        WHEN ${schema.games.visibility} = 'listed' THEN (
+          SELECT legacy.id FROM builds AS legacy
+          WHERE legacy.game_id = ${schema.games.id} AND legacy.branch_id = ${schema.branches.id}
+            AND legacy.status = 'tested' AND legacy.artifact = 'present'
+            AND NOT EXISTS (SELECT 1 FROM publish_checks AS checked WHERE checked.build_id = legacy.id)
+          ORDER BY legacy.created_at DESC, legacy.rowid DESC LIMIT 1
+        )
+        ELSE ${schema.branches.latestBuildId} END`,
+    })
     .from(schema.branches)
+    .innerJoin(schema.games, eq(schema.games.id, schema.branches.gameId))
+    .leftJoin(schema.releases, eq(schema.releases.id, schema.games.publishedReleaseId))
     .where(and(inArray(schema.branches.gameId, gameIds), eq(schema.branches.name, 'main')))
     .all();
   const entries: Array<
@@ -149,7 +165,7 @@ export async function gameMedia(
   for (let index = 0; index < branches.length; index += 8) {
     entries.push(
       ...(await Promise.all(
-        branches.slice(index, index + 8).map(async ({ gameId, buildId: latestBuildId }) => {
+        branches.slice(index, index + 8).map(async ({ gameId, buildId: visibleBuildId, draftBuildId }) => {
           const game = deps.db.select().from(schema.games).where(eq(schema.games.id, gameId)).get();
           const releaseBuildId = currentPublishedBuild(deps, gameId);
           const owner =
@@ -159,7 +175,7 @@ export async function gameMedia(
             viewer.principal.familyId === game.familyId &&
             viewer.principal.capability === 'creator' &&
             hasCreatorMembership(deps, game.familyId, viewer.principal.userId);
-          const buildId = viewer && !owner ? releaseBuildId : latestBuildId;
+          const buildId = viewer ? (owner ? draftBuildId : releaseBuildId) : visibleBuildId;
           if (!buildId) return [gameId, {}] as const;
           let directory: string;
           try {

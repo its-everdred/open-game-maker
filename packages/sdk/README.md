@@ -251,3 +251,7 @@ three.js (`threeCamera`). `createVfx({ canvas, wasmUrl })` loads the runtime on 
 with `import wasmUrl from '@gm/sdk/vfx/effekseer.wasm?url'`. Pixel games set `pixelSize`, and optionally a `palette`,
 so effects render coarse and upscale with hard pixels. Each scene caps its effects and particles, and slow frames step
 quality down to off. The `gm-vfx` skill covers authoring effects by script and the budget.
+
+### Host Back button
+
+Games declare the shared Back control with `host.back?.set({ enabled: true, label: 'Back' })` and register its action with `host.back?.on(() => ...)`. Disable it when the current screen cannot go back; call the returned unsubscribe function when the handler is no longer needed. The host draws the control, so games should not draw a duplicate. `host.capabilities.has('host.back')` identifies embedding surfaces that support this contract. Deploy the supporting host before deploying a game that relies on it; an older host cannot display or invoke Back.

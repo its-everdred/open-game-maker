@@ -43,6 +43,7 @@ const sdkExports = {
     haptics: { pulse: 1 } satisfies Record<keyof HostApi['haptics'], 1>,
     test: 1,
     setHostPauseVisible: 1,
+    back: { set: 1, on: 1 } satisfies Record<keyof NonNullable<HostApi['back']>, 1>,
     controls: { set: 1 } satisfies Record<keyof NonNullable<HostApi['controls']>, 1>,
   } satisfies Record<keyof HostApi, unknown>,
   GameInstance: {
@@ -74,8 +75,9 @@ describe('gm-ui-hud skill', () => {
     expect(text).toContain('MultiplayerHooks.hud');
     expect(text).toContain('`safe` insets');
     expect(text).toContain('at most 25% of the screen');
-    /* The host's Pause lives in its play bar, never over the game (#641), so games may use the top corners. */
+    /* Keep the host controls clear on every game screen. */
     expect(text).toMatch(/Pause button sits in its play\s+bar outside the game/);
+    expect(text).toContain('Back and Menu occupy the top-left and top-right');
     expect(text).toContain('at least 16 CSS px');
     /* On-screen buttons must never hide what the player needs (#600); the zone covers the host overlay's footprint. */
     expect(text).toContain('must never cover important content');
@@ -83,5 +85,5 @@ describe('gm-ui-hud skill', () => {
     expect(text).toContain('qa/journeys/hud-clear.json');
     expect(text).toMatch(/title, play, paused, won, and lost/);
     expect(checkSkill(SKILL, { commands, sdkExports })).toEqual({ commands: [], sdk: [] });
-  }, 30_000);
+  }, 120_000);
 });

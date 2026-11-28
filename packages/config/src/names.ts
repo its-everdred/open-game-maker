@@ -29,6 +29,18 @@ export type EnvName = {
 export const OGM_ENV_NAMES: readonly EnvName[] = [
   { name: 'OGM_API_PORT', unit: 'api', kind: 'port', doc: 'loopback port of the API' },
   {
+    name: 'OGM_TESTER_NEW_GAMES_PER_DAY',
+    unit: 'api',
+    kind: 'int',
+    doc: 'maximum new games per tester per local day (default 1)',
+  },
+  {
+    name: 'OGM_NEW_GAME_PLAN_TICKET_LIMIT',
+    unit: 'api',
+    kind: 'int',
+    doc: 'maximum child tickets in an automated New Game plan (default 1)',
+  },
+  {
     name: 'OGM_ANALYTICS_RETENTION_DAYS',
     unit: 'api',
     kind: 'int',
@@ -296,6 +308,12 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
     unit: 'shared',
     kind: 'url',
     doc: 'loopback URL of the internal API (commit, games-host, voice-host, repair)',
+  },
+  {
+    name: 'OGM_ARTIFACT_RELEASE_GATE',
+    unit: 'shared',
+    kind: 'bool',
+    doc: 'api + games-host serve game artifacts only for released builds (default false until #1505)',
   },
   {
     name: 'OGM_BUILDER_WORKSPACES_ROOT',

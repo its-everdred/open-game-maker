@@ -1,9 +1,9 @@
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { createAiurClient, type AiurClient } from '@ogm/aiur-client';
-import { parse } from 'yaml';
 
 import { preflight } from '../policy/preflight.js';
+import { readDaemonLabelPrefix } from './label-prefix.js';
 import { externalPreflight, sameDirectory } from './external-preflight.js';
 import {
   aiurRoot,
@@ -16,7 +16,14 @@ import {
 } from './daemon-dir.js';
 import { createMissCounter, passes, realSleep, waitHealthy, type Sleep } from './health.js';
 import { writeRegistry } from './registry.js';
-import { daemonPaths, parseEnv, readIfPresent, writeDaemonSecrets } from './secrets.js';
+import {
+  daemonPaths,
+  isRegisteredDaemon,
+  parseEnv,
+  readIfPresent,
+  writeAtomic,
+  writeDaemonSecrets,
+} from './secrets.js';
 import { createSystemctl, mintTokens, nodeRunner, unitName, type Runner, type Systemctl } from './systemctl.js';
 import {
   LIVE_STATUSES,
@@ -63,7 +70,7 @@ export function createFleet(deps: FleetDeps) {
   const { store, activeJobs, env } = deps;
   const runner = deps.runner ?? nodeRunner;
   const systemctl = deps.systemctl ?? createSystemctl(runner);
-  const files = deps.files ?? gameRepoDaemonFiles;
+  const files = deps.files ?? gameRepoDaemonFiles(env);
   const sleep = deps.sleep ?? realSleep;
   const now = deps.now ?? (() => new Date());
   const portFree = deps.portFree ?? probePort;
@@ -92,7 +99,7 @@ export function createFleet(deps: FleetDeps) {
   const isStale = (row: DaemonRow) => row.status === 'starting' && !starting.has(row.slug);
   // An operator-registered daemon (`gm games register`) runs from its own checkout under its own unit; the fleet only
   // renders, starts and stops the daemons it made under its own directory.
-  const isRegistered = (row: DaemonRow) => row.checkoutPath !== daemonPaths(env.home, row.slug).dir;
+  const isRegistered = (row: DaemonRow) => isRegisteredDaemon(env.home, row);
 
   function clientFor(row: DaemonRow, token: string): AiurClient {
     return createAiurClient({ baseUrl: `http://127.0.0.1:${row.port}`, token }, deps.fetch);
@@ -212,6 +219,13 @@ export function createFleet(deps: FleetDeps) {
     return rendered;
   }
 
+  async function refreshManagedHook(row: DaemonRow, rows: DaemonRow[]): Promise<void> {
+    if (isRegistered(row)) return;
+    const paths = daemonPaths(env.home, row.slug);
+    await materializeCodexHome(renderInputFor(row, paths, env, 'feature', rows), codexAuthFor(env));
+    await writeAtomic(join(paths.dir, '.aiur/hooks'), (await files(row)).hooks, 0o600);
+  }
+
   async function toDaemon(row: DaemonRow): Promise<GameDaemon> {
     const clientToken = (await readIfPresent(daemonPaths(env.home, row.slug).clientToken))?.trim() ?? '';
     return {
@@ -231,10 +245,7 @@ export function createFleet(deps: FleetDeps) {
     if (row.status !== 'running' && row.status !== 'idle') {
       return { status: 'stopped', reasons: [`registered daemon ${row.slug} (${row.unit}) is not running`] };
     }
-    const labelPrefix = await readIfPresent(join(row.checkoutPath, '.aiur/config'))
-      .then((text) => parse(text ?? '') as { tracker?: { github?: { label_prefix?: unknown } } } | null)
-      .then((config) => config?.tracker?.github?.label_prefix)
-      .catch(() => undefined);
+    const labelPrefix = await readDaemonLabelPrefix(row.checkoutPath);
     if (typeof labelPrefix !== 'string' || labelPrefix === '') {
       return { status: 'stopped', reasons: [`registered daemon ${row.slug} has no readable tracker label_prefix`] };
     }
@@ -293,6 +304,7 @@ export function createFleet(deps: FleetDeps) {
       if (LIVE_STATUSES.includes(row.status)) await prepare(row, shape.kind);
     }
     if (row.status === 'running' || row.status === 'idle') {
+      await refreshManagedHook(row, await store.list());
       row = await setStatus(row, 'running', { idleSince: null });
       return { done: { status: 'running', daemon: await toDaemon(row) } };
     }
@@ -321,6 +333,15 @@ export function createFleet(deps: FleetDeps) {
   }
 
   return {
+    /** Refresh running fleet-owned hooks after upgrading the API, leaving registered daemons untouched. */
+    refreshManagedHooks(): Promise<void> {
+      return locked(async () => {
+        const rows = await store.list();
+        for (const row of rows) {
+          if (LIVE_STATUSES.includes(row.status)) await refreshManagedHook(row, rows);
+        }
+      });
+    },
     // Concurrent calls for one game share a single start.
     ensureDaemon(key: DaemonKey, kind: JobKind): Promise<EnsureResult> {
       const slug = key.slug.trim().toLowerCase();

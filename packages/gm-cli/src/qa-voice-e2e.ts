@@ -3,7 +3,9 @@ import { join } from 'node:path';
 import { openRunningTicket, openTicketBuilds } from './qa-review-checks.js';
 
 type Browser = Awaited<ReturnType<(typeof import('@ogm/gm-verify'))['launch']>>;
+type Context = Awaited<ReturnType<Browser['newContext']>>;
 type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPage']>>;
+type Locator = ReturnType<Page['locator']>;
 
 // The prod voice check (#879): as the QA creator, open a seeded build's chat on a phone, hold the mic while a recorded
 // clip plays into a fake microphone and see the words land in the message box, then hold a short voice session and
@@ -13,8 +15,8 @@ type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPa
 /** Spoken by Piper's public-domain LJSpeech voice, 16 kHz mono; together 3.2 s, under the ticket's 10 s cap. */
 export const CLIPS = { dictate: 'say.wav', talk: 'hello.wav' } as const;
 export const CLIP_SECONDS = { dictate: 1.61, talk: 1.62 } as const;
-/** The clip's distinctive words must both reach the box in order. */
-export const DICTATED = /\bsk(?:y|ies)\b.*\bblue\b/iu;
+/** Every spoken word must reach the box in order; distinctive-word-only checks miss clipped openings. */
+export const DICTATED = /\bmake\b.*\bthe\b.*\bsk(?:y|ies)\b.*\bblue\b/iu;
 const MEDIA_DIR = new URL('../qa/voice-e2e/', import.meta.url);
 const VIEWPORT = { width: 390, height: 844 };
 const TITLE = 'QA voice';
@@ -65,7 +67,13 @@ export type VoiceTally = {
   errors: string[];
 };
 
-export type VoiceStep = { name: 'dictation' | 'two-way'; ok: boolean; failure?: string; detail?: string; url?: string };
+export type VoiceStep = {
+  name: 'new-game-dictation' | 'dictation' | 'two-way';
+  ok: boolean;
+  failure?: string;
+  detail?: string;
+  url?: string;
+};
 
 export type VoiceCost = {
   characters: number | null;
@@ -74,6 +82,10 @@ export type VoiceCost = {
 };
 
 export type VoiceE2eResult = { steps: VoiceStep[]; cost: VoiceCost; stills: string[] };
+
+export function voiceE2eStepsPassed(steps: readonly VoiceStep[]): boolean {
+  return steps.length === 3 && steps.every((step) => step.ok);
+}
 
 export function tallyFrames(frames: readonly string[]): VoiceTally {
   const tally: VoiceTally = {
@@ -116,7 +128,7 @@ export function tallyFrames(frames: readonly string[]): VoiceTally {
   return tally;
 }
 
-/** One-way: the clip's words reached the message box. */
+/** One-way: the complete clip's words reached the message box in order. */
 export function dictationFailure(box: string): string | null {
   if (!box.trim()) return 'the message box stayed empty after the clip';
   if (!DICTATED.test(box)) return `the message box shows "${box.slice(0, 80)}", not the clip's words`;
@@ -297,6 +309,69 @@ export async function openChat(page: Page, origin: string, title = TITLE): Promi
     .waitFor(timeout);
 }
 
+/** The route must use the seeded, dispatchless QA draft; never let a smoke run create real work. */
+export async function openNewGameChat(page: Page, context: Context, origin: string, draftId: string): Promise<void> {
+  let intercepted = false;
+  await context.route('**/api/v1/game-drafts', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    if (intercepted) return route.abort('blockedbyclient');
+    intercepted = true;
+    return route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ draftId, jobId: `draft:${draftId}`, status: 'open' }),
+    });
+  });
+  await page.goto(`${origin}/new?step=talk`, { waitUntil: 'load', timeout: 60_000 });
+  await page.locator('.talk-host aiur-composer').waitFor({ timeout: 20_000 });
+  if (!intercepted) throw new StepFailed('New Game did not request its QA draft fixture');
+}
+
+async function dictateOn(
+  page: Page,
+  container: Locator,
+  name: 'new-game-dictation' | 'dictation',
+  wait: number,
+  onAudioSent: () => void,
+): Promise<string> {
+  const mic = container.getByRole('button', { name: LABELS.dictate });
+  await mic.waitFor({ timeout: 20_000 });
+  const composer = container.locator('aiur-composer');
+  await composer.evaluate((element) => {
+    element.addEventListener('aiur-composer-error', () => element.setAttribute('data-qa-dictation-error', ''));
+  });
+  const box = (await mic.boundingBox())!;
+  const textbox = container.locator('textarea').first();
+  const requestedBefore = await page.evaluate(() => (window as unknown as MicWindow).__ogmFakeMic.requested);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForFunction(
+    (before) => (window as unknown as MicWindow).__ogmFakeMic.requested > before,
+    requestedBefore,
+    { timeout: wait },
+  );
+  await page.waitForTimeout(300);
+  await page.evaluate(() => (window as unknown as MicWindow).__ogmFakeMic.play('dictate'));
+  onAudioSent();
+  await page.waitForTimeout(CLIP_SECONDS.dictate * 1000 + 800);
+  await page.mouse.up();
+  await waitForDictationCommit(
+    async () => textbox.evaluate((input) => !(input as HTMLTextAreaElement).readOnly),
+    async () =>
+      (await composer.getAttribute('data-qa-dictation-error')) !== null
+        ? 'the composer reported an error'
+        : (await container.getByRole('alert').isVisible())
+          ? await container.getByRole('alert').innerText()
+          : null,
+    wait,
+  );
+  await until(async () => dictationFailure(await textbox.inputValue()) === null, wait);
+  const text = await textbox.inputValue();
+  const failure = dictationFailure(text);
+  if (failure) throw new StepFailed(`${name}: ${failure}`);
+  return text;
+}
+
 export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promise<VoiceE2eResult> {
   mkdirSync(config.out, { recursive: true });
   const wait = config.timeoutMs ?? 30_000;
@@ -316,7 +391,8 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
     // permission prompt, so grant it for this QA app origin as a user would when connecting to that address.
     await context.grantPermissions(['local-network-access'], { origin: config.origin });
     // A dead run's build would list beside this one; the seed replaces it.
-    await internal(config, '/voice-fixtures', { method: 'POST', body: JSON.stringify({ run }) });
+    const fixture = await internal(config, '/voice-fixtures', { method: 'POST', body: JSON.stringify({ run }) });
+    if (typeof fixture.draftId !== 'string') throw new StepFailed('voice fixture did not return a New Game draft');
     await context.addCookies([{ ...config.cookie, url: config.origin }]);
     await context.addInitScript(installFakeMic, clips);
     const page = await context.newPage();
@@ -347,49 +423,26 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
     let reopenForVoice = false;
 
     try {
+      await openNewGameChat(page, context, config.origin, fixture.draftId);
+      const text = await dictateOn(page, page.locator('.talk-host'), 'new-game-dictation', wait, () => {
+        cost.audioSentSeconds += CLIP_SECONDS.dictate;
+      });
+      await still('new-game-dictation');
+      await page.locator('.talk-host textarea').first().fill('');
+      steps.push({ name: 'new-game-dictation', ok: true, detail: text });
+    } catch (error) {
+      await cancelFailedDictation(page, page.locator('.talk-host'));
+      await failed('new-game-dictation', error);
+    }
+
+    try {
       await openChat(page, config.origin);
-      const mic = dialog.getByRole('button', { name: LABELS.dictate });
-      await mic.waitFor({ timeout: 20_000 });
-      await dialog.locator('aiur-composer').evaluate((composer) => {
-        composer.addEventListener('aiur-composer-error', () => composer.setAttribute('data-qa-dictation-error', ''));
+      const text = await dictateOn(page, dialog, 'dictation', wait, () => {
+        cost.audioSentSeconds += CLIP_SECONDS.dictate;
       });
-      const box = (await mic.boundingBox())!;
-      const textbox = dialog.locator('textarea').first();
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await page.mouse.down();
-      // The clip starts once the app has opened the microphone, so none of it is spoken into nothing.
-      await page.waitForFunction(() => (window as unknown as MicWindow).__ogmFakeMic.requested > 0, null, {
-        timeout: wait,
-      });
-      await page.waitForTimeout(300);
-      await page.evaluate(() => (window as unknown as MicWindow).__ogmFakeMic.play('dictate'));
-      cost.audioSentSeconds += CLIP_SECONDS.dictate;
-      await page.waitForTimeout(CLIP_SECONDS.dictate * 1000 + 800);
-      await page.mouse.up();
-      // Partials appear while recording; only inspect the draft after the final commit settles.
-      const alert = dialog.getByRole('alert');
-      await waitForDictationCommit(
-        async () => textbox.evaluate((input) => !(input as HTMLTextAreaElement).readOnly),
-        async () =>
-          (await dialog.locator('aiur-composer').getAttribute('data-qa-dictation-error')) !== null
-            ? 'the composer reported an error'
-            : (await alert.isVisible())
-              ? await alert.innerText()
-              : null,
-        wait,
-      );
-      await until(async () => dictationFailure(await textbox.inputValue()) === null, wait);
-      const text = await textbox.inputValue();
-      const failure = dictationFailure(text);
-      if (failure) {
-        reopenForVoice = true;
-        await failed('dictation', new StepFailed(failure));
-      } else {
-        await still('dictation');
-        // The words stay a draft: the run never sends them.
-        await textbox.fill('');
-        steps.push({ name: 'dictation', ok: true, detail: text });
-      }
+      await still('dictation');
+      await dialog.locator('textarea').first().fill('');
+      steps.push({ name: 'dictation', ok: true, detail: text });
     } catch (error) {
       await cancelFailedDictation(page, dialog);
       reopenForVoice = true;

@@ -8,8 +8,9 @@ defect, and so is a playable build the creator was never shown.
 ## The inventory
 
 One per game, in the instance repo: `docs/<slug>/decisions.json` (an array) and `docs/<slug>/decisions.md`, rendered
-from it in the same commit (grouped by area; one row per decision: id, question, options, recommendation, status,
-answer, ticket). Never edit the `.md` alone.
+from it in the same commit (grouped by area; one row per decision, including its rationale, sources and answer date).
+Never edit the `.md` by hand. `gm decisions render` warns with the ID of each invalid entry and renders the valid
+entries; fix the warnings before relying on the page as a complete inventory.
 
 | Field | Holds |
 |---|---|
@@ -23,7 +24,7 @@ answer, ticket). Never edit the `.md` alone.
 | `ticket` | The ticket that builds it; `null` until one exists. |
 | `phase` | The approval rung represented by a `review/decisions.json` screen target or answered ticket decision: `mock`, `prototype`, `build`, or `polish`. Creative prototype PRs require `mock` or later; build PRs require `prototype` or later. |
 | `status` | `open` (not yet asked) → `asked` (a Command is raised) → `answered` (the creator picked) or `defaulted` (the recommendation stands after silence; a later answer still wins). |
-| `answer`, `answered_at` | The picked label plus any note; ISO time. `null` until then. |
+| `answer`, `answered_at` | The picked label plus any note; ISO time or a historical date. `null` until then. |
 | `reuse` | Optional, once a round is approved: `{paths, generator?, notes?}`, the files and folders it left to build on, the script that made them, and how to extend them. `gm context` points later tickets at them. |
 
 ```json

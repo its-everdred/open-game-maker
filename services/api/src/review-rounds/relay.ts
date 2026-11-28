@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import type { ApiBindings, AppDeps } from '../app/types.js';
-import type { ReviewSubmission } from '@ogm/contracts';
+import type { ReviewSubmission, ReviewTrack } from '@ogm/contracts';
 import { buildRoutes } from '../builds/routes.js';
+import { withArtifactMutation } from '../builds/artifact-lock.js';
+import { submitRound } from './store.js';
 
 // The preview relay has already checked the ticket-scoped grant and game/repository binding.
 // Reuse the normal submission route so both transports enforce identical track and media rules.
@@ -18,6 +20,8 @@ export async function submitRelayedReview(
     effort: NonNullable<import('./store.js').NewReviewRound['effort']>,
     audioVerified: boolean,
   ) => Promise<{ id: string; round: number }>,
+  authorizedLive = false,
+  liveTrack?: ReviewTrack,
 ): Promise<{ id: string; round: number }> {
   const app = new Hono<ApiBindings>();
   app.use(async (c, next) => {
@@ -30,7 +34,14 @@ export async function submitRelayedReview(
       daemonForSecret: async () => null,
       gameForSecret: async () => ({ slug, repo }),
       authorizedAudio,
-      submitReview,
+      authorizedLive,
+      ...(authorizedLive && liveTrack ? { trackFor: async () => liveTrack } : {}),
+      submitReview:
+        submitReview ??
+        (authorizedLive
+          ? async (ctx, gameId, value, effort, audioVerified) =>
+              withArtifactMutation(async () => submitRound(ctx.db, gameId, value, effort, audioVerified))
+          : undefined),
     }),
   );
   const response = await app.request(`/internal/games/${encodeURIComponent(slug)}/review-rounds`, {

@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -16,6 +17,7 @@ type Logged = { method: string; url: string; token: string; sha: string; body: B
 let server: Server;
 let api: string;
 let requests: Logged[] = [];
+let checkRecords: unknown[] = [];
 let uploadAnswer: { status: number; body: string } = { status: 201, body: '' };
 // Uploads still to drop by closing the connection without an answer, as a reset keep-alive socket does.
 let dropUploads = 0;
@@ -30,6 +32,13 @@ let remoteSha: string;
 let brokenSha: string;
 let unlistedSha: string;
 let slowSha: string;
+let failingTestSha: string;
+let smokeTestSha: string;
+let wrongServeSha: string;
+let mutatingSmokeSha: string;
+let mutationSha: string;
+let sourceMutationSha: string;
+let untrackedMutationSha: string;
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -43,9 +52,9 @@ function writeGame(repo: string, marker: string): void {
     join(game, 'build.sh'),
     [
       'set -eu',
-      'if [[ -n ${ASSET_CACHE_SENTINEL:-} ]]; then test "$(cat .gm/cache/assets/sentinel)" = "$ASSET_CACHE_SENTINEL"; fi',
+      'if [[ -n ${ASSET_CACHE_SENTINEL:-} ]]; then test ! -e .gm/cache/assets/sentinel; fi',
       'printf "%s\\n" "$*" > "$BUILD_ARGS_LOG"',
-      'printf "token=%s mode=%s assets=%s\\n" "${OGM_INTERNAL_TOKEN:-}" "$NODE_ENV" "${OGM_ASSETS_ROOT:-}" > "$BUILD_ENV_LOG"',
+      'printf "token=%s github=%s mode=%s assets=%s\\n" "${OGM_INTERNAL_TOKEN:-}" "${GITHUB_TOKEN:-}" "$NODE_ENV" "${OGM_ASSETS_ROOT:-}" > "$BUILD_ENV_LOG"',
       'mkdir -p dist/design dist/assets',
       `printf '<!doctype html><script type="module" src="./assets/main.js"></script><!-- ${marker} -->\\n' > dist/index.html`,
       'printf "console.log(1)\\n" > dist/assets/main.js',
@@ -55,7 +64,10 @@ function writeGame(repo: string, marker: string): void {
       '',
     ].join('\n'),
   );
-  writeFileSync(join(game, 'package.json'), '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh"}}\n');
+  writeFileSync(
+    join(game, 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"test -f dist/index.html"}}\n',
+  );
   writeFileSync(join(game, 'gm.manifest.json'), '{"id":"blobs","capabilities":[]}\n');
   writeFileSync(join(game, 'manifest.json'), '{"id":"blobs","sdk":"1.0.0"}\n');
   writeFileSync(join(game, 'design', 'design.json'), '{"schemaVersion":1,"globals":{},"entities":{}}\n');
@@ -102,6 +114,53 @@ beforeAll(async () => {
   writeFileSync(join(origin, 'games', 'blobs', 'build.sh'), 'sleep 2\n');
   git(origin, 'commit', '-qam', 'slow build fixture');
   slowSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'failing-test', 'main');
+  writeFileSync(
+    join(origin, 'games', 'blobs', 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"exit 7"}}\n',
+  );
+  git(origin, 'commit', '-qam', 'failing test fixture');
+  failingTestSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'smoke-test', 'main');
+  writeFileSync(
+    join(origin, 'games', 'blobs', 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"gm test"}}\n',
+  );
+  git(origin, 'commit', '-qam', 'smoke test fixture');
+  smokeTestSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'mutating-smoke', 'smoke-test');
+  writeFileSync(join(origin, 'games', 'blobs', '.mutate-test'), 'yes');
+  git(origin, 'add', '-A');
+  git(origin, 'commit', '-qm', 'mutating smoke fixture');
+  mutatingSmokeSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'wrong-serve', 'main');
+  writeFileSync(
+    join(origin, 'games', 'blobs', 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"gm test --serve old-dist"}}\n',
+  );
+  git(origin, 'commit', '-qam', 'wrong serve fixture');
+  wrongServeSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'mutating-test', 'main');
+  writeFileSync(
+    join(origin, 'games', 'blobs', 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"printf changed > dist/index.html"}}\n',
+  );
+  git(origin, 'commit', '-qam', 'mutating test fixture');
+  mutationSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'mutating-source', 'main');
+  writeFileSync(
+    join(origin, 'games', 'blobs', 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"printf changed > manifest.json"}}\n',
+  );
+  git(origin, 'commit', '-qam', 'mutating source fixture');
+  sourceMutationSha = git(origin, 'rev-parse', 'HEAD');
+  git(origin, 'switch', '-qc', 'untracked-source', 'main');
+  writeFileSync(
+    join(origin, 'games', 'blobs', 'package.json'),
+    '{"name":"blobs","private":true,"scripts":{"build":"sh build.sh","test":"printf generated > generated.ts"}}\n',
+  );
+  git(origin, 'commit', '-qam', 'untracked source fixture');
+  untrackedMutationSha = git(origin, 'rev-parse', 'HEAD');
   git(origin, 'switch', '-q', 'main');
 
   // pnpm stand-in: the scratch repository has nothing to install, and its build is one shell script.
@@ -114,7 +173,10 @@ beforeAll(async () => {
       'set -eu',
       'printf "%s\\n" "$*" >> "$PNPM_LOG"',
       '[[ ${1:-} == install ]] && exit 0',
+      'if [[ ${1:-} == exec ]]; then touch dist/.test-mode; exit 0; fi',
       '[[ ${1:-} == run ]] && shift',
+      'if [[ ${1:-} == test ]] && [[ "$(node -p \'require("./package.json").scripts.test\')" == "gm test" ]]; then test -f dist/.test-mode; if [[ -f .mutate-test ]]; then printf changed > dist/index.html; fi; exit; fi',
+      'if [[ ${1:-} == test ]]; then exec sh -c "$(node -p \'require("./package.json").scripts.test\')"; fi',
       '[[ ${1:-} == build ]] && shift',
       '[[ ${1:-} == -- ]] && shift',
       'exec sh -c "$(node -p \'require("./package.json").scripts.build\') $*"',
@@ -122,6 +184,8 @@ beforeAll(async () => {
     ].join('\n'),
   );
   chmodSync(join(bin, 'pnpm'), 0o755);
+  writeFileSync(join(bin, 'codex'), '#!/usr/bin/env bash\nwhile [[ "$1" != -- ]]; do shift; done\nshift\nexec "$@"\n');
+  chmodSync(join(bin, 'codex'), 0o755);
   writeFileSync(
     join(bin, 'gh'),
     '#!/usr/bin/env bash\nif [[ ${GH_FAIL_PR:-} == "${3:-}" ]]; then exit 1; fi\nif [[ ${GH_NONE_PR:-} == "${3:-}" ]]; then printf "%s\\n" "Prototype review: none"; exit 0; fi\nprintf "%s\\n" "Closes #42" "## Prototype review" "**Works now:** walk around" "**Known limitations:** no attack yet" "**Weigh in on:** enemies-first, loot-drop, town-shop"\nif [[ -n ${GH_PLAY:-} ]]; then printf "Play: %s\\n" "$GH_PLAY"; fi\n',
@@ -132,6 +196,12 @@ beforeAll(async () => {
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
+      if (request.method === 'POST' && request.url === '/internal/operator/games/blobs/publish-checks') {
+        checkRecords.push(JSON.parse(Buffer.concat(chunks).toString()));
+        response.writeHead(201, { 'content-type': 'application/json' });
+        response.end('{"id":"pc_test","result":"passed"}');
+        return;
+      }
       requests.push({
         method: request.method ?? '',
         url: request.url ?? '',
@@ -179,7 +249,9 @@ beforeAll(async () => {
           response.write('{"state":');
           return setTimeout(() => request.socket.destroy(), 20);
         }
-        return json(uploadAnswer.status, uploadAnswer.body);
+        const answer = JSON.parse(uploadAnswer.body) as Record<string, unknown>;
+        if (uploadAnswer.status === 201 && answer.publishResult === undefined) answer.publishResult = 'published';
+        return json(uploadAnswer.status, JSON.stringify(answer));
       }
       if (
         request.method === 'POST' &&
@@ -227,6 +299,7 @@ async function publish(argv: string[], options: { home?: string; cwd?: string; e
     ...options.env,
   };
   requests = [];
+  checkRecords = [];
   const result = await gm(['publish', ...argv], { home, env, ...(options.cwd ? { cwd: options.cwd } : {}) });
   const read = (name: string) => (existsSync(join(logs, name)) ? readFileSync(join(logs, name), 'utf8') : '');
   return { ...result, home, pnpm: read('pnpm'), args: read('args'), buildEnv: read('env') };
@@ -238,7 +311,7 @@ describe('gm publish', () => {
     expect(git(checkout, 'rev-parse', 'origin/main')).toBe(staleSha);
 
     // The token in the environment reaches the API and never the build.
-    const run = await publish(['blobs', '--api', api], { env: { OGM_INTERNAL_TOKEN: TOKEN } });
+    const run = await publish(['blobs', '--api', api], { env: { OGM_INTERNAL_TOKEN: TOKEN, GITHUB_TOKEN: 'private' } });
 
     expect(run.err).toEqual([]);
     expect(run.code).toBe(0);
@@ -263,8 +336,26 @@ describe('gm publish', () => {
     expect(ReviewSubmission.safeParse(JSON.parse(review.body.toString())).success).toBe(true);
     // The production build: relative base, published mode, the asset library, and never the operator's token.
     expect(run.pnpm).toContain('install --frozen-lockfile');
+    expect(run.pnpm).toContain('run test');
+    expect(checkRecords).toContainEqual({
+      gitSha: remoteSha,
+      artifactSha256: createHash('sha256').update(upload.body).digest('hex'),
+      surface: 'game',
+      sizes: [],
+      checks: [
+        { name: 'asset references', result: 'passed' },
+        { name: 'asset rights and files', result: 'passed' },
+        { name: 'dependency install', result: 'passed' },
+        { name: 'pnpm run build', result: 'passed' },
+        { name: 'production snapshot', result: 'passed' },
+        { name: 'pnpm run test', result: 'passed' },
+        { name: 'source integrity', result: 'passed' },
+        { name: 'production build integrity', result: 'passed' },
+        { name: 'publish artifact', result: 'passed' },
+      ],
+    });
     expect(run.args.trim()).toBe('--base=./ --mode=published');
-    expect(run.buildEnv.trim()).toBe(`token= mode=production assets=${join(root, 'assets-local')}`);
+    expect(run.buildEnv.trim()).toMatch(/token= github= mode=production assets=.*\/assets$/);
     const archive = join(tempDir('gm-publish-archive-'), 'upload.tgz');
     writeFileSync(archive, upload.body);
     const listing = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' });
@@ -278,7 +369,7 @@ describe('gm publish', () => {
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
   });
 
-  it('seeds generated asset cache files into the fresh publish worktree', async () => {
+  it('does not expose old asset cache files to the publish build', async () => {
     const cache = join(checkout, 'games', 'blobs', '.gm', 'cache', 'assets');
     mkdirSync(cache, { recursive: true });
     writeFileSync(join(cache, 'sentinel'), 'reusable cache');
@@ -423,11 +514,23 @@ describe('gm publish', () => {
     expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'GET']);
   });
 
+  it('reports a skipped automatic release without claiming it was published', async () => {
+    uploadAnswer = {
+      status: 201,
+      body: '{"state":"done","jobId":"j_skipped","buildId":"build_skipped","publishResult":"skipped"}',
+    };
+    const run = await publish(['blobs', '--api', api]);
+    expect(run.code).toBe(0);
+    expect(run.out.join('\n')).toContain('automatic release skipped');
+    expect(run.out.join('\n')).not.toContain('published games/');
+    expect(requests.some((request) => request.url.endsWith('/prototype-reviews'))).toBe(false);
+  });
+
   it('does not send the upload again when it times out, as the API may still be publishing it', async () => {
     const real = globalThis.fetch;
     let uploads = 0;
     const spy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
-      if (init?.method !== 'POST') return real(input, init);
+      if (init?.method !== 'POST' || !String(input).endsWith('/builds')) return real(input, init);
       uploads += 1;
       return Promise.reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
     });
@@ -453,6 +556,103 @@ describe('gm publish', () => {
     expect(requests.map((r) => r.method)).toEqual(['GET']);
     expect(readdirSync(join(run.home, '.local', 'state', 'ogm', 'publish'))).toEqual([]);
     expect(git(checkout, 'worktree', 'list').split('\n')).toHaveLength(1);
+  });
+
+  it('does not upload when the game tests fail', async () => {
+    const run = await publish(['blobs', '--sha', failingTestSha, '--api', api]);
+
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain("the game's tests failed");
+    expect(checkRecords).toContainEqual({
+      gitSha: failingTestSha,
+      surface: 'game',
+      sizes: [],
+      checks: [
+        { name: 'asset references', result: 'passed' },
+        { name: 'asset rights and files', result: 'passed' },
+        { name: 'dependency install', result: 'passed' },
+        { name: 'pnpm run build', result: 'passed' },
+        { name: 'production snapshot', result: 'passed' },
+        { name: 'pnpm run test', result: 'failed' },
+      ],
+    });
+    expect(requests.map((request) => request.method)).toEqual(['GET']);
+  });
+
+  it('tests a gm smoke build and uploads the saved production snapshot', async () => {
+    uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_smoke","buildId":"build_smoke"}' };
+    const run = await publish(['blobs', '--sha', smokeTestSha, '--api', api]);
+    expect(run.code).toBe(0);
+    expect(run.pnpm).toContain('exec vite build --mode test --base=./');
+    expect(run.pnpm.match(/run build/g)).toHaveLength(1);
+    expect(checkRecords).toContainEqual(
+      expect.objectContaining({
+        testArtifactSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        sizes: ['390x844', '1180x820'],
+        checks: expect.arrayContaining([
+          { name: 'test-mode build', result: 'passed' },
+          { name: 'production snapshot', result: 'passed' },
+        ]),
+      }),
+    );
+  });
+
+  it('rejects a smoke test that changes its recorded build', async () => {
+    const run = await publish(['blobs', '--sha', mutatingSmokeSha, '--api', api]);
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain('the game checks changed the test build');
+    expect(checkRecords).toContainEqual(
+      expect.objectContaining({
+        gitSha: mutatingSmokeSha,
+        checks: expect.arrayContaining([{ name: 'test build integrity', result: 'failed' }]),
+      }),
+    );
+  });
+
+  it('rejects gm test when it would serve a different build', async () => {
+    const run = await publish(['blobs', '--sha', wrongServeSha, '--api', api]);
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain('gm test must use the default dist directory');
+    expect(checkRecords).toContainEqual(
+      expect.objectContaining({
+        gitSha: wrongServeSha,
+        checks: expect.arrayContaining([{ name: 'test configuration', result: 'failed' }]),
+      }),
+    );
+    expect(requests.map((request) => request.method)).toEqual(['GET']);
+  });
+
+  it('does not publish if tests change the production build', async () => {
+    const run = await publish(['blobs', '--sha', mutationSha, '--api', api]);
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain('game checks changed the production build');
+    expect(requests.map((request) => request.method)).toEqual(['GET']);
+  });
+
+  it('does not publish if checks change tracked source', async () => {
+    const run = await publish(['blobs', '--sha', sourceMutationSha, '--api', api]);
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain('game checks changed the source commit or tracked files');
+    expect(checkRecords).toContainEqual(
+      expect.objectContaining({
+        gitSha: sourceMutationSha,
+        checks: expect.arrayContaining([{ name: 'source integrity', result: 'failed' }]),
+      }),
+    );
+    expect(requests.map((request) => request.method)).toEqual(['GET']);
+  });
+
+  it('does not publish if checks add untracked source', async () => {
+    const run = await publish(['blobs', '--sha', untrackedMutationSha, '--api', api]);
+    expect(run.code).toBe(1);
+    expect(run.err.join('\n')).toContain('game checks changed the source commit or tracked files');
+    expect(checkRecords).toContainEqual(
+      expect.objectContaining({
+        gitSha: untrackedMutationSha,
+        checks: expect.arrayContaining([{ name: 'source integrity', result: 'failed' }]),
+      }),
+    );
+    expect(requests.map((request) => request.method)).toEqual(['GET']);
   });
 
   it('reports a timed out build with the configured duration instead of missing dist output', async () => {
@@ -516,7 +716,9 @@ it('confirms a newly landed build after the upload times out', async () => {
   const originalFetch = globalThis.fetch;
   let factsReads = 0;
   const mock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-    if (init?.method === 'POST') throw new DOMException('timed out', 'TimeoutError');
+    if (String(input).endsWith('/publish-checks')) return originalFetch(input, init);
+    if (init?.method === 'POST' && String(input).endsWith('/builds'))
+      throw new DOMException('timed out', 'TimeoutError');
     factsReads += 1;
     if (factsReads === 2) return new Response('', { status: 404 });
     if (factsReads === 3) return new Response(JSON.stringify({ state: 'filed', buildId: null }), { status: 200 });

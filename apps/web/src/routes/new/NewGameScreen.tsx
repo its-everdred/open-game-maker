@@ -24,7 +24,7 @@ import {
   type StepKey,
 } from './options';
 import { useCreateGame } from './useCreateGame';
-import { admitNewGame, type AdmissionResult } from '../../features/scope-chat/admit';
+import { admissionRefusal, admitNewGame, type AdmissionResult } from '../../features/scope-chat/admit';
 import './new.css';
 import './new-prototype.css';
 
@@ -106,7 +106,14 @@ export function NewGameScreen() {
     retainDraft(): void;
   }) => {
     retainDraft();
-    const gameId = await ensureGame(choices, allowAiGeneratedAssets);
+    let gameId: string;
+    try {
+      gameId = await ensureGame(choices, allowAiGeneratedAssets);
+    } catch (error) {
+      const refusal = admissionRefusal(error);
+      if (refusal) return refusal;
+      throw error;
+    }
     await api(`/game-drafts/${encodeURIComponent(sessionId)}/attach-game`, {
       method: 'POST',
       json: { gameId },

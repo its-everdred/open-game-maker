@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 
 import { schema } from '@ogm/db';
 import { ReviewSubmission } from '@ogm/contracts';
+import { liveWorkspaceReady } from './live-workspace.js';
 
 import type { AppDeps } from '../app/types.js';
 import { ARCHIVE_LIMITS } from '../builds/untar.js';
@@ -20,6 +21,15 @@ import { readTrack, reviewCheckout } from '../review-rounds/tracks.js';
 import { phaseOwner } from '../review-rounds/owners.js';
 import { submitRound } from '../review-rounds/store.js';
 import { withArtifactMutation } from '../builds/artifact-lock.js';
+import { plannerRequest } from './new-game.js';
+import { newGameContext } from '../new-game/context.js';
+import { getAttachment, readBlob } from '../build-chat/attachments.js';
+import { admitPlannerChild, plannerChildStatus } from './planner-child.js';
+import { HttpError } from '../app/errors.js';
+import { AdmissionRefused } from '../jobs/admission.js';
+import { plannerAnswers } from '../job-commands/planner-answers.js';
+import { plannerCheckpointBranch } from './planner-base.js';
+import { and, eq, sql } from 'drizzle-orm';
 import type { PreviewTicketVerifier } from './ticket.js';
 
 const requestName = /^[0-9a-f-]{36}\.json$/u;
@@ -38,6 +48,10 @@ type Request = {
   kind?: string;
   submission?: unknown;
   attachments?: unknown;
+  attachment?: string;
+  child?: unknown;
+  childKey?: string;
+  plannerBranch?: string;
 };
 type RepoGrant = { repo: string; ticket: string; game: string; grant: string; secret: string; workspace: string };
 
@@ -87,6 +101,7 @@ async function processRequest(
         typeof data.token !== 'string' ||
         typeof data.ticket !== 'string' ||
         !ticketPattern.test(data.ticket) ||
+        !Number.isSafeInteger(Number(data.ticket)) ||
         typeof data.slug !== 'string' ||
         typeof data.sha !== 'string' ||
         !SHA.test(data.sha) ||
@@ -142,6 +157,93 @@ async function processRequest(
         !(await verifyTicket(`${game.githubOwner}/${game.githubRepo}`, data.ticket, data.slug, !!repoGrant))
       )
         throw new Error('unauthorized');
+      if (data.kind === 'planner-worker-context') {
+        const repo = `${game.githubOwner}/${game.githubRepo}`.toLowerCase();
+        const job = deps.db
+          .select({
+            id: schema.jobs.id,
+            plan: schema.jobs.plan,
+            key: schema.jobs.idempotencyKey,
+            state: schema.jobs.state,
+          })
+          .from(schema.jobTickets)
+          .innerJoin(schema.jobs, eq(schema.jobs.id, schema.jobTickets.jobId))
+          .where(
+            and(
+              eq(schema.jobTickets.issueNumber, Number(data.ticket)),
+              sql`lower(${schema.jobTickets.repo}) = ${repo}`,
+              eq(schema.jobs.gameId, game.id),
+            ),
+          )
+          .get();
+        if (!job?.key?.startsWith('planner:')) {
+          await response.writeFile(Buffer.from(JSON.stringify({ state: 'done', result: { plannerChild: false } })));
+          return;
+        }
+        if (!['admitted', 'filed', 'running', 'paused_budget'].includes(job.state))
+          throw new HttpError(409, 'planner_child_not_admitted');
+        const base = (JSON.parse(job.plan) as { _plannerBase?: unknown })._plannerBase;
+        if (
+          !base ||
+          typeof base !== 'object' ||
+          !('branch' in base) ||
+          !('sha' in base) ||
+          typeof base.branch !== 'string' ||
+          typeof base.sha !== 'string' ||
+          !SHA.test(base.sha)
+        )
+          throw new Error('invalid_planner_base');
+        const answers = plannerAnswers(deps.db, deps.sqlite, { jobId: job.id, gameId: game.id });
+        await response.writeFile(
+          Buffer.from(JSON.stringify({ state: 'done', result: { plannerChild: true, base, answers } })),
+        );
+        return;
+      }
+      if (
+        ['new-game-context', 'new-game-attachment', 'new-game-child', 'new-game-child-status'].includes(data.kind ?? '')
+      ) {
+        const repo = `${game.githubOwner}/${game.githubRepo}`.toLowerCase();
+        const requestId = plannerRequest(deps.db, repo, Number(data.ticket), game.id);
+        if (!requestId) throw new Error('unauthorized');
+        if (data.kind === 'new-game-child' || data.kind === 'new-game-child-status') {
+          let childResult;
+          if (data.kind === 'new-game-child') {
+            const base = { branch: data.plannerBranch ?? '', sha: data.sha };
+            if (
+              !deps.registry.plannerBaseVerifier ||
+              !(await deps.registry.plannerBaseVerifier(
+                repo,
+                workspace,
+                data.slug,
+                base,
+                typeof data.child === 'object' && data.child !== null && 'decisions' in data.child
+                  ? data.child.decisions
+                  : undefined,
+              ))
+            )
+              throw new HttpError(409, 'invalid_planner_base');
+            childResult = await admitPlannerChild(deps, requestId, data.child, {
+              ...base,
+              branch: plannerCheckpointBranch(base.sha),
+            });
+          } else childResult = plannerChildStatus(deps, requestId, data.childKey ?? '');
+          await response.writeFile(Buffer.from(JSON.stringify({ state: 'done', result: childResult })));
+          return;
+        }
+        const context = newGameContext(deps.db, deps.sqlite, requestId);
+        if (!context) throw new Error('unauthorized');
+        let result: unknown = context;
+        if (data.kind === 'new-game-attachment') {
+          const attachment = context.attachments.find((item) => item.id === data.attachment);
+          const row = attachment && getAttachment(deps.sqlite, attachment.id);
+          const bytes = row && (await readBlob(deps.blobStore, row.blobHash));
+          if (!attachment || !bytes || !plannerRequest(deps.db, repo, Number(data.ticket), game.id))
+            throw new Error('unauthorized');
+          result = { id: attachment.id, data: Buffer.from(bytes).toString('base64') };
+        }
+        await response.writeFile(Buffer.from(JSON.stringify({ state: 'done', result })));
+        return;
+      }
       if (data.kind === 'review') {
         if (
           !data.submission ||
@@ -155,10 +257,25 @@ async function processRequest(
         const submission = ReviewSubmission.safeParse(data.submission);
         const attachments = data.attachments ?? [];
         if (!submission.success || !Array.isArray(attachments)) throw new Error('invalid_request');
+        const liveBuilds = submission.data.media.filter(
+          (item) => item.kind === 'build' && item.ref.startsWith('live-'),
+        );
+        let authorizedLive = false;
+        if (liveBuilds.length) {
+          if (
+            !repoGrant ||
+            liveBuilds.length !== 1 ||
+            liveBuilds[0]!.ref !== `live-${submission.data.id}` ||
+            !game.githubPath
+          )
+            throw new Error('invalid_request');
+          if (!(await liveWorkspaceReady(workspace, game.githubPath))) throw new Error('invalid_request');
+          authorizedLive = true;
+        }
         const daemon = reviewDaemonForGame(deps.db, game.id);
-        if (!daemon || !game.githubPath) throw new Error('invalid_request');
+        if (!game.githubPath || (!daemon && !authorizedLive)) throw new Error('invalid_request');
         const track = await readTrack(
-          await reviewCheckout(daemon.checkoutPath, submission.data.ticket, daemon.repo),
+          authorizedLive ? workspace : await reviewCheckout(daemon!.checkoutPath, submission.data.ticket, daemon!.repo),
           game.githubPath,
           data.sha,
           submission.data.track,
@@ -210,9 +327,18 @@ async function processRequest(
         }
         let round;
         if (staged.length === 0) {
-          round = await submitRelayedReview(deps, data.slug, `${game.githubOwner}/${game.githubRepo}`, data.submission);
+          round = await submitRelayedReview(
+            deps,
+            data.slug,
+            `${game.githubOwner}/${game.githubRepo}`,
+            data.submission,
+            undefined,
+            undefined,
+            authorizedLive,
+            track,
+          );
         } else {
-          if (submission.data.category === 'gameplay' && submission.data.phase !== 'mock')
+          if (submission.data.category === 'gameplay' && submission.data.phase !== 'mock' && !authorizedLive)
             throw new Error('invalid_request');
           round = await withArtifactMutation(async () => {
             const overlay = {
@@ -259,6 +385,8 @@ async function processRequest(
                 }
                 throw new Error('review_preflight_failed');
               },
+              authorizedLive,
+              track,
             );
             for (const attachment of staged) await deps.blobStore.put(attachment.bytes, attachment.mime);
             return submitRelayedReview(
@@ -269,6 +397,8 @@ async function processRequest(
               new Set(staged.filter((item) => item.mime.startsWith('audio/')).map((item) => item.hash)),
               async (_deps, gameId, value, effort, audioVerified) =>
                 submitRound(deps.db, gameId, value, effort, audioVerified),
+              authorizedLive,
+              track,
             );
           });
         }
@@ -296,7 +426,20 @@ async function processRequest(
       result = { state: 'done', gameId: preview.gameId, buildId: preview.buildId };
     } catch (error) {
       deps.log({ event: 'preview_relay_failed', reason: error instanceof Error ? error.name : 'Error' });
-      result = { state: 'failed', error: 'preview upload refused' };
+      const code =
+        error instanceof HttpError &&
+        [
+          'planner_ticket_limit',
+          'planner_child_conflict',
+          'planner_decision_conflict',
+          'invalid_planner_child',
+          'invalid_planner_base',
+        ].includes(error.code)
+          ? error.code
+          : error instanceof AdmissionRefused
+            ? error.body.error
+            : 'preview upload refused';
+      result = { state: 'failed', error: code };
     }
     const output = Buffer.from(JSON.stringify(result));
     await response.writeFile(output);

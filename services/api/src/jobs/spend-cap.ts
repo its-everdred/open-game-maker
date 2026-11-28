@@ -108,7 +108,9 @@ export async function markFiled(
 export function markRunning(deps: LifecycleDeps, jobId: string): Job {
   const row = findJobRow(deps.db, jobId);
   if (row.state === 'running') return findJob(deps.db, jobId);
-  const state = transition(row.state, row.state === 'paused_budget' ? 'resume' : 'run');
+  const stagedPlanner =
+    row.state === 'admitted' && row.aiurIssueNumber !== null && (row.idempotencyKey ?? '').startsWith('planner:');
+  const state = stagedPlanner ? 'running' : transition(row.state, row.state === 'paused_budget' ? 'resume' : 'run');
   deps.db
     .update(schema.jobs)
     .set({ state, pausedReason: null, updatedAt: nowFor(deps).toISOString() })
@@ -155,7 +157,9 @@ export function markTerminal(
     .transaction(() => {
       if (changed) {
         const event = terminal === 'done' ? 'finish' : terminal === 'failed' ? 'fail' : 'cancel';
-        const state = transition(row.state, event);
+        const stagedPlanner =
+          row.state === 'admitted' && row.aiurIssueNumber !== null && (row.idempotencyKey ?? '').startsWith('planner:');
+        const state = stagedPlanner && terminal === 'done' ? 'done' : transition(row.state, event);
         deps.db
           .update(schema.jobs)
           .set({ state, terminalAt: at.toISOString(), updatedAt: at.toISOString() })

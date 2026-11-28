@@ -8,7 +8,7 @@ import { and, desc, eq, inArray, lte } from 'drizzle-orm';
 // A New Game request's parent issue: the one issue the New Game flow files when the creator finishes the scope chat.
 // It carries only a privacy-safe summary and an opaque reference; the conversation, transcripts, pastes, attachments
 // and design spec stay in the app's private storage behind the internal API. The parent never carries a dispatch
-// label, so no worker claims it: the Executor reads it and creates the Build Order with gm-new-game-plan.
+// label, so no worker claims it: a separate planner ticket creates the Build Order with gm-new-game-plan.
 export const PARENT_LABEL = 'request:new-game';
 export const PARENT_TICKET_KEY = 'new-game';
 

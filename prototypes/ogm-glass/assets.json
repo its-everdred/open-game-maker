@@ -744,6 +744,13 @@
    "height": 160
   },
   {
+   "artboard": "AccessEntry.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
    "artboard": "CatHome.html",
    "path": "assets-local/review/design-ogm-glass/img/cat-fx-fire.jpg",
    "source": "Hivemind fire VFX store preview, torches crop (NoAI)",
