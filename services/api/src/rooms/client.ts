@@ -62,3 +62,18 @@ export async function revokeRelayRoom(
   if (response.status === 404) throw new HttpError(404, 'room_not_found');
   if (!response.ok) throw new HttpError(503, 'rooms_unavailable');
 }
+
+export async function invalidateRelayRoomUser(
+  deps: AppDeps,
+  roomId: string,
+  userId: string,
+  fetchImpl: typeof fetch,
+): Promise<void> {
+  const response = await request(
+    deps,
+    `/internal/rooms/${encodeURIComponent(roomId)}/invalidate-user`,
+    { userId },
+    fetchImpl,
+  );
+  if (!response.ok) throw new HttpError(503, 'rooms_unavailable');
+}

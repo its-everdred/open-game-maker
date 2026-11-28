@@ -281,6 +281,11 @@ export function GamesScreen() {
                           onPlay={() => open(selectedIndex ?? -1, 'play')}
                           onEdit={() => open(selectedIndex ?? -1, 'edit')}
                           onAccess={() => setAccessGame(selected)}
+                          onPublish={() => navigate(`/g/${encodeURIComponent(selected.id)}/releases`)}
+                          onVersions={() => navigate(`/g/${encodeURIComponent(selected.id)}/versions`)}
+                          onActivity={() =>
+                            navigate(`/g/${encodeURIComponent(selected.id)}`, { state: { openActivity: true } })
+                          }
                           onRelease={() => release.mutate({ gameId: selected.id, releaseState: 'released' })}
                           onComingSoon={() => release.mutate({ gameId: selected.id, releaseState: 'coming_soon' })}
                           releasePending={release.isPending}

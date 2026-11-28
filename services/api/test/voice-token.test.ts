@@ -115,7 +115,7 @@ async function setup(
       headers: { ...asUser(user.userId), 'content-type': 'application/json' },
       body: JSON.stringify({ target }),
     });
-  return { request, gameId: game.id, scopeSessionId, draftId: draft.id };
+  return { request, deps, gameId: game.id, scopeSessionId, draftId: draft.id };
 }
 
 function insertJob(deps: ReturnType<typeof makeDeps>, id: string, gameId: string) {
@@ -152,6 +152,33 @@ const buildTarget = (gameId: string, creatorId = creator.userId, jobId = 'j-1') 
 });
 
 describe('POST /api/v1/voice/token', () => {
+  it('mints dictation for a granted editor on another creator’s job', async () => {
+    const { request, deps, gameId } = await setup();
+    const date = new Date(now);
+    deps.db
+      .insert(schema.user)
+      .values({
+        id: sibling.userId,
+        email: sibling.email,
+        name: 'Sibling',
+        emailVerified: true,
+        createdAt: date,
+        updatedAt: date,
+      })
+      .run();
+    deps.db
+      .insert(schema.gameAccess)
+      .values({ gameId, email: sibling.email, access: 'edit', updatedBy: creator.userId, updatedAt: now })
+      .run();
+    const target = {
+      kind: 'edit',
+      game_id: gameId,
+      creator_id: sibling.userId,
+      session_id: '29000000-0000-4000-8000-000000000001',
+      job_id: 'j-1',
+    };
+    expect((await request(sibling, target, '/api/v1/voice/dictation-token')).status).toBe(200);
+  });
   it('authorizes a temporary draft scope session without a game row', async () => {
     const { request, draftId } = await setup();
     const target = {

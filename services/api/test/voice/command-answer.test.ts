@@ -7,7 +7,8 @@ import type { AppDeps } from '../../src/app/types.js';
 import { findCommand, insertChatRow, parseCommand } from '../../src/build-chat/store.js';
 import { answerCommand } from '../../src/job-commands/answer.js';
 import { answerVoiceCommand } from '../../src/voice/command-answer.js';
-import { ids, insertJob, NOW, worked } from '../budget/fixture.js';
+import { ids, insertJob, NOW } from '../budget/fixture.js';
+import { worked } from './access-fixture.js';
 import { makeApp } from '../helpers.js';
 
 const target = {

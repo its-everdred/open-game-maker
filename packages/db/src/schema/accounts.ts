@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import { allowedUsers } from './allow-list.js';
 
 const createdAt = () => text('created_at').notNull();
 
@@ -161,9 +160,7 @@ export const gameAccess = sqliteTable(
     gameId: text('game_id')
       .notNull()
       .references(() => games.id, { onDelete: 'cascade' }),
-    email: text('email')
-      .notNull()
-      .references(() => allowedUsers.email, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
     access: text('access', { enum: ['hide', 'play', 'edit'] }).notNull(),
     updatedBy: text('updated_by').notNull(),
     updatedAt: text('updated_at').notNull(),

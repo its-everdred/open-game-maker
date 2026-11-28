@@ -133,6 +133,7 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
   private readonly violations = new Map<string, ViolationWindow>();
   private readonly revokedJtis = new Set<string>();
   private readonly revokedUsers = new Set<string>();
+  private readonly invalidatedUsers = new Map<string, number>();
   private readonly forcedLeaves = new Map<string, ForcedLeave>();
   private readonly lastSeenRev = new Map<string, number>();
   private readonly readyUsers = new Set<string>();
@@ -248,6 +249,7 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
 
   onJoin(client: Client, _options: unknown, auth?: RoomGrant): void {
     const grant = auth ?? clientGrant(client);
+    if (this.isRevoked(grant)) rejection({ code: 'GRANT_REVOKED' }, 403);
     client.auth = grant;
     this.cancelIdleTimer();
     if (this.isV2) return this.joinSeat(client, grant);
@@ -361,6 +363,17 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
     for (const client of [...this.clients]) {
       const grant = clientGrant(client);
       if ((input.jti && grant.jti === input.jti) || (input.userId && grant.sub === input.userId)) {
+        this.forcedLeaves.set(client.sessionId, 'revoked');
+        client.send('ended', { reason: 'revoked' });
+        client.leave(4001);
+      }
+    }
+  }
+
+  invalidateUser(userId: string): void {
+    this.invalidatedUsers.set(userId, Math.floor(Date.now() / 1000));
+    for (const client of [...this.clients]) {
+      if (clientGrant(client).sub === userId) {
         this.forcedLeaves.set(client.sessionId, 'revoked');
         client.send('ended', { reason: 'revoked' });
         client.leave(4001);
@@ -1129,7 +1142,11 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
   }
 
   private isRevoked(grant: RoomGrant): boolean {
-    return this.revokedJtis.has(grant.jti) || this.revokedUsers.has(grant.sub);
+    return (
+      this.revokedJtis.has(grant.jti) ||
+      this.revokedUsers.has(grant.sub) ||
+      grant.iat <= (this.invalidatedUsers.get(grant.sub) ?? -1)
+    );
   }
 
   private hasConnectedSession(userId: string): boolean {

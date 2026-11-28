@@ -60,26 +60,29 @@ export function GlassUsers({
     return () => previous?.focus();
   }, [selected]);
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<AllowListRole>('player');
+  const [inviteRole, setInviteRole] = useState<AllowListRole>('player');
+  const [editRole, setEditRole] = useState<AllowListRole>('player');
+  const panelId = useRef(0);
   const active = users.filter(hasJoined);
   const invited = users.filter((user) => !hasJoined(user));
   const openUser = (user: AdminAllowedUser) => {
+    panelId.current += 1;
     setSelected(user);
-    setRole(user.role);
+    setEditRole(user.role);
   };
   const close = () => {
+    panelId.current += 1;
     setInviting(false);
     setSelected(null);
-    setRole('player');
   };
-  const segment = (
+  const segment = (role: AllowListRole, setRole: (value: AllowListRole) => void, isSelf = false) => (
     <div className="game-access-segment glass-users-segment" role="group" aria-label="Type">
       {roles.map((value) => (
         <button
           key={value}
           type="button"
           aria-pressed={role === value}
-          disabled={busy || (!!selected && selected.email === currentEmail)}
+          disabled={busy || isSelf}
           onClick={() => setRole(value)}
         >
           {label(value)}
@@ -123,7 +126,8 @@ export function GlassUsers({
             className={`${kit.orb} ${kit.sm} game-access-back glass-users-add`}
             aria-label="Invite user"
             onClick={() => {
-              setRole('player');
+              panelId.current += 1;
+              setInviteRole('player');
               setInviting(true);
             }}
           >
@@ -148,9 +152,12 @@ export function GlassUsers({
           className="game-access-body glass-users-form"
           onSubmit={(event) => {
             event.preventDefault();
-            void onInvite(email.trim(), role)
+            const panel = panelId.current;
+            void onInvite(email.trim(), inviteRole)
               .then(() => {
+                if (panel !== panelId.current) return;
                 setEmail('');
+                setInviteRole('player');
                 close();
               })
               .catch(() => {});
@@ -164,11 +171,12 @@ export function GlassUsers({
                 placeholder="Email"
                 aria-label="Email"
                 required
+                disabled={busy}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />
             </label>
-            <div className="glass-users-segment-wrap">{segment}</div>
+            <div className="glass-users-segment-wrap">{segment(inviteRole, setInviteRole)}</div>
           </div>
           {error && <p role="alert">{error}</p>}
           <button className="glass-users-primary" type="submit" disabled={busy}>
@@ -265,10 +273,12 @@ export function GlassUsers({
           className="glass-users-landscape-invite"
           onSubmit={(event) => {
             event.preventDefault();
-            void onInvite(email.trim(), role)
+            const panel = panelId.current;
+            void onInvite(email.trim(), inviteRole)
               .then(() => {
+                if (panel !== panelId.current) return;
                 setEmail('');
-                setRole('player');
+                setInviteRole('player');
               })
               .catch(() => {});
           }}
@@ -282,11 +292,12 @@ export function GlassUsers({
                 placeholder="Email"
                 aria-label="Email"
                 required
+                disabled={busy}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />
             </label>
-            <div className="glass-users-segment-wrap">{segment}</div>
+            <div className="glass-users-segment-wrap">{segment(inviteRole, setInviteRole)}</div>
           </div>
           <button className="glass-users-primary" type="submit" disabled={busy}>
             Send invite
@@ -324,15 +335,18 @@ export function GlassUsers({
           >
             <span className="game-access-avatar glass-users-large">{name(selected).charAt(0).toUpperCase()}</span>
             <h2>{name(selected)}</h2>
-            {segment}
+            {segment(editRole, setEditRole, selected.email === currentEmail)}
             {error && <p role="alert">{error}</p>}
             <button
               type="button"
               className="glass-users-primary"
               disabled={busy}
               onClick={() => {
-                void onChange(selected, role)
-                  .then(close)
+                const panel = panelId.current;
+                void onChange(selected, editRole)
+                  .then(() => {
+                    if (panel === panelId.current) close();
+                  })
                   .catch(() => {});
               }}
             >

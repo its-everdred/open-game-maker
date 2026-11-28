@@ -42,3 +42,43 @@ it('invites an Editor and changes an existing user type', async () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ email: 'alexis@example.test' }), 'player'),
   );
 });
+
+it('keeps the landscape invite type independent and does not close a replacement user after a delayed save', async () => {
+  let finish!: () => void;
+  const onChange = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const users = ['Alexis', 'Sam'].map((name) => ({
+    email: `${name.toLowerCase()}@example.test`,
+    name,
+    role: 'player' as const,
+    addedBy: 'owner',
+    addedAt: '',
+    lastSignInAt: '2026-01-01',
+  }));
+  const { container } = render(
+    <MemoryRouter>
+      <GlassUsers
+        users={users}
+        currentEmail="owner@example.test"
+        busy={false}
+        onInvite={vi.fn()}
+        onChange={onChange}
+        onRemove={vi.fn()}
+        onResend={vi.fn()}
+      />
+    </MemoryRouter>,
+  );
+  const invite = container.querySelector('.glass-users-landscape-invite') as HTMLElement;
+  fireEvent.click(within(invite).getByRole('button', { name: 'Editor', hidden: true }));
+  fireEvent.click(screen.getByRole('button', { name: /Alexis/ }));
+  fireEvent.click(within(screen.getByRole('dialog', { name: 'Alexis' })).getByRole('button', { name: 'Done' }));
+  fireEvent.click(container.querySelector('.glass-users-scrim') as HTMLElement);
+  fireEvent.click(screen.getByRole('button', { name: /Sam/ }));
+  finish();
+  await waitFor(() => expect(screen.getByRole('dialog', { name: 'Sam' })).toBeInTheDocument());
+  expect(within(invite).getByRole('button', { name: 'Editor', hidden: true })).toHaveAttribute('aria-pressed', 'true');
+});

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6a76ff2d-6413-4784-a716-bd3181b552b7",
+  "id": "26037429-b5dd-4df8-a898-1e77c6efb2cd",
   "prevId": "c351529e-0d88-43b5-bbde-60563c0521ba",
   "tables": {
     "app_meta": {
@@ -213,15 +213,6 @@
           "tableTo": "games",
           "columnsFrom": ["game_id"],
           "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "game_access_email_allowed_users_email_fk": {
-          "name": "game_access_email_allowed_users_email_fk",
-          "tableFrom": "game_access",
-          "tableTo": "allowed_users",
-          "columnsFrom": ["email"],
-          "columnsTo": ["email"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }

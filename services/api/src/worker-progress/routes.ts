@@ -16,7 +16,6 @@ import { listEditorPreviews, listPreviewHistory, listPreviews } from '../preview
 import type { ApiBindings } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
 import { authorizedGame } from '../games/authorize.js';
-import { requirePrincipal } from '../app/principal.js';
 import { listWorkers } from './list.js';
 import { logIncomplete, sourceError } from './incomplete-log.js';
 import { recentCompletions } from './completions.js';
@@ -167,7 +166,6 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
 
 routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
   const game = authorizedGame(c, 'game.edit');
-  if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
   const deps = c.get('deps');
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
   if (!repo || !game.slug || !deps.registry.trackerTickets) throw new HttpError(503, 'ticket_scope_unavailable');
@@ -310,7 +308,6 @@ routes.get('/games/:gameId/tickets/:ticket/conversation', async (c) => {
 });
 routes.post('/games/:gameId/tickets/:ticket/conversation', async (c) => {
   const game = authorizedGame(c, 'game.edit');
-  if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
   const deps = c.get('deps');
   const ticket = c.req.param('ticket');
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;

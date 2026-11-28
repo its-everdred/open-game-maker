@@ -6,7 +6,8 @@ import { listSince } from '../../src/build-chat/store.js';
 import { gameDrafts } from '../../src/new-game/drafts.js';
 import { scopeSessions } from '../../src/scope/store.js';
 import type { VoiceTarget } from '../../src/voice/briefing-push.js';
-import { ids, worked } from '../budget/fixture.js';
+import { ids } from '../budget/fixture.js';
+import { worked } from './access-fixture.js';
 import { makeApp } from '../helpers.js';
 
 const SECRET = 'voice-internal-secret-for-tests';
@@ -212,7 +213,7 @@ describe('POST /internal/voice/transcript', () => {
     const forgedBuild = { ...build, creator_id: ids.other };
     const forgedScope = { ...scope, session_id: 'missing' };
 
-    expect((await request(forgedBuild, 'creator', 'no', 'user-3')).status).toBe(404);
+    expect((await request(forgedBuild, 'creator', 'no', 'user-3')).status).toBe(403);
     expect((await request(forgedScope, 'agent', 'no', 'agent-3')).status).toBe(404);
     expect(listSince(deps.sqlite, ids.running, 0)).toEqual([]);
   });

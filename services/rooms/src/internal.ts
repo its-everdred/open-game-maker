@@ -84,5 +84,21 @@ export function createInternalApp(options: InternalAppOptions): Hono {
     }
   });
 
+  app.post('/internal/rooms/:roomId/invalidate-user', async (context) => {
+    const body = z
+      .object({ userId: z.string().min(1) })
+      .strict()
+      .safeParse(await context.req.json().catch(() => undefined));
+    if (!body.success) return context.json({ error: 'invalid user' }, 400);
+    try {
+      await matchMaker.remoteRoomCall<GameRoom, 'invalidateUser'>(context.req.param('roomId'), 'invalidateUser', [
+        body.data.userId,
+      ]);
+      return context.body(null, 204);
+    } catch {
+      return context.body(null, 503);
+    }
+  });
+
   return app;
 }

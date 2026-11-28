@@ -35,4 +35,17 @@ describe('per-game access', () => {
       }),
     ).toEqual({ ok: false, reason: 'game_hidden' });
   });
+
+  it('prevents a creator from forking a hidden game while preserving owner and ordinary access', () => {
+    const actor = { ...editor, familyId: 'family' };
+    const listed = { ...game, visibility: 'listed' as const };
+    expect(authorize(actor, 'game.fork', { ...listed, gameAccess: 'hide' })).toEqual({
+      ok: false,
+      reason: 'game_hidden',
+    });
+    expect(authorize(actor, 'game.fork', listed)).toEqual({ ok: true });
+    expect(authorize(actor, 'game.fork', { ...listed, ownerId: actor.userId, gameAccess: 'hide' })).toEqual({
+      ok: true,
+    });
+  });
 });

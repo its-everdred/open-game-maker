@@ -521,6 +521,18 @@ describe('StudioMenu', () => {
     );
   });
 
+  it('opens the game-scoped builds panel from the activity entry', async () => {
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/g/game-1', state: { openActivity: true } }]}>
+        <GameMenuProvider>
+          <StudioMenu />
+          <TestPlayControls onEdit={vi.fn()} />
+        </GameMenuProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('region', { name: 'Builds' })).toBeVisible();
+  });
+
   it('puts play actions in the icon row and returns focus to the glass menu button after selection', async () => {
     const onEdit = vi.fn();
     render(

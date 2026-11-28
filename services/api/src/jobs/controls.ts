@@ -13,7 +13,7 @@ import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import type { IssueStateWriter } from '../app/registry.js';
 import { parseBody } from '../app/validate.js';
-import { getGameAccess } from '../games/games.js';
+import { getGameAccess, requireGameFamilyVisibility } from '../games/games.js';
 import { daemonRowForGame } from './daemons.js';
 import { findJob, findJobRow, type JobRow } from './repo.js';
 import { markTerminal } from './spend-cap.js';
@@ -68,6 +68,7 @@ function loadAuthorized(
   const row = findJobRow(deps.db, id);
   const game = deps.db.select().from(schema.games).where(eq(schema.games.id, row.gameId)).get();
   if (!game) throw new HttpError(404, 'game_not_found');
+  requireGameFamilyVisibility(game, principal.familyId);
   const actor = actorFromPrincipal(principal);
   const decision = authorize(actor, action, {
     gameId: game.id,

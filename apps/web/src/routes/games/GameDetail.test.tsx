@@ -327,3 +327,22 @@ describe('game detail', () => {
     expect(video).toHaveAttribute('preload', 'auto');
   });
 });
+
+it('offers owner actions that call the supplied destinations', () => {
+  const onPublish = vi.fn();
+  const onVersions = vi.fn();
+  const onActivity = vi.fn();
+  const onAccess = vi.fn();
+  detail({ ...blobs, canManageAccess: true, canEdit: true }, { onPublish, onVersions, onActivity, onAccess });
+  for (const [label, callback] of [
+    ['Publish', onPublish],
+    ['Versions', onVersions],
+    ['Activity', onActivity],
+    ['Access', onAccess],
+  ] as const) {
+    fireEvent.click(screen.getByRole('button', { name: label }));
+    expect(callback).toHaveBeenCalledOnce();
+  }
+  expect(screen.getByRole('button', { name: 'Play Blobs' })).toHaveTextContent('Play');
+  expect(screen.getByRole('button', { name: 'Edit Blobs' })).toHaveTextContent('Edit');
+});

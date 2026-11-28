@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 
 import { api } from '../../lib/api/client';
@@ -76,16 +76,20 @@ export function GameAccess({ gameId, ownerId, onClose }: { gameId: string; owner
     return () => previous?.focus();
   }, []);
   const landscape = useSyncExternalStore(subscribeLandscape, landscapeSnapshot, () => false);
+  const queryClient = useQueryClient();
   const path = `/games/${encodeURIComponent(gameId)}/access`;
+  const mutationKey = ['game-access-update', gameId] as const;
+  const pending = useIsMutating({ mutationKey }) > 0;
   const users = useQuery({
     queryKey: ['game-access', gameId],
     queryFn: () => api<{ users: User[] }>(path),
     retry: false,
   });
   const update = useMutation({
+    mutationKey,
     mutationFn: ({ email, access }: { email: string; access: Access }) =>
       api(`${path}/${encodeURIComponent(email)}`, { method: 'PUT', json: { access } }),
-    onSuccess: () => users.refetch(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['game-access', gameId] }),
   });
   const owner = users.data?.users.find((user) => user.userId === ownerId);
   const others = users.data?.users.filter((user) => user.userId !== ownerId) ?? [];
@@ -151,11 +155,9 @@ export function GameAccess({ gameId, ownerId, onClose }: { gameId: string; owner
             <div className="game-access-landscape">
               <div>
                 {owner && <Owner user={owner} />}
-                {others.length > 0 && <Users users={others.slice(0, 1)} busy={update.isPending} change={change} />}
+                {others.length > 0 && <Users users={others.slice(0, 1)} busy={pending} change={change} />}
               </div>
-              <div>
-                {others.length > 1 && <Users users={others.slice(1)} busy={update.isPending} change={change} />}
-              </div>
+              <div>{others.length > 1 && <Users users={others.slice(1)} busy={pending} change={change} />}</div>
             </div>
           ) : (
             <div className="game-access-portrait">
@@ -164,7 +166,7 @@ export function GameAccess({ gameId, ownerId, onClose }: { gameId: string; owner
                 <div className={`${kit.cap} game-access-caption`}>
                   Users <span className={kit.cnt}>{others.length}</span>
                 </div>
-                {others.length > 0 && <Users users={others} busy={update.isPending} change={change} />}
+                {others.length > 0 && <Users users={others} busy={pending} change={change} />}
               </section>
             </div>
           ))}

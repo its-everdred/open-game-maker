@@ -10,6 +10,7 @@ import { toUnits } from '../budget/units.js';
 import { parseCommandOptions } from '../job-commands/options.js';
 import { decisionFocus } from './decision-focus.js';
 import type { QuestionSession } from './question-session.js';
+import { voiceActor } from './access.js';
 
 export type { VoiceTarget } from '@ogm/contracts';
 
@@ -135,7 +136,7 @@ export function jobFor(db: Db, target: VoiceTarget) {
       .from(schema.jobs)
       .where(
         and(
-          eq(schema.jobs.creatorId, target.creator_id),
+          target.job_id ? undefined : eq(schema.jobs.creatorId, target.creator_id),
           eq(schema.jobs.gameId, target.game_id),
           target.job_id ? eq(schema.jobs.id, target.job_id) : eq(schema.jobs.idempotencyKey, editAdmissionKey(target)),
         ),
@@ -255,7 +256,9 @@ const lastFailureLog = new Map<string, number>();
 export async function pushBriefing(deps: PushDeps, target: VoiceTarget): Promise<void> {
   const key = targetKey(target);
   try {
+    if (!voiceActor(deps.db, target)) return;
     const briefing = await buildBriefing(deps, target);
+    if (!voiceActor(deps.db, target)) return;
     const response = await (deps.fetch ?? fetch)(`${deps.url.replace(/\/$/, '')}/internal/briefing`, {
       method: 'POST',
       headers: { authorization: `Bearer ${deps.secret}`, 'content-type': 'application/json' },

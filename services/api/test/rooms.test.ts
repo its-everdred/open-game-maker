@@ -6,6 +6,7 @@ import {
   createRoom,
   createRoomInvitation,
   freshRoomGrant,
+  invalidateGameRoomAccess,
   joinRoom,
   recordRoomEnded,
   revokeRoomAccess,
@@ -88,6 +89,74 @@ function createdRoomResponse(roomId = 'room-1') {
 }
 
 describe('room lifecycle service', () => {
+  it('denies hidden users invitation joins and grant refreshes, and restores play access', async () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.user)
+      .values({
+        id: member.userId,
+        email: member.email,
+        name: member.displayName,
+        emailVerified: true,
+        createdAt: new Date(now),
+        updatedAt: new Date(now),
+      })
+      .run();
+    deps.db
+      .insert(schema.rooms)
+      .values({
+        id: 'room-1',
+        gameId: 'g-1',
+        branchId: 'branch-1',
+        buildId: 'build-1',
+        ownerId: owner.userId,
+        maxPlayers: 4,
+        createdAt: now,
+      })
+      .run();
+    const invitation = await createRoomInvitation(deps, owner, 'room-1', { email: member.email }, nowMs);
+    const token = invitation.url.split('/').at(-1) ?? '';
+    await joinRoom(deps, member, token, nowMs);
+    deps.db
+      .insert(schema.gameAccess)
+      .values({ gameId: 'g-1', email: member.email, access: 'hide', updatedBy: owner.userId, updatedAt: now })
+      .run();
+    await expect(joinRoom(deps, member, token, nowMs)).rejects.toMatchObject({ status: 403, code: 'game_hidden' });
+    await expect(freshRoomGrant(deps, member, 'room-1', nowMs)).rejects.toMatchObject({
+      status: 403,
+      code: 'game_hidden',
+    });
+    await expect(freshRoomGrant(deps, owner, 'room-1', nowMs)).resolves.toMatchObject({ roomId: 'room-1' });
+    deps.db.update(schema.gameAccess).set({ access: 'play' }).run();
+    await expect(freshRoomGrant(deps, member, 'room-1', nowMs)).resolves.toMatchObject({ roomId: 'room-1' });
+  });
+
+  it('requires the relay to invalidate each active game room', async () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.rooms)
+      .values({
+        id: 'room-1',
+        gameId: 'g-1',
+        branchId: 'branch-1',
+        buildId: 'build-1',
+        ownerId: owner.userId,
+        maxPlayers: 4,
+        createdAt: now,
+      })
+      .run();
+    const relay = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await expect(invalidateGameRoomAccess(deps, 'g-1', member.userId, relay)).rejects.toMatchObject({
+      status: 503,
+      code: 'rooms_unavailable',
+    });
+    await expect(invalidateGameRoomAccess(deps, 'g-1', member.userId, relay)).resolves.toBeUndefined();
+    expect(relay.mock.calls[1]?.[0]).toContain('/internal/rooms/room-1/invalidate-user');
+    expect(relay.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({ userId: member.userId }));
+  });
   it('creates one clamped room, persists it only after the relay succeeds, and signs an owner grant', async () => {
     const deps = setup();
     const relay = vi.fn<typeof fetch>().mockResolvedValue(createdRoomResponse());

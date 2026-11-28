@@ -88,4 +88,27 @@ describe('rooms internal API', () => {
     expect(response.status).toBe(204);
     expect(await ended).toEqual({ reason: 'revoked' });
   });
+
+  it('invalidates a connected user through the internal route and fails on a missing room', async () => {
+    const created = await createRoom({
+      gameId: 'g_test',
+      branchId: 'main',
+      buildId: 'sha256:one',
+      ownerId: 'owner',
+      maxPlayers: 4,
+    });
+    const { roomId } = (await created.json()) as { roomId: string };
+    const room = harness.testServer.getRoomById(roomId);
+    const player = await connect(harness.testServer, room, 'player', 'player');
+    const ended = player.waitForMessage('ended');
+    const request = (id: string) =>
+      harness.app.request(`/internal/rooms/${id}/invalidate-user`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${INTERNAL_SECRET}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ userId: 'player' }),
+      });
+    expect((await request(roomId)).status).toBe(204);
+    expect(await ended).toEqual({ reason: 'revoked' });
+    expect((await request('missing')).status).toBe(503);
+  });
 });

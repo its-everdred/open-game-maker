@@ -177,6 +177,21 @@ describe('GameRoom lifecycle', () => {
     expect(await rejectionCode(connect(harness.testServer, room, 'player', 'player'))).toBe('GRANT_REVOKED');
   });
 
+  it('invalidates old grants and disconnects sessions without permanently banning the user', async () => {
+    const room = await newRoom(harness.testServer);
+    await connect(harness.testServer, room, 'owner', 'owner');
+    const oldOptions = await joinOptions(room, 'player', 'player');
+    const player = await harness.testServer.connectTo(room, oldOptions);
+    const ended = player.waitForMessage('ended');
+    room.invalidateUser('player');
+    expect(await ended).toEqual({ reason: 'revoked' });
+    await sleep(40);
+    expect(await rejectionCode(harness.testServer.connectTo(room, oldOptions))).toBe('GRANT_REVOKED');
+    const freshOptions = await joinOptions(room, 'player', 'player', { nowMs: Date.now() + 2000 });
+    const restored = await harness.testServer.connectTo(room, freshOptions);
+    await restored.leave();
+  });
+
   it('rejects a revoked session that tries to reconnect from a held seat', async () => {
     const room = await newRoom(harness.testServer);
     const player = await connect(harness.testServer, room, 'player', 'player');

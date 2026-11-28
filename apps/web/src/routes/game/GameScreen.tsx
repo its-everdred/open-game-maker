@@ -118,9 +118,17 @@ export function GameScreen() {
   /* A link to one build (a review's "Play this build") names it here; the frame plays it instead of the branch head. */
   const linkedBuild = searchParams.get('build')?.trim() || undefined;
   const isGameRoute = useMatch('/g/:gameId') !== null;
-  const mode: 'play' | 'edit' = searchParams.get('mode') === 'edit' ? 'edit' : 'play';
+  const wantsEdit = searchParams.get('mode') === 'edit';
   const gamesOrigin = import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000';
   const game = useQuery({ queryKey: ['game', gameId], queryFn: () => getGame(gameId), enabled: gameId !== '' });
+  const canEdit = game.data?.canEdit === true;
+  const mode: 'play' | 'edit' = wantsEdit && canEdit ? 'edit' : 'play';
+  useEffect(() => {
+    if (!wantsEdit || !game.data || canEdit) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('mode', 'play');
+    setSearchParams(next, { replace: true });
+  }, [wantsEdit, game.data, canEdit, searchParams, setSearchParams]);
   const loadedGameId = game.data?.id;
   /* The games list already holds this game's art, so the loading screen never waits on the game request. */
   const listedGame = useMemo(
@@ -649,12 +657,13 @@ export function GameScreen() {
   const requestMode = useCallback(
     (nextMode: 'play' | 'edit') => {
       if (room.snapshot?.role === 'peer') return;
+      if (nextMode === 'edit' && !canEdit) return;
       if (room.snapshot?.role === 'host') {
         room.session?.send({ t: 'phase', to: nextMode === 'play' ? 'playing' : 'editing' });
       }
       setMode(nextMode);
     },
-    [room.session, room.snapshot?.role, setMode],
+    [canEdit, room.session, room.snapshot?.role, setMode],
   );
   const leaveRoom = useCallback(async () => {
     try {
@@ -701,10 +710,10 @@ export function GameScreen() {
     [frameState, gameId, mode, runningBuildId],
   );
   const askForChange = useCallback(() => {
-    if (room.snapshot?.role === 'peer') return;
+    if (room.snapshot?.role === 'peer' || !canEdit) return;
     requestMode('edit');
     useDock.getState().startEdit({ gameId, branchId: jobBranch, title: game.data?.title ?? '' });
-  }, [game.data?.title, gameId, jobBranch, requestMode, room.snapshot?.role]);
+  }, [canEdit, game.data?.title, gameId, jobBranch, requestMode, room.snapshot?.role]);
   const closeMenu = useCallback(() => setMenuOpen(false), [setMenuOpen]);
   const extraProps: GameExtraProps = useMemo(
     () => ({
@@ -780,7 +789,7 @@ export function GameScreen() {
                       label: 'Edit',
                       icon: 'edit',
                       onPausePanel: true,
-                      disabled: room.snapshot?.role === 'peer',
+                      disabled: room.snapshot?.role === 'peer' || !canEdit,
                       onSelect: (): void => {
                         void requestMode('edit');
                       },
@@ -791,7 +800,7 @@ export function GameScreen() {
                 id: 'ask-change',
                 label: 'Ask for a change',
                 icon: 'speak',
-                disabled: room.snapshot?.role === 'peer',
+                disabled: room.snapshot?.role === 'peer' || !canEdit,
                 onSelect: askForChange,
               },
             ],
@@ -806,7 +815,7 @@ export function GameScreen() {
                 id: 'ask-change',
                 label: 'Ask for a change',
                 icon: 'speak',
-                disabled: room.snapshot?.role === 'peer',
+                disabled: room.snapshot?.role === 'peer' || !canEdit,
                 onSelect: askForChange,
               },
             ],
@@ -814,6 +823,7 @@ export function GameScreen() {
           },
     [
       askForChange,
+      canEdit,
       extraProps,
       frameState.bridgeState,
       frameState.hostPauseVisible,
@@ -997,7 +1007,7 @@ export function GameScreen() {
               setMenuOpen(false);
               void requestMode('edit');
             }}
-            editDisabled={room.snapshot?.role === 'peer'}
+            editDisabled={room.snapshot?.role === 'peer' || !canEdit}
             onMoreHost={setMoreHost}
             onFileBug={fileBug}
             bugLog={readBugLog}

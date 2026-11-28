@@ -1,8 +1,8 @@
 import { schema } from '@ogm/db';
 import { describe, expect, it } from 'vitest';
 
-import { getGameAccess } from '../src/games/games.js';
-import { setAllowedRole } from '../src/auth/allow-list.js';
+import { createGameRow, getGameAccess } from '../src/games/games.js';
+import { addAllowedUser, setAllowedRole } from '../src/auth/allow-list.js';
 import { asUser, installUsers, makeApp, makeDeps, type TestUser } from './helpers.js';
 
 const owner: TestUser = {
@@ -72,6 +72,31 @@ const put = (app: Awaited<ReturnType<typeof makeApp>>['app'], actor: string, ema
   });
 
 describe('game access', () => {
+  it('keeps pending invitations hidden on games created before or after the invite', async () => {
+    const { deps } = await setup();
+    addAllowedUser(deps.db, { email: 'new@example.test', role: 'maker', addedBy: owner.userId });
+    const later = createGameRow(deps.db, {
+      familyId: owner.familyId,
+      ownerId: owner.userId,
+      title: 'Later',
+      repoVisibility: 'private',
+    });
+    const now = new Date();
+    deps.db
+      .insert(schema.user)
+      .values({
+        id: 'new',
+        email: 'new@example.test',
+        name: 'New',
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    expect(getGameAccess(deps.db, 'game', 'new')).toBe('hide');
+    expect(getGameAccess(deps.db, later.id, 'new')).toBe('hide');
+  });
+
   it('lets the owner set an invited editor access before their first sign-in', async () => {
     const { app, deps } = await setup();
     expect((await put(app, owner.userId, 'invited@example.test', 'edit')).status).toBe(200);

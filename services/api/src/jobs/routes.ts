@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { getGameAccess, hasGameGrant, listGames as listVisibleGames } from '../games/games.js';
+import { authorizedGameById } from '../games/authorize.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
@@ -115,17 +116,10 @@ const routes = new Hono<ApiBindings>()
     return c.json(findJob(deps.db, row.id));
   })
   .patch('/jobs/:id', async (c) => {
-    const principal = requirePrincipal(c, ['user']);
+    requirePrincipal(c, ['user']);
     const deps = c.get('deps');
     const row = findJobRow(deps.db, c.req.param('id'));
-    const game = gameFor(deps, row.gameId);
-    requireAuthorization(
-      authorize(actorFromPrincipal(principal), 'game.edit', {
-        familyId: game.familyId,
-        ownerId: game.ownerId,
-        gameAccess: getGameAccess(deps.db, game.id, principal.userId),
-      }),
-    );
+    authorizedGameById(c, 'game.edit', row.gameId);
     if (row.state !== 'queued') throw new HttpError(409, 'job_not_queued');
     const { plan } = await parseBody(c, patchBody);
     deps.db

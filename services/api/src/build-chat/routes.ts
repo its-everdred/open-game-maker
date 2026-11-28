@@ -3,7 +3,7 @@ import { streamSSE } from 'hono/streaming';
 
 import { ChatPostBody, ChatSinceQuery, type ChatMessagesPage } from '@ogm/contracts';
 import { HttpError } from '../app/errors.js';
-import { requirePrincipal } from '../app/principal.js';
+import { principalMiddleware, requirePrincipal } from '../app/principal.js';
 import { readBoundedBody } from '../app/read-body.js';
 import type { ChatJob } from '../app/registry.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
@@ -35,6 +35,7 @@ import {
 } from './store.js';
 import { createChatHub, formatChatFrame, type ChatHub } from './stream.js';
 import { getNarrationRenderer } from '../narration/render.js';
+import { authorizedGameById } from '../games/authorize.js';
 
 export const prefix = '/api/v1/jobs';
 
@@ -144,6 +145,27 @@ function messageOf(deps: AppDeps, row: ChatRow, sign: MediaSigner) {
 
 function chatStream(c: Context<ApiBindings>, job: ChatJob, since: number) {
   const deps = c.get('deps');
+  const userId = requirePrincipal(c, ['user']).userId;
+  const headers = new Headers(c.req.raw.headers);
+  const auth = new Hono<ApiBindings>();
+  auth.use(async (context, next) => {
+    context.set('deps', deps);
+    await next();
+  });
+  auth.use(principalMiddleware());
+  auth.get('/', (context) => {
+    const principal = requirePrincipal(context, ['user']);
+    if (principal.userId !== userId) return context.body(null, 403);
+    authorizedGameById(context, 'game.edit', job.gameId);
+    return context.body(null, 204);
+  });
+  const allowed = async () => {
+    try {
+      return (await auth.request('http://127.0.0.1/', { headers })).ok;
+    } catch {
+      return false;
+    }
+  };
   const runtime = getChatRuntime(deps);
   if (!runtime.hub.canSubscribe(job.jobId)) throw new HttpError(503, 'too_many_streams');
 
@@ -163,7 +185,12 @@ function chatStream(c: Context<ApiBindings>, job: ChatJob, since: number) {
             if (rows.length === 0) return;
             for (const row of rows) {
               if (shownInChat(row)) {
-                await stream.write(formatChatFrame(row.seq, await messageOf(deps, row, runtime.sign)));
+                const message = await messageOf(deps, row, runtime.sign);
+                if (!(await allowed())) {
+                  finish();
+                  return;
+                }
+                await stream.write(formatChatFrame(row.seq, message));
               }
               cursor = row.seq;
             }
@@ -175,7 +202,15 @@ function chatStream(c: Context<ApiBindings>, job: ChatJob, since: number) {
     const unsubscribe = runtime.hub.subscribe(job.jobId, pump);
     stream.onAbort(finish);
     const keepalive = setInterval(() => {
-      void stream.write(': ping\n\n').catch(finish);
+      chain = chain
+        .then(async () => {
+          if (!(await allowed())) {
+            finish();
+            return;
+          }
+          await stream.write(': ping\n\n');
+        })
+        .catch(finish);
     }, 25_000);
     keepalive.unref();
     pump();

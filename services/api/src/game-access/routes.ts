@@ -10,7 +10,8 @@ import { invalidateArtifactGrants } from '../artifacts/session-grants.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
-import { findGameForFamily, hasGameGrant } from '../games/games.js';
+import { findGameForFamily } from '../games/games.js';
+import { invalidateGameRoomAccess } from '../rooms/rooms.js';
 
 export const prefix = '/api/v1/games';
 const bodySchema = z.object({ access: z.enum(['hide', 'play', 'edit']) }).strict();
@@ -29,6 +30,8 @@ const routes = new Hono<ApiBindings>()
         userId: schema.user.id,
         familyId: schema.familyMembers.familyId,
         access: schema.gameAccess.access,
+        inviteGrant: schema.gameGrants.userId,
+        earlyGrant: schema.gameEarlyAccess.userId,
       })
       .from(schema.allowedUsers)
       .leftJoin(schema.user, sql`lower(${schema.user.email}) = ${schema.allowedUsers.email}`)
@@ -37,9 +40,17 @@ const routes = new Hono<ApiBindings>()
         schema.gameAccess,
         and(eq(schema.gameAccess.email, schema.allowedUsers.email), eq(schema.gameAccess.gameId, game.id)),
       )
+      .leftJoin(
+        schema.gameGrants,
+        and(eq(schema.gameGrants.userId, schema.user.id), eq(schema.gameGrants.gameId, game.id)),
+      )
+      .leftJoin(
+        schema.gameEarlyAccess,
+        and(eq(schema.gameEarlyAccess.userId, schema.user.id), eq(schema.gameEarlyAccess.gameId, game.id)),
+      )
       .all();
     return c.json({
-      users: users.map((user) => ({
+      users: users.map(({ inviteGrant, earlyGrant, ...user }) => ({
         ...user,
         access:
           user.access ??
@@ -57,7 +68,7 @@ const routes = new Hono<ApiBindings>()
               ownerId: game.ownerId,
               visibility: game.visibility,
               releaseState: game.releaseState,
-              granted: hasGameGrant(db, game.id, user.userId),
+              granted: inviteGrant !== null || earlyGrant !== null,
             },
           ).ok
             ? 'play'
@@ -68,21 +79,23 @@ const routes = new Hono<ApiBindings>()
   .put('/:gameId/access/:email', async (c) => {
     const principal = requirePrincipal(c, ['user']);
     const { db } = c.get('deps');
-    const game = findGameForFamily(db, c.req.param('gameId'), principal.familyId);
-    if (game.ownerId !== principal.userId) throw new HttpError(403, 'not_owner');
     const email = c.req.param('email').trim().toLowerCase();
-    const target = db.select().from(schema.allowedUsers).where(eq(schema.allowedUsers.email, email)).get();
-    if (!target) throw new HttpError(404, 'user_not_found');
-    const account = db
-      .select({ id: schema.user.id })
-      .from(schema.user)
-      .where(sql`lower(${schema.user.email}) = ${email}`)
-      .get();
-    if (account?.id === game.ownerId) throw new HttpError(409, 'owner_immutable');
     const { access } = await parseBody(c, bodySchema);
-    if (access === 'edit' && target.role === 'player') throw new HttpError(400, 'editor_required');
     const updated = { access, updatedBy: principal.userId, updatedAt: new Date().toISOString() };
+    let targetUserId: string | undefined;
     db.transaction((tx) => {
+      const game = findGameForFamily(tx, c.req.param('gameId'), principal.familyId);
+      if (game.ownerId !== principal.userId) throw new HttpError(403, 'not_owner');
+      const target = tx.select().from(schema.allowedUsers).where(eq(schema.allowedUsers.email, email)).get();
+      if (!target) throw new HttpError(404, 'user_not_found');
+      const account = tx
+        .select({ id: schema.user.id })
+        .from(schema.user)
+        .where(sql`lower(${schema.user.email}) = ${email}`)
+        .get();
+      targetUserId = account?.id;
+      if (account?.id === game.ownerId) throw new HttpError(409, 'owner_immutable');
+      if (access === 'edit' && target.role === 'player') throw new HttpError(400, 'editor_required');
       const previous = tx
         .select({ access: schema.gameAccess.access })
         .from(schema.gameAccess)
@@ -106,6 +119,8 @@ const routes = new Hono<ApiBindings>()
         .run();
       if (account) invalidateArtifactGrants(tx, 'user', account.id);
     });
+    if (access === 'hide' && targetUserId)
+      await invalidateGameRoomAccess(c.get('deps'), c.req.param('gameId'), targetUserId);
     return c.json({ email, access });
   });
 

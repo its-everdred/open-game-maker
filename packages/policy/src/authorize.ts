@@ -36,7 +36,11 @@ export function authorize(actor: Actor, action: Action, resource: Resource = {})
   }
   if (ownerActions.has(action) && resource.ownerId === undefined) return denied('owner_required');
 
-  if (action === 'game.play' && resource.gameAccess === 'hide' && resource.ownerId !== actor.userId)
+  if (
+    (action === 'game.play' || action === 'game.fork') &&
+    resource.gameAccess === 'hide' &&
+    resource.ownerId !== actor.userId
+  )
     return denied('game_hidden');
 
   if (actor.platformRole === 'maintainer') {

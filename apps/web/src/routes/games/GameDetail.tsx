@@ -97,6 +97,9 @@ export function GameDetail({
   onPlay,
   onEdit,
   onAccess,
+  onPublish,
+  onVersions,
+  onActivity,
   onRelease,
   onComingSoon,
   releasePending,
@@ -110,6 +113,9 @@ export function GameDetail({
   onPlay(): void;
   onEdit(): void;
   onAccess?(): void;
+  onPublish?(): void;
+  onVersions?(): void;
+  onActivity?(): void;
   onRelease?(): void;
   onComingSoon?(): void;
   releasePending?: boolean;
@@ -214,7 +220,7 @@ export function GameDetail({
             )}
           </dl>
         )}
-        <div className="games-spotlight-actions">
+        <div className={`games-spotlight-actions${game.canManageAccess ? ' games-owner-primary' : ''}`}>
           {game.releaseState === 'coming_soon' && game.canPlay === false ? (
             <span>Coming Soon</span>
           ) : (
@@ -225,7 +231,7 @@ export function GameDetail({
                 aria-label={`Play ${game.title}`}
                 onClick={onPlay}
               >
-                ▶
+                {game.canManageAccess ? 'Play' : '▶'}
               </button>
               {game.canEdit !== false && (
                 <button
@@ -234,7 +240,7 @@ export function GameDetail({
                   aria-label={`Edit ${game.title}`}
                   onClick={onEdit}
                 >
-                  <Icon name="pencil" />
+                  {game.canManageAccess ? 'Edit' : <Icon name="pencil" />}
                 </button>
               )}
             </>
@@ -252,23 +258,50 @@ export function GameDetail({
           {releaseError && <p role="alert">Couldn’t change the release state. Try again.</p>}
         </div>
         {game.canManageAccess && onAccess && (
-          <button type="button" className="games-access-tile" onClick={onAccess}>
-            <svg
-              viewBox="0 0 24 24"
-              width="22"
-              height="22"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="9" cy="8" r="3.5" />
-              <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.3c1.8.8 3 2.9 3 5.7" />
-            </svg>
-            <span>Access</span>
-          </button>
+          <div className="games-owner-actions">
+            {[
+              { label: 'Publish', action: onPublish, path: 'M12 15V4M7 9l5-5 5 5M5 20h14' },
+              { label: 'Versions', action: onVersions, path: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5' },
+              { label: 'Activity', action: onActivity, path: 'M3 12h4l3-7 4 14 3-7h4' },
+            ].map(
+              ({ label, action, path }) =>
+                action && (
+                  <button type="button" className="games-access-tile" onClick={action} key={label}>
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="22"
+                      height="22"
+                      fill="none"
+                      stroke={label === 'Activity' ? '#d795e4' : 'currentColor'}
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d={path} />
+                    </svg>
+                    <span>{label}</span>
+                  </button>
+                ),
+            )}
+            <button type="button" className="games-access-tile" onClick={onAccess}>
+              <svg
+                viewBox="0 0 24 24"
+                width="22"
+                height="22"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="9" cy="8" r="3.5" />
+                <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.3c1.8.8 3 2.9 3 5.7" />
+              </svg>
+              <span>Access</span>
+            </button>
+          </div>
         )}
       </div>
       <div

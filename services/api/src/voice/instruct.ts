@@ -2,8 +2,7 @@ import { createHash } from 'node:crypto';
 
 import type { InstructRequest, InstructResponse, VoiceTarget } from '@ogm/contracts';
 import { schema } from '@ogm/db';
-import type { Actor } from '@ogm/policy';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import type { AppDeps } from '../app/types.js';
 import { getChatRuntime } from '../build-chat/routes.js';
@@ -18,6 +17,7 @@ import {
   targetKey,
 } from './briefing-push.js';
 import { gameDrafts } from '../new-game/drafts.js';
+import { voiceActor } from './access.js';
 
 type Delivery = { promise: Promise<InstructResponse>; expiresAt: number };
 
@@ -54,7 +54,6 @@ async function deliverBuild(deps: AppDeps, request: InstructRequest): Promise<'d
   if (
     !row ||
     row.gameId !== target.game_id ||
-    row.creatorId !== target.creator_id ||
     row.aiurRepo === null ||
     row.aiurIssueNumber === null ||
     String(row.aiurIssueNumber) !== target.ticket
@@ -66,6 +65,7 @@ async function deliverBuild(deps: AppDeps, request: InstructRequest): Promise<'d
   if (getChatRow(deps.sqlite, chatId)) return 'delivered';
 
   const aiur = await deps.aiurClientForGame(row.gameId);
+  if (!voiceActor(deps.db, target)) throw new Error('voice access revoked');
   await aiur.message(target.ticket, request.text, request.idempotency_key);
   const { inserted } = insertChatRow(deps.sqlite, {
     id: chatId,
@@ -124,22 +124,8 @@ async function deliverScope(
     }
   }
   const game = deps.db.select().from(schema.games).where(eq(schema.games.id, target.game_id)).get();
-  const membership = game
-    ? deps.db
-        .select()
-        .from(schema.familyMembers)
-        .where(
-          and(eq(schema.familyMembers.familyId, game.familyId), eq(schema.familyMembers.userId, target.creator_id)),
-        )
-        .get()
-    : undefined;
-  if (!game || !membership) throw new Error('voice scope target is unavailable');
-  const actor: Actor = {
-    userId: target.creator_id,
-    familyId: game.familyId,
-    platformRole: 'none',
-    capability: membership.capability,
-  };
+  const actor = voiceActor(deps.db, target);
+  if (!game || !actor) throw new Error('voice scope target is unavailable');
   const title =
     draft.text
       .split(/\r?\n/)

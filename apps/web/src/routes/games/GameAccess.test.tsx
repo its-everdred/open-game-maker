@@ -43,3 +43,55 @@ it('lets the owner change an editor’s access and disables Edit for players', a
     ),
   );
 });
+
+it('keeps updates disabled when the dialog is reopened during a save', async () => {
+  let finish!: (value: Response) => void;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: string, init?: RequestInit) =>
+      init?.method === 'PUT'
+        ? new Promise<Response>((resolve) => {
+            finish = resolve;
+          })
+        : Promise.resolve(
+            new Response(
+              JSON.stringify({
+                users: [
+                  { email: 'editor@example.test', name: 'Editor', userId: 'editor', role: 'maker', access: 'play' },
+                ],
+              }),
+              { headers: { 'content-type': 'application/json' } },
+            ),
+          ),
+    ),
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const view = render(
+    <QueryClientProvider client={client}>
+      <GameAccess gameId="game" ownerId="owner" onClose={vi.fn()} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(
+    within(await screen.findByRole('group', { name: 'Editor access' })).getByRole('button', { name: 'Edit' }),
+  );
+  await waitFor(() => expect(finish).toBeDefined());
+  view.rerender(
+    <QueryClientProvider client={client}>
+      <div />
+    </QueryClientProvider>,
+  );
+  view.rerender(
+    <QueryClientProvider client={client}>
+      <GameAccess gameId="game" ownerId="owner" onClose={vi.fn()} />
+    </QueryClientProvider>,
+  );
+  expect(
+    within(await screen.findByRole('group', { name: 'Editor access' })).getByRole('button', { name: 'Play' }),
+  ).toBeDisabled();
+  finish(new Response('{}', { headers: { 'content-type': 'application/json' } }));
+  await waitFor(() =>
+    expect(
+      within(screen.getByRole('group', { name: 'Editor access' })).getByRole('button', { name: 'Play' }),
+    ).toBeEnabled(),
+  );
+});
