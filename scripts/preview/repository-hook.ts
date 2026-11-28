@@ -3,10 +3,14 @@
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import {
+  closeSync,
+  constants,
   existsSync,
   linkSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readlinkSync,
   readdirSync,
   realpathSync,
   renameSync,
@@ -15,6 +19,7 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
+import { bootstrapPlanner } from './planner-bootstrap.ts';
 
 const operation = process.argv[2];
 if (operation !== 'create' && operation !== 'remove') throw new Error('expected create or remove');
@@ -75,7 +80,18 @@ if (operation === 'remove') {
   ).toString('base64url');
   const signature = createHmac('sha256', secret).update(`preview:${payload}`).digest('base64url');
   const context = join(workspace, '.gm/context');
-  const contextTemp = join(context, `.preview-${randomUUID()}.tmp`);
-  writeFileSync(contextTemp, JSON.stringify({ token: `${payload}.${signature}` }), { mode: 0o600, flag: 'wx' });
-  renameSync(contextTemp, join(context, 'preview.json'));
+  const contextFd = openSync(context, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  const descriptor = `/proc/self/fd/${contextFd}`;
+  const contextTemp = join(descriptor, `.preview-${randomUUID()}.tmp`);
+  const token = `${payload}.${signature}`;
+  try {
+    if (readlinkSync(descriptor) !== context) throw new Error('unsafe workspace context');
+    writeFileSync(contextTemp, JSON.stringify({ token }), { mode: 0o600, flag: 'wx' });
+    renameSync(contextTemp, join(descriptor, 'preview.json'));
+  } finally {
+    rmSync(contextTemp, { force: true });
+    closeSync(contextFd);
+  }
+  if (issue.labels.some((label) => label.name === 'ogm:planner-child'))
+    await bootstrapPlanner(workspace, ticket, game, token);
 }

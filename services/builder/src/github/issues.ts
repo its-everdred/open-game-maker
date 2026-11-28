@@ -21,6 +21,8 @@ export interface IssuesClient {
   labels(repo: string, issueNumber: number): Promise<string[]>;
   addLabel(repo: string, issueNumber: number, name: string): Promise<void>;
   removeLabel(repo: string, issueNumber: number, name: string): Promise<void>;
+  blockBy?(repo: string, issueNumber: number, blockerNumber: number): Promise<void>;
+  unblockBy?(repo: string, issueNumber: number, blockerNumber: number): Promise<void>;
   close?(repo: string, issueNumber: number): Promise<void>;
   // `prefix` is the daemon's lifecycle-label prefix: a game daemon writes `<game-slug>:<state>`, never `agent:<state>`.
   setStateLabel(
@@ -79,6 +81,34 @@ export function createIssuesClient(deps: IssuesClientDeps): IssuesClient {
         await sleep(retryDelay(normalized, attempt));
       }
     }
+  }
+
+  async function blocker(repo: string, number: number) {
+    const parts = splitRepo(repo);
+    const value = record(
+      (
+        await call('GET /repos/{owner}/{repo}/issues/{issue_number}', {
+          owner: parts.owner,
+          repo: parts.name,
+          issue_number: number,
+        })
+      ).data,
+    );
+    if (typeof value.id !== 'number' || !Number.isSafeInteger(value.id)) throw new Error('invalid blocker issue');
+    return { id: value.id, state: value.state };
+  }
+
+  async function containsBlocker(repo: string, issueNumber: number, id: number): Promise<boolean> {
+    const parts = splitRepo(repo);
+    const result = await call('GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by', {
+      owner: parts.owner,
+      repo: parts.name,
+      issue_number: issueNumber,
+      per_page: 100,
+      headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+    });
+    if (!Array.isArray(result.data)) throw new Error('invalid blocker response');
+    return result.data.some((item) => record(item).id === id);
   }
 
   return {
@@ -215,6 +245,43 @@ export function createIssuesClient(deps: IssuesClientDeps): IssuesClient {
         if (error instanceof GitHubIssuesError && error.status === 404) return;
         throw error;
       }
+    },
+
+    async blockBy(repo, issueNumber, blockerNumber) {
+      const parts = splitRepo(repo);
+      const target = await blocker(repo, blockerNumber);
+      if (target.state !== 'open') throw new Error('planner parent is not open');
+      if (await containsBlocker(repo, issueNumber, target.id)) return;
+      try {
+        await call('POST /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by', {
+          owner: parts.owner,
+          repo: parts.name,
+          issue_number: issueNumber,
+          issue_id: target.id,
+          headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+        });
+      } catch (error) {
+        if (!(await containsBlocker(repo, issueNumber, target.id))) throw error;
+      }
+      if (!(await containsBlocker(repo, issueNumber, target.id))) throw new Error('planner gate not recorded');
+    },
+
+    async unblockBy(repo, issueNumber, blockerNumber) {
+      const parts = splitRepo(repo);
+      const target = await blocker(repo, blockerNumber);
+      if (!(await containsBlocker(repo, issueNumber, target.id))) return;
+      try {
+        await call('DELETE /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by/{issue_id}', {
+          owner: parts.owner,
+          repo: parts.name,
+          issue_number: issueNumber,
+          issue_id: target.id,
+          headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+        });
+      } catch (error) {
+        if (await containsBlocker(repo, issueNumber, target.id)) throw error;
+      }
+      if (await containsBlocker(repo, issueNumber, target.id)) throw new Error('planner gate still present');
     },
 
     async close(repo, issueNumber) {

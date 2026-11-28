@@ -24,6 +24,7 @@ export function weeklyJobs(db: Db, userId: string, now: Date, zone: string) {
     .where(
       and(
         eq(schema.jobs.creatorId, userId),
+        sql`substr(coalesce(${schema.jobs.idempotencyKey}, ''), 1, 8) != 'planner:'`,
         gte(sql<string>`coalesce(${schema.jobs.startAt}, ${schema.jobs.createdAt})`, window.startsAt),
         lt(sql<string>`coalesce(${schema.jobs.startAt}, ${schema.jobs.createdAt})`, window.resetsAt),
       ),

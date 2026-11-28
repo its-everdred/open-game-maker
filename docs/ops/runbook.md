@@ -79,6 +79,11 @@ The API file must set `OGM_APP_ORIGIN`, `OGM_COMMIT_INTERNAL_URL`, and `OGM_COMM
 `OGM_GAME_TEMPLATE_REF` defaults to `game-2d@1` when left blank. Job admission defaults each member to
 `OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD=5000000` and resets that allowance at midnight in
 `OGM_RESET_ZONE_DEFAULT` (the host's IANA time zone when blank). Family budget settings override both defaults.
+`OGM_TESTER_NEW_GAMES_PER_DAY` limits each non-admin creator's game creations and New Game requests per day in the family's
+reset zone; it defaults to 1. A provisioning retry uses its existing game record and does not consume another slot.
+Set it to a positive integer in `api.env` and restart the API to change it. Admins and maintainers are exempt.
+`OGM_NEW_GAME_PLAN_TICKET_LIMIT` sets the automated planner's maximum child tickets per game, defaulting to 1 for the
+starter scope. Set a positive integer in `api.env` and restart the API to change the limit for new plans.
 
 The commit file must also set the shared `OGM_INTERNAL_TOKEN` so boundary checks can read active repositories and
 creator PII terms. The Aiur Executor's unit needs the same `OGM_INTERNAL_TOKEN`: it reads a New Game request's private

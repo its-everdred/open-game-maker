@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { EXIT, type GmCommand } from '../../command.js';
-import { inventoryPath, readInventory, renderInventory } from '../../decision-inventory.js';
+import { inventoryFile, inventoryPath, readInventory, renderInventory } from '../../decision-inventory.js';
 import { workspaceRoot } from '../../outbox.js';
 
 export const command: GmCommand = {
@@ -12,7 +11,7 @@ export const command: GmCommand = {
   async run(ctx, _args, flags) {
     const { slug: currentSlug } = inventoryPath(ctx.cwd);
     const slug = typeof flags.game === 'string' && flags.game.trim() ? flags.game.trim() : currentSlug;
-    const target = join(workspaceRoot(ctx.cwd), 'docs', slug, 'decisions.json');
+    const target = inventoryFile(workspaceRoot(ctx.cwd), slug);
     const inventory = readInventory(target);
     const mdFile = target.replace(/decisions\.json$/, 'decisions.md');
     let markdown = '';

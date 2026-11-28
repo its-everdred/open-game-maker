@@ -12,9 +12,12 @@ import { schema } from '@ogm/db';
 import { describe, expect, it } from 'vitest';
 
 import { publishStaged } from '../../src/builds/publish.js';
+import { createApp } from '../../src/app/app.js';
+import { buildRoutes } from '../../src/builds/routes.js';
+import { managedTicketAccess } from '../../src/internal/bundle.js';
+import { builtFiles, completeRun, gamesHost, ids, jobState, REPO, SECRET, TICKET, world } from './fixtures.js';
 import { FsBaseDocSource } from '../../src/design/base-doc.js';
 import { releaseRuntimeFor } from '../../src/releases/routes.js';
-import { builtFiles, completeRun, gamesHost, ids, jobState, SECRET, TICKET, world } from './fixtures.js';
 
 // aiur daemons run hooks with plain git; drop an agent workspace's git guard from PATH.
 const HOOK_PATH = (env.PATH ?? '')
@@ -108,6 +111,55 @@ function hookWorld() {
 }
 
 describe('before_remove hook to a playable build', () => {
+  it('authorizes the upload with its real ticket grant and removes it afterwards', async () => {
+    const { deps } = world();
+    deps.sqlite
+      .prepare('UPDATE games SET github_owner = ?, github_repo = ?, github_path = ? WHERE id = ?')
+      .run('everdred-games', 'gm-g2', '', ids.game);
+    const home = mkdtempSync(join(tmpdir(), 'ogm-grant-home-'));
+    const daemonDir = join(home, '.config/ogm/daemons/shared-daemon');
+    mkdirSync(daemonDir, { recursive: true });
+    const secretFile = join(daemonDir, 'hook-secret');
+    writeFileSync(secretFile, SECRET);
+    deps.db
+      .insert(schema.gameDaemons)
+      .values({
+        slug: 'shared-daemon',
+        repo: REPO,
+        checkoutPath: '/fixture',
+        unit: 'fixture',
+        envFile: '/fixture',
+        port: 4101,
+        status: 'running',
+        createdAt: '2026-11-01T00:00:00Z',
+      })
+      .run();
+    const access = managedTicketAccess(home);
+    let captured: [string, string, string, string] | undefined;
+    const app = createApp(deps);
+    app.route(
+      '/internal',
+      buildRoutes({
+        daemonForSecret: async (secret) => (secret === SECRET ? REPO : null),
+        gameForSecret: async () => ({ repo: REPO, slug: 'shared-daemon' }),
+        ticketAccess: async (token, hash, repo, ticket, requestDeps) => {
+          captured = [token, hash, repo, ticket];
+          return access(token, hash, repo, ticket, requestDeps);
+        },
+      }),
+    );
+    const api = await serveApi(app);
+    const { dir } = workspace();
+    try {
+      const hook = await runHook(dir, api.base, { OGM_HOOK_SECRET_FILE: secretFile });
+      expect(hook.stderr).toContain('build upload: HTTP 202');
+      expect(captured).toBeDefined();
+      expect(await access(...captured!, deps)).toBeNull();
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it('does not automatically release when its job is cancelled during release preparation', async () => {
     const { deps, app } = hookWorld();
     deps.sqlite.prepare("UPDATE games SET visibility = 'listed' WHERE id = ?").run(ids.game);
@@ -173,7 +225,7 @@ describe('before_remove hook to a playable build', () => {
       // The feed then reports the merge; main.ts hands the job to the publisher.
       completeRun(deps);
       const outcome = await publishStaged(deps, ids.job);
-      expect(outcome).toMatchObject({ state: 'done' });
+      expect(outcome?.state, JSON.stringify(outcome)).toBe('done');
       const buildId = outcome?.state === 'done' ? outcome.buildId : '';
       const row = deps.sqlite
         .prepare<[string], { git_sha: string; status: string }>('SELECT git_sha, status FROM builds WHERE id = ?')

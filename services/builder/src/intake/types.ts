@@ -29,11 +29,10 @@ export type IntakeDeps = {
   // Keyed by the daemon the game resolved to: its own, or the registered daemon its repository shares.
   aiurForGame: (daemonSlug: string) => Promise<Pick<AiurClient, 'setSpendCap' | 'nudgeTodo'>>;
   shippedSkills: readonly string[];
+  plannerTicketLimit?: number;
   coreRepo?: string;
   failJob: (jobId: string) => void;
-  // Ends a request whose obligation is fulfilled without a worker: a New Game parent issue hands off to the Executor.
-  // Required, so a caller cannot wire the parent path and leave its `new_game` slot held open forever.
-  completeJob: (jobId: string) => void;
+  cancelJob?: (jobId: string) => void;
   subscribeAdmitted?: (listener: (jobId: string) => void) => () => void;
   onJobChanged?: (event: { jobId: string; gameId: string; familyId: string; state: 'filed' | 'paused_budget' }) => void;
   alert?: (event: IntakeAlert) => void | Promise<void>;

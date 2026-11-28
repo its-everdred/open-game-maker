@@ -8,6 +8,7 @@ const states: JobState[] = ['queued', 'admitted', 'filed', 'running', 'paused_bu
 const events: JobEvent[] = ['admit', 'file', 'run', 'pause', 'resume', 'finish', 'fail', 'cancel'];
 const allowed = new Map<string, JobState>([
   ['queued:admit', 'admitted'],
+  ['queued:fail', 'failed'],
   ['queued:cancel', 'cancelled'],
   ['admitted:file', 'filed'],
   ['admitted:fail', 'failed'],
@@ -21,6 +22,7 @@ const allowed = new Map<string, JobState>([
   ['running:fail', 'failed'],
   ['running:cancel', 'cancelled'],
   ['paused_budget:resume', 'running'],
+  ['paused_budget:finish', 'done'],
   ['paused_budget:fail', 'failed'],
   ['paused_budget:cancel', 'cancelled'],
 ]);

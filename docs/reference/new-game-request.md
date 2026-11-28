@@ -1,7 +1,7 @@
 # New Game request parent issue
 
-When the New Game flow finishes in the scope chat, Open Game Maker files one parent issue and stops: the parent is the
-root of the game's Build Order and only the Executor plans from it. No worker ever claims it. Everything raw — the scope
+When the New Game flow finishes in the scope chat, Open Game Maker files a parent issue and queues a separate planner
+ticket. The parent is the root of the game's Build Order and no worker claims it. Everything raw — the scope
 conversation, voice transcripts as text, pastes, attachments and the agreed spec — stays in the app's private storage
 and reaches an authorised agent through the internal API described below. Nothing raw reaches GitHub.
 
@@ -18,8 +18,8 @@ filing:
   opaque reference, then a fixed note that the private context is not in the issue. An address-shaped value is
   redacted and the brief is cut at 400 characters. The body ends with the job's markers
   (`<!-- gm-job:<id> gm-ticket:new-game gm-sig:<sha256> -->`), so a retried create is found instead of filed twice.
-- **No spend cap and no aiur nudge:** the request's obligation ends at filing. The job goes to `done`, releasing the
-  `new_game` slot; the build's own tickets carry their own caps when the Executor files them.
+- The parent itself has no spend cap or aiur nudge. The separate planner ticket receives a spend cap and is queued;
+  the request remains active while its worker plans.
 
 The request's opaque reference is its job id. It names the private context but grants nothing on its own: the internal
 API needs a scoped token or the internal credential, and the parent issue carries neither.
@@ -36,7 +36,10 @@ API needs a scoped token or the internal credential, and the parent issue carrie
   "brief": "A cozy island platformer about relighting harbour lanterns.",
   "spec": { "session_id": "s_...", "revision": 1 },
   "revisions": [{ "revision": 1, "agreedAt": "2026-11-04T18:00:00.000Z" }],
-  "messages": [{ "at": "…", "actor": "creator", "kind": "text", "text": "Keep it calm at dusk.", "media": false }],
+  "messages": [
+    { "id": "m_...", "at": "…", "actor": "creator", "kind": "text", "text": "Keep it calm at dusk.", "media": false }
+  ],
+  "designDecisions": [],
   "attachments": [{ "id": "att_...", "kind": "text", "name": "mood-board.md", "mime": "text/markdown", "bytes": 7 }],
   "parent": { "repo": "owner/game", "number": 12 }
 }
@@ -57,36 +60,47 @@ The route accepts either credential and nothing else — a user session cannot r
 
 - **Scoped token** in `Authorization: Bearer ngc1.…`. It names one request and its game, lives an hour, and is signed
   with a secret derived from the API's job token secret (domain-separated), so no extra secret is distributed. A token
-  minted for another request is `403`. The token travels to an agent in its prompt or environment, never to GitHub.
+  minted for another request is `403`. A token never goes to GitHub.
 - **The internal credential** in `x-ogm-internal`, the same shared secret the API already accepts for internal calls.
   The Executor's unit carries it.
 
 `POST /internal/new-game/requests/:requestId/token` mints a scoped token and needs the internal credential. It returns
-`{ request, game, token, expiresAt }` with `201`, so the Executor can hand a worker exactly one request's context.
+`{ request, game, token, expiresAt }` with `201`. The planner's workspace relay instead delivers context and attachments
+after verifying its ticket, game and workspace grant against the active request's recorded planner ticket.
 
 Credentials are checked before the request's existence: an unauthenticated caller gets `401` and learns nothing about
 which request ids exist.
 
-## The Executor receives the parent
+## Automatic planning
 
-The parent is filed for aiur's Executor, not for a worker. The Executor runs an aiur executor subscription on the
-`request:new-game` label — the mechanism aiur documents in [the new-game Aiur dependencies](../new-game/aiur-dependencies.md)
-(`aiur take <ticket-id>` plus `aiur executor-subscribe 'ticket.<ticket-id>.#'`), so the parent reaches the Executor without
-an agent slot and without entering the fleet's dispatch. From there the `gm-new-game-plan` skill plans the whole game and
-files the children; this intake never creates them.
+Intake creates one planner ticket linked to the parent, records it durably, sets its spend cap, and queues it on the
+game's daemon. Its worker uses `gm-new-game-plan` and the configured first-playable ticket limit. The workspace relay
+grants only the recorded, active planner ticket access to that request's private context. The planner submits each
+child through the same relay: normal admission reserves its budget, enforces the per-game ticket limit atomically,
+and files the child with its own spend cap. The child gets its todo label behind a dependency on the parent; when an
+edit slot opens, intake removes that gate and dispatches it using the planner's verified checkpoint. Reusing a child key
+returns the same job. The intake GitHub credential needs permission to manage issue dependencies and to create and read
+Git refs in the game repository. The API retains a checkpoint ref so a delayed child can start after the planner's
+branch is removed.
+
+A registered daemon uses its own trusted workspace hooks. Before using it for New Game planning, install the current
+`gm-new-game-plan` skill and its scripts in every worker workspace, call
+`node <ogm-core>/scripts/preview/repository-hook.ts create` from `after_create` after cloning and from `before_run`,
+and call the same script with `remove` from `before_remove`. The create hook verifies the issue, binds the grant to
+that workspace, and prepares a planner child's checkpoint and current answers before it runs; the remove hook revokes
+the grant. The worker cannot retrieve context or submit children until this host setup is in place.
 
 Two invariants keep a worker off the parent:
 
 1. The parent carries no label in the daemon's dispatch set. A game daemon dispatches on `<slug>:todo` and reads only its
    own lifecycle states; `request:new-game` is neither.
-2. The request's job is `done` once the parent is filed. Nothing stays `running` or `filed` against the parent, so no
-   daemon lifecycle event nudges it.
+2. The request's active job points to the planner ticket, not the parent, so chat reaches the planner worker.
 
 If filing fails — GitHub unavailable, or the summary missing — the request stays `admitted`, the intake alerts, and the
 sweep retries. A create whose outcome is unknown is recovered by its marker rather than filed a second time.
 
-The intake still runs the game's daemon preflight before filing the parent, so the daemon is up when the Executor's
-children arrive and carry `<slug>:todo`; the request's own job ends at filing regardless.
+The intake runs the game's daemon preflight before filing the parent, so the daemon is ready for the planner and its
+children. Retries reuse the parent and planner markers and resume from their saved cap and queue checkpoints.
 
 ## Editor changes are not requests
 

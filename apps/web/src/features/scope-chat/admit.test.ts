@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AgreedScope } from '@ogm/contracts';
 
-import { admitNewGame } from './admit';
+import { admissionRefusal, admitNewGame } from './admit';
 
 const scope: AgreedScope = {
   session_id: 's_1',
@@ -25,6 +25,21 @@ const scope: AgreedScope = {
 };
 
 describe('admitNewGame', () => {
+  it('maps a game-provisioning limit into the same refusal shown for job admission', () => {
+    expect(
+      admissionRefusal({
+        status: 402,
+        body: {
+          error: 'energy_limit_reached',
+          remainingMicroUsd: 0,
+          resetsAt: '2026-11-28T08:00:00.000Z',
+          offers: ['ask_admin'],
+          window: 'day',
+        },
+      }),
+    ).toMatchObject({ kind: 'refused', offers: ['ask_admin'], window: 'day' });
+    expect(admissionRefusal({ status: 503 })).toBeNull();
+  });
   it('uses the agreed scope unchanged and navigates after admission', async () => {
     const request = vi.fn().mockResolvedValue({ jobId: 'j_1', state: 'admitted' });
     const navigate = vi.fn();

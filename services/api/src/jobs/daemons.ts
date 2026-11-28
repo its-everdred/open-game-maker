@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 
 import type { AiurClient } from '@ogm/aiur-client';
-import { daemonPaths, type FeedFleet } from '@ogm/builder';
+import { daemonPaths, isRegisteredDaemon, type FeedFleet } from '@ogm/builder';
 import { schema, type Db } from '@ogm/db';
 import { asc, eq, sql } from 'drizzle-orm';
 
@@ -38,7 +38,8 @@ export function daemonRowForGame(db: Db, gameId: string): typeof schema.gameDaem
     .from(schema.gameDaemons)
     .where(sql`lower(${schema.gameDaemons.repo}) = ${repo}`)
     .all();
-  return shared.length === 1 ? shared[0] : undefined;
+  const registered = shared.filter((row) => isRegisteredDaemon(homedir(), row));
+  return registered.length === 1 ? registered[0] : undefined;
 }
 
 // Drafts have no game yet; use an operator-registered daemon, which the fleet will not stop when idle.

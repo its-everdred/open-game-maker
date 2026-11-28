@@ -10,7 +10,7 @@ import type {
 } from '@ogm/contracts';
 import { schema, type Db, type Sqlite } from '@ogm/db';
 import { authorize, type Actor } from '@ogm/policy';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { requireAuthorization } from '../accounts/families.js';
 import { allowanceRemaining, familyDayTotal, platformRemaining } from '../budget/allowance.js';
@@ -31,6 +31,7 @@ import { energyBlock } from '../energy/view.js';
 import type { AppEvents } from '../app/events.js';
 import { acceptedFor } from './repo.js';
 import { SLOT_STATES } from './state.js';
+import { newGameDailyUsage } from './new-game-daily-limit.js';
 
 export class AdmissionRefused extends Error {
   constructor(readonly body: AllowanceExceeded) {
@@ -46,6 +47,8 @@ export type AdmissionDeps = {
   defaults: BudgetDefaults;
   now?: () => Date;
   qaEnergyProbe?: boolean;
+  newGameDailyLimit?: number;
+  plannerChild?: { parentJobId: string; limit: number };
 };
 
 const SIZE_BY_COMPLEXITY: Record<number, SizeClass> = { 1: 'small', 2: 'medium', 3: 'large', 4: 'huge', 5: 'huge' };
@@ -54,6 +57,12 @@ export function sizeFor(kind: JobKind, complexity: number): SizeClass {
   const size = SIZE_BY_COMPLEXITY[complexity] ?? 'huge';
   if (kind === 'new_game' && (size === 'small' || size === 'medium')) return 'large';
   return size;
+}
+
+function plannerContent(plan: unknown): string {
+  const copy = { ...(plan as Record<string, unknown>) };
+  delete copy._plannerBase;
+  return JSON.stringify(copy);
 }
 
 function reservationFor(db: Db, kind: JobKind, complexity: number): Reservation {
@@ -111,12 +120,42 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
 
   const outcome = deps.sqlite
     .transaction(() => {
+      if (request.idempotencyKey?.startsWith('planner:')) {
+        const child = deps.plannerChild;
+        const prefix = child ? `planner:${child.parentJobId}:` : '';
+        if (
+          !child ||
+          request.kind !== 'feature' ||
+          !request.idempotencyKey.startsWith(prefix) ||
+          !/^[a-zA-Z0-9_-]{1,60}$/.test(request.idempotencyKey.slice(prefix.length)) ||
+          !Number.isSafeInteger(child.limit) ||
+          child.limit < 1
+        )
+          throw new HttpError(403, 'invalid_planner_child');
+        const parent = deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, child.parentJobId)).get();
+        if (
+          !parent ||
+          parent.kind !== 'new_game' ||
+          parent.gameId !== request.gameId ||
+          parent.creatorId !== actor.userId ||
+          !['filed', 'running'].includes(parent.state)
+        )
+          throw new HttpError(403, 'invalid_planner_child');
+      } else if (deps.plannerChild) throw new HttpError(403, 'invalid_planner_child');
+
       if (request.idempotencyKey) {
         const existing = deps.db
           .select()
           .from(schema.jobs)
           .where(and(eq(schema.jobs.creatorId, actor.userId), eq(schema.jobs.idempotencyKey, request.idempotencyKey)))
           .get();
+        if (
+          existing &&
+          deps.plannerChild &&
+          (existing.complexity !== request.complexity ||
+            plannerContent(JSON.parse(existing.plan)) !== plannerContent(request.plan))
+        )
+          throw new HttpError(409, 'planner_child_conflict');
         if (existing)
           return {
             created: false,
@@ -125,12 +164,38 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
           };
       }
 
+      if (deps.plannerChild) {
+        const child = deps.plannerChild;
+        const existing = deps.db
+          .select({ id: schema.jobs.id, plan: schema.jobs.plan })
+          .from(schema.jobs)
+          .where(
+            and(eq(schema.jobs.gameId, request.gameId), sql`substr(${schema.jobs.idempotencyKey}, 1, 8) = 'planner:'`),
+          )
+          .all();
+        if (existing.length >= child.limit) throw new HttpError(409, 'planner_ticket_limit');
+        const requested = request.plan.tickets.flatMap((ticket) =>
+          ticket.skills.filter((skill) => skill.startsWith('decision:')),
+        );
+        if (new Set(requested).size !== requested.length) throw new HttpError(409, 'planner_decision_conflict');
+        for (const previous of existing) {
+          const plan = JSON.parse(previous.plan) as { tickets?: { skills?: string[] }[] };
+          if (plan.tickets?.some((ticket) => ticket.skills?.some((skill) => requested.includes(skill))))
+            throw new HttpError(409, 'planner_decision_conflict');
+        }
+      }
+
       const settings = getBudgetSettings(deps.db, game.familyId, deps.defaults);
       const reservation = reservationFor(deps.db, request.kind, request.complexity);
       const resetAt = nextReset(now, settings.resetZone);
       const resetsAt = resetAt.toISOString();
       const targetAt = request.start === 'at_reset' ? resetAt : now;
-      {
+      if (request.kind === 'new_game' && actor.platformRole === 'none' && deps.newGameDailyLimit !== undefined) {
+        const daily = newGameDailyUsage(deps.db, actor.userId, targetAt, settings.resetZone);
+        if (!daily.gameIds.includes(request.gameId) && daily.count >= deps.newGameDailyLimit)
+          refusal('energy_limit_reached', 0, daily.resetsAt, ['ask_admin'], 'day');
+      }
+      if (!deps.plannerChild) {
         for (const at of [now, targetAt]) {
           const weekly = weeklyJobs(deps.db, actor.userId, at, deps.defaults.resetZone);
           const remaining =
@@ -199,7 +264,8 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
           ),
         )
         .all().length;
-      const state = request.start === 'at_reset' || held >= settings.slots[slot] ? 'queued' : 'admitted';
+      const state =
+        deps.plannerChild || request.start === 'at_reset' || held >= settings.slots[slot] ? 'queued' : 'admitted';
       const at = now.toISOString();
       const id = `j_${randomUUID()}`;
       deps.db

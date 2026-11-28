@@ -11,6 +11,7 @@ import { summaryOf } from '../commands/aiur.js';
 import { creatorAudience } from '../commands/audience.js';
 import { correlate, isTextOnly, pickOf, recommendationOf, statusOf } from './correlate.js';
 import type { InboxWriter } from './inbox.js';
+import { createPlannerAnswerSync } from './planner-answers.js';
 
 type PollerDeps = {
   db: Db;
@@ -59,6 +60,8 @@ function changed(command: StoredCommand, patch: Partial<StoredCommand>): boolean
 }
 
 export function createCommandPoller(deps: PollerDeps) {
+  const syncPlannerAnswers = createPlannerAnswerSync(deps.db, deps.sqlite);
+  const answerSyncInFlight = new Set<string>();
   const failedDaemons = new Set<string>();
   const missingSupervisorTokens = new Set<string>();
   let timer: NodeJS.Timeout | null = null;
@@ -80,6 +83,18 @@ export function createCommandPoller(deps: PollerDeps) {
         if (!job.aiur) continue;
         attemptedDaemons.add(job.aiur.daemonSlug);
         try {
+          if (!answerSyncInFlight.has(job.jobId)) {
+            answerSyncInFlight.add(job.jobId);
+            void syncPlannerAnswers(job, clientFor)
+              .catch((error: unknown) => {
+                deps.log({
+                  event: 'planner-answer-sync-error',
+                  jobId: job.jobId,
+                  error: error instanceof Error ? error.name : 'unknown',
+                });
+              })
+              .finally(() => answerSyncInFlight.delete(job.jobId));
+          }
           const client = await clientFor(job.aiur.daemonSlug);
           if (!client) continue;
           const decisions = (await client.decisions({ ticket: job.aiur.ticket, limit: 50 })).filter(

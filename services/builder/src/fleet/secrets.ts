@@ -28,6 +28,10 @@ export function daemonPaths(home: string, slug: string): DaemonPaths {
   };
 }
 
+export function isRegisteredDaemon(home: string, row: { slug: string; checkoutPath: string }): boolean {
+  return row.checkoutPath !== daemonPaths(home, row.slug).dir;
+}
+
 export async function writeAtomic(path: string, content: string, mode: number): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
