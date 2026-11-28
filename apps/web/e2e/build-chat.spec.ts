@@ -550,6 +550,8 @@ test('build composer keeps voice controls at the right through dictation and liv
     .poll(() => mic.evaluate((button) => getComputedStyle(button).backgroundColor))
     .toBe('rgb(116, 200, 237)');
   await expect(input).toHaveValue('Make the moonlight warmer');
+  await expect(input).toHaveCSS('overflow-wrap', 'break-word');
+  await expect(input).toHaveCSS('word-break', 'normal');
   await expect(composer.locator('[part="waveform"]')).toBeVisible();
   await expect(composer.locator('[part="voice"]')).toBeVisible();
   await expect
@@ -576,8 +578,10 @@ test('build composer keeps voice controls at the right through dictation and liv
   const recordingMic = await mic.boundingBox();
   const recordingSend = await send.boundingBox();
   const inputBox = await input.boundingBox();
+  const composerBox = await composer.boundingBox();
   expect(Math.abs(recordingMic!.x - idleMic!.x)).toBeLessThan(1);
   expect(Math.abs(recordingSend!.x - idleSend!.x)).toBeLessThan(1);
+  expect(inputBox!.width).toBeGreaterThan(composerBox!.width * 0.9);
   expect(inputBox!.y + inputBox!.height).toBeLessThan((await composer.locator('[part="voice"]').boundingBox())!.y);
   await page.screenshot({ path: 'e2e/screenshots/1087/composer-dictating.png', animations: 'disabled' });
 

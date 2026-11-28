@@ -117,10 +117,10 @@ export function AiurComposer({
       .row { display:flex; flex-wrap:nowrap; align-items:center; gap:8px; }
       .spacer { display:none; }
       .attach, .cancel { order:0; }
-      textarea { order:1; flex:1 1 0; flex-basis:0; min-width:0; padding-inline:4px; }
+      textarea { order:1; flex:1 1 0; flex-basis:0; min-width:0; padding-inline:4px; overflow-wrap:break-word; word-break:normal; white-space:pre-wrap; }
       :host([data-recording]) textarea { flex:1 1 0; flex-basis:0; padding-inline:4px; }
       :host([data-recording]) .row, :host([data-voice-live]) .row { display:grid; grid-template-columns:40px minmax(0,1fr) 40px 40px 40px; grid-template-rows:auto auto; align-items:center; gap:8px; }
-      :host([data-recording]) textarea, :host([data-voice-live]) textarea { grid-column:1 / -1; grid-row:1; width:100%; min-width:0; padding-inline:4px; }
+      :host([data-recording]) textarea, :host([data-voice-live]) textarea { grid-column:1 / -1; grid-row:1; width:100%; min-width:0; max-width:100%; box-sizing:border-box; padding-inline:4px; overflow-wrap:break-word; word-break:normal; white-space:pre-wrap; }
       :host([data-recording]) .cancel, :host([data-voice-live]) .cancel { grid-column:1; grid-row:2; }
       :host([data-recording]) .wave, :host([data-voice-live]) .wave { grid-column:2; grid-row:2; width:100%; min-width:0; flex:none; }
       :host([data-recording]) .voice, :host([data-voice-live]) .voice { grid-column:3; grid-row:2; }
