@@ -18,7 +18,7 @@ const test = base.extend<{ system: System }>({
     if (!baseURL) throw new Error('browser base URL is required');
     // A prepared copy avoids compiling the same template per viewport on loaded test hosts.
     // eslint-disable-next-line no-restricted-properties -- optional test-only fixture path.
-    const system = await startBrowserSystem(baseURL, process.env.OGM_TEST_TEMPLATE_DIST);
+    const system = await startBrowserSystem(baseURL, process.env.OGM_TEST_TEMPLATE_DIST, bridgeOrigin);
     let closing = false;
     try {
       // Forward browser requests to the local API; no auth or API response is stubbed.
@@ -290,7 +290,7 @@ for (const viewport of [
       await touchControl(flow.getByRole('button', { name: 'Versus CPU', exact: true }));
       await touchControl(flow.getByRole('button', { name: 'Blocks', exact: true }));
       await touchControl(flow.getByRole('button', { name: 'Play', exact: true }));
-      const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+      const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`));
       if (!frame) throw new Error('hosted Blobs frame is missing');
       await frame.waitForFunction(() => typeof (window as TestWindow).advanceTime === 'function');
       for (let step = 0; step < 60 && (await flow.getAttribute('data-screen')) !== null; step += 1) {
@@ -421,7 +421,7 @@ for (const viewport of [
         await ownerFlow.getByRole('button', { name: 'Start match' }).tap();
         await expect.poll(() => room.state.epoch, { timeout: 120_000 }).not.toBe('');
         for (const target of [page, peer]) {
-          const frame = target.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+          const frame = target.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`));
           if (!frame) throw new Error('hosted Blobs frame is missing');
           await expect
             .poll(
@@ -457,7 +457,7 @@ for (const viewport of [
           });
         }
         if (peerPage && !peerPage.isClosed()) {
-          const frame = peerPage.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+          const frame = peerPage.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`));
           const lobby = await frame
             ?.locator('#blobs-flow')
             .textContent({ timeout: 5_000 })
@@ -507,7 +507,7 @@ for (const viewport of [
         page
           .frames()
           .find((candidate) =>
-            [bridgeOrigin, 'http://127.0.0.1:10000'].some((origin) => candidate.url().startsWith(`${origin}/g/`)),
+            [bridgeOrigin, 'http://127.0.0.1:10000'].some((origin) => candidate.url().startsWith(`${origin}/d/`)),
           );
       await expect.poll(() => Boolean(gameFrame()), { timeout: 30_000 }).toBe(true);
       const frame = gameFrame()!;

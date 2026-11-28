@@ -1,6 +1,6 @@
 /* The real auth route reads its environment at setup; isolate test-only values in this worker. */
 import { execFile } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import { serve } from '@hono/node-server';
 import { schema } from '@ogm/db';
 
 import { createChatJobDirectory } from '../src/build-chat/job-directory.js';
+import { completeBuildCache } from '../src/builds/cache-plan.js';
 import { ensureMainBranch } from '../src/design/store.js';
 import { createApp as createGamesHost } from '../../games-host/src/server.js';
 
@@ -18,7 +19,7 @@ import { makeApp, makeDeps } from './helpers.js';
 const run = promisify(execFile);
 
 /** Start the actual API routes with a private database, mail outbox and filesystem. */
-export async function startBrowserSystem(appOrigin: string, editorBuildDirectory?: string) {
+export async function startBrowserSystem(appOrigin: string, editorBuildDirectory?: string, gamesOrigin?: string) {
   const scratch = mkdtempSync(join(tmpdir(), 'ogm-browser-system-'));
   const overrides: Record<string, string> = {
     TMPDIR: scratch,
@@ -74,6 +75,7 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
   try {
     deps = makeDeps();
     deps.config.appOrigin = appOrigin;
+    if (gamesOrigin) deps.config.gamesOrigin = gamesOrigin;
     deps.reviewLogPath = join(scratch, 'review-feed.log');
     const { app } = await makeApp(deps);
     server = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 });
@@ -83,8 +85,9 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
     });
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('API did not bind a TCP port');
+    const apiOrigin = `http://127.0.0.1:${address.port}`;
     return {
-      origin: `http://127.0.0.1:${address.port}`,
+      origin: apiOrigin,
       configureVoice(url: string) {
         deps!.config.voiceTokenSecret = 'local-test-voice-secret-0123456789';
         deps!.config.voiceWsUrl = url;
@@ -109,14 +112,56 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
           await pendingBuild;
         }
         if (closing) throw new Error('system closed while staging the editor build');
+        const assetDir = join(directory, 'a');
+        const planPath = join(directory, 'assets', 'cache-plan.json');
+        if (existsSync(assetDir) && existsSync(planPath)) {
+          const plan = JSON.parse(readFileSync(planPath, 'utf8')) as { entries: { url: string }[] };
+          const planned = new Set(
+            plan.entries.filter(({ url }) => url.startsWith('/a/')).map(({ url }) => url.slice(3)),
+          );
+          for (const name of readdirSync(assetDir)) if (!planned.has(name)) rmSync(join(assetDir, name));
+        }
+        await completeBuildCache({
+          root: deps!.config.gamesRoot,
+          files: directory,
+          gameId,
+          buildId,
+          previousBuildId: null,
+          sdkVersion: '1.0.0',
+          privateAssets: true,
+        });
         writeFileSync(join(directory, '.complete'), '');
         const branch = ensureMainBranch(deps!.sqlite, gameId);
         deps!.sqlite.prepare('UPDATE branches SET latest_build_id = ? WHERE id = ?').run(buildId, branch.id);
+        deps!.db
+          .insert(schema.builds)
+          .values({
+            id: buildId,
+            gameId,
+            branchId: branch.id,
+            gitSha: 'a'.repeat(40),
+            sdkVersion: '1.0.0',
+            saveSchemaVersion: 1,
+            achievementCatalogHash: 'b'.repeat(64),
+            status: 'tested',
+            artifact: 'present',
+            artifactPath: directory,
+            createdAt: new Date().toISOString(),
+          })
+          .run();
         const gameHost = createGamesHost({
           appOrigin,
           root: deps!.config.gamesRoot,
           version: 'test',
           workerScript: join(scratch, 'game-cache.js'),
+          authorize: async (request) => {
+            const response = await fetch(`${apiOrigin}/api/v1/artifacts/authorize`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(request),
+            });
+            return response.ok && ((await response.json()) as { allowed: boolean }).allowed;
+          },
         });
         gamesServer = serve({ fetch: gameHost.fetch, hostname: '127.0.0.1', port: 0 });
         await new Promise<void>((resolve, reject) => {
@@ -149,6 +194,43 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
           )
           .run(owner);
         deps!.sqlite.prepare("UPDATE games SET owner_id = ?, visibility = 'listed'").run(owner);
+        const gameId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01';
+        const buildId = 'build_01BX5ZZKBKACTAV9WEVGEMMVRZ';
+        const branch = ensureMainBranch(deps!.sqlite, gameId);
+        const publishedAt = new Date().toISOString();
+        deps!.db
+          .insert(schema.overrideSnapshots)
+          .values({
+            id: 'snapshot-system-test',
+            gameId,
+            branchId: branch.id,
+            buildId,
+            headRev: 0,
+            sha256: 'c'.repeat(64),
+            entriesJson: '[]',
+            entityOpsJson: '[]',
+            createdAt: publishedAt,
+          })
+          .run();
+        deps!.db
+          .insert(schema.releases)
+          .values({
+            id: 'release-system-test',
+            gameId,
+            seq: 1,
+            version: '1.0.0',
+            buildId,
+            snapshotId: 'snapshot-system-test',
+            gitTag: 'system-test',
+            kind: 'publish',
+            changelogJson: '[]',
+            publishedBy: owner,
+            publishedAt,
+          })
+          .run();
+        deps!.sqlite
+          .prepare('UPDATE games SET published_release_id = ? WHERE id = ?')
+          .run('release-system-test', gameId);
       },
       reports: () =>
         deps!.sqlite.prepare('SELECT game_id, build_hash, text FROM reports ORDER BY created_at').all() as {
