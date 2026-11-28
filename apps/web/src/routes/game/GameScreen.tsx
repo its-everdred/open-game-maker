@@ -827,6 +827,22 @@ export function GameScreen() {
         <Hd2dPanel report={frameState.hd2d} apply={frameController?.applyHd2d} onSave={saveLighting} />
       )}
       <div className="game-stage">
+        {mode === 'play' &&
+        frameState.bridgeState === 'ready' &&
+        frameState.firstFrame &&
+        frameState.back?.enabled &&
+        !menuOpen &&
+        room.snapshot?.matchPause === undefined ? (
+          <button
+            type="button"
+            className="studio-back-button studio-menu-button"
+            data-game-play="true"
+            aria-label={frameState.back.label ?? 'Back'}
+            onClick={() => frameRef.current?.back?.()}
+          >
+            <span aria-hidden="true">←</span>
+          </button>
+        ) : null}
         <div className="game-frame" ref={containerRef} />
         {mode === 'edit' && !mapOpen && !frameState.manifest?.palette?.items.length && <AssetLibrary gameId={gameId} />}
         {mode === 'edit' && openScene ? <MapEditor gameId={gameId} scene={openScene} onOpen={setMapOpen} /> : null}

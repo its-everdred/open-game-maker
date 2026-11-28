@@ -35,3 +35,32 @@ it.each([
     await browser.close();
   }
 });
+
+it.each([
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+])('keeps Back and Menu aligned in the phone shell at $width x $height', async (viewport) => {
+  const browser = await launch(process.env.GM_VERIFY_SOFTWARE_GL === '1');
+  try {
+    const page = await browser.newPage({ viewport });
+    await page.goto(hostFrameUrl(shell.url, game.url, 'mobile', 'Test game'));
+    const back = page.getByRole('button', { name: 'Back', includeHidden: true });
+    await back.evaluate((button: HTMLButtonElement) => {
+      button.hidden = false;
+    });
+    const menu = page.getByRole('button', { name: 'Menu' });
+    const backBox = await back.boundingBox();
+    const menuBox = await menu.boundingBox();
+    expect(backBox).not.toBeNull();
+    expect(menuBox).not.toBeNull();
+    expect(backBox!.y).toBe(menuBox!.y);
+    expect(backBox!.width).toBe(menuBox!.width);
+    expect(backBox!.height).toBe(menuBox!.height);
+    expect(backBox!.x).toBeLessThan(menuBox!.x);
+    expect(await back.evaluate((element) => getComputedStyle(element).borderColor)).toBe(
+      await menu.evaluate((element) => getComputedStyle(element).borderColor),
+    );
+  } finally {
+    await browser.close();
+  }
+});

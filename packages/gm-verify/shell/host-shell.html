@@ -9,10 +9,19 @@
   <body>
     <div class="app-chrome">
       <div class="studio-menu-control">
-        <button type="button" class="studio-menu-button" aria-label="Menu">
+        <button type="button" class="studio-menu-button" data-game-play="true" aria-label="Menu">
           <span class="studio-menu-ring" aria-hidden="true"></span>☰
         </button>
       </div>
+      <button
+        type="button"
+        class="studio-back-button studio-menu-button"
+        data-game-play="true"
+        aria-label="Back"
+        hidden
+      >
+        <span aria-hidden="true">←</span>
+      </button>
       <main>
         <section class="game-screen is-playing" aria-label="Play and edit">
           <div class="game-stage">

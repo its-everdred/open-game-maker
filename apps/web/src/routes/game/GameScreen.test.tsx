@@ -9,6 +9,8 @@ import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
 type MockFrameState = {
   bridgeState: 'connecting' | 'ready' | 'error';
   dropped: number;
+  firstFrame?: boolean;
+  back?: { enabled: boolean; label?: string };
   manifest?: unknown;
   error?: string;
   errorCode?: string;
@@ -51,6 +53,7 @@ const editorApi = vi.hoisted(() => ({
 const host = vi.hoisted(() => {
   const controller = {
     applyDesign: vi.fn(),
+    back: vi.fn(),
     camera: vi.fn(),
     dispose: vi.fn(),
     onEvent: vi.fn(() => vi.fn()),
@@ -915,4 +918,29 @@ describe('GameScreen', () => {
     await waitFor(() => expect(container.querySelector('.game-screen')).toHaveClass('is-playing'));
     expect(container.querySelector('.game-frame')).toBe(frame);
   });
+});
+
+it('shows the host Back action only while the game enables it', async () => {
+  renderGame();
+  await readyPlayFrame();
+  expect(screen.queryByRole('button', { name: 'Choose mode' })).toBeNull();
+  act(() =>
+    host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+      bridgeState: 'ready',
+      dropped: 0,
+      firstFrame: true,
+      back: { enabled: true, label: 'Choose mode' },
+    }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Choose mode' }));
+  expect(host.controller.back).toHaveBeenCalledOnce();
+  act(() =>
+    host.mountGameFrame.mock.calls.at(-1)?.[0]?.onState?.({
+      bridgeState: 'ready',
+      dropped: 0,
+      firstFrame: true,
+      back: { enabled: false },
+    }),
+  );
+  expect(screen.queryByRole('button', { name: 'Choose mode' })).toBeNull();
 });

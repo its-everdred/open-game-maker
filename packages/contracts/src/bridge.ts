@@ -106,6 +106,7 @@ export const hostToGameSchema = z
         tier: tierSchema.optional(),
       }),
     ),
+    envelope('navigation.back', empty),
     envelope('lifecycle.pause', empty),
     envelope('lifecycle.resume', empty),
     envelope('lifecycle.dispose', empty),
@@ -348,6 +349,7 @@ export const gameToHostSchema = z
     envelope('host.pause.visible', z.looseObject({ visible: z.boolean() })),
     /** Which host touch controls the current screen shows; `gameplay` until the game says otherwise. */
     envelope('host.controls', z.looseObject({ layout: controlsLayoutSchema })),
+    envelope('host.back', z.looseObject({ enabled: z.boolean(), label: z.string().min(1).max(80).optional() })),
     /** Host hotkeys while the iframe has focus. */
     envelope('input.rawKey', z.looseObject({ code: z.string().max(32), down: z.boolean() })),
     /** The host fills identity and slot. */

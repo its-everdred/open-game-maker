@@ -14,6 +14,8 @@ export class SdkHostApi implements HostApi {
   capabilities: ReadonlySet<string> = new Set();
   private currentViewport = defaultViewport;
   private hooks: GmTestHooks | undefined;
+  private readonly backListeners = new Set<() => void>();
+  private backEnabled = false;
   private readonly inputListeners = new Map<string, Set<(value: ActionValue) => void>>();
   private readonly settingsListeners = new Set<(settings: PlayerSettings) => void>();
   private readonly viewportListeners = new Set<(viewport: Viewport) => void>();
@@ -68,6 +70,21 @@ export class SdkHostApi implements HostApi {
   readonly controls: NonNullable<HostApi['controls']> = {
     set: ({ layout }) => this.send('host.controls', { layout }),
   };
+
+  readonly back: NonNullable<HostApi['back']> = {
+    set: (options) => {
+      this.backEnabled = options.enabled;
+      this.send('host.back', options);
+    },
+    on: (callback) => {
+      this.backListeners.add(callback);
+      return () => this.backListeners.delete(callback);
+    },
+  };
+
+  dispatchBack(): void {
+    if (this.backEnabled) for (const listener of this.backListeners) listener();
+  }
 
   readonly test: HostApi['test'] = {
     register: (hooks) => {

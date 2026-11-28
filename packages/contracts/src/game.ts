@@ -419,6 +419,8 @@ export interface HostApi {
   test: { register(hooks: GmTestHooks): void };
   /** Hide the host Pause control on the game's own menu screens; it shows by default and again after a reload. */
   setHostPauseVisible?(visible: boolean): void;
+  /** Declare the host Back button and register its action. It is hidden until enabled. */
+  back?: { set(options: { enabled: boolean; label?: string }): void; on(callback: () => void): () => void };
   /** Choose the host touch controls for the current screen; `gameplay` until set, and again after a reload. */
   controls?: { set(options: { layout: ControlsLayout }): void };
 }

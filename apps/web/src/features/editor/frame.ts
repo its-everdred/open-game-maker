@@ -44,6 +44,7 @@ export type GameFrameState = {
   load?: Pick<GameLoadProgress, 'phase' | 'loaded' | 'total'> & { done: boolean };
   /** The game's latest `host.pause.visible`; unset means visible, and a remount starts unset. */
   hostPauseVisible?: boolean;
+  back?: { enabled: boolean; label?: string };
   /** Unset until the game reports; a game without the SDK's HD-2D never does. */
   hd2d?: Hd2dReport;
 };
@@ -70,6 +71,8 @@ export type GameFrameController = {
   onScreen(
     callback: (position: { id: string; x: number; y: number } | { id: string; offscreen: true }) => void,
   ): () => void;
+  /** Send Back to a running game; static editor previews do not implement it. */
+  back?(): void;
   pause(): void;
   resume(): void;
   restoreSave(save: SaveData<unknown>): Promise<SaveData<unknown>>;
@@ -399,6 +402,11 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
     current = { ...current, hostPauseVisible: visible };
     publish();
   });
+  const stopBack = frame.on('host.back', (back) => {
+    if (disposed) return;
+    current = { ...current, back };
+    publish();
+  });
   const stopHd2d = frame.on('hd2d.scene', (report) => {
     if (disposed) return;
     current = { ...current, hd2d: report };
@@ -456,6 +464,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
         placementQueue.push({ prefab, pose, timeoutMs, resolve });
         sendNextPlacement();
       }),
+    back: () => frame.send('navigation.back', {}),
     onPicked: (callback) => frame.on('editor.picked', ({ targets }) => callback(targets)),
     onScreen: (callback) => frame.on('editor.screen', callback),
     pause: () => {
@@ -540,6 +549,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       stopStartupWrites();
       stopPlacement();
       stopHostPause();
+      stopBack();
       stopHd2d();
       for (const stop of stopRoomMessages) stop();
       if (activePlacement !== undefined) {
