@@ -32,4 +32,6 @@ for p in $(pgrep -f 'vite.*preview|http.server' 2>/dev/null); do t=$(ps -o etime
 # 6. Tickets that errored repeatedly (same symptom recurring = unfixed root cause).
 for r in open-game-maker open-games; do gh issue list -R its-everdred/$r --label agent:error --state open --json number -q '.[].number' 2>/dev/null | while read -r i; do
   c=$(gh issue view $i -R its-everdred/$r --json comments -q '[.comments[]|select(.body|test("no-op turn limit|orphaned in-progress claim"))]|length' 2>/dev/null); [ "${c:-0}" -ge 2 ] && echo "REPEAT-ERROR $r#$i $c no-op/orphan events"; done; done
+# 7. Post-deploy checks failing (prod broken). Any failure in the window is P0 (11-28: no game served for 75 min after a gate merged).
+[ -n "$S" ] && [ -f "$S/aiur-replies.md" ] && { since=$(date -u -d "-$H hours" +%FT%H:%M); f=$(grep -E 'qa-game-play failed|cards-check|card check' "$S/aiur-replies.md" | awk -v s="$since" '$1>=s' | wc -l); [ "$f" -gt 0 ] && echo "P0-POSTDEPLOY $f post-deploy check failures in ${H}h (aiur-replies.md)"; }
 exit 0
