@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { QA_VOICE_ISSUE, QA_VOICE_TITLE } from '../../src/qa/voice.js';
 import { sweepExpiredDrafts } from '../../src/game-drafts/cleanup.js';
+import { gameDrafts } from '../../src/new-game/drafts.js';
 import { readQaState } from '../../src/qa/state.js';
 import { INTERNAL_TOKEN, makeApp, makeDeps } from '../helpers.js';
 
@@ -184,5 +185,70 @@ describe('QA voice fixtures (#879)', () => {
     expect(close).not.toHaveBeenCalled();
     expect(deps.db.select().from(schema.gameDrafts).all()).toEqual([]);
     expect(readQaState(deps.db)?.voiceDraftId).toBeUndefined();
+  });
+
+  it('does not close the shared voice issue when reseeding races with an expiry snapshot', async () => {
+    const { deps, internal } = await voiceApp();
+    const first = await internal('/internal/qa/voice-fixtures', {
+      method: 'POST',
+      body: JSON.stringify({ run: 'expiry-race-1' }),
+    });
+    const { draftId } = (await first.json()) as { draftId: string };
+    const staleDraft = gameDrafts.get(deps.db, draftId)!;
+    let markCloseEntered!: () => void;
+    const closeStarted = new Promise<void>((resolve) => {
+      markCloseEntered = resolve;
+    });
+    let releaseClose!: () => void;
+    const closeGate = new Promise<void>((resolve) => {
+      releaseClose = resolve;
+    });
+    const close = vi.fn(async ({ ticket }: { ticket?: string }) => {
+      if (ticket === '878') {
+        markCloseEntered();
+        await closeGate;
+      }
+    });
+    deps.registry.draftScopeAssistant = {
+      create: async () => ({ repo: 'qa', ticket: String(QA_VOICE_ISSUE) }),
+      close,
+      transcript: async () => [],
+    };
+    const earlierDraft = gameDrafts.create(deps.db, {
+      familyId: readQaState(deps.db)!.familyId,
+      creatorId: readQaState(deps.db)!.userId,
+      choices: {
+        genre: 'Open-ended',
+        vibe: 'Open-ended',
+        family: 'any',
+        world: 'Open-ended',
+        players: 'single',
+        pov: 'fixed',
+      },
+      allowAiGeneratedAssets: true,
+    });
+    gameDrafts.attachTicket(deps.db, earlierDraft.id, 'qa', 878);
+    deps.sqlite
+      .prepare('UPDATE game_drafts SET expires_at = ? WHERE id = ?')
+      .run('2020-01-01T00:00:00.000Z', earlierDraft.id);
+    const persistedEarlierDraft = gameDrafts.get(deps.db, earlierDraft.id)!;
+    const expired = vi.spyOn(gameDrafts, 'expired').mockReturnValue([persistedEarlierDraft, staleDraft]);
+
+    const sweeping = sweepExpiredDrafts(deps, new Date('2026-11-28T00:00:00.000Z'));
+    await closeStarted;
+    const replacement = await internal('/internal/qa/voice-fixtures', {
+      method: 'POST',
+      body: JSON.stringify({ run: 'expiry-race-2' }),
+    });
+    expect(replacement.status).toBe(201);
+    releaseClose();
+    await sweeping;
+    expired.mockRestore();
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledWith(expect.objectContaining({ ticket: '878' }));
+    expect(deps.db.select().from(schema.gameDrafts).all()).toEqual([
+      expect.objectContaining({ ticketRepo: 'qa', ticketNumber: QA_VOICE_ISSUE }),
+    ]);
   });
 });

@@ -1,9 +1,10 @@
 import type { AppDeps } from '../app/types.js';
 import { gameDrafts, type GameDraft } from '../new-game/drafts.js';
-import { readQaState, updateQaState } from '../qa/state.js';
+import { updateQaState } from '../qa/state.js';
+import { isQaVoiceFixture } from '../qa/voice.js';
 
 export async function discardGameDraft(deps: AppDeps, draft: GameDraft): Promise<void> {
-  const qaVoiceFixture = readQaState(deps.db)?.voiceDraftId === draft.id;
+  const qaVoiceFixture = isQaVoiceFixture(draft);
   await closeDraftAssistant(deps, draft);
   const jobId = `draft:${draft.id}`;
   let discarded = false;
@@ -31,7 +32,7 @@ export async function discardGameDraft(deps: AppDeps, draft: GameDraft): Promise
 }
 
 async function closeDraftAssistant(deps: AppDeps, draft: GameDraft): Promise<void> {
-  if (readQaState(deps.db)?.voiceDraftId === draft.id) return;
+  if (isQaVoiceFixture(draft)) return;
   if (!draft.ticketRepo) return;
   const assistant = deps.registry.draftScopeAssistant;
   if (!assistant) throw new Error('draft_scope_close_unavailable');

@@ -5,7 +5,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
 import { readQaState, updateQaState } from './state.js';
-import { gameDrafts } from '../new-game/drafts.js';
+import { gameDrafts, type GameDraft } from '../new-game/drafts.js';
 
 // The voice E2E's build (#879): one job on the QA game whose build chat shows the mic and "Start voice conversation", so the
 // prod run dictates into its message box and holds a voice session on it. Like an operator publish it is `filed` with
@@ -14,6 +14,10 @@ import { gameDrafts } from '../new-game/drafts.js';
 export const QA_VOICE_REPO = 'qa';
 export const QA_VOICE_ISSUE = 879;
 export const QA_VOICE_TITLE = 'QA voice';
+
+export function isQaVoiceFixture(draft: Pick<GameDraft, 'ticketRepo' | 'ticketNumber'>): boolean {
+  return draft.ticketRepo === QA_VOICE_REPO && draft.ticketNumber === QA_VOICE_ISSUE;
+}
 
 const jobId = (run: string) => `j_qa-voice-${run}`;
 
