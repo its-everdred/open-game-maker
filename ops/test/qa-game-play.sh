@@ -123,6 +123,11 @@ assert_eq "qa play-check g_private build_private --out $stack/assets-local/revie
   '--game selects an explicitly requested private game'
 assert_grep 'exit=0 qa-game-play' "$scratch/out"
 assert_grep 'privileged build smoke; verify real player access separately' "$scratch/out"
+: > "$scratch/calls"
+"$check" --db "$db" --repo "$stack" --game private --build build_private > "$scratch/out"
+assert_eq "qa play-check g_private build_private --out $stack/assets-local/review/app/play-check/build_private" "$(cat "$scratch/calls")" \
+  '--build accepts the current private release'
+assert_grep 'exit=0 qa-game-play' "$scratch/out"
 python3 - "$db" << 'PY'
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])

@@ -5,6 +5,8 @@ import { createApp } from '../src/app/app.js';
 import { validGrant } from '../src/artifacts/grants.js';
 import releaseRoutes from '../src/releases/routes.js';
 import { publish } from '../src/releases/service.js';
+import { signIn } from './auth-helpers.js';
+import { makeApp } from './helpers.js';
 import { ids, insertBuild, now, setup } from './release-fixtures.js';
 
 it.each([
@@ -84,4 +86,28 @@ it('returns a revocable private release URL to an invited player', async () => {
   expect(await validGrant(deps, grant, ids.game, buildId)).toBe(true);
   deps.db.delete(schema.gameGrants).where(eq(schema.gameGrants.userId, player)).run();
   expect(await validGrant(deps, grant, ids.game, buildId)).toBe(false);
+});
+
+it('issues a private release URL tied to a real authenticated session', async () => {
+  const { deps, source, runtime } = setup();
+  const buildId = insertBuild(deps, source);
+  const { app } = await makeApp(deps);
+  const outbox = () =>
+    deps.sqlite.prepare('SELECT text FROM mail_outbox ORDER BY created_at').all() as { text: string }[];
+  const { session } = await signIn(app, outbox, 'kevin@example.com');
+  const user = deps.db.select().from(schema.user).where(eq(schema.user.email, 'kevin@example.com')).get()!;
+  deps.db.update(schema.games).set({ ownerId: user.id }).where(eq(schema.games.id, ids.game)).run();
+  deps.db
+    .insert(schema.familyMembers)
+    .values({ familyId: ids.family, userId: user.id, role: 'member', capability: 'creator', joinedAt: now })
+    .run();
+  await publish(deps, runtime, { gameId: ids.game, buildId, actor: user.id });
+  const response = await app.request(`/api/v1/games/${ids.game}/published`, { headers: { cookie: session } });
+  expect(response.status).toBe(200);
+  const { buildUrl } = (await response.json()) as { buildUrl: string };
+  expect(buildUrl).toContain(`/d/${ids.game}/${buildId}/`);
+  const grant = new URL(buildUrl).pathname.split('/')[4]!;
+  expect(await validGrant({ ...deps }, grant, ids.game, buildId)).toBe(true);
+  deps.db.delete(schema.session).where(eq(schema.session.userId, user.id)).run();
+  expect(await validGrant({ ...deps }, grant, ids.game, buildId)).toBe(false);
 });
