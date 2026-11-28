@@ -8,17 +8,25 @@ import { PcmPlayer } from '../src/audio/playback.js';
 // on Kevin's iPhone (#1325).
 function safariNavigator(type: string) {
   const audioSession = { type };
-  const tracks = [{ stop: vi.fn() }];
+  const tracks = [{ enabled: true, stop: vi.fn() }];
   const getUserMedia = vi.fn(async () => {
     if (audioSession.type !== 'auto' && audioSession.type !== 'play-and-record') {
       throw new DOMException('AudioSession category is not compatible with audio capture.', 'InvalidStateError');
     }
-    return { getTracks: () => tracks };
+    return { getTracks: () => tracks, getAudioTracks: () => tracks };
   });
   return { audioSession, mediaDevices: { getUserMedia }, tracks };
 }
 
 class FakeContext {
+  static latest: FakeContext | undefined;
+
+  onAudioProcess: ((event: { inputBuffer: { getChannelData: () => Float32Array } }) => void) | undefined;
+
+  constructor() {
+    FakeContext.latest = this;
+  }
+
   resume(): Promise<void> {
     return Promise.resolve();
   }
@@ -27,7 +35,16 @@ class FakeContext {
   destination = {};
   close = vi.fn(async () => undefined);
   createMediaStreamSource = () => ({ connect: vi.fn(), disconnect: vi.fn() });
-  createScriptProcessor = () => ({ addEventListener: vi.fn(), connect: vi.fn(), disconnect: vi.fn() });
+  createScriptProcessor = () => ({
+    addEventListener: (
+      _type: string,
+      listener: (event: { inputBuffer: { getChannelData: () => Float32Array } }) => void,
+    ) => {
+      this.onAudioProcess = listener;
+    },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  });
   createGain = () => ({ gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() });
   createBufferSource = () => ({ buffer: null, connect: vi.fn(), start: vi.fn() });
   createBuffer = () => ({});
@@ -67,6 +84,29 @@ describe('capture audio session', () => {
     await new PcmPlayer(() => new FakeContext() as unknown as AudioContext).unlock();
 
     expect(nav.audioSession.type).toBe('play-and-record');
+    capture.stop();
+  });
+
+  it('mutes the microphone track without ending the audio session', async () => {
+    const capture = await startCapture(() => undefined);
+    capture.setMuted(true);
+    expect(nav.tracks[0]!.enabled).toBe(false);
+    expect(nav.audioSession.type).toBe('play-and-record');
+
+    capture.setMuted(false);
+    expect(nav.tracks[0]!.enabled).toBe(true);
+    capture.stop();
+  });
+
+  it('reports a normalized waveform level and flattens it while muted', async () => {
+    const level = vi.fn();
+    const capture = await startCapture(() => undefined, level);
+
+    FakeContext.latest!.onAudioProcess!({ inputBuffer: { getChannelData: () => new Float32Array(8).fill(0.2) } });
+    expect(level.mock.lastCall?.[0]).toBeCloseTo(0.8);
+
+    capture.setMuted(true);
+    expect(level).toHaveBeenLastCalledWith(0);
     capture.stop();
   });
 

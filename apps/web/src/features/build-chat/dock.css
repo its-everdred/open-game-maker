@@ -20,6 +20,14 @@
   animation: build-chat-rise 0.2s;
 }
 
+.app-chrome:has(.build-chat-dock[data-state='chat']) {
+  background: transparent;
+}
+
+.build-chat-dock[data-state='chat'] .build-chat-panel {
+  background: color-mix(in srgb, var(--surface-card) 82%, transparent);
+}
+
 .build-chat-dock[data-state='chat'] .build-chat-panel {
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100svh - var(--safe-t) - var(--safe-b) - 24px);
@@ -47,11 +55,21 @@
   font: 700 17px var(--display);
 }
 
+.build-chat-dock[data-state='chat'] .build-chat-chat-head {
+  padding-right: 124px;
+}
+
+.build-chat-chat-head h3 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .build-chat-close,
 .build-chat-back,
 .build-chat-queued-actions button,
 .build-chat-composer-actions button,
-.build-chat-read,
 .build-chat-type {
   border: 1px solid var(--rule);
   border-radius: 999px;
@@ -198,6 +216,10 @@
 }
 
 @media (max-width: 600px) {
+  .app-chrome:has(.build-chat-dock[data-state='chat']) .studio-logo {
+    display: none;
+  }
+
   .build-chat-dock[data-state='chat'] {
     inset: 0;
     align-items: stretch;
@@ -221,10 +243,6 @@
   .build-chat-messages {
     max-height: none;
     flex: 1;
-  }
-
-  .build-chat-voice {
-    grid-template-columns: 1fr;
   }
 }
 
