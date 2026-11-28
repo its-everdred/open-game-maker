@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GateResult } from '@ogm/gm-verify';
 
 import { gm, tempDir } from './helpers.js';
+import * as preferences from '../src/preferences.js';
+import * as playAreaCheck from '../src/play-area-check.js';
 
 const state = vi.hoisted(() => ({
   l0: {
@@ -123,10 +125,57 @@ beforeEach(() => {
 });
 
 describe('gm check', () => {
+  it('fails when the preference registry has conflicts', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const spy = vi
+      .spyOn(preferences, 'validatePreferences')
+      .mockReturnValue({ active: [], errors: ['preference conflict'] });
+    try {
+      const result = await gm(['check', '--json']);
+      expect(result.code).toBe(1);
+      expect(JSON.parse(result.out[0]!).preferenceProblems).toContain('preference conflict');
+    } finally {
+      spy.mockRestore();
+    }
+  }, 180_000);
+
+  it('reports a stale worker skill without failing a game check', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const spy = vi.spyOn(preferences, 'checkInstalledPreferenceSections').mockReturnValue(['stale worker skill']);
+    try {
+      const result = await gm(['check', '--json']);
+      expect(result.code).toBe(0);
+      expect(JSON.parse(result.out[0]!).preferenceWarnings).toContain('stale worker skill');
+    } finally {
+      spy.mockRestore();
+    }
+  }, 180_000);
+
+  it('reports a failed capture gate for an SDK game with a nonstandard layout', async () => {
+    state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [] };
+    const root = tempDir();
+    execFileSync('git', ['-C', root, 'init', '-q']);
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ dependencies: { '@gm/sdk': '*' } }));
+    writeFileSync(join(root, 'index.html'), '');
+    const spy = vi
+      .spyOn(playAreaCheck, 'checkPlayArea')
+      .mockResolvedValue({ ok: false, output: ['capture unavailable'] });
+    try {
+      const result = await gm(['check', '--json'], { cwd: root });
+      expect(result.code).toBe(1);
+      expect(JSON.parse(result.out[0]!).playArea.output).toContain('capture unavailable');
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 180_000);
+
   it('runs the complete L0 gate and composes the registered asset check', async () => {
     state.l0 = { gate: 'L0', ok: true, durationMs: 1, checks: [{ id: 'hook-present', ok: true }] };
 
-    expect(await gm(['check'])).toEqual({ code: 0, out: [], err: [] });
+    const root = tempDir();
+    execFileSync('git', ['-C', root, 'init', '-q']);
+    expect(await gm(['check'], { cwd: root })).toEqual({ code: 0, out: [], err: [] });
     expect(state.l0Options).toBeUndefined();
   }, 60_000);
 

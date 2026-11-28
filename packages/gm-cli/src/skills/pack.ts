@@ -15,6 +15,7 @@ import {
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { skillPackVersion } from '@ogm/game-repo-template';
 import { UsageError } from '../command.js';
 import { readSkillsLock, readVendorPins, type SkillsLock, writeSkillsLock } from './lock.js';
 import {
@@ -445,7 +446,7 @@ export function syncSkillPack(options: SyncSkillPackOptions): SyncSkillPackResul
     }
   }
   const source = sourcePack(packDir, options.set);
-  const currentVersion = gmCliVersion();
+  const currentVersion = skillPackVersion(packDir, gmCliVersion());
   const installedRoot = join(repoDir, '.claude', 'skills');
   const oldLock = readSkillsLock(repoDir);
   const installationPending = oldLock?.installedAt === '';

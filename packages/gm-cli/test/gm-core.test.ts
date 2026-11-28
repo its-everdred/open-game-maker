@@ -17,7 +17,12 @@ describe('gm skill pack', () => {
       .filter((name) => name.startsWith('gm-') && !name.startsWith('gm-set-'))
       .sort();
 
-    expect(core.length).toBeLessThanOrEqual(120);
+    // Registry entries grow independently of the hand-written routing instructions.
+    const routing = text
+      .replace(/<!-- preferences:start -->[\s\S]*?<!-- preferences:end -->/, '')
+      .trimEnd()
+      .split('\n');
+    expect(routing.length).toBeLessThanOrEqual(120);
     for (const name of firstParty) expect(text).toContain(`| ${name} |`);
     for (const activity of [
       'asset_pipeline',

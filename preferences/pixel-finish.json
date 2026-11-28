@@ -1,0 +1,15 @@
+{
+  "id": "pixel-finish",
+  "date": "2026-11-24",
+  "quote": "the outfit screenshots do look fuzzy from our pixel art mask. the original sprites have sharper edges and sharper shade/color transitions. clear lines separating clothing from skin etc",
+  "source": "https://github.com/its-everdred/open-game-maker/issues/1338",
+  "scope": "role:visual",
+  "topic": "pixel-finish",
+  "value": "crisp-material-separation",
+  "owner_ticket": 1338,
+  "check": {
+    "kind": "review-only",
+    "reason": "The visual match to the original sprites requires comparing rendered art."
+  },
+  "status": "active"
+}

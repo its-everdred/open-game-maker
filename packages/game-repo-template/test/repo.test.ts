@@ -54,6 +54,8 @@ describe('renderRepoTemplate', () => {
       expect(agents).toContain(`\`${command}\``);
     }
     expect(agents).toContain('gm-core');
+    expect(agents).toContain('gm prefs list');
+    expect(agents).toContain('gm prefs check');
     expect(agents).toContain('## Local tests');
     expect(requiredChecks).toEqual(['ci / required', 'ogm/boundary']);
   });
@@ -118,4 +120,20 @@ describe('renderRepoTemplate', () => {
     );
     expect(new Set(names).size).toBe(names.length);
   });
+});
+
+it('changes the skill pack version when a preference section changes', async () => {
+  const { skillPack } = await import('../src/skills.js');
+  const root = emptyRoot();
+  mkdirSync(join(root, 'skills/gm-core'), { recursive: true });
+  mkdirSync(join(root, 'packages/gm-cli'), { recursive: true });
+  writeFileSync(join(root, 'packages/gm-cli/package.json'), JSON.stringify({ version: '0.0.0' }));
+  const skill = join(root, 'skills/gm-core/SKILL.md');
+  writeFileSync(skill, '<!-- preferences:start -->first<!-- preferences:end -->');
+  const first = skillPack(root).version;
+  writeFileSync(skill, '<!-- preferences:start -->changed<!-- preferences:end -->');
+  const changed = skillPack(root).version;
+  expect(changed).not.toBe(first);
+  writeFileSync(skill, '<!-- preferences:start -->changed<!-- preferences:end -->\nlocal context');
+  expect(skillPack(root).version).toBe(changed);
 });

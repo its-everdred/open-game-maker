@@ -22,3 +22,7 @@ use. Work here the way those agents will work: dogfood the skills.
   `git -C <repo> -c credential.helper='!gh auth git-credential' push "$(git -C <repo> remote get-url origin | sed 's#git@github.com:#https://github.com/#')" research`
   (one commit at a time if it disconnects). Deploy the web app (`apps/web/tools/deploy.sh`) only when Kevin says so; Netlify credits
   are limited.
+
+Creator preferences are recorded in `preferences/`; use `gm prefs list` for applicable active entries and `gm prefs check` to find conflicts.
+
+When Kevin states a new preference, record his exact words and date in the registry with an automated check or a reason it requires review. Resolve a clear replacement with reciprocal supersession links; raise a creator decision for ambiguous conflicts with both quotes and dates, recommending the newest.

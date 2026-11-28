@@ -1,0 +1,12 @@
+{
+  "id": "image-distortion",
+  "date": "2026-11-17",
+  "quote": "i've seen agents stretch images a lot, how might we ensure and enforce that agents never stretch images and instead re-generate new ones as needed",
+  "source": "https://github.com/its-everdred/open-game-maker/issues/837",
+  "scope": "all",
+  "topic": "image-distortion",
+  "value": "preserve-aspect-ratio",
+  "owner_ticket": 837,
+  "check": { "kind": "rule", "id": "image-distortion" },
+  "status": "active"
+}

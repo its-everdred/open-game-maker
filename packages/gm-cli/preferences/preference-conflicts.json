@@ -1,0 +1,15 @@
+{
+  "id": "preference-conflicts",
+  "date": "2026-11-26",
+  "quote": "make sure if preferences ever conflict agent either takes the newest or surfaces conflict to me",
+  "source": "https://github.com/its-everdred/open-game-maker/issues/1395#issuecomment-7189008304",
+  "scope": "all",
+  "topic": "preference-conflicts",
+  "value": "newest-or-escalate",
+  "owner_ticket": 1395,
+  "check": {
+    "kind": "review-only",
+    "reason": "Whether an ambiguous conflict was presented to the creator requires reviewing the resulting decision."
+  },
+  "status": "active"
+}

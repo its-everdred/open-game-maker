@@ -17,8 +17,8 @@ export function skillPack(root: string = WORKSPACE_ROOT): SkillPack {
   const real = join(root, 'skills');
   if (hasPack(real)) return workspaceSkillPack(root, real);
   const source = join(TEMPLATES, 'skills');
-  const lock = readFileSync(join(source, 'skills.lock'), 'utf8');
-  const parsed = JSON.parse(lock) as { pack?: unknown };
+  const rawLock = readFileSync(join(source, 'skills.lock'), 'utf8');
+  const parsed = JSON.parse(rawLock) as { pack?: unknown };
   if (typeof parsed.pack !== 'string' || parsed.pack === '')
     throw new Error(`${source}/skills.lock has no pack version`);
   const files = skillNames(source).flatMap((name) =>
@@ -27,7 +27,9 @@ export function skillPack(root: string = WORKSPACE_ROOT): SkillPack {
       content: readFileSync(join(source, name, path), 'utf8'),
     })),
   );
-  return { version: parsed.pack, lock, files, discovery: discoverySkills(files) };
+  const version = skillPackVersion(source, parsed.pack);
+  const lock = `${JSON.stringify({ ...JSON.parse(rawLock), pack: version }, null, 2)}\n`;
+  return { version, lock, files, discovery: discoverySkills(files) };
 }
 
 export function skillNames(dir: string): string[] {
@@ -41,7 +43,16 @@ function hasPack(dir: string): boolean {
   return existsSync(dir) && skillNames(dir).length > 0;
 }
 
-function workspaceSkillPack(root: string, dir: string): SkillPack {
+/** Preference content participates in the shared pack version used by workers and local sync. */
+export function skillPackVersion(dir: string, baseVersion: string): string {
+  const file = join(dir, 'gm-core', 'SKILL.md');
+  const content = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  const section = /<!-- preferences:start -->[\s\S]*?<!-- preferences:end -->/.exec(content)?.[0] ?? '';
+  const digest = createHash('sha256').update(section).digest('hex').slice(0, 16);
+  return `${baseVersion}+${digest}`;
+}
+
+function workspacePackFiles(dir: string): SkillPack['files'] {
   const roots = readdirSync(dir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && (entry.name.startsWith('gm-') || entry.name === 'vendor'))
     .map((entry) => entry.name)
@@ -56,7 +67,12 @@ function workspaceSkillPack(root: string, dir: string): SkillPack {
       };
     }),
   );
-  const version = packVersion(root, dir);
+  return files;
+}
+
+function workspaceSkillPack(root: string, dir: string): SkillPack {
+  const files = workspacePackFiles(dir);
+  const version = skillPackVersion(dir, packVersion(root, dir));
   const lock = `${JSON.stringify(
     {
       v: 1,

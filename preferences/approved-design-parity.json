@@ -1,0 +1,15 @@
+{
+  "id": "approved-design-parity",
+  "date": "2026-11-26",
+  "quote": "i care about replicating even the smallest details",
+  "source": "https://github.com/its-everdred/open-game-maker/issues/1395#issuecomment-7210724570",
+  "scope": "all",
+  "topic": "approved-app-design-parity",
+  "value": "replicate-approved-claude-design-canvas-exactly",
+  "owner_ticket": 1449,
+  "check": {
+    "kind": "review-only",
+    "reason": "Applies to OGM app UI built from an approved Claude Design canvas; the gm design parity check is owned by ticket 1449 and is not yet registered here."
+  },
+  "status": "active"
+}

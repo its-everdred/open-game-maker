@@ -16,6 +16,22 @@ import { checkPrReview } from '../../pr-review-check.js';
 import { entriesForTicket, readInventory } from '../../decision-inventory.js';
 import { reviewScreens } from '../../look/screens.js';
 import { recipeSchema } from '../../sprite-forge.js';
+import {
+  checkInstalledPreferenceSections,
+  checkPreferenceBundle,
+  checkPromptPreferenceSection,
+  checkPreferenceSection,
+  readPreferences,
+  validatePreferences,
+} from '../../preferences.js';
+import {
+  bundledPreferences,
+  fallbackSkill,
+  bundledSkill,
+  preferencePrompt,
+  preferenceSkill,
+  preferencesDirectory,
+} from '../prefs/list.js';
 
 function ticketLabels(body: string): Set<string> {
   return new Set(
@@ -235,6 +251,23 @@ export const command: GmCommand = {
     let loadingErrors: string[] = [];
     let imageErrors: string[] = [];
     let playArea: Awaited<ReturnType<typeof checkPlayArea>> | undefined;
+    const preferenceEntries = readPreferences(preferencesDirectory);
+    const preferenceProblems = validatePreferences(preferenceEntries).errors;
+    if (preferenceProblems.length === 0)
+      preferenceProblems.push(
+        ...checkPreferenceSection(preferenceEntries, preferenceSkill),
+        ...checkPreferenceBundle(preferenceEntries, bundledPreferences, bundledSkill),
+      );
+    if (preferenceProblems.length === 0 && existsSync(preferencePrompt))
+      preferenceProblems.push(...checkPromptPreferenceSection(preferenceEntries, preferencePrompt));
+    if (preferenceProblems.length === 0 && existsSync(fallbackSkill))
+      preferenceProblems.push(
+        ...checkPreferenceSection(preferenceEntries, fallbackSkill).map(
+          () => 'fallback gm-core preference section is stale',
+        ),
+      );
+    let preferenceWarnings: string[] = [];
+    if (!ctx.json) preferenceProblems.forEach(ctx.err);
     const prProblems =
       typeof flags.body === 'string'
         ? [
@@ -262,6 +295,12 @@ export const command: GmCommand = {
       // The static gate also works outside a game repository.
     }
     const playAreaGame = findPlayAreaGame(ctx.cwd, game);
+    if (preferenceProblems.length === 0)
+      preferenceWarnings = checkInstalledPreferenceSections(preferenceEntries, ctx.cwd, Boolean(playAreaGame));
+    if (!ctx.json)
+      preferenceWarnings.forEach((warning) =>
+        ctx.err(`warning: ${warning}${warning.startsWith('no installed') ? '' : '; update the CLI and skill pack'}`),
+      );
     if (playAreaGame) {
       playArea = await checkPlayArea(ctx, playAreaGame);
       if (!ctx.json) playArea.output.forEach(playArea.ok ? ctx.out : ctx.err);
@@ -299,14 +338,24 @@ export const command: GmCommand = {
       loadingErrors.length === 0 &&
       imageErrors.length === 0 &&
       playArea?.ok !== false &&
-      prProblems.length === 0;
-    if (ctx.json && (lookReport !== undefined || playArea !== undefined || typeof flags.body === 'string'))
+      prProblems.length === 0 &&
+      preferenceProblems.length === 0;
+    if (
+      ctx.json &&
+      (lookReport !== undefined ||
+        playArea !== undefined ||
+        typeof flags.body === 'string' ||
+        preferenceProblems.length > 0 ||
+        preferenceWarnings.length > 0)
+    )
       ctx.out(
         JSON.stringify({
           ...gate,
           ok,
           look: lookReport,
           loadingErrors,
+          preferenceProblems,
+          preferenceWarnings,
           imageErrors,
           playArea,
           prototypeReview: typeof flags.body === 'string' ? { problems: prProblems } : undefined,

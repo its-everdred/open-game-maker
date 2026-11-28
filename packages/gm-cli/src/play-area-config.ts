@@ -3,18 +3,19 @@ import { dirname, join, resolve } from 'node:path';
 
 export type PlayAreaConfig = false | { tap?: string; minFill?: number; maxOffset?: number; disabled?: boolean };
 
-/** Template games may have no source manifest; their SDK dependency identifies them. */
+/** Template games may have no source manifest; require an SDK dependency and a game entry point. */
 export function hasPlayAreaCheck(game: string): boolean {
   if (existsSync(join(game, 'gm.manifest.json'))) return true;
+  if (!existsSync(join(game, 'index.html'))) return false;
   try {
     const pkg = JSON.parse(readFileSync(join(game, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, unknown>;
+      devDependencies?: Record<string, unknown>;
+      optionalDependencies?: Record<string, unknown>;
+      peerDependencies?: Record<string, unknown>;
     };
-    return (
-      pkg.dependencies?.['@gm/sdk'] !== undefined &&
-      existsSync(join(game, 'index.html')) &&
-      existsSync(join(game, 'src/main.ts')) &&
-      existsSync(join(game, 'design'))
+    return [pkg.dependencies, pkg.devDependencies, pkg.optionalDependencies, pkg.peerDependencies].some(
+      (dependencies) => dependencies?.['@gm/sdk'] !== undefined,
     );
   } catch {
     return false;

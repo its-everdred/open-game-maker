@@ -6,8 +6,7 @@ description: Load first in every Game Maker build. Routes the work, keeps the br
 # Game Maker core
 
 ## The job
-Build the game in `gm scope`. The scope owns the WHAT: theme, art, names, palette, and mechanics. Templates, skills,
-pattern cards, and engine references are HOW. Never add a mechanic the scope does not list; suggest it in the build chat instead. Loading artwork: declare `loading.portrait` and `loading.landscape` PNG paths under `media/` in `gm.manifest.json`, with 9:16 (at least 1440×2560) and 16:9 (at least 2560×1440) art in `public/media/`. Also declare `images.loading` with `per-ratio` variants for phone-portrait, phone-landscape, tablet-portrait, tablet-landscape, and desktop, each matching its display ratio.
+Build the game in `gm scope`. The scope owns the WHAT: theme, art, names, palette, and mechanics. Templates, skills, pattern cards, and engine references are HOW. Never add a mechanic the scope does not list; suggest it in the build chat instead. Loading artwork: declare `loading.portrait` and `loading.landscape` PNG paths under `media/` in `gm.manifest.json`, with 9:16 (at least 1440×2560) and 16:9 (at least 2560×1440) art in `public/media/`. Also declare `images.loading` with `per-ratio` variants for phone-portrait, phone-landscape, tablet-portrait, tablet-landscape, and desktop, each matching its display ratio.
 Keep the subject in the centre 70%, the top 25% calm for the shell logo, and the bottom 20% calm for progress. Run `gm check`. For asynchronous startup, set `runtime.hooks.ready = false` before starting work and `true` only after the first frame renders.
 
 Before coding, write a five-line plan and a short list titled "defaults I'd reach for." Drop each default or justify it against the scope. Templates are scaffolds, not game designs: do not inherit a theme, entity, HUD, name, or mechanic.
@@ -28,8 +27,7 @@ Start from approved work: `gm context` lists what this game's earlier tickets go
 
 Keep one style family per game. Use `gm assets sheet` for visual choices and record why the chosen items fit.
 
-**Never re-offer a rejected option.** `design/feedback.json` is the creator's rejection ledger and each entry's rule
-holds: run `gm options check` before the creator sees options; record a new rejection with `gm options reject`. Give
+**Never re-offer a rejected option.** `design/feedback.json` is the creator's rejection ledger and each entry's rule holds: run `gm options check` before the creator sees options; record a new rejection with `gm options reject`. Give
 each option its provenance (`gm decide … --provenance <id>=@<file>.json`): the check reads its packs, assets, generator
 and build time, and a ledger-carrying game refuses an option nobody can check.
 
@@ -118,3 +116,17 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | vendor/phaser | Working in Phaser; load only the capability needed. |
 | vendor/threejs | Working in Three.js; load only the capability needed. |
 | vendor/gamedev | Needing a focused game-development reference; `.claude/skills/gm-core/references/roles.md` lists each role's picks. |
+
+Creator preferences are recorded in `preferences/`; use `gm prefs list` for applicable active entries and `gm prefs check` to find conflicts. When Kevin states a new preference, record his exact words and date in the registry with an automated check or a reason it requires review. Resolve a clear replacement with reciprocal supersession links; raise a creator decision for ambiguous conflicts with both quotes and dates, recommending the newest.
+
+<!-- preferences:start -->
+## Creator preferences
+
+Apply all-game entries and entries matching the ticket game, role or lane. Run `gm prefs check` when the registry changes.
+- [approved-design-parity](https://github.com/its-everdred/open-game-maker/issues/1395#issuecomment-7210724570) (2026-11-26, all; owner #1449; review only: Applies to OGM app UI built from an approved Claude Design canvas; the gm design parity check is owned by ticket 1449 and is not yet registered here.): “i care about replicating even the smallest details”
+- [controller-icons](https://github.com/its-everdred/open-game-maker/issues/1320) (2026-11-24, all; owner #1394; review only: Visual review must distinguish action icons from letters in rendered controls.): “controller buttons on screen should always use icons. not letters”
+- [controller-layer](https://github.com/its-everdred/open-game-maker/issues/1394) (2026-11-26, all; owner #1394; review only: The controller conformance rule is owned by ticket 1394 and is not yet registered here.): “games should never draw their own [controls], OGM should be the controller layer with a flexible way for games to dictate the controller buttons and layouts needed for that game.”
+- [image-distortion](https://github.com/its-everdred/open-game-maker/issues/837) (2026-11-17, all; owner #837; gm check: image-distortion): “i've seen agents stretch images a lot, how might we ensure and enforce that agents never stretch images and instead re-generate new ones as needed”
+- [pixel-finish](https://github.com/its-everdred/open-game-maker/issues/1338) (2026-11-24, role:visual; owner #1338; review only: The visual match to the original sprites requires comparing rendered art.): “the outfit screenshots do look fuzzy from our pixel art mask. the original sprites have sharper edges and sharper shade/color transitions. clear lines separating clothing from skin etc”
+- [preference-conflicts](https://github.com/its-everdred/open-game-maker/issues/1395#issuecomment-7189008304) (2026-11-26, all; owner #1395; review only: Whether an ambiguous conflict was presented to the creator requires reviewing the resulting decision.): “make sure if preferences ever conflict agent either takes the newest or surfaces conflict to me”
+<!-- preferences:end -->
