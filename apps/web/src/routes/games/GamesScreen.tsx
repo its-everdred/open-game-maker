@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { useMutation } from '@tanstack/react-query';
 
 import { registerTestApi } from '../../app/testHook';
 import { set as setMusic } from '../../lib/sound';
+import { api } from '../../lib/api/client';
 import { GameCell } from './GameCell';
 import {
   cancelGlides,
@@ -40,6 +42,11 @@ export function GamesScreen() {
   const spotlightDismissed = isSpotlightDismissed(location.state);
 
   const gamesQuery = useGames();
+  const release = useMutation({
+    mutationFn: ({ gameId, releaseState }: { gameId: string; releaseState: 'released' | 'coming_soon' }) =>
+      api(`/games/${encodeURIComponent(gameId)}`, { method: 'PATCH', json: { releaseState } }),
+    onSuccess: () => gamesQuery.refetch(),
+  });
   const jobsQuery = useActiveJobs();
   const realGames = gamesQuery.data ?? [];
   const games = useMemo(() => mergeShowcase(gamesQuery.data ?? []), [gamesQuery.data]);
@@ -112,7 +119,7 @@ export function GamesScreen() {
 
   const open = (index: number, mode: 'play' | 'edit' = 'play') => {
     const game = sortedGames[index];
-    if (!game || game.id !== selected?.id || !canOpen) return;
+    if (!game || game.id !== selected?.id || !canOpen || game.canPlay === false) return;
     if (game.id.startsWith('showcase:') && game.showcase && game.showcase.id !== 'goblin-cellar') {
       navigate(`/g/showcase/${encodeURIComponent(game.showcase.id)}?mode=${mode}`);
       return;
@@ -264,6 +271,10 @@ export function GamesScreen() {
                           job={activeJobs.get(selected.id)}
                           onPlay={() => open(selectedIndex ?? -1, 'play')}
                           onEdit={() => open(selectedIndex ?? -1, 'edit')}
+                          onRelease={() => release.mutate({ gameId: selected.id, releaseState: 'released' })}
+                          onComingSoon={() => release.mutate({ gameId: selected.id, releaseState: 'coming_soon' })}
+                          releasePending={release.isPending}
+                          releaseError={release.isError && release.variables?.gameId === selected.id}
                           onClose={close}
                         />
                       ) : null

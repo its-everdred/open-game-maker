@@ -22,6 +22,7 @@ export interface DictationOptions {
 type DictationEventMap = {
   transcript: DictationTranscript;
   error: DictationError;
+  level: number;
 };
 
 const MAX_BUFFERED_BASE64_BYTES = 640_000;
@@ -43,6 +44,7 @@ export class Dictation {
   private pendingChunks: string[] = [];
   private pendingBytes = 0;
   private generation = 0;
+  private muted = false;
   private started = false;
   private released = false;
   private committed = false;
@@ -79,6 +81,15 @@ export class Dictation {
     this.commitIfReady();
   }
 
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    if (muted) {
+      this.pendingChunks = [];
+      this.pendingBytes = 0;
+    }
+    this.capture?.setMuted(muted);
+  }
+
   cancel(): void {
     if (!this.started || this.finished) return;
     if (this.socket?.readyState === WebSocket.OPEN) this.send({ v: 1, type: 'stop' });
@@ -90,6 +101,7 @@ export class Dictation {
     this.pendingChunks = [];
     this.pendingBytes = 0;
     this.started = true;
+    this.muted = false;
     this.released = false;
     this.committed = false;
     this.finished = false;
@@ -100,11 +112,15 @@ export class Dictation {
 
   private async beginCapture(generation: number): Promise<void> {
     try {
-      const capture = await startCapture((chunk) => this.sendAudio(generation, chunk));
+      const capture = await startCapture(
+        (chunk) => this.sendAudio(generation, chunk),
+        (level) => this.emit('level', level),
+      );
       if (generation !== this.generation || this.finished || this.released) {
         capture.stop();
       } else {
         this.capture = capture;
+        if (this.muted) capture.setMuted(true);
       }
     } catch (error) {
       if (generation !== this.generation || this.finished) return;
@@ -152,7 +168,7 @@ export class Dictation {
   }
 
   private sendAudio(generation: number, chunk: string): void {
-    if (generation !== this.generation || this.finished || this.released) return;
+    if (generation !== this.generation || this.finished || this.released || this.muted) return;
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.send({ v: 1, type: 'audio', data_b64: chunk });
       return;

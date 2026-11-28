@@ -14,7 +14,20 @@ const allowed = (): Authorization => ({ ok: true });
 const denied = (reason: string): Authorization => ({ ok: false, reason });
 
 export function authorize(actor: Actor, action: Action, resource: Resource = {}): Authorization {
-  if (resource.familyId !== undefined && resource.familyId !== actor.familyId) return denied('cross_family');
+  if (
+    resource.releaseState !== undefined &&
+    resource.releaseState !== 'released' &&
+    resource.releaseState !== 'coming_soon'
+  )
+    return denied('release_state_invalid');
+  if (resource.familyId !== undefined && resource.familyId !== actor.familyId) {
+    const earlyAccess = action === 'game.play' && resource.granted === true;
+    const adminAccess =
+      action === 'game.play' &&
+      resource.releaseState === 'coming_soon' &&
+      (actor.platformRole === 'admin' || actor.platformRole === 'maintainer');
+    if (!earlyAccess && !adminAccess) return denied('cross_family');
+  }
   if (ownerActions.has(action) && resource.ownerId === undefined) return denied('owner_required');
 
   if (actor.platformRole === 'maintainer') {
@@ -52,6 +65,12 @@ export function authorize(actor: Actor, action: Action, resource: Resource = {})
   }
 
   if (action === 'game.play') {
+    if (resource.visibility === undefined) return denied('visibility_required');
+    if (resource.releaseState === 'coming_soon') {
+      return actor.platformRole === 'admin' || resource.ownerId === actor.userId || resource.granted === true
+        ? allowed()
+        : denied('coming_soon');
+    }
     if (resource.visibility === 'listed') return allowed();
     if (resource.visibility !== 'private') return denied('visibility_required');
     return resource.ownerId === actor.userId || resource.granted === true ? allowed() : denied('private_game');
@@ -59,6 +78,7 @@ export function authorize(actor: Actor, action: Action, resource: Resource = {})
 
   if (action === 'game.fork') {
     if (resource.ownerId === actor.userId) return allowed();
+    if (resource.releaseState === 'coming_soon') return denied('coming_soon');
     return actor.capability === 'creator' && resource.visibility === 'listed' ? allowed() : denied('not_allowed');
   }
 

@@ -64,6 +64,18 @@ function shape(element: Element): string {
 }
 
 describe('game detail', () => {
+  it('offers release to an authorized owner of a coming soon game', () => {
+    const onRelease = vi.fn();
+    detail({ ...blobs, releaseState: 'coming_soon', canPlay: true, canManageRelease: true }, { onRelease });
+    fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+    expect(onRelease).toHaveBeenCalledOnce();
+  });
+  it('does not offer play or edit to a restricted viewer', () => {
+    detail({ ...blobs, releaseState: 'coming_soon', canPlay: false });
+    expect(screen.getByText('Coming Soon')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Play Blobs' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit Blobs' })).not.toBeInTheDocument();
+  });
   it('can dismiss with Escape as soon as the detail is committed', () => {
     const onClose = vi.fn();
     function PressEscape() {

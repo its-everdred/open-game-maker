@@ -79,6 +79,7 @@ export default new Hono<ApiBindings>()
         familyId: game.familyId,
         ownerId: game.ownerId,
         visibility: game.visibility,
+        releaseState: game.releaseState,
         granted: hasGameGrant(deps.db, game.id, principal.userId),
       }).ok;
     if (!owner && !canPlay) return c.notFound();

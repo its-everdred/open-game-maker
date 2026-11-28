@@ -318,6 +318,9 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
       switch (envelope.t) {
         case 'hello':
           return;
+        case 'navigation.back':
+          host.dispatchBack();
+          return;
         case 'lifecycle.pause':
           if (lifecyclePaused) return;
           lifecyclePaused = true;

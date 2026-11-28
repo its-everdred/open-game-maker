@@ -38,6 +38,7 @@ function renderPlay(entry: string) {
           <Route path="/play/:ref" element={<PlayScreen />} />
           <Route path="/g/:gameId" element={<Location />} />
           <Route path="/all" element={<h1>Your games</h1>} />
+          <Route path="/signin" element={<Location />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -53,6 +54,16 @@ afterEach(() => {
 });
 
 describe('a shared /play link', () => {
+  it('shows coming soon without sending the visitor to sign in', async () => {
+    mockedApi.mockRejectedValue(new ApiError(403, { error: 'coming_soon' }));
+    renderPlay('/play/dusk-helm');
+    expect(await screen.findByText(/Coming Soon/)).toBeVisible();
+  });
+  it('preserves the requested path when a released game needs sign in', async () => {
+    mockedApi.mockRejectedValue(new ApiError(401, { error: 'unauthenticated' }));
+    renderPlay('/play/castle-game?chat=one');
+    expect(await screen.findByText('/signin?next=%2Fplay%2Fcastle-game%3Fchat%3Done')).toBeVisible();
+  });
   it('opens the game in play mode from its slug', async () => {
     mockedApi.mockResolvedValue({ game });
 

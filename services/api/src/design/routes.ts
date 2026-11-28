@@ -18,7 +18,7 @@ import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
-import { findGameForFamily, hasGameGrant, type GameRow } from '../games/games.js';
+import { findGameForFamily, findGameForPlay, hasGameGrant, type GameRow } from '../games/games.js';
 import { FsBaseDocSource, type BaseDocSource } from './base-doc.js';
 import { acquireLease, heartbeatLease, LeaseMismatch, releaseLease } from './lease.js';
 import {
@@ -115,12 +115,13 @@ function ownedGame(c: Parameters<typeof requirePrincipal>[0]): {
 
 function readableGame(c: Parameters<typeof requirePrincipal>[0]): GameRow {
   const principal = requirePrincipal(c, ['user']);
-  const game = findGameForFamily(c.get('deps').db, routeParam(c, 'gameId'), principal.familyId);
+  const game = findGameForPlay(c.get('deps').db, routeParam(c, 'gameId'), actorFromPrincipal(principal));
   requireAuthorization(
     authorize(actorFromPrincipal(principal), 'game.play', {
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      releaseState: game.releaseState,
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
     }),
   );

@@ -525,6 +525,7 @@ export function GameScreen() {
         : snapshot.buildId === NO_BUILD_ID && !framePreview
           ? mountSceneryPreview(container, previewSource!, snapshot.doc, setFrameState)
           : mountGameFrame({
+              hostBack: true,
               container,
               gamesOrigin,
               gameId,
@@ -816,6 +817,7 @@ export function GameScreen() {
       extraProps,
       frameState.bridgeState,
       frameState.hostPauseVisible,
+      frameState.back?.enabled,
       leaveRoom,
       mode,
       requestMode,
@@ -871,6 +873,21 @@ export function GameScreen() {
         <Hd2dPanel report={frameState.hd2d} apply={frameController?.applyHd2d} onSave={saveLighting} />
       )}
       <div className="game-stage">
+        {frameState.bridgeState === 'ready' &&
+        frameState.firstFrame &&
+        frameState.back?.enabled &&
+        !menuOpen &&
+        room.snapshot?.matchPause === undefined ? (
+          <button
+            type="button"
+            className="studio-back-button studio-menu-button"
+            data-game-play="true"
+            aria-label={frameState.back.label ?? 'Back'}
+            onClick={() => frameRef.current?.back?.()}
+          >
+            <span aria-hidden="true">←</span>
+          </button>
+        ) : null}
         <div className="game-frame" ref={containerRef} />
         {mode === 'edit' && !mapOpen && !frameState.manifest?.palette?.items.length && <AssetLibrary gameId={gameId} />}
         {mode === 'edit' && openScene ? <MapEditor gameId={gameId} scene={openScene} onOpen={setMapOpen} /> : null}
