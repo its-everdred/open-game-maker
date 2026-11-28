@@ -22,7 +22,7 @@
       /* A falling-blocks slice for the review deck's playable cards (#608): `speed` sets how fast blocks fall,
          `lead_in=one-chain` stacks a chain first so the situation is ready, and the move stick, arrow keys or a gamepad
          slide the catcher. It speaks the host bridge just enough to be played and paused. */
-      const HOST_ORIGIN = new URL(document.referrer).origin;
+      const HOST_ORIGIN = new URL(document.referrer || new URLSearchParams(location.search).get('e2eHost')).origin;
       const manifest = await (await fetch('./manifest.json')).json();
       const query = new URLSearchParams(location.search);
       const SPEEDS = { slow: 70, medium: 150, fast: 280 };

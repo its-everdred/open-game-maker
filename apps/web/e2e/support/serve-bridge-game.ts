@@ -23,11 +23,14 @@ createServer(async (request, response) => {
     return;
   }
   /* The app proxies /api here in e2e. A launch sends the frame to the build, as the API's redirect does. It navigates
-     in the page rather than with a 302 because Playwright routes miss a redirect's target, and specs route builds. */
+     in the page rather than with a 302 because Playwright routes miss a redirect's target, and specs route builds.
+     A navigation an opaque frame starts carries no referrer, so the build gets the shell's origin, which a 302 would
+     have kept as its referrer, in `e2eHost`. */
   const launch = /^\/api\/v1\/games\/([^/]+)\/launch\/([^/]+)$/u.exec(pathname);
   if (launch) {
     const target = new URL(`/g/${launch[1]}/${launch[2]}/index.html`, `http://${host}:${port}`);
     target.search = new URL(request.url ?? '/', target).search;
+    if (request.headers.referer) target.searchParams.set('e2eHost', new URL(request.headers.referer).origin);
     response
       .writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
       .end(`<script>location.replace(${JSON.stringify(target.href)})</script>`);
