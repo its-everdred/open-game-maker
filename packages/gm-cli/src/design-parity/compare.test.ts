@@ -19,6 +19,24 @@ it('writes evidence and enforces the parity thresholds', async () => {
     await expect(compareGlassScreen(black, black, dir, masks, 'Settings')).rejects.toThrow('No reviewed mask entry');
     expect((await compareGlassScreen(black, black, dir, masks, 'Home')).pass).toBe(true);
     expect(await readFile(join(dir, 'checklist.md'), 'utf8')).toContain('- [ ] Safe areas — crop: _required_');
+    const crops = JSON.parse(await readFile(join(dir, 'crops/index.json'), 'utf8')) as Array<{
+      file: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>;
+    expect(crops).toHaveLength(9);
+    expect(crops.reduce((area, crop) => area + crop.width * crop.height, 0)).toBe(64);
+    const first = await sharp(join(dir, 'crops', crops[0]!.file)).metadata();
+    expect([first.width, first.height]).toEqual([crops[0]!.width * 2, crops[0]!.height]);
+    expect((await compareGlassScreen(black, white, dir, masks, 'Home')).pass).toBe(false);
+    const pixels = await sharp(join(dir, 'crops', crops[0]!.file))
+      .removeAlpha()
+      .raw()
+      .toBuffer();
+    expect([...pixels.subarray(0, 3)]).toEqual([0, 0, 0]);
+    expect([...pixels.subarray(crops[0]!.width * 3, crops[0]!.width * 3 + 3)]).toEqual([255, 255, 255]);
     expect((await compareGlass(black, black, dir, [])).pass).toBe(true);
     expect((await compareGlass(black, white, dir, [])).pass).toBe(false);
     expect(JSON.parse(await readFile(join(dir, 'score.json'), 'utf8')).deltaEOver3Percent).toBe(100);
@@ -49,6 +67,30 @@ it('requires both the SSIM and colour thresholds independently', async () => {
     expect(structureOnly.deltaEOver3Percent).toBeLessThanOrEqual(1);
     expect(structureOnly.pass).toBe(false);
     expect(JSON.parse(await readFile(join(dir, 'score.json'), 'utf8')).pass).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+it('keeps every pixel when the reference is smaller than the tile grid', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ogm-glass-small-'));
+  try {
+    const image = await sharp({ create: { width: 2, height: 1, channels: 3, background: '#123456' } })
+      .png()
+      .toBuffer();
+    const masks = join(dir, 'masks.json');
+    await writeFile(masks, JSON.stringify({ Home: [] }));
+    await compareGlassScreen(image, image, dir, masks, 'Home');
+    const crops = JSON.parse(await readFile(join(dir, 'crops/index.json'), 'utf8')) as Array<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>;
+    expect(crops.map(({ x, y, width, height }) => ({ x, y, width, height }))).toEqual([
+      { x: 0, y: 0, width: 1, height: 1 },
+      { x: 1, y: 0, width: 1, height: 1 },
+    ]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

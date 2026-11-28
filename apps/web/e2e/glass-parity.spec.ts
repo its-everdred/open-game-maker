@@ -467,6 +467,14 @@ for (const target of screens) {
       ] as const) {
         await testInfo.attach(name, { path: resolve(out, name), contentType });
       }
+      const crops: { file: string }[] = JSON.parse(await readFile(resolve(out, 'crops/index.json'), 'utf8'));
+      await testInfo.attach('crops-index.json', {
+        path: resolve(out, 'crops/index.json'),
+        contentType: 'application/json',
+      });
+      for (const crop of crops) {
+        await testInfo.attach(crop.file, { path: resolve(out, 'crops', crop.file), contentType: 'image/png' });
+      }
       console.log(`Glass parity evidence: ${out}`);
       expect(result.pass, `${target.name}: SSIM ${result.ssim}, ΔE > 3 ${result.deltaEOver3Percent}%`).toBe(true);
     } finally {
