@@ -44,6 +44,7 @@ export const command: GmCommand = {
       else
         for (const node of result.nodes)
           ctx.out(`${terminalText(node.id)}  ${terminalText(node.name)}  ${terminalText(node.parent ?? '')}`);
+      for (const warning of result.warnings) ctx.err(terminalText(warning));
       return EXIT.ok;
     }
     if (ctx.json) printSafeJson(ctx, result);

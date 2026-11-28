@@ -83,11 +83,14 @@ export async function assemblePackBuilding(options: {
   if (!source || !/\.(?:prefab|unity)$/i.test(source))
     throw new Error('source must be a Unity prefab or scene in the extracted pack');
   if (options.listOnly) {
-    const nodes = await inspectUnityAssembly(extracted, source, options.binary2text);
+    const warnings: string[] = [];
+    const nodes = await inspectUnityAssembly(extracted, source, options.binary2text, (warning) =>
+      warnings.push(warning),
+    );
     return {
       id: '',
       output: '',
-      warnings: [],
+      warnings,
       nodes: nodes.map((node) => ({ id: node.transformId, name: node.name, parent: node.parentId })),
     };
   }

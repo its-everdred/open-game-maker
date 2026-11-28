@@ -85,8 +85,9 @@ export async function inspectUnityAssembly(
   root: string,
   source: string,
   binary2text?: string,
+  onWarning?: (message: string) => void,
 ): Promise<UnityMeshNode[]> {
-  return (await loadUnityHierarchy(root, source, undefined, binary2text)).nodes;
+  return (await loadUnityHierarchy(root, source, onWarning, binary2text)).nodes;
 }
 
 /** Build a complete, checked local input plan before invoking any model converter. */

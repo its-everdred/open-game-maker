@@ -147,3 +147,51 @@ SkinnedMeshRenderer:
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it('lists and plans a scene with the same stale override warning', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'gm-unity-stale-'));
+  const guid = 'd'.repeat(32);
+  try {
+    await writeFile(
+      join(root, 'house.prefab'),
+      `--- !u!1 &1
+GameObject:
+  m_Name: House
+  m_Component:
+  - component: {fileID: 2}
+--- !u!4 &2
+Transform:
+  m_GameObject: {fileID: 1}
+  m_Father: {fileID: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+`,
+    );
+    await writeFile(join(root, 'house.prefab.meta'), `guid: ${guid}\n`);
+    const scene = join(root, 'scene.unity');
+    await writeFile(
+      scene,
+      `--- !u!1001 &12
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: ${guid}}
+  m_Modification:
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 99, guid: ${guid}}
+      propertyPath: m_Name
+      value: Old
+`,
+    );
+    const listed: string[] = [],
+      planned: string[] = [];
+    expect(await inspectUnityAssembly(root, scene, undefined, (warning) => listed.push(warning))).toMatchObject([
+      { name: 'House', transformId: 'root/12/2' },
+    ]);
+    await planUnityAssembly(root, scene, (warning) => planned.push(warning));
+    expect(listed).toEqual(planned);
+    expect(listed[0]).toContain('stale override');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

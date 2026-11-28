@@ -23,7 +23,10 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 });
 vi.mock('../src/packs/unity/plan.js', () => ({
   planUnityAssembly: vi.fn(async () => []),
-  inspectUnityAssembly: vi.fn(async () => [{ transformId: 'root/2', name: 'House', parentId: null }]),
+  inspectUnityAssembly: vi.fn(async (_root, _source, _binary, warn) => {
+    warn('stale override');
+    return [{ transformId: 'root/2', name: 'House', parentId: null }];
+  }),
 }));
 vi.mock('../src/packs/unity/export.js', () => ({
   exportUnityAssembly: vi.fn(async (_plan, path: string) => writeFile(path, 'glb', { flag: 'wx' })),
@@ -76,11 +79,20 @@ it('publishes a measured building card inheriting confirmed pack rights and refu
     const options = { assetsRoot: root, pack: 'example', source: 'house.prefab', slug: 'house', title: 'House' };
     const inspected = await assemblePackBuilding({ ...options, listOnly: true });
     expect(inspected.nodes).toEqual([{ id: 'root/2', name: 'House', parent: null }]);
+    expect(inspected.warnings).toEqual(['stale override']);
     expect(vi.mocked(exportUnityAssembly)).not.toHaveBeenCalled();
     const lines: string[] = [];
-    const ctx = { cwd: root, assetsRoot: root, json: true, out: (line: string) => lines.push(line) } as GmContext;
+    const errors: string[] = [];
+    const ctx = {
+      cwd: root,
+      assetsRoot: root,
+      json: true,
+      out: (line: string) => lines.push(line),
+      err: (line: string) => errors.push(line),
+    } as GmContext;
     expect(await command.run(ctx, ['example', 'house.prefab'], { list: true })).toBe(0);
     expect(JSON.parse(lines[0]!)).toEqual([{ id: 'root/2', name: 'House', parent: null }]);
+    expect(errors).toEqual(['stale override']);
     const result = await assemblePackBuilding(options);
     expect(result.id).toBe('t1:example/assembled-house@v1');
     await rename(join(pack, 'v1', 'extracted'), join(pack, 'v1', 'saved'));
