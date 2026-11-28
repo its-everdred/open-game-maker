@@ -522,6 +522,8 @@ test('build composer keeps voice controls at the right through dictation and liv
   await page.goto('/all?test');
   await openBuildChat(page);
   const composer = page.locator('aiur-composer');
+  const card = composer.locator('[part="card"]');
+  const attach = composer.locator('[part="attach"]');
   const mic = composer.locator('[part="mic"]');
   const voice = composer.locator('[part="voice"]');
   const send = composer.locator('[part="send"]');
@@ -535,11 +537,14 @@ test('build composer keeps voice controls at the right through dictation and liv
   expect(idleMic!.x).toBeLessThan(idleSend!.x);
   expect(idleMic!.width).toBe(40);
   expect(idleSend!.width).toBe(40);
-  expect(
-    await composer.evaluate(
-      (node) => getComputedStyle((node as HTMLElement).shadowRoot!.querySelector('[part="card"]')!).borderRadius,
-    ),
-  ).toBe('28px');
+  expect(await card.evaluate((node) => getComputedStyle(node).borderRadius)).toBe('28px');
+  await expect(card).toHaveCSS('border-top-width', '1px');
+  await expect(card).toHaveCSS('border-right-width', '1px');
+  await expect(card).toHaveCSS('border-top-color', 'rgba(255, 255, 255, 0.42)');
+  await expect(card).toHaveCSS('border-right-color', 'rgba(0, 0, 0, 0.38)');
+  expect(await card.evaluate((node) => getComputedStyle(node).boxShadow)).toContain('0px 18px 44px');
+  await expect(attach).toHaveCSS('border-width', '0px');
+  await expect(attach).toHaveCSS('box-shadow', 'none');
   await expect(mic).toHaveCSS('border-width', '0px');
   await expect(mic).toHaveCSS('box-shadow', 'none');
   await expect(mic).toHaveCSS('border-radius', '999px');
