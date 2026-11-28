@@ -254,4 +254,4 @@ quality down to off. The `gm-vfx` skill covers authoring effects by script and t
 
 ### Host Back button
 
-Games declare the shared Back control with `host.back?.set({ enabled: true, label: 'Back' })` and register its action with `host.back?.on(() => ...)`. Disable it when the current screen cannot go back; call the returned unsubscribe function when the handler is no longer needed. The host draws the control, so games should not draw a duplicate.
+Games declare the shared Back control with `host.back?.set({ enabled: true, label: 'Back' })` and register its action with `host.back?.on(() => ...)`. Disable it when the current screen cannot go back; call the returned unsubscribe function when the handler is no longer needed. The host draws the control, so games should not draw a duplicate. `host.capabilities.has('host.back')` identifies hosts that support this contract. Deploy the supporting host before deploying a game that relies on it; an older host cannot display or invoke Back.

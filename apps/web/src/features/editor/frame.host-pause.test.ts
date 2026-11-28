@@ -70,6 +70,9 @@ it('stops listening when the game exits, so a late message cannot hide the contr
 it('hides the control only in play with a live bridge, never stranding a player on a failed or loading game', () => {
   expect(hidesHostPause('play', { bridgeState: 'ready', hostPauseVisible: false })).toBe(true);
   expect(hidesHostPause('play', { bridgeState: 'ready', hostPauseVisible: true })).toBe(false);
+  expect(hidesHostPause('play', { bridgeState: 'ready', hostPauseVisible: false, back: { enabled: true } })).toBe(
+    false,
+  );
   expect(hidesHostPause('play', { bridgeState: 'ready' })).toBe(false);
   expect(hidesHostPause('play', { bridgeState: 'error', hostPauseVisible: false })).toBe(false);
   expect(hidesHostPause('play', { bridgeState: 'connecting', hostPauseVisible: false })).toBe(false);

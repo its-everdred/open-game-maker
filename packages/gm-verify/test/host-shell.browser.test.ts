@@ -43,11 +43,49 @@ it.each([
   const browser = await launch(process.env.GM_VERIFY_SOFTWARE_GL === '1');
   try {
     const page = await browser.newPage({ viewport });
-    await page.goto(hostFrameUrl(shell.url, game.url, 'mobile', 'Test game'));
-    const back = page.getByRole('button', { name: 'Back', includeHidden: true });
-    await back.evaluate((button: HTMLButtonElement) => {
-      button.hidden = false;
+    await page.addInitScript(() => {
+      if (window.parent === window) return;
+      let connected = false;
+      const sendHello = () =>
+        window.parent.postMessage(JSON.stringify({ v: 1, id: 'hello', t: 'hello', payload: { protocol: 1 } }), '*');
+      const timer = setInterval(sendHello, 100);
+      window.addEventListener('message', (event) => {
+        if (connected || !event.ports[0]) return;
+        connected = true;
+        clearInterval(timer);
+        const port = event.ports[0];
+        port.onmessage = ({ data }) => {
+          if (JSON.parse(data).t === 'navigation.back') document.body.dataset.backReceived = 'true';
+        };
+        const send = (t: string, payload: unknown) => port.postMessage(JSON.stringify({ v: 1, id: t, t, payload }));
+        send('ready', {
+          protocol: 1,
+          marks: [],
+          firstFrameSignal: true,
+          manifest: {
+            id: 'host-test',
+            sdk: '^1.0.0',
+            title: 'Host Test',
+            inputs: { actions: {} },
+            presentation: { orientation: 'landscape', minLogical: { w: 640, h: 360 }, fit: 'responsive' },
+            view: 'iso',
+            dimension: '3d',
+            capabilities: [],
+            palette: { categories: [], items: [] },
+            tools: [],
+            gizmos: {},
+            saves: false,
+            overrides: { aliases: {}, retired: [] },
+          },
+        });
+        send('host.back', { enabled: true });
+        send('load.frame', {});
+      });
+      sendHello();
     });
+    await page.goto(hostFrameUrl(shell.url, game.url, 'mobile', 'Test game'));
+    const back = page.getByRole('button', { name: 'Back' });
+    await back.waitFor({ state: 'visible' });
     const menu = page.getByRole('button', { name: 'Menu' });
     const backBox = await back.boundingBox();
     const menuBox = await menu.boundingBox();
@@ -57,6 +95,10 @@ it.each([
     expect(backBox!.width).toBe(menuBox!.width);
     expect(backBox!.height).toBe(menuBox!.height);
     expect(backBox!.x).toBeLessThan(menuBox!.x);
+    await back.click();
+    await expect
+      .poll(() => page.locator('iframe').contentFrame().locator('body').getAttribute('data-back-received'))
+      .toBe('true');
     expect(await back.evaluate((element) => getComputedStyle(element).borderColor)).toBe(
       await menu.evaluate((element) => getComputedStyle(element).borderColor),
     );

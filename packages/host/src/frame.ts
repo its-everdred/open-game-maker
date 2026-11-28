@@ -156,7 +156,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     onFatal: dispose,
     hello: {
       protocol: SDK_PROTOCOL,
-      capabilities: [...new Set([...options.capabilities, 'haptics'])],
+      capabilities: [...new Set([...options.capabilities, 'haptics', 'host.back'])],
       mode: options.mode,
       ...(options.startupHold ? { startupHold: true } : {}),
       build: options.build,

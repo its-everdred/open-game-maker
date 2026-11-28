@@ -83,7 +83,7 @@ export class SdkHostApi implements HostApi {
   };
 
   dispatchBack(): void {
-    if (this.backEnabled) for (const listener of this.backListeners) listener();
+    if (this.backEnabled) for (const listener of [...this.backListeners]) listener();
   }
 
   readonly test: HostApi['test'] = {

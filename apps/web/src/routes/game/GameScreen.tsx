@@ -775,6 +775,7 @@ export function GameScreen() {
       extraProps,
       frameState.bridgeState,
       frameState.hostPauseVisible,
+      frameState.back?.enabled,
       leaveRoom,
       mode,
       requestMode,

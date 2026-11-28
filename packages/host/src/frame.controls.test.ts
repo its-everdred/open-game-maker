@@ -132,3 +132,18 @@ it('shows every control for a game that never chooses, as before', () => {
   }
   frame.dispose();
 });
+
+it('advertises the host Back capability to the game', () => {
+  const { frame } = phoneFrame();
+  const send = vi.spyOn(frame.iframe.contentWindow!, 'postMessage');
+  window.dispatchEvent(
+    new MessageEvent('message', {
+      origin: 'https://games.test',
+      source: frame.iframe.contentWindow,
+      data: JSON.stringify({ v: 1, id: 'hello', t: 'hello', payload: { protocol: 1 } }),
+    }),
+  );
+  const hello = JSON.parse(send.mock.calls[0]![0] as string);
+  expect(hello.payload.capabilities).toContain('host.back');
+  frame.dispose();
+});

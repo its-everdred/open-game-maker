@@ -20,3 +20,20 @@ it('declares Back and only dispatches while enabled', () => {
   host.dispatchBack();
   expect(action).toHaveBeenCalledOnce();
 });
+
+it('does not invoke a replacement handler during the same Back action', () => {
+  const host = new SdkHostApi(
+    () => undefined,
+    () => undefined,
+  );
+  const next = vi.fn();
+  const off = host.back.on(() => {
+    off();
+    host.back.on(next);
+  });
+  host.back.set({ enabled: true });
+  host.dispatchBack();
+  expect(next).not.toHaveBeenCalled();
+  host.dispatchBack();
+  expect(next).toHaveBeenCalledOnce();
+});
