@@ -41,3 +41,9 @@ This is OGM's chrome only. Dusk Helm's pixel UI and any game's own art are separ
 - In any other screen or panel, interactive elements share one accent colour.
 - State (muted, error) is shown through shape, icon or opacity within that colour, not by adding new hues. Destructive actions are the only exception, and only where needed.
 - Kevin 2026-11-27: dark mode is right, as long as the glassy, colourful glow background (as on the game picker / Home) sits behind it. No screen uses a flat black background.
+
+## Button and field material (Kevin 2026-11-27, reference: the Claude app composer; image in assets-local/review/design-ogm-glass/kevin-ref-claude-app-composer.jpg)
+"let's emulate this UI design language a little more closely". Replicate it exactly:
+1. **Standalone buttons** (round icon buttons, chips) are glass with a THIN border: lighter along the top and bottom edges, darker along the left and right edges. They carry a soft, slight drop shadow.
+2. **Form containers** (the chat input card, panels with fields) get the same thin, light-top/bottom and dark-left/right glass border and a soft shadow.
+3. **Buttons embedded inside a form element** (the composer's +, model chip, mic, send) do NOT stick out: no border and no shadow, just a flat fill or icon on the container's surface.
