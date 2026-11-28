@@ -1,11 +1,18 @@
 import stylelint from 'stylelint';
+import { existsSync } from 'node:fs';
+import { isAbsolute, relative, resolve } from 'node:path';
+import process from 'node:process';
 import { accentsInCss } from './glass-accents.mjs';
 
 const accentRule = 'ogm/one-accent';
+const localKit = resolve(process.cwd(), 'src/components/glass');
+const kitDirectory = existsSync(localKit) ? localKit : resolve(process.cwd(), 'apps/web/src/components/glass');
 const oneAccent = stylelint.createPlugin(accentRule, (enabled) => (root, result) => {
   if (!enabled) return;
   // The shared kit defines every supported tone; the rule applies to screens that use it.
-  if (root.source?.input.file?.replaceAll('\\', '/').includes('/src/components/glass/')) return;
+  const file = root.source?.input.file;
+  const kitRelative = file ? relative(kitDirectory, file) : undefined;
+  if (kitRelative && !kitRelative.startsWith('..') && !isAbsolute(kitRelative)) return;
   const hues = new Set();
   let first;
   root.walkDecls((declaration) => {

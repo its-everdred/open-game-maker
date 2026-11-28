@@ -46,6 +46,12 @@ it('rejects multiple explicit accent hues in a screen stylesheet', async () => {
     config: glassStylelintConfig,
   });
   expect(kit.results[0]!.warnings.some((warning) => warning.rule === 'ogm/one-accent')).toBe(false);
+  const nestedImpostor = await stylelint.lint({
+    code: '.go { color: var(--ogm-role-go) } .info { color: var(--ogm-role-working) }',
+    codeFilename: 'src/other/src/components/glass/glass.css',
+    config: glassStylelintConfig,
+  });
+  expect(nestedImpostor.results[0]!.warnings.some((warning) => warning.rule === 'ogm/one-accent')).toBe(true);
 }, 30_000);
 
 it('rejects multiple explicit Glass control accents, including conditional tones', async () => {
