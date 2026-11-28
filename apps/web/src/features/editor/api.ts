@@ -29,6 +29,7 @@ export type GameMetadata = {
   id: string;
   familyId: string;
   ownerId: string;
+  canEdit?: boolean;
   title: string;
   visibility: 'listed' | 'private';
   repoVisibility: 'public' | 'private';

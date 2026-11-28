@@ -853,3 +853,34 @@
     animation: none;
   }
 }
+.games-owner-primary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.games-owner-primary button {
+  min-width: 0;
+}
+.games-owner-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.games-access-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 72px;
+  min-width: 0;
+  border: 1px solid var(--access-art-42);
+  border-radius: 16px;
+  color: var(--access-art-9);
+  background: var(--access-art-50);
+  font:
+    700 13px Nunito,
+    sans-serif;
+  cursor: pointer;
+}

@@ -4,7 +4,7 @@ import { gameJobsQueryKey, isTerminal } from '../../features/build-chat/jobs';
 import { listJobs } from '../../features/editor/api';
 import { useSession } from '../../lib/api/session';
 
-export function useEditConversation(gameId: string, branchId: string) {
+export function useEditConversation(gameId: string, branchId: string, canEdit = false) {
   const jobs = useQuery({
     queryKey: gameJobsQueryKey(gameId),
     queryFn: () => listJobs(gameId),
@@ -20,7 +20,7 @@ export function useEditConversation(gameId: string, branchId: string) {
     previousJob.current = undefined;
   }, [gameId, branchId]);
   const eligible = rows?.filter(
-    (job) => job.branchId === branchId && job.creatorId === session?.user?.id && !isTerminal(job.state),
+    (job) => job.branchId === branchId && (canEdit || job.creatorId === session?.user?.id) && !isTerminal(job.state),
   );
   const job =
     eligible?.find((item) => item.id === admittedJobId) ??

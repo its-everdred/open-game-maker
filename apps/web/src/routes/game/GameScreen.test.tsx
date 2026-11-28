@@ -173,7 +173,7 @@ beforeEach(() => {
   branchList.value = undefined;
   preview.mountSceneryPreview.mockReturnValue(host.controller);
   useDock.getState().reset();
-  editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar' });
+  editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar', canEdit: true });
   editorApi.requestDraftGrant.mockResolvedValue({ grant: 'test-grant' });
   editorApi.getFallbackPalette.mockResolvedValue({ mode: 'request', palette: { categories: [], items: [] } });
   editorApi.getEditorPreviews.mockResolvedValue({ previews: [] });
@@ -217,6 +217,15 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
+  it('keeps play-only users out of edit mode and disables edit actions', async () => {
+    editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar', canEdit: false });
+    renderGame('/g/game?mode=edit');
+    await readyPlayFrame();
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    for (const edit of screen.getAllByRole('button', { name: 'Edit' })) expect(edit).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Ask for a change' })).toBeDisabled();
+    expect(host.controller.setMode).not.toHaveBeenCalledWith('edit');
+  });
   it('reconnects with a replacement draft grant after authorization changes', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     renderGame('/g/game', client);
@@ -269,9 +278,9 @@ describe('GameScreen', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shapes the edit preview like the window, with no orientation buttons', () => {
+  it('shapes the edit preview like the window, with no orientation buttons', async () => {
     const { container } = renderGame('/g/game?mode=edit');
-    expect(container.querySelector('.edit-workspace-chat aiur-composer')).not.toBeNull();
+    await waitFor(() => expect(container.querySelector('.edit-workspace-chat aiur-composer')).not.toBeNull());
     expect(container.querySelector('.game-stage-area')?.hasAttribute('data-edit-frame')).toBe(true);
     expect(screen.queryByRole('group', { name: 'Game orientation' })).toBeNull();
     expect(screen.queryByRole('button', { name: /(Wide|Vertical) game/ })).toBeNull();
@@ -288,6 +297,7 @@ describe('GameScreen', () => {
     editorApi.getGame.mockImplementation(async () => ({
       id: 'game',
       title: 'Goblin Cellar',
+      canEdit: true,
       allowAiGeneratedAssets: allowed,
     }));
     const fetchSpy = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
@@ -314,8 +324,18 @@ describe('GameScreen', () => {
   });
 
   it('keeps the preference action disabled while its updated value reloads', async () => {
-    let finishReload!: (value: { id: string; title: string; allowAiGeneratedAssets: boolean }) => void;
-    editorApi.getGame.mockResolvedValueOnce({ id: 'game', title: 'Goblin Cellar', allowAiGeneratedAssets: true });
+    let finishReload!: (value: {
+      id: string;
+      title: string;
+      canEdit: boolean;
+      allowAiGeneratedAssets: boolean;
+    }) => void;
+    editorApi.getGame.mockResolvedValueOnce({
+      id: 'game',
+      title: 'Goblin Cellar',
+      canEdit: true,
+      allowAiGeneratedAssets: true,
+    });
     editorApi.getGame.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -333,7 +353,9 @@ describe('GameScreen', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Disable AI-generated assets' }));
       await waitFor(() => expect(editorApi.getGame).toHaveBeenCalledTimes(2));
       expect(screen.getByRole('button', { name: 'Disable AI-generated assets' })).toBeDisabled();
-      await act(async () => finishReload({ id: 'game', title: 'Goblin Cellar', allowAiGeneratedAssets: false }));
+      await act(async () =>
+        finishReload({ id: 'game', title: 'Goblin Cellar', canEdit: true, allowAiGeneratedAssets: false }),
+      );
       await waitFor(() => expect(screen.getByRole('button', { name: 'Enable AI-generated assets' })).toBeEnabled());
     } finally {
       vi.unstubAllGlobals();

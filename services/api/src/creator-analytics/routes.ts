@@ -10,7 +10,7 @@ import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
 import { createRateLimiter } from '../auth/rate-limit.js';
-import { findGameForFamily, findGameForPlay, hasGameGrant, type GameRow } from '../games/games.js';
+import { findGameForFamily, findGameForPlay, getGameAccess, hasGameGrant, type GameRow } from '../games/games.js';
 import { ingestPlayEvents } from './ingest.js';
 import { queryAttempts, queryFunnel, queryOverview, queryReleases, type AnalyticsRange } from './query.js';
 
@@ -47,6 +47,7 @@ function playableGame(c: Parameters<typeof requirePrincipal>[0]): { principal: U
       visibility: game.visibility,
       releaseState: game.releaseState,
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
+      gameAccess: getGameAccess(c.get('deps').db, game.id, principal.userId),
     }),
   );
   return { principal, game };

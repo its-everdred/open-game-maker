@@ -22,7 +22,7 @@ const json = { 'content-type': 'application/json' };
 async function setup(kind: 'scope' | 'feature' = 'scope', options: { seed?: boolean } = {}) {
   const client = fakeAiur();
   const jobs = jobTable(chatJob({ kind, aiur: { daemonSlug: 'game-1', ticket: String(PARENT_TICKET) } }));
-  const { app, deps } = await makeChatApp(jobs, client);
+  const { app, deps } = await makeChatApp(jobs, client, false);
   if (options.seed !== false) seedDesignGame(deps);
   return { app, deps, client };
 }
@@ -196,6 +196,13 @@ describe('design decisions recorded from the build chat', () => {
   it('answers the Command even when the decision cannot be recorded', async () => {
     const { app, deps } = await setup('scope', { seed: false });
     insertOpenDesignCommand(deps);
+
+    const other = await app.request(`/api/v1/jobs/${SCOPE_JOB}/commands/${CP_ID}/answer`, {
+      method: 'POST',
+      headers: { ...json, ...as('sibling') },
+      body: JSON.stringify({ option_id: 'wood' }),
+    });
+    expect(other.status).toBe(403);
 
     const response = await answer(app, 'wood');
 

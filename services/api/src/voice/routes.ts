@@ -23,7 +23,7 @@ import type { AppDeps } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
 import { createRateLimiter } from '../auth/rate-limit.js';
 import { requireMeteredDispatch } from '../gameplay/policy.js';
-import { findGameForFamily } from '../games/games.js';
+import { authorizedGameById } from '../games/authorize.js';
 import { findJobRow } from '../jobs/repo.js';
 import { registerVoiceTarget } from './briefing-push.js';
 import { answerVoiceCommand } from './command-answer.js';
@@ -31,6 +31,7 @@ import { deliverInstruction } from './instruct.js';
 import { mintVoiceToken, VOICE_DICTATION_TOKEN_SCOPE } from './token.js';
 import { appendVoiceTranscript } from './transcript.js';
 import { gameDrafts } from '../new-game/drafts.js';
+import { voiceActor } from './access.js';
 
 export const prefix = '/';
 
@@ -90,19 +91,11 @@ async function authorizedTarget(c: Context<ApiBindings>) {
       return { principal, target };
     }
   }
-  const game = findGameForFamily(db, target.game_id, principal.familyId);
-  requireAuthorization(
-    authorize(actorFromPrincipal(principal), 'game.edit', { familyId: game.familyId, ownerId: game.ownerId }),
-  );
+  const game = authorizedGameById(c, 'game.edit', target.game_id);
 
   if (target.kind === 'build') {
     const job = findJobRow(db, target.job_id);
-    if (
-      job.gameId !== game.id ||
-      job.creatorId !== principal.userId ||
-      job.aiurIssueNumber === null ||
-      String(job.aiurIssueNumber) !== target.ticket
-    ) {
+    if (job.gameId !== game.id || job.aiurIssueNumber === null || String(job.aiurIssueNumber) !== target.ticket) {
       throw new HttpError(403, 'job_not_in_game');
     }
   } else if (target.kind === 'scope') {
@@ -112,7 +105,7 @@ async function authorizedTarget(c: Context<ApiBindings>) {
     }
   } else if (target.kind === 'edit' && target.job_id) {
     const job = findJobRow(db, target.job_id);
-    if (job.gameId !== game.id || job.creatorId !== principal.userId) throw new HttpError(403, 'job_not_in_game');
+    if (job.gameId !== game.id) throw new HttpError(403, 'job_not_in_game');
   }
 
   return { principal, target };
@@ -167,6 +160,7 @@ routes.post('/internal/voice/instruct', async (c) => {
     throw new HttpError(401, 'unauthorized');
   }
   const request = await parseBody(c, InstructRequest);
+  if (!voiceActor(deps.db, request.target)) throw new HttpError(403, 'voice_access_revoked');
   const response = await deliverInstruction(deps, request);
   return response.status === 'failed' ? c.json(response, 500) : c.json(response);
 });
@@ -177,6 +171,7 @@ routes.post('/internal/voice/transcript', async (c) => {
     throw new HttpError(401, 'unauthorized');
   }
   const request = await parseBody(c, VoiceTranscriptRequest);
+  if (!voiceActor(deps.db, request.target)) throw new HttpError(403, 'voice_access_revoked');
   const response = await appendVoiceTranscript(deps, request);
   if (response === null) throw new HttpError(404, 'voice_target_not_found');
   return c.json(response);
@@ -188,6 +183,7 @@ routes.post('/internal/voice/command-answer', async (c) => {
     throw new HttpError(401, 'unauthorized');
   }
   const request = await parseBody(c, VoiceCommandAnswerRequest);
+  if (!voiceActor(deps.db, request.target)) throw new HttpError(403, 'voice_access_revoked');
   const response = await answerVoiceCommand(deps, request);
   if (response.status === 'stale') return c.json(response, 409);
   if (response.status === 'failed') return c.json(response, 500);

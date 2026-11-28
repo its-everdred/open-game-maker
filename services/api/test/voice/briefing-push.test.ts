@@ -17,7 +17,8 @@ import {
   startBriefingPush,
   type VoiceTarget,
 } from '../../src/voice/briefing-push.js';
-import { ids, insertJob, NOW, worked } from '../budget/fixture.js';
+import { ids, insertJob, NOW } from '../budget/fixture.js';
+import { worked } from './access-fixture.js';
 import { makeApiEnv } from '../env-fixture.js';
 
 const SECRET = 'voice-internal-secret-for-tests';

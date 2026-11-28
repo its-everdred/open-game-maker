@@ -153,6 +153,37 @@ export const gameGrants = sqliteTable(
   (table) => [primaryKey({ columns: [table.gameId, table.userId] }), index('game_grants_user_index').on(table.userId)],
 );
 
+// Owner-managed access is separate from invitation grants, so an explicit Hide can override an older invite.
+export const gameAccess = sqliteTable(
+  'game_access',
+  {
+    gameId: text('game_id')
+      .notNull()
+      .references(() => games.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    access: text('access', { enum: ['hide', 'play', 'edit'] }).notNull(),
+    updatedBy: text('updated_by').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.gameId, table.email] }),
+    index('game_access_email_index').on(table.email),
+    check('game_access_access_check', sql`${table.access} IN ('hide', 'play', 'edit')`),
+  ],
+);
+
+export const gameAccessAudit = sqliteTable('game_access_audit', {
+  id: text('id').primaryKey(),
+  gameId: text('game_id')
+    .notNull()
+    .references(() => games.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  previousAccess: text('previous_access', { enum: ['hide', 'play', 'edit'] }),
+  access: text('access', { enum: ['hide', 'play', 'edit'] }).notNull(),
+  actorId: text('actor_id').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
 export const gameEarlyAccess = sqliteTable(
   'game_early_access',
   {

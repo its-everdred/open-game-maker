@@ -10,6 +10,7 @@ import { and, eq } from 'drizzle-orm';
 import { copyCatalog } from '../achievements/catalog.js';
 import type { AppDeps } from '../app/types.js';
 import { ensureMainBranch, stableId } from '../design/store.js';
+import { getGameAccess } from '../games/games.js';
 import { assignSlug } from '../games/slug.js';
 import { CommitUnavailable } from '../releases/commit-client.js';
 import type { RightsReason } from '../releases/rights.js';
@@ -137,6 +138,7 @@ export async function forkGame(
     ownerId: sourceGame.ownerId,
     visibility: sourceGame.visibility,
     releaseState: sourceGame.releaseState,
+    gameAccess: getGameAccess(deps.db, sourceGame.id, input.actor.userId),
   });
   if (!authorization.ok) throw new ForkError(authorization.reason, 403);
   if (!sourceGame.forkable) throw new ForkError('not_forkable', 403);

@@ -112,6 +112,11 @@ export function StudioMenu() {
   const isGameView = Boolean(game || isShowcase);
   const hasStudioHeader = Boolean(matchPath('/all', location.pathname) || matchPath('/new', location.pathname));
   const gameId = game?.params.gameId;
+  useEffect(() => {
+    if (!gameId || !location.state?.openActivity) return;
+    setSheet('builds');
+    setOpen(true);
+  }, [gameId, location.key, location.state, setOpen]);
   const unreadUpdates = useNotify((state) => scopedUpdates(state, creatorId, gameId).unread);
   const hasUpdates = useNotify((state) => scopedUpdates(state, creatorId, gameId).updates.length > 0);
   const ownedGames = isShowcase ? [] : builds.games.filter((item) => item.ownerId === creatorId);

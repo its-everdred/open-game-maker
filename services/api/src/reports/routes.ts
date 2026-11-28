@@ -17,7 +17,7 @@ import { countDistinct, eq } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { createRateLimiter } from '../auth/rate-limit.js';
-import { findGame, hasGameGrant } from '../games/games.js';
+import { findGame, findGameForPlay, getGameAccess, hasGameGrant } from '../games/games.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import { readBoundedBody } from '../app/read-body.js';
@@ -181,7 +181,7 @@ const routes = new Hono<ApiBindings>()
     const actor = actorFromPrincipal(principal);
     if (!context(deps).perUser(actor.userId)) throw new HttpError(429, 'rate_limited');
     const body = await parseBody(c, CreateReport);
-    const game = findGame(deps.db, body.gameId);
+    const game = findGameForPlay(deps.db, body.gameId, actor);
     const resource = {
       gameId: game.id,
       familyId: game.familyId,
@@ -189,9 +189,10 @@ const routes = new Hono<ApiBindings>()
       visibility: game.visibility,
       releaseState: game.releaseState,
       granted: hasGameGrant(deps.db, game.id, actor.userId),
+      gameAccess: getGameAccess(deps.db, game.id, actor.userId),
     };
     requireAuthorization(authorize(actor, 'game.play', resource));
-    requireAuthorization(authorize(actor, 'report.file', resource));
+    requireAuthorization(authorize(actor, 'report.file'));
 
     const probe = isEnergyProbe(c, principal.userId);
     const probeId = probe ? c.req.header('x-ogm-qa-energy-probe') : undefined;

@@ -1,15 +1,13 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { authorize } from '@ogm/policy';
-
-import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
 import { requireMeteredDispatch } from '../gameplay/policy.js';
-import { findGame, findGameForFamily } from '../games/games.js';
+import { findGame } from '../games/games.js';
+import { authorizedGame } from '../games/authorize.js';
 import { getNarrationRenderer, NarrationLine } from './render.js';
 
 export const prefix = '/api/v1/games';
@@ -22,10 +20,7 @@ export default new Hono<ApiBindings>().post('/:gameId/narration/render', async (
   const gameId = c.req.param('gameId');
 
   if (principal.kind === 'user') {
-    const game = findGameForFamily(deps.db, gameId, principal.familyId);
-    requireAuthorization(
-      authorize(actorFromPrincipal(principal), 'game.edit', { familyId: game.familyId, ownerId: game.ownerId }),
-    );
+    authorizedGame(c, 'game.edit');
   } else if (principal.service !== 'builder') {
     throw new HttpError(403, 'forbidden');
   } else {

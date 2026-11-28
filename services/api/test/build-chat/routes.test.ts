@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getChatRuntime } from '../../src/build-chat/routes.js';
 import { insertChatRow, listSince } from '../../src/build-chat/store.js';
-import { as, chatJob, jobTable, JOB_ID, makeChatApp } from './setup.js';
+import { as, chatJob, jobTable, JOB_ID, makeChatApp, users } from './setup.js';
 
 const url = (path = '') => `/api/v1/jobs/${JOB_ID}/chat${path}`;
 const json = { 'content-type': 'application/json' };
@@ -221,6 +221,26 @@ describe('build chat routes', () => {
       insertChatRow(deps.sqlite, { jobId: JOB_ID, actor: 'agent', kind: 'text', text });
     const response = await app.request(url(), { headers: { ...as('owner'), 'last-event-id': '1' } });
     expect((await readFrames(response, 1)).map((frame) => frame.data.text)).toEqual(['two']);
+  });
+
+  it('ends an open stream when the caller loses creator access', async () => {
+    const { app, deps } = await makeChatApp();
+    let capability: 'creator' | 'player' = 'creator';
+    deps.registry.principalResolvers.unshift(async () => ({ ...users.owner, capability }));
+    insertChatRow(deps.sqlite, { jobId: JOB_ID, actor: 'agent', kind: 'text', text: 'before' });
+    const stream = sse(await app.request(url(), { headers: as('owner') }));
+    expect((await stream.next()).data.text).toBe('before');
+    capability = 'player';
+    insertChatRow(deps.sqlite, { jobId: JOB_ID, actor: 'agent', kind: 'text', text: 'after' });
+    getChatRuntime(deps).hub.publish(JOB_ID);
+    await expect(stream.next()).rejects.toThrow('stream ended');
+  });
+
+  it('streams a creator scope chat before its game row exists', async () => {
+    const { app, deps } = await makeChatApp(jobTable(chatJob({ kind: 'scope' })), undefined, false);
+    insertChatRow(deps.sqlite, { jobId: JOB_ID, actor: 'agent', kind: 'text', text: 'draft' });
+    const stream = sse(await app.request(url(), { headers: as('owner') }));
+    expect((await stream.next()).data.text).toBe('draft');
   });
 
   it('shows a creator post on the open stream', async () => {

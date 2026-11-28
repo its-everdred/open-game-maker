@@ -21,14 +21,44 @@ export function authorize(actor: Actor, action: Action, resource: Resource = {})
   )
     return denied('release_state_invalid');
   if (resource.familyId !== undefined && resource.familyId !== actor.familyId) {
-    const earlyAccess = action === 'game.play' && resource.granted === true;
+    const earlyAccess =
+      action === 'game.play' &&
+      (resource.granted === true || resource.gameAccess === 'play' || resource.gameAccess === 'edit');
+    const editorAccess =
+      (action === 'game.edit' || action === 'game.publish') &&
+      resource.gameAccess === 'edit' &&
+      actor.capability === 'creator';
     const adminAccess =
       action === 'game.play' &&
       resource.releaseState === 'coming_soon' &&
       (actor.platformRole === 'admin' || actor.platformRole === 'maintainer');
-    if (!earlyAccess && !adminAccess) return denied('cross_family');
+    if (!earlyAccess && !editorAccess && !adminAccess) return denied('cross_family');
   }
   if (ownerActions.has(action) && resource.ownerId === undefined) return denied('owner_required');
+
+  if (
+    (action === 'game.play' || action === 'game.fork') &&
+    resource.gameAccess === 'hide' &&
+    resource.ownerId !== actor.userId
+  )
+    return denied('game_hidden');
+
+  if (action === 'game.create') return actor.capability === 'creator' ? allowed() : denied('creator_required');
+
+  if (
+    (action === 'game.edit' || action === 'game.publish' || action === 'job.edit' || action === 'job.cancel') &&
+    actor.capability !== 'creator'
+  )
+    return denied('creator_required');
+
+  // An owner's explicit edit grant is ordinary authorization, not maintainer
+  // break-glass access, and applies equally to creators with that role.
+  if (
+    (action === 'game.edit' || action === 'game.publish') &&
+    resource.gameAccess === 'edit' &&
+    actor.capability === 'creator'
+  )
+    return allowed();
 
   if (actor.platformRole === 'maintainer') {
     if (ownerActions.has(action) && resource.ownerId !== actor.userId) {
@@ -36,8 +66,6 @@ export function authorize(actor: Actor, action: Action, resource: Resource = {})
     }
     return allowed();
   }
-
-  if (action === 'game.create') return actor.capability === 'creator' ? allowed() : denied('creator_required');
 
   if (ownerActions.has(action)) {
     return resource.ownerId === actor.userId ? allowed() : denied('not_owner');
@@ -66,6 +94,7 @@ export function authorize(actor: Actor, action: Action, resource: Resource = {})
 
   if (action === 'game.play') {
     if (resource.visibility === undefined) return denied('visibility_required');
+    if (resource.gameAccess === 'play' || resource.gameAccess === 'edit') return allowed();
     if (resource.releaseState === 'coming_soon') {
       return actor.platformRole === 'admin' || resource.ownerId === actor.userId || resource.granted === true
         ? allowed()

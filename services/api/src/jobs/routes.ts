@@ -7,7 +7,8 @@ import { authorize } from '@ogm/policy';
 import { and, eq } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
-import { hasGameGrant, listGames as listVisibleGames } from '../games/games.js';
+import { getGameAccess, listGames as listVisibleGames } from '../games/games.js';
+import { authorizedGameById } from '../games/authorize.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
@@ -31,26 +32,6 @@ function defaults(deps: AppDeps) {
     defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
     resetZone: deps.config.resetZoneDefault,
   };
-}
-
-function gameFor(deps: AppDeps, gameId: string) {
-  const game = deps.db.select().from(schema.games).where(eq(schema.games.id, gameId)).get();
-  if (!game) throw new HttpError(404, 'game_not_found');
-  return game;
-}
-
-function requireRead(deps: AppDeps, gameId: string, actor: ReturnType<typeof actorFromPrincipal>) {
-  const game = gameFor(deps, gameId);
-  requireAuthorization(
-    authorize(actor, 'game.play', {
-      familyId: game.familyId,
-      ownerId: game.ownerId,
-      visibility: game.visibility,
-      releaseState: game.releaseState,
-      granted: hasGameGrant(deps.db, game.id, actor.userId),
-    }),
-  );
-  return game;
 }
 
 const routes = new Hono<ApiBindings>()
@@ -86,7 +67,7 @@ const routes = new Hono<ApiBindings>()
     const deps = c.get('deps');
     const actor = actorFromPrincipal(principal);
     if ('gameId' in query) {
-      requireRead(deps, query.gameId, actor);
+      authorizedGameById(c, 'game.edit', query.gameId);
       return c.json({ jobs: listJobs(deps.db, query.gameId) });
     }
 
@@ -94,12 +75,12 @@ const routes = new Hono<ApiBindings>()
     const visibleGameIds = listVisibleGames(deps.db, principal.familyId, principal.userId)
       .filter(
         (game) =>
-          authorize(actor, 'game.play', {
+          authorize(actor, 'game.edit', {
             familyId: game.familyId,
             ownerId: game.ownerId,
             visibility: game.visibility,
             releaseState: game.releaseState,
-            granted: hasGameGrant(deps.db, game.id, principal.userId),
+            gameAccess: getGameAccess(deps.db, game.id, principal.userId),
           }).ok,
       )
       .map((game) => game.id);
@@ -107,20 +88,17 @@ const routes = new Hono<ApiBindings>()
     return c.json({ jobs });
   })
   .get('/jobs/:id', (c) => {
-    const principal = requirePrincipal(c, ['user']);
+    requirePrincipal(c, ['user']);
     const deps = c.get('deps');
     const row = findJobRow(deps.db, c.req.param('id'));
-    requireRead(deps, row.gameId, actorFromPrincipal(principal));
+    authorizedGameById(c, 'game.edit', row.gameId);
     return c.json(findJob(deps.db, row.id));
   })
   .patch('/jobs/:id', async (c) => {
-    const principal = requirePrincipal(c, ['user']);
+    requirePrincipal(c, ['user']);
     const deps = c.get('deps');
     const row = findJobRow(deps.db, c.req.param('id'));
-    const game = gameFor(deps, row.gameId);
-    requireAuthorization(
-      authorize(actorFromPrincipal(principal), 'game.edit', { familyId: game.familyId, ownerId: game.ownerId }),
-    );
+    authorizedGameById(c, 'game.edit', row.gameId);
     if (row.state !== 'queued' || (row.idempotencyKey ?? '').startsWith('planner:'))
       throw new HttpError(409, 'job_not_queued');
     const { plan } = await parseBody(c, patchBody);

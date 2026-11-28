@@ -8,7 +8,8 @@ import { createChatJobDirectory } from '../../src/build-chat/job-directory.js';
 import { writeLimits } from '../../src/energy/store.js';
 import { buildBriefing, clearVoiceWaitingOn, type VoiceTarget } from '../../src/voice/briefing-push.js';
 import { gameDrafts } from '../../src/new-game/drafts.js';
-import { ids, NOW, worked } from '../budget/fixture.js';
+import { ids, NOW } from '../budget/fixture.js';
+import { worked } from './access-fixture.js';
 import { makeApp } from '../helpers.js';
 
 const SECRET = 'voice-internal-secret-for-tests';
@@ -53,6 +54,51 @@ async function setup() {
 }
 
 describe('POST /internal/voice/instruct', () => {
+  it('allows an editor to instruct on the owner’s build, then rejects revoked access and demotion', async () => {
+    const { deps, message, request } = await setup();
+    const otherFamily = 'f_18000000-0000-4000-8000-000000000099';
+    deps.db
+      .insert(schema.families)
+      .values({ id: otherFamily, name: 'Other', ownerUserId: ids.other, createdAt: NOW.toISOString() })
+      .run();
+    deps.db
+      .update(schema.familyMembers)
+      .set({ familyId: otherFamily })
+      .where(eq(schema.familyMembers.userId, ids.other))
+      .run();
+    const target = { ...build, creator_id: ids.other } as VoiceTarget;
+    deps.db
+      .insert(schema.gameAccess)
+      .values({
+        gameId: ids.game,
+        email: 'o@example.test',
+        access: 'edit',
+        updatedBy: ids.creator,
+        updatedAt: NOW.toISOString(),
+      })
+      .run();
+    expect((await request(target, 'First instruction', 'shared-one')).status).toBe(200);
+    deps.db
+      .update(schema.gameAccess)
+      .set({ access: 'hide' })
+      .where(eq(schema.gameAccess.email, 'o@example.test'))
+      .run();
+    expect((await request(target, 'After revoke', 'shared-two')).status).toBe(403);
+    // A cached idempotency key must not bypass the check either.
+    expect((await request(target, 'First instruction', 'shared-one')).status).toBe(403);
+    deps.db
+      .update(schema.gameAccess)
+      .set({ access: 'edit' })
+      .where(eq(schema.gameAccess.email, 'o@example.test'))
+      .run();
+    deps.db
+      .update(schema.allowedUsers)
+      .set({ role: 'player' })
+      .where(eq(schema.allowedUsers.email, 'o@example.test'))
+      .run();
+    expect((await request(target, 'After demotion', 'shared-three')).status).toBe(403);
+    expect(message).toHaveBeenCalledTimes(1);
+  });
   it('does not report delivery when an edit instruction remains pending', async () => {
     const { deps, request } = await setup();
     const target: VoiceTarget = {

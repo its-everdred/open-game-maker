@@ -39,6 +39,7 @@ async function setup() {
   const { app, deps } = await makeChatApp(
     jobTable(chatJob({ kind: 'scope', aiur: { daemonSlug: 'game-1', ticket: String(PARENT_TICKET) } })),
     client,
+    false,
   );
   seedDesignGame(deps);
   return { app, deps, answers };

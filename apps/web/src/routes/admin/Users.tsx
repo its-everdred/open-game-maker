@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 
 import { adminKeys, adminRequest, invalidateAdmin, useAllowedUsers, useAdminMe } from './api';
 import { ConfirmDialog } from './ConfirmDialog';
-import { GameplaySetting } from './GameplaySetting';
+import { GlassUsers } from './GlassUsers';
 import { WeeklyBudget } from './WeeklyBudget';
 import type { AdminAllowedUser, AllowListRole } from './types';
 
@@ -12,6 +12,7 @@ const ROLES: AllowListRole[] = ['player', 'maker', 'admin'];
 type Pending = { kind: 'remove'; user: AdminAllowedUser };
 
 function roleLabel(role: AllowListRole): string {
+  if (role === 'maker') return 'Editor';
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
@@ -25,21 +26,15 @@ function lastSignIn(user: AdminAllowedUser): string {
 export function Users() {
   const me = useAdminMe();
   const users = useAllowedUsers();
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<AllowListRole>('player');
   const [pending, setPending] = useState<Pending | null>(null);
   const add = useMutation({
     mutationFn: (value: { email: string; role: AllowListRole }) =>
       adminRequest('/admin/users', { method: 'POST', json: value }),
-    onSuccess: async () => {
-      setEmail('');
-      setRole('player');
-      await invalidateAdmin(adminKeys.users());
-    },
+    onSuccess: () => invalidateAdmin(adminKeys.users()),
   });
   const changeRole = useMutation({
-    mutationFn: ({ user, nextRole }: { user: AdminAllowedUser; nextRole: AllowListRole }) =>
-      adminRequest(`/admin/users/${encodeURIComponent(user.email)}`, { method: 'PATCH', json: { role: nextRole } }),
+    mutationFn: ({ user, role }: { user: AdminAllowedUser; role: AllowListRole }) =>
+      adminRequest(`/admin/users/${encodeURIComponent(user.email)}`, { method: 'PATCH', json: { role } }),
     onSuccess: () => invalidateAdmin(adminKeys.users()),
   });
   const remove = useMutation({
@@ -50,75 +45,34 @@ export function Users() {
       setPending(null);
     },
   });
-  const budget = useMutation({
-    mutationFn: ({
-      user,
-      value,
-    }: {
-      user: AdminAllowedUser;
-      value: { newGames: number | null; edits: number | null };
-    }) => adminRequest(`/admin/users/${encodeURIComponent(user.email)}/weekly-budget`, { method: 'PUT', json: value }),
-    onSuccess: () => invalidateAdmin(adminKeys.users()),
-  });
   const invite = useMutation({
     mutationFn: (user: AdminAllowedUser) =>
       adminRequest(`/admin/users/${encodeURIComponent(user.email)}/invite`, { method: 'POST', json: {} }),
   });
-
   if (users.isPending || me.isPending) return <p className="admin-state">Loading users…</p>;
   if (users.isError || me.isError) return <p className="admin-state">Not allowed</p>;
-
   return (
-    <section>
-      <p className="admin-kicker">Instance</p>
-      <h2>Users</h2>
-      <form
-        className="admin-form admin-card"
-        onSubmit={(event) => {
-          event.preventDefault();
-          add.mutate({ email: email.trim(), role });
-        }}
-      >
-        <label>
-          Email
-          <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-        </label>
-        <label>
-          Role
-          <select value={role} onChange={(event) => setRole(event.target.value as AllowListRole)}>
-            {ROLES.map((value) => (
-              <option key={value} value={value}>
-                {roleLabel(value)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="admin-primary tap-primary" disabled={add.isPending} type="submit">
-          Add user
-        </button>
-      </form>
-      {add.isError ? (
-        <p className="admin-dialog-error" role="alert">
-          {addError(add.error)}
-        </p>
-      ) : null}
-      <GameplaySetting />
-      <UsersTable
-        busy={changeRole.isPending || remove.isPending || invite.isPending || budget.isPending}
-        budgetFailed={budget.isError}
-        onSaveBudget={(user, value) => budget.mutate({ user, value })}
-        currentEmail={me.data.user.email.toLowerCase()}
-        inviteFailed={invite.isError}
-        roleFailed={changeRole.isError}
+    <>
+      <GlassUsers
         users={users.data.users}
-        onChangeRole={(user, nextRole) => changeRole.mutate({ user, nextRole })}
-        onInvite={(user) => invite.mutate(user)}
+        currentEmail={me.data.user.email.toLowerCase()}
+        busy={add.isPending || changeRole.isPending || remove.isPending || invite.isPending}
+        error={
+          add.isError
+            ? addError(add.error)
+            : changeRole.isError || invite.isError
+              ? 'Change could not be saved. Try again.'
+              : undefined
+        }
+        onInvite={(email, role) => add.mutateAsync({ email, role })}
+        onChange={(user, role) => (user.role === role ? Promise.resolve() : changeRole.mutateAsync({ user, role }))}
+        onResend={(user) => invite.mutate(user)}
         onRemove={(user) => {
           remove.reset();
           setPending({ kind: 'remove', user });
         }}
       />
-      {pending ? (
+      {pending && (
         <ConfirmDialog
           busy={remove.isPending}
           error={remove.isError ? 'Change could not be saved. Try again.' : undefined}
@@ -128,8 +82,8 @@ export function Users() {
         >
           <p>{pending.user.email}</p>
         </ConfirmDialog>
-      ) : null}
-    </section>
+      )}
+    </>
   );
 }
 

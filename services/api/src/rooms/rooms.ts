@@ -10,8 +10,8 @@ import { HttpError } from '../app/errors.js';
 import type { AppDeps } from '../app/types.js';
 import { createInvitation } from '../invites/invites.js';
 import { hashOf } from '../invites/tokens.js';
-import { createRelayRoom, revokeRelayRoom } from './client.js';
-import { hasGameGrant } from '../games/games.js';
+import { getGameAccess, hasGameGrant } from '../games/games.js';
+import { createRelayRoom, invalidateRelayRoomUser, revokeRelayRoom } from './client.js';
 
 const ROOM_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -218,6 +218,7 @@ export async function joinRoom(
       visibility: game.visibility,
       releaseState: game.releaseState,
       granted: game.releaseState === 'coming_soon' ? hasGameGrant(deps.db, game.id, principal.userId) : true,
+      gameAccess: getGameAccess(deps.db, game.id, principal.userId),
     }),
   );
 
@@ -232,6 +233,9 @@ export async function joinRoom(
   }
 
   deps.db.transaction((tx) => {
+    if (game.ownerId !== principal.userId && getGameAccess(tx, game.id, principal.userId) === 'hide') {
+      throw new HttpError(403, 'game_hidden');
+    }
     const fresh = tx.select().from(schema.invitations).where(eq(schema.invitations.id, invitation.id)).get();
     if (!fresh || fresh.revokedAt || Date.parse(fresh.expiresAt) <= nowMs) throw new HttpError(410, 'invite_gone');
     if (fresh.acceptedAt && fresh.acceptedBy !== principal.userId) throw new HttpError(410, 'invite_gone');
@@ -270,6 +274,7 @@ export async function freshRoomGrant(
   if (room.ownerId === principal.userId) {
     return grantResponse(deps, room, principal.userId, 'owner', principal.displayName, nowMs);
   }
+  if (getGameAccess(deps.db, room.gameId, principal.userId) === 'hide') throw new HttpError(403, 'game_hidden');
   const member = deps.db
     .select()
     .from(schema.roomMembers)
@@ -277,6 +282,20 @@ export async function freshRoomGrant(
     .get();
   if (!member || member.revokedAt) throw new HttpError(403, 'not_room_member');
   return grantResponse(deps, room, principal.userId, 'player', principal.displayName, nowMs);
+}
+
+export async function invalidateGameRoomAccess(
+  deps: AppDeps,
+  gameId: string,
+  userId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  const rooms = deps.db
+    .select()
+    .from(schema.rooms)
+    .where(and(eq(schema.rooms.gameId, gameId), isNull(schema.rooms.endedAt)))
+    .all();
+  await Promise.all(rooms.map((room) => invalidateRelayRoomUser(deps, room.id, userId, fetchImpl)));
 }
 
 export async function revokeRoomAccess(

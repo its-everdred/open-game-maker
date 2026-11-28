@@ -60,6 +60,7 @@ describe('command rename migration', () => {
       '20261127002110_fixed_roughhouse.sql',
       '20261127152311_coming_soon.sql',
       '20261128050146_publish_checks.sql',
+      '20261128094519_game_access.sql',
     ]);
 
     expect(sqlite.prepare('SELECT decision_id, version, status FROM commands').all()).toEqual([

@@ -10,6 +10,7 @@ import { parseCommandOptions } from '../job-commands/options.js';
 import { jobFor } from './briefing-push.js';
 import { selectedOption } from './select-option.js';
 import { answerProductQuestion } from './question-session.js';
+import { voiceActor } from './access.js';
 
 export async function answerVoiceCommand(
   deps: AppDeps,
@@ -18,13 +19,7 @@ export async function answerVoiceCommand(
   const target = request.target;
   if (target.kind === 'questions') return answerProductQuestion(deps, { ...request, target });
   const job = jobFor(deps.db, target);
-  if (
-    !job ||
-    job.gameId !== target.game_id ||
-    job.creatorId !== target.creator_id ||
-    job.aiurRepo === null ||
-    job.aiurIssueNumber === null
-  ) {
+  if (!job || job.gameId !== target.game_id || job.aiurRepo === null || job.aiurIssueNumber === null) {
     return { status: 'failed' };
   }
   if (target.kind === 'build' && (job.id !== target.job_id || String(job.aiurIssueNumber) !== target.ticket)) {
@@ -56,6 +51,7 @@ export async function answerVoiceCommand(
   // one leave one record: the chat row the inbox reads, the job's inbox, the design decision history and aiur.
   const chatJob = option === null ? null : await deps.registry.chatJobs?.get(job.id);
   const row = chatJob ? findCommand(deps.sqlite, job.id, command.decisionId) : null;
+  if (!voiceActor(deps.db, target)) return { status: 'failed' };
   if (chatJob && row && option) {
     let outcome;
     try {
@@ -79,6 +75,7 @@ export async function answerVoiceCommand(
 
   try {
     const client = await deps.aiurClientForGame(job.gameId);
+    if (!voiceActor(deps.db, target)) return { status: 'failed' };
     await client.decide(command.decisionId, {
       ...(option === null ? { response: request.choice } : { option: option.id }),
       expected_version: command.version,

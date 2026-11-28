@@ -67,16 +67,7 @@ const ownAllowed = {
   maintainer: ACTIONS,
   admin,
   creator: own,
-  player: [
-    'game.edit',
-    'game.publish',
-    'game.play',
-    'game.fork',
-    'job.cancel',
-    'job.edit',
-    'game.delist',
-    'report.file',
-  ],
+  player: ['game.play', 'game.fork', 'game.delist', 'report.file'],
 } as const satisfies Record<ActorName, readonly Action[]>;
 
 function resource(actor: Actor, action: Action, scope: Scope): Resource {

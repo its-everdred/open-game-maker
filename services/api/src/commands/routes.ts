@@ -72,7 +72,6 @@ export default new Hono<ApiBindings>()
   })
   .post('/games/:gameId/commands/:decisionId/missing-media', async (c) => {
     const game = authorizedGame(c, 'game.edit');
-    if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
     const deps = c.get('deps');
     const command = await findGameCommand(deps, game, c.req.param('decisionId'));
     if (!command || !command.ticket) throw new HttpError(404, 'command_not_found');

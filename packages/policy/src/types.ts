@@ -37,6 +37,7 @@ export type Resource = {
   inviteKind?: 'member' | 'play' | 'room';
   targetRole?: 'owner' | 'admin' | 'member';
   granted?: boolean;
+  gameAccess?: 'hide' | 'play' | 'edit';
   audit?: boolean;
 };
 

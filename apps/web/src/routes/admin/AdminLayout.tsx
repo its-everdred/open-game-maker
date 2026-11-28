@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate, NavLink, Outlet } from 'react-router';
+import { Navigate, NavLink, Outlet, useLocation } from 'react-router';
 
 import { useAdminMe } from './api';
 import { requireAdmin } from './guard';
@@ -20,12 +20,14 @@ const links = [
 
 export function AdminLayout() {
   const me = useAdminMe();
+  const location = useLocation();
 
   useEffect(registerAdminTestApi, []);
 
   if (me.isPending) return <p className="admin-state">Loading admin…</p>;
   if (me.isError) return <p className="admin-state">Not allowed</p>;
   if (requireAdmin(me.data) === 'redirect') return <Navigate replace to="/all" />;
+  if (location.pathname.replace(/\/$/, '') === '/admin/users') return <Outlet />;
 
   return (
     <div className="admin-shell">

@@ -170,6 +170,42 @@ function seedRuntimeRows(context: Awaited<ReturnType<typeof world>>): void {
 }
 
 describe('game forks', () => {
+  it('rejects a listed-game fork when the creator is explicitly hidden', async () => {
+    const context = await world();
+    const creator: TestUser = {
+      kind: 'user',
+      userId: 'u_hidden_creator',
+      displayName: 'Creator',
+      email: 'creator@example.test',
+      familyId: ids.family,
+      platformRole: 'none',
+      capability: 'creator',
+    };
+    installUsers(context.deps, [creator]);
+    context.deps.db
+      .insert(schema.familyMembers)
+      .values({ familyId: ids.family, userId: creator.userId, role: 'member', capability: 'creator', joinedAt: now })
+      .run();
+    context.deps.db
+      .insert(schema.user)
+      .values({
+        id: creator.userId,
+        email: creator.email,
+        name: creator.displayName,
+        emailVerified: true,
+        createdAt: new Date(now),
+        updatedAt: new Date(now),
+      })
+      .run();
+    context.deps.db
+      .insert(schema.gameAccess)
+      .values({ gameId: ids.game, email: creator.email, access: 'hide', updatedBy: ids.user, updatedAt: now })
+      .run();
+    const response = await fork(context.app, {}, creator.userId);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'game_hidden' });
+    expect(context.runtime.checkRights).not.toHaveBeenCalled();
+  });
   it('publishes the complete tested build of a fork', async () => {
     const context = await world();
     await writeFile(join(context.artifactPath, 'index.html'), '<h1>Fork</h1>');

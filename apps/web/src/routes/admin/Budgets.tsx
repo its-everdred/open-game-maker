@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { formatUnits } from '../../features/build-chat/units';
 import { adminKeys, adminRequest, invalidateAdmin, useAdminBudget, useAdminSettings } from './api';
 import { ConfirmDialog } from './ConfirmDialog';
+import { UserBudgetSettings } from './UserBudgetSettings';
 import type { AdminBudget, AdminMember, AdminSettings } from './types';
 
 export function parseUnits(text: string, microUsdPerUnit: number): number | null {
@@ -122,6 +123,7 @@ function BudgetContent({ settings, budget }: { settings: AdminSettings; budget: 
     <section>
       <p className="admin-kicker">Family</p>
       <h2>Budgets</h2>
+      <UserBudgetSettings />
       <div className="admin-card admin-settings-grid">
         <label>
           Reset zone

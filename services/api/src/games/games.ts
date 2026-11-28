@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Db } from '@ogm/db';
 import { schema } from '@ogm/db';
-import { and, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 
 import type { AppDeps } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
@@ -72,13 +72,20 @@ export function findGameForFamily(db: Db, id: string, familyId: string): GameRow
   return game;
 }
 
+export function requireGameFamilyVisibility(game: GameRow, familyId: string): void {
+  if (game.familyId !== familyId && game.delistedAt !== null) throw new HttpError(404, 'game_not_found');
+}
+
 export function findGameForPlay(db: Db, id: string, actor: Actor): GameRow {
   const game = findGame(db, id);
+  if (game.ownerId !== actor.userId && getGameAccess(db, id, actor.userId) === 'hide')
+    throw new HttpError(403, 'game_hidden');
   /* A delisted game stays reachable to its own family, as before, and to no one outside it. */
   if (game.familyId === actor.familyId) return game;
   if (game.delistedAt !== null) throw new HttpError(404, 'game_not_found');
   if (
     hasGameGrant(db, id, actor.userId) ||
+    ['play', 'edit'].includes(getGameAccess(db, id, actor.userId) ?? '') ||
     (game.releaseState === 'coming_soon' && (actor.platformRole === 'admin' || actor.platformRole === 'maintainer'))
   )
     return game;
@@ -87,6 +94,14 @@ export function findGameForPlay(db: Db, id: string, actor: Actor): GameRow {
 }
 
 export function listGames(db: Db, familyId: string, userId: string): GameRow[] {
+  const explicit = db
+    .select({ gameId: schema.gameAccess.gameId, access: schema.gameAccess.access })
+    .from(schema.gameAccess)
+    .innerJoin(schema.user, sql`lower(${schema.user.email}) = ${schema.gameAccess.email}`)
+    .where(eq(schema.user.id, userId))
+    .all();
+  const access = new Map(explicit.map((row) => [row.gameId, row.access]));
+  const visibleIds = explicit.filter((row) => row.access !== 'hide').map((row) => row.gameId);
   return db
     .select()
     .from(schema.games)
@@ -94,6 +109,7 @@ export function listGames(db: Db, familyId: string, userId: string): GameRow[] {
       and(
         isNull(schema.games.delistedAt),
         or(
+          inArray(schema.games.id, visibleIds),
           eq(schema.games.releaseState, 'coming_soon'),
           inArray(
             schema.games.id,
@@ -116,7 +132,8 @@ export function listGames(db: Db, familyId: string, userId: string): GameRow[] {
         ),
       ),
     )
-    .all();
+    .all()
+    .filter((game) => game.ownerId === userId || access.get(game.id) !== 'hide');
 }
 
 export function hasGameGrant(db: Db, gameId: string, userId: string): boolean {
@@ -136,6 +153,15 @@ export function hasGameGrant(db: Db, gameId: string, userId: string): boolean {
         .get(),
     )
   );
+}
+
+export function getGameAccess(db: Db, gameId: string, userId: string): 'hide' | 'play' | 'edit' | undefined {
+  return db
+    .select({ access: schema.gameAccess.access })
+    .from(schema.gameAccess)
+    .innerJoin(schema.user, sql`lower(${schema.user.email}) = ${schema.gameAccess.email}`)
+    .where(and(eq(schema.gameAccess.gameId, gameId), eq(schema.user.id, userId)))
+    .get()?.access;
 }
 
 export function createGameRow(
@@ -167,7 +193,14 @@ export function createGameRow(
     allowAiGeneratedAssets: input.allowAiGeneratedAssets ?? true,
     createdAt: new Date().toISOString(),
   };
-  db.insert(schema.games).values(row).run();
+  db.transaction((tx) => {
+    tx.insert(schema.games).values(row).run();
+    // An invitation shown as hidden must stay hidden when the recipient signs in,
+    // including when this game was created after the invitation.
+    tx.run(sql`INSERT OR IGNORE INTO game_access (game_id, email, access, updated_by, updated_at)
+      SELECT ${id}, a.email, 'hide', 'system', ${row.createdAt} FROM allowed_users a
+      WHERE NOT EXISTS (SELECT 1 FROM user u WHERE lower(u.email) = a.email)`);
+  });
   return findGame(db, row.id);
 }
 

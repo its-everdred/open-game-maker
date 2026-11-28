@@ -20,6 +20,7 @@ import {
   findGameForFamily,
   findGameForPlay,
   gameResponse,
+  getGameAccess,
   hasGameGrant,
   isGameProvisioning,
   listGames,
@@ -257,10 +258,17 @@ const routes = new Hono<ApiBindings>()
           visibility: game.visibility,
           releaseState: game.releaseState,
           granted: hasGameGrant(db, game.id, principal.userId),
+          gameAccess: getGameAccess(db, game.id, principal.userId),
         }).ok;
         return {
           ...gameResponse(game),
           ...(canPlay ? {} : { repo: null, familyId: '', ownerId: '' }),
+          canManageAccess: game.ownerId === principal.userId,
+          canEdit: authorize(actorFromPrincipal(principal), 'game.edit', {
+            familyId: game.familyId,
+            ownerId: game.ownerId,
+            gameAccess: getGameAccess(db, game.id, principal.userId),
+          }).ok,
           canManageRelease:
             (game.releaseState === 'coming_soon' &&
               (principal.platformRole === 'admin' || principal.platformRole === 'maintainer')) ||
@@ -290,6 +298,7 @@ const routes = new Hono<ApiBindings>()
         visibility: game.visibility,
         releaseState: game.releaseState,
         granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
+        gameAccess: getGameAccess(c.get('deps').db, game.id, principal.userId),
       }),
     );
     const media =
@@ -299,6 +308,11 @@ const routes = new Hono<ApiBindings>()
     const stats = gameStats(c.get('deps').db, [game]);
     return c.json({
       ...gameResponse(game),
+      canEdit: authorize(actorFromPrincipal(principal), 'game.edit', {
+        familyId: game.familyId,
+        ownerId: game.ownerId,
+        gameAccess: getGameAccess(c.get('deps').db, game.id, principal.userId),
+      }).ok,
       ...media,
       stats: stats.get(game.id),
     });
@@ -315,7 +329,8 @@ const routes = new Hono<ApiBindings>()
       game.releaseState === 'coming_soon' &&
       principal.familyId !== game.familyId &&
       principal.platformRole === 'none' &&
-      !hasGameGrant(c.get('deps').db, game.id, principal.userId)
+      !hasGameGrant(c.get('deps').db, game.id, principal.userId) &&
+      !['play', 'edit'].includes(getGameAccess(c.get('deps').db, game.id, principal.userId) ?? '')
     )
       throw new HttpError(403, 'coming_soon');
     requireAuthorization(
@@ -325,6 +340,7 @@ const routes = new Hono<ApiBindings>()
         visibility: game.visibility,
         releaseState: game.releaseState,
         granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
+        gameAccess: getGameAccess(c.get('deps').db, game.id, principal.userId),
       }),
     );
     return c.json({ game: gameResponse(game) });
@@ -340,6 +356,7 @@ const routes = new Hono<ApiBindings>()
         visibility: game.visibility,
         releaseState: game.releaseState,
         granted: hasGameGrant(db, game.id, principal.userId),
+        gameAccess: getGameAccess(db, game.id, principal.userId),
       }),
     );
     const lastPlayedAt = new Date().toISOString();

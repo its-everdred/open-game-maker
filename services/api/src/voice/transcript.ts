@@ -12,6 +12,7 @@ import { gameDrafts } from '../new-game/drafts.js';
 import { targetKey } from './briefing-push.js';
 import { jobFor } from './briefing-push.js';
 import { deliverInstruction } from './instruct.js';
+import { voiceActor } from './access.js';
 
 function stableUuid(value: string): string {
   const digest = createHash('sha256').update(value).digest('hex');
@@ -22,7 +23,6 @@ function buildJob(deps: AppDeps, target: Extract<VoiceTarget, { kind: 'build' }>
   const job = deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, target.job_id)).get();
   return job &&
     job.gameId === target.game_id &&
-    job.creatorId === target.creator_id &&
     job.aiurIssueNumber !== null &&
     String(job.aiurIssueNumber) === target.ticket
     ? job.id
@@ -72,7 +72,7 @@ export async function appendVoiceTranscript(
     if (result.status === 'failed' || result.status === 'needs_choice') return null;
   }
   const jobId = targetJob(deps, request.target);
-  if (jobId === null) return null;
+  if (jobId === null || !voiceActor(deps.db, request.target)) return null;
 
   const identity = JSON.stringify([targetKey(request.target), request.conversation_id, request.actor, request.turn_id]);
   const id = `m_${stableUuid(identity)}`;

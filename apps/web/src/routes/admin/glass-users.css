@@ -1,0 +1,201 @@
+.glass-users-top {
+  display: flex;
+}
+.glass-users .game-access-top h1 {
+  flex: 1;
+}
+.glass-users-add {
+  font:
+    700 25px/1 Nunito,
+    sans-serif;
+  color: var(--access-art-14);
+  background: var(--access-art-40), var(--access-art-20);
+}
+.glass-users-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--access-art-41);
+}
+.glass-users-tabs button {
+  flex: 1;
+  height: 40px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--access-art-11);
+  background: transparent;
+  font:
+    700 14px Nunito,
+    sans-serif;
+}
+.glass-users-tabs button[aria-pressed='true'] {
+  color: var(--access-art-14);
+  background: var(--access-art-40), var(--access-art-20);
+}
+.glass-users-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+.glass-users-row .game-access-name > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font:
+    600 17px/1.2 Fredoka,
+    Nunito,
+    sans-serif;
+}
+.glass-users-form {
+  bottom: 24px;
+}
+.glass-users-input {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 6px 16px;
+}
+.glass-users-input input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--access-art-9);
+  font:
+    600 16px Nunito,
+    sans-serif;
+}
+.glass-users-segment-wrap {
+  padding: 4px 10px 10px;
+}
+.glass-users-segment {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 100%;
+}
+.glass-users-segment button {
+  height: 44px;
+  font-size: 15px;
+}
+.glass-users-primary {
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid var(--access-art-42);
+  border-radius: 999px;
+  color: var(--access-art-14);
+  background: var(--access-art-40), var(--access-art-20);
+  font:
+    600 18px Fredoka,
+    Nunito,
+    sans-serif;
+}
+.glass-users-form > .glass-users-primary {
+  margin-top: auto;
+}
+.glass-users-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: var(--access-art-39);
+  backdrop-filter: blur(5px);
+}
+.glass-users-sheet {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 7;
+  border: 1px solid var(--access-art-42);
+  border-radius: 28px;
+  padding: 24px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  background: var(--access-art-31);
+  backdrop-filter: blur(22px) saturate(1.4);
+}
+.glass-users-sheet h2 {
+  margin: 0;
+  font:
+    600 24px/1.15 Fredoka,
+    Nunito,
+    sans-serif;
+}
+.glass-users-large {
+  width: 64px;
+  height: 64px;
+  font-size: 28px;
+}
+.glass-users-remove {
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--access-art-19);
+  background: transparent;
+  font:
+    600 18px Fredoka,
+    Nunito,
+    sans-serif;
+}
+.glass-users-landscape-invite {
+  display: none;
+}
+@media (orientation: landscape) and (max-height: 600px) {
+  .glass-users .game-access-top h1 {
+    flex: none;
+  }
+  .glass-users .glass-users-add {
+    display: none;
+  }
+  .glass-users .game-access-body {
+    top: 64px;
+    left: 14px;
+    right: auto;
+    bottom: 10px;
+    width: calc(50% - 22px);
+  }
+  .glass-users-tabs {
+    position: fixed;
+    z-index: 1;
+    top: 12px;
+    left: 175px;
+    width: min(420px, calc(100% - 190px));
+  }
+  .glass-users .game-access-caption {
+    display: none;
+  }
+  .glass-users-landscape-invite {
+    position: absolute;
+    top: 64px;
+    right: 14px;
+    width: calc(50% - 22px);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .glass-users-landscape-invite .game-access-caption {
+    display: block;
+    padding: 0 6px;
+  }
+  .glass-users-sheet {
+    left: 25%;
+    right: 25%;
+    max-height: calc(100% - 20px);
+    overflow: auto;
+  }
+}
+.glass-users-tabs {
+  border: 0;
+}
+.glass-users-input {
+  gap: 10px;
+}

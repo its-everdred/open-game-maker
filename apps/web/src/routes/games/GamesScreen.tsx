@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useMutation } from '@tanstack/react-query';
 
@@ -17,6 +17,7 @@ import {
   type TileRects,
 } from './flip';
 import { GameDetail } from './GameDetail';
+import { GameAccess } from './GameAccess';
 import { startTrailer, stopOtherTrailers, stopTrailers } from './trailerVideo';
 import { mergeShowcase } from './showcase';
 import { Tile } from './Tile';
@@ -36,6 +37,7 @@ let gamesApiRegistered = false;
 const gamesTestSnapshot: { selected: string | null; tiles: string[] } = { selected: null, tiles: [] };
 
 export function GamesScreen() {
+  const [accessGame, setAccessGame] = useState<GameSummary | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -119,7 +121,14 @@ export function GamesScreen() {
 
   const open = (index: number, mode: 'play' | 'edit' = 'play') => {
     const game = sortedGames[index];
-    if (!game || game.id !== selected?.id || !canOpen || game.canPlay === false) return;
+    if (
+      !game ||
+      game.id !== selected?.id ||
+      !canOpen ||
+      game.canPlay === false ||
+      (mode === 'edit' && game.canEdit === false)
+    )
+      return;
     if (game.id.startsWith('showcase:') && game.showcase && game.showcase.id !== 'goblin-cellar') {
       navigate(`/g/showcase/${encodeURIComponent(game.showcase.id)}?mode=${mode}`);
       return;
@@ -271,6 +280,12 @@ export function GamesScreen() {
                           job={activeJobs.get(selected.id)}
                           onPlay={() => open(selectedIndex ?? -1, 'play')}
                           onEdit={() => open(selectedIndex ?? -1, 'edit')}
+                          onAccess={() => setAccessGame(selected)}
+                          onPublish={() => navigate(`/g/${encodeURIComponent(selected.id)}/releases`)}
+                          onVersions={() => navigate(`/g/${encodeURIComponent(selected.id)}/versions`)}
+                          onActivity={() =>
+                            navigate(`/g/${encodeURIComponent(selected.id)}`, { state: { openActivity: true } })
+                          }
                           onRelease={() => release.mutate({ gameId: selected.id, releaseState: 'released' })}
                           onComingSoon={() => release.mutate({ gameId: selected.id, releaseState: 'coming_soon' })}
                           releasePending={release.isPending}
@@ -287,6 +302,9 @@ export function GamesScreen() {
         </>
       )}
 
+      {accessGame && (
+        <GameAccess gameId={accessGame.id} ownerId={accessGame.ownerId} onClose={() => setAccessGame(null)} />
+      )}
       {!selected && (
         <button type="button" className="tap-primary games-new" aria-label="New game" onClick={() => navigate('/new')}>
           <span className="plus" aria-hidden="true">

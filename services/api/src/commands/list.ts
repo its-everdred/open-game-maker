@@ -5,7 +5,7 @@ import { GameCommand, type CreatorCommandsPage, type GameCommandsPage, type Prin
 import { actorFromPrincipal } from '../accounts/families.js';
 import type { AppDeps } from '../app/types.js';
 import { getChatRow, listCommands, parseCommand, toMessage, type MediaSigner } from '../build-chat/store.js';
-import { hasGameGrant, listGames, type GameRow } from '../games/games.js';
+import { getGameAccess, hasGameGrant, listGames, type GameRow } from '../games/games.js';
 import { listJobs } from '../jobs/repo.js';
 import { reviewNumbers } from '../reviews/numbers.js';
 import { gameCommandsFromAiur } from './aiur.js';
@@ -229,6 +229,7 @@ export async function listCreatorCommands(
         visibility: game.visibility,
         releaseState: game.releaseState,
         granted: hasGameGrant(deps.db, game.id, principal.userId),
+        gameAccess: getGameAccess(deps.db, game.id, principal.userId),
       }).ok,
   );
   // One game that fails to list is left out of this read, so it never hides the other games' decisions.

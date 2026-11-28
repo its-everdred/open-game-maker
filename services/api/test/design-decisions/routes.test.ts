@@ -35,7 +35,7 @@ function decision(deps: Awaited<ReturnType<typeof setup>>['deps'], chosen: strin
 }
 
 async function setup() {
-  const { app, deps } = await makeChatApp();
+  const { app, deps } = await makeChatApp(undefined, undefined, false);
   seedDesignGame(deps);
   const get = (path: string, headers: Record<string, string> = {}) =>
     app.request(`http://127.0.0.1:4000${path}`, { headers });

@@ -1,0 +1,201 @@
+/* Glass kit primitives used by the access and users screens. */
+.g {
+  --night: var(--access-art-6);
+  --night-2: var(--access-art-7);
+  --night-3: var(--access-art-8);
+  --ink: var(--access-art-9);
+  --ink-2: var(--access-art-10);
+  --muted: var(--access-art-11);
+  --faint: var(--access-art-12);
+  --rule: var(--access-art-13);
+  --dark: var(--access-art-14);
+  --green: var(--access-art-15);
+  --yellow: var(--access-art-16);
+  --orange: var(--access-art-17);
+  --red: var(--access-art-18);
+  --red-ink: var(--access-art-19);
+  --blue: var(--access-art-20);
+  --aqua: var(--access-art-21);
+  --purple: var(--access-art-22);
+  --pink: var(--access-art-23);
+  --mineral-1: var(--access-art-24);
+  --mineral-2: var(--access-art-25);
+  --mineral-3: var(--access-art-26);
+  --gas-1: var(--access-art-27);
+  --gas-2: var(--access-art-28);
+  --gas-3: var(--access-art-29);
+  --glass-fill: var(--access-art-30);
+  --glass-fill-strong: var(--access-art-31);
+  --glass-blur: blur(22px) saturate(1.4);
+  --edge-top: var(--access-art-32);
+  --edge-bottom: var(--access-art-33);
+  --gloss: var(--access-art-1);
+  --r-xs: 8px;
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  --display: 'Fredoka', 'Nunito', system-ui, sans-serif;
+  --body: 'Nunito', system-ui, sans-serif;
+}
+.g * {
+  box-sizing: border-box;
+}
+.g {
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  background: var(--night);
+  color: var(--ink);
+  font: 600 15px/1.35 var(--body);
+}
+.g button,
+.g input,
+.g textarea,
+.g select {
+  font: inherit;
+  color: inherit;
+}
+.g button {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.g button:focus-visible,
+.g a:focus-visible,
+.g input:focus-visible,
+.g textarea:focus-visible {
+  outline: 3px solid var(--aqua);
+  outline-offset: 2px;
+}
+.g svg {
+  display: block;
+  flex: none;
+}
+.g a {
+  color: var(--blue);
+  text-decoration: none;
+}
+.g a.orb {
+  color: var(--ink);
+}
+.glows {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.glows i {
+  position: absolute;
+  width: 330px;
+  height: 330px;
+  border-radius: 50%;
+  translate: -50% -50%;
+  filter: blur(8px);
+}
+.glows i:nth-child(1) {
+  top: 10%;
+  left: 10%;
+  background: var(--access-art-2);
+}
+.glows i:nth-child(2) {
+  top: 16%;
+  left: 92%;
+  background: var(--access-art-3);
+}
+.glows i:nth-child(3) {
+  top: 92%;
+  left: 30%;
+  background: var(--access-art-4);
+}
+.glows i:nth-child(4) {
+  top: 86%;
+  left: 88%;
+  background: var(--access-art-5);
+}
+.h1 {
+  font: 700 30px/1.1 var(--display);
+  margin: 0;
+  letter-spacing: 0.005em;
+}
+.cap {
+  font: 800 11px/1 var(--body);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.orb {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--ink);
+  border: 1px solid var(--access-art-34);
+  background: var(--gloss), var(--access-art-35);
+  box-shadow:
+    inset 0 1px 0 var(--access-art-36),
+    0 8px 22px var(--access-art-37);
+  -webkit-backdrop-filter: blur(14px) saturate(1.35);
+  backdrop-filter: blur(14px) saturate(1.35);
+}
+.orb.sm {
+  width: 40px;
+  height: 40px;
+}
+.cnt {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--access-art-38);
+  color: var(--ink);
+  font: 800 12px/1 var(--body);
+  letter-spacing: 0;
+}
+.seg {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--r-pill);
+  background: var(--access-art-39);
+  border: 1px solid var(--rule);
+}
+.seg button {
+  flex: 1;
+  height: 40px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--muted);
+  font: 700 15px var(--body);
+}
+.seg button[aria-pressed='true'] {
+  background: var(--gloss), var(--ink);
+  color: var(--dark);
+}
+.top {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 76px;
+  padding: 14px 14px 0 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  z-index: 5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .g * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
