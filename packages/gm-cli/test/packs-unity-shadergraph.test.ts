@@ -30,7 +30,7 @@ it('follows texture multiplication into base color and rejects unknown graph nod
     m_OutputChannel: 1,
   } as (typeof mixed)[number]);
   expect(shaderGraphBase(mixed.map((value) => JSON.stringify(value)).join('\n')).textureChannels).toEqual([0, 1]);
-  expect(() => shaderGraphBase(source.replace('MultiplyNode', 'AddNode'))).toThrow('unsupported Unity shader graph');
+  expect(() => shaderGraphBase(source.replace('MultiplyNode', 'FloorNode'))).toThrow('unsupported Unity shader graph');
 });
 
 it('resolves scalar and color property terms from a graph', async () => {
