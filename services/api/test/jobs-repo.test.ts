@@ -153,6 +153,22 @@ describe('job projection directory', () => {
     expect(findJob(deps.db, 'j_now').position).toBe(2);
     expect(acceptedFor(deps.db, findJobRow(deps.db, 'j_now'), new Date('1999-01-01T00:00:00.000Z')).position).toBe(1);
   });
+  it('counts ready jobs across the creator’s families and slots', () => {
+    const deps = setup();
+    insertJob(deps, 'j_first', 1, 'queued');
+    insertJob(deps, 'j_second', 2, 'queued');
+    deps.db
+      .insert(schema.families)
+      .values({ id: 'f_2', name: 'Another Family', ownerUserId: 'u_2', createdAt: '2026-11-01T00:00:00.000Z' })
+      .run();
+    deps.db
+      .update(schema.jobs)
+      .set({ familyId: 'f_2', slot: 'new_game', createdAt: '2026-11-01T00:01:00.000Z' })
+      .where(eq(schema.jobs.id, 'j_second'))
+      .run();
+
+    expect(findJob(deps.db, 'j_second').position).toBe(2);
+  });
   it('resolves daemon tickets and lists only non-terminal jobs', () => {
     const deps = setup();
     insertJob(deps, 'j_queued', 141, 'queued');

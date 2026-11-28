@@ -110,9 +110,10 @@ function queuePosition(db: Db, row: JobRow, at = new Date()): number | undefined
       .from(schema.jobs)
       .where(
         and(
-          eq(schema.jobs.familyId, row.familyId),
+          // Creator capacity is shared across games and families. A creator waiting on that
+          // limit needs one coherent position across every queue that can consume the slot.
+          eq(schema.jobs.creatorId, row.creatorId),
           eq(schema.jobs.state, 'queued'),
-          eq(schema.jobs.slot, row.slot),
           ready ? or(eq(schema.jobs.start, 'now'), lte(schema.jobs.startAt, now)) : eq(schema.jobs.start, 'at_reset'),
         ),
       )
