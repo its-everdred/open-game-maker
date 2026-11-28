@@ -1,6 +1,6 @@
 /* The real auth route reads its environment at setup; isolate test-only values in this worker. */
 import { execFile } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -92,14 +92,16 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
       exhaustWeeklyJobs() {
         deps!.db.insert(schema.weeklyJobBudgets).values({ email: 'player@example.test', newGames: 0, edits: 0 }).run();
       },
-      async seedEditor() {
+      async seedEditor(buildDirectory = editorBuildDirectory) {
         const gameId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01';
         const buildId = 'build_01BX5ZZKBKACTAV9WEVGEMMVRZ';
         const directory = join(deps!.config.gamesRoot, gameId, buildId);
         mkdirSync(directory, { recursive: true });
         // Match gm publish: Vite needs a relative base when served under /g/<game>/<build>/.
-        if (editorBuildDirectory) {
-          cpSync(editorBuildDirectory, directory, { recursive: true });
+        if (buildDirectory) {
+          cpSync(buildDirectory, directory, { recursive: true });
+          const blobs = join(buildDirectory, 'a');
+          if (existsSync(blobs)) cpSync(blobs, join(deps!.config.gamesRoot, '_a'), { recursive: true });
         } else {
           pendingBuild = run('pnpm', ['exec', 'vite', 'build', '--base=./', '--mode=draft', '--outDir', directory], {
             cwd: fileURLToPath(new URL('../../../templates/game-3d/', import.meta.url)),
@@ -116,7 +118,9 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
           version: 'test',
           workerScript: join(scratch, 'game-cache.js'),
         });
-        gamesServer = serve({ fetch: gameHost.fetch, hostname: '127.0.0.1', port: 0 });
+        // eslint-disable-next-line no-restricted-properties -- optional private browser-test host port.
+        const gamesPort = Number(process.env.OGM_TEST_GAMES_HOST_PORT ?? 0);
+        gamesServer = serve({ fetch: gameHost.fetch, hostname: '127.0.0.1', port: gamesPort });
         await new Promise<void>((resolve, reject) => {
           gamesServer!.once('listening', resolve);
           gamesServer!.once('error', reject);

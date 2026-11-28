@@ -1,4 +1,4 @@
-import { expect, test as base, type Page } from '@playwright/test';
+import { expect, test as base, type Locator, type Page } from '@playwright/test';
 
 import { startBrowserSystem } from '../../../services/api/test/browser-system-harness';
 import { startDictationSystemServer } from '../../../packages/voice-client/e2e/dictation-system-server';
@@ -99,6 +99,10 @@ async function openChat(page: Page, system: System) {
     .getByRole('button', { name: /^Build a lantern/ })
     .tap();
   return page.locator('aiur-composer').first();
+}
+
+async function touchControl(control: Locator) {
+  await control.tap({ timeout: 120_000 });
 }
 
 for (const viewport of [
@@ -244,6 +248,65 @@ for (const viewport of [
       await expect(bug.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
     });
 
+    test('hosted Blobs starts a CPU match', async ({ page, system }) => {
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(String(error)));
+      // eslint-disable-next-line no-restricted-properties -- the real game is built outside this repository.
+      const dist = process.env.OGM_BLOBS_DIST;
+      test.skip(!dist, 'OGM_BLOBS_DIST must point to a local Blobs draft build');
+      test.setTimeout(1_200_000);
+      await signIn(page, system);
+      system.seedChat();
+      const game = await system.seedEditor(dist);
+      // eslint-disable-next-line no-restricted-properties -- direct host avoids buffering every game asset.
+      if (!process.env.OGM_TEST_GAMES_HOST_PORT)
+        await page.route(
+          (url) => [bridgeOrigin, 'http://127.0.0.1:10000'].includes(url.origin),
+          async (route) => {
+            const incoming = new URL(route.request().url());
+            const target = new URL(incoming.pathname + incoming.search, game.origin);
+            try {
+              await route.fulfill({ response: await route.fetch({ url: target.href, maxRedirects: 0 }) });
+            } catch {
+              await route.abort('failed').catch(() => undefined);
+            }
+          },
+        );
+      await page.goto(`/g/${game.gameId}?test`, { waitUntil: 'domcontentloaded' });
+      await expect
+        .poll(
+          () =>
+            page.evaluate(
+              () =>
+                (window as Window & { __ogmHost?: { game?: { bridgeState: string } } }).__ogmHost?.game?.bridgeState,
+            ),
+          { timeout: 120_000 },
+        )
+        .toBe('ready');
+      await expect(page.getByRole('alert').getByRole('button', { name: 'Try again' })).toHaveCount(0);
+      await expect(page.getByRole('progressbar', { name: 'Loading' })).toBeHidden({ timeout: 600_000 });
+      const flow = page.frameLocator('.game-frame iframe').locator('#blobs-flow');
+      await touchControl(flow.getByRole('button', { name: 'Play', exact: true }));
+      await touchControl(flow.getByRole('button', { name: 'Versus CPU', exact: true }));
+      await touchControl(flow.getByRole('button', { name: 'Blocks', exact: true }));
+      await touchControl(flow.getByRole('button', { name: 'Play', exact: true }));
+      const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+      if (!frame) throw new Error('hosted Blobs frame is missing');
+      await frame.waitForFunction(() => typeof (window as TestWindow).advanceTime === 'function');
+      for (let step = 0; step < 60 && (await flow.getAttribute('data-screen')) !== null; step += 1) {
+        await frame.evaluate(() => (window as TestWindow).advanceTime!(1000));
+      }
+      await expect(flow).not.toHaveAttribute('data-screen', /.+/);
+      // Let gravity finish each round; the deterministic clock advances without hundreds of
+      // cross-process key events, while the actual game and CPU decide the result.
+      for (let step = 0; step < 60; step += 1) {
+        if (await flow.getByRole('button', { name: 'Rematch', exact: true }).isVisible()) break;
+        await frame.evaluate(() => (window as TestWindow).advanceTime!(10_000));
+      }
+      await expect(flow.locator('.results__reason')).toHaveText(/^(You win|CPU wins) the match$/);
+      expect(errors).toEqual([]);
+    });
+
     test('manual edit persists through the real game host', async ({ page, system }) => {
       test.setTimeout(600_000);
       await signIn(page, system);
@@ -259,6 +322,27 @@ for (const viewport of [
       );
       await page.goto(`/g/${game.gameId}?mode=edit&test`, { waitUntil: 'domcontentloaded' });
       await expect(page.getByLabel('Game editor')).toBeVisible({ timeout: 120_000 });
+      const gameFrame = () =>
+        page
+          .frames()
+          .find((candidate) =>
+            [bridgeOrigin, 'http://127.0.0.1:10000'].some((origin) => candidate.url().startsWith(`${origin}/g/`)),
+          );
+      await expect.poll(() => Boolean(gameFrame()), { timeout: 30_000 }).toBe(true);
+      const frame = gameFrame()!;
+      await frame.waitForFunction(() => typeof (window as TestWindow).advanceTime === 'function');
+      await frame.evaluate(() => {
+        const instance = (
+          window as unknown as { __gm: { runtime: { instance: { applyDesign: (...args: unknown[]) => unknown } } } }
+        ).__gm.runtime.instance;
+        const apply = instance.applyDesign;
+        (window as unknown as { appliedLights: unknown[] }).appliedLights = [];
+        instance.applyDesign = function (...args) {
+          const design = args[0] as { globals?: Record<string, unknown> };
+          (window as unknown as { appliedLights: unknown[] }).appliedLights.push(design.globals?.['scenery.lighting']);
+          return apply.apply(this, args);
+        };
+      });
       await page.getByLabel('Game editor').tap();
       await page.getByRole('button', { name: 'Light', exact: true }).tap();
       await page.getByRole('button', { name: 'Night', exact: true }).tap();
@@ -274,15 +358,9 @@ for (const viewport of [
             }),
           ]),
         );
-      const gameFrame = () =>
-        page
-          .frames()
-          .find((candidate) =>
-            [bridgeOrigin, 'http://127.0.0.1:10000'].some((origin) => candidate.url().startsWith(`${origin}/g/`)),
-          );
-      await expect.poll(() => Boolean(gameFrame()), { timeout: 30_000 }).toBe(true);
-      const frame = gameFrame()!;
-      await frame.waitForFunction(() => typeof (window as TestWindow).advanceTime === 'function');
+      await expect
+        .poll(() => frame.evaluate(() => (window as unknown as { appliedLights: unknown[] }).appliedLights))
+        .toContain('night');
       const snapshot = () =>
         frame.evaluate(() => {
           const { tick, mode } = JSON.parse((window as TestWindow).render_game_to_text!()) as {
