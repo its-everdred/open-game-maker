@@ -10,41 +10,53 @@ import { makeApp } from './helpers.js';
 import { ids, insertBuild, now, setup } from './release-fixtures.js';
 
 it.each([
-  { visibility: 'private' as const, releaseState: 'released' as const },
-  { visibility: 'listed' as const, releaseState: 'coming_soon' as const },
-])('returns a session-scoped URL for a $visibility $releaseState release', async (settings) => {
-  const { deps, source, runtime } = setup();
-  const buildId = insertBuild(deps, source);
-  deps.db.update(schema.games).set(settings).where(eq(schema.games.id, ids.game)).run();
-  deps.registry.principalResolvers.push(async (c) =>
-    c.req.header('cookie') === 'session=owner'
-      ? {
-          kind: 'user',
-          userId: ids.user,
-          familyId: ids.family,
-          displayName: 'Owner',
-          platformRole: 'none',
-          capability: 'creator',
-        }
-      : null,
-  );
-  const release = await publish(deps, runtime, { gameId: ids.game, buildId, actor: ids.user });
-  const app = createApp(deps);
-  app.route('/', releaseRoutes);
-  const response = await app.request(`/api/v1/games/${ids.game}/published`, {
-    headers: { cookie: 'session=owner', 'if-none-match': `"${release.id}"` },
-  });
-  expect(response.status).toBe(200);
-  expect(response.headers.get('cache-control')).toBe('private, no-store');
-  const { buildUrl } = (await response.json()) as { buildUrl: string };
-  expect(buildUrl).toContain(`/d/${ids.game}/${buildId}/`);
-  const grant = new URL(buildUrl).pathname.split('/')[4]!;
-  expect(await validGrant(deps, grant, ids.game, buildId)).toBe(true);
-});
+  { visibility: 'private' as const, releaseState: 'released' as const, gate: false },
+  { visibility: 'listed' as const, releaseState: 'coming_soon' as const, gate: false },
+  { visibility: 'private' as const, releaseState: 'released' as const, gate: true },
+])(
+  'returns a session-scoped URL for a $visibility $releaseState release (gate=$gate)',
+  async ({ gate, ...settings }) => {
+    const { deps, source, runtime } = setup();
+    deps.config.artifactReleaseGate = gate;
+    const buildId = insertBuild(deps, source);
+    deps.db.update(schema.branches).set({ latestBuildId: buildId }).where(eq(schema.branches.id, ids.main)).run();
+    deps.db.update(schema.games).set(settings).where(eq(schema.games.id, ids.game)).run();
+    deps.registry.principalResolvers.push(async (c) =>
+      c.req.header('cookie') === 'session=owner'
+        ? {
+            kind: 'user',
+            userId: ids.user,
+            familyId: ids.family,
+            displayName: 'Owner',
+            platformRole: 'none',
+            capability: 'creator',
+          }
+        : null,
+    );
+    const release = await publish(deps, runtime, { gameId: ids.game, buildId, actor: ids.user });
+    const app = createApp(deps);
+    app.route('/', releaseRoutes);
+    const response = await app.request(`/api/v1/games/${ids.game}/published`, {
+      headers: { cookie: 'session=owner', 'if-none-match': `"${release.id}"` },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    const { buildUrl } = (await response.json()) as { buildUrl: string };
+    expect(buildUrl).toContain(`/d/${ids.game}/${buildId}/`);
+    const grant = new URL(buildUrl).pathname.split('/')[4]!;
+    expect(await validGrant(deps, grant, ids.game, buildId)).toBe(true);
+    deps.db.update(schema.branches).set({ latestBuildId: null }).where(eq(schema.branches.id, ids.main)).run();
+    const unavailable = await app.request(`/api/v1/games/${ids.game}/published`, {
+      headers: { cookie: 'session=owner' },
+    });
+    expect(unavailable.status).toBe(gate ? 200 : 404);
+  },
+);
 
 it('returns a revocable private release URL to an invited player', async () => {
   const { deps, source, runtime } = setup();
   const buildId = insertBuild(deps, source);
+  deps.db.update(schema.branches).set({ latestBuildId: buildId }).where(eq(schema.branches.id, ids.main)).run();
   const player = 'u_00000000-0000-4000-8000-000000000088';
   deps.db
     .insert(schema.invitations)
@@ -91,6 +103,7 @@ it('returns a revocable private release URL to an invited player', async () => {
 it('issues a private release URL tied to a real authenticated session', async () => {
   const { deps, source, runtime } = setup();
   const buildId = insertBuild(deps, source);
+  deps.db.update(schema.branches).set({ latestBuildId: buildId }).where(eq(schema.branches.id, ids.main)).run();
   const { app } = await makeApp(deps);
   const outbox = () =>
     deps.sqlite.prepare('SELECT text FROM mail_outbox ORDER BY created_at').all() as { text: string }[];

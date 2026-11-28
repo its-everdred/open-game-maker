@@ -17,6 +17,7 @@ import { CommitUnavailable, HttpCommitClient } from './commit-client.js';
 import { checkPublishRights, RightsCheckUnavailable } from './rights.js';
 import { collectBuildArtifact } from './gc.js';
 import { issueGrant } from '../artifacts/grants.js';
+import { currentPublishedBuild } from '../artifacts/published.js';
 import {
   ReleaseError,
   addChangeNote,
@@ -240,6 +241,9 @@ const routes = new Hono<ApiBindings>()
       const scoped = game.visibility !== 'listed' || game.releaseState !== 'released';
       let buildUrl = `${runtime(c).gamesOrigin.replace(/\/$/, '')}/g/${release.gameId}/${release.buildId}/`;
       if (scoped) {
+        if (currentPublishedBuild(c.get('deps'), game.id) !== release.buildId) {
+          throw new HttpError(404, 'published_build_unavailable');
+        }
         const grant = await issueGrant(
           c.get('deps'),
           game.id,
