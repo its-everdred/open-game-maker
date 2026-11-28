@@ -30,6 +30,8 @@ describe('built routes', () => {
   it('ships discoverable agent introductions alongside the built homepage', () => {
     const agentGuide = readFileSync(`${distDir}/AGENTS.md`, 'utf8');
     const discovery = readFileSync(`${distDir}/llms.txt`, 'utf8');
+    expect(agentGuide).toBe(readFileSync(fileURLToPath(new URL('../public/AGENTS.md', import.meta.url)), 'utf8'));
+    expect(discovery).toBe(readFileSync(fileURLToPath(new URL('../public/llms.txt', import.meta.url)), 'utf8'));
     expect(agentGuide).toContain('invite-only');
     expect(agentGuide).toContain('[homepage](/)');
     expect(discovery).toContain('[Agent overview](/AGENTS.md)');
