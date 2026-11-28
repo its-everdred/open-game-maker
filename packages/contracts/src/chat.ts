@@ -174,7 +174,7 @@ export const ChatAttachment = z
 
 export const BuildChatMessage = z.object({
   id: ChatMessageId,
-  job_id: Id,
+  job_id: z.union([Id, z.string().regex(/^draft:d_[0-9a-f-]{36}$/)]),
   at: IsoTime,
   actor: ChatActor,
   kind: ChatKind,
