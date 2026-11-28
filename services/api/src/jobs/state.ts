@@ -10,7 +10,7 @@ const TRANSITIONS: Record<JobState, Partial<Record<JobEvent, JobState>>> = {
   // New Game planning uses a separate worker ticket; its parent remains a non-dispatchable record.
   filed: { run: 'running', finish: 'done', fail: 'failed', cancel: 'cancelled' },
   running: { pause: 'paused_budget', finish: 'done', fail: 'failed', cancel: 'cancelled' },
-  paused_budget: { resume: 'running', fail: 'failed', cancel: 'cancelled' },
+  paused_budget: { resume: 'running', finish: 'done', fail: 'failed', cancel: 'cancelled' },
   done: {},
   failed: {},
   cancelled: {},

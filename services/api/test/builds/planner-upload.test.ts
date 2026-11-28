@@ -25,14 +25,22 @@ it('resolves a persisted child ticket for its own game before accepting a build'
       daemonForSecret: async (secret) => (secret === SECRET || secret === 'other' ? REPO : null),
       gameForSecret: async (secret) =>
         secret === SECRET ? { repo: REPO, slug: 'castle-game' } : { repo: REPO, slug: 'other-game' },
+      ticketAccess: async (token, workspace, _repo, ticket) =>
+        token === 'ticket-12' && workspace === 'workspace-12' && ticket === TICKET ? 'castle-game' : null,
     }),
   );
-  const request = (secret: string) =>
+  const request = (secret: string, token = 'ticket-12') =>
     app.request(`/internal/jobs/by-ticket/${TICKET}/build`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${secret}`, 'x-gm-sha': 'invalid' },
+      headers: {
+        authorization: `Bearer ${secret}`,
+        'x-gm-sha': 'invalid',
+        'x-ogm-preview-token': token,
+        'x-ogm-workspace': 'workspace-12',
+      },
       body: 'x',
     });
   expect((await request(SECRET)).status).toBe(400);
   expect((await request('other')).status).toBe(404);
+  expect((await request(SECRET, 'ticket-13')).status).toBe(404);
 });

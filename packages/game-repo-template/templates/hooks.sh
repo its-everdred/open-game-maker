@@ -320,12 +320,18 @@ before_remove: |
   ticket="${AIUR_HOOK_TICKET_IDENTIFIER:-}"
   secret="$(cat "${OGM_HOOK_SECRET_FILE:-/nonexistent}" 2>/dev/null || true)"
   root="$(pwd -P)"
-  if [ -n "${OGM_HOOK_SECRET_FILE:-}" ]; then
-    OGM_PREVIEW_GRANTS="$(dirname "$OGM_HOOK_SECRET_FILE")/preview-grants" node -e '
-      const fs = require("node:fs"), crypto = require("node:crypto");
-      const workspace = crypto.createHash("sha256").update(process.cwd()).digest("hex");
-      fs.rmSync(process.env.OGM_PREVIEW_GRANTS + "/" + workspace + ".json", { force: true });
-    ' || true
+  workspace_hash="$(node -p "require('node:crypto').createHash('sha256').update(process.cwd()).digest('hex')")"
+  preview_token=""
+  if [ -n "$ticket" ] && [ -n "$secret" ] && [ -n "${OGM_HOOK_SECRET_FILE:-}" ]; then
+    preview_token="$(printf %s "$secret" | OGM_PREVIEW_GAME="$(basename "$(dirname "$OGM_HOOK_SECRET_FILE")")" OGM_PREVIEW_TICKET="$ticket" OGM_PREVIEW_GRANTS="$(dirname "$OGM_HOOK_SECRET_FILE")/preview-grants" node -e '
+      const fs=require("node:fs"), c=require("node:crypto"), ticket=process.env.OGM_PREVIEW_TICKET, game=process.env.OGM_PREVIEW_GAME;
+      if(!/^[1-9]\d{0,15}$/.test(ticket)||!/^[A-Za-z0-9_-]{1,200}$/.test(game)) process.exit(1);
+      const grant=c.randomUUID(), expires=Date.now()+7200000, workspace=c.createHash("sha256").update(process.cwd()).digest("hex");
+      fs.mkdirSync(process.env.OGM_PREVIEW_GRANTS,{recursive:true,mode:0o700});
+      fs.writeFileSync(process.env.OGM_PREVIEW_GRANTS+"/"+workspace+".json",JSON.stringify({ticket,grant,game,expires}),{mode:0o600});
+      const payload=Buffer.from(JSON.stringify({ticket,grant,game,expires})).toString("base64url");
+      process.stdout.write(payload+"."+c.createHmac("sha256",fs.readFileSync(0,"utf8")).update("preview:"+payload).digest("base64url"));
+    ' || true)"
   fi
   # Build what the workspace holds now; a stale dist/ from an earlier run never leaves it.
   if [ -n "$ticket" ] && [ -n "$secret" ]; then
@@ -343,9 +349,12 @@ before_remove: |
     done
     if tar --format=ustar -czf "$stage.tgz" -C "$stage" .; then
       status="$(curl -sS --max-time 120 --retry 3 --retry-connrefused -o /dev/null -w '%{http_code}' -X POST \
-        -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $(git rev-parse HEAD)" -H "content-type: application/gzip" \
+        -H "Authorization: Bearer ${secret}" -H "X-OGM-Preview-Token: ${preview_token}" -H "X-OGM-Workspace: ${workspace_hash}" -H "x-gm-sha: $(git rev-parse HEAD)" -H "content-type: application/gzip" \
         --data-binary @"$stage.tgz" "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/build")"
       echo "build upload: HTTP ${status:-000}" >&2
     fi
     rm -rf "$stage" "$stage.tgz"
+  fi
+  if [ -n "${OGM_HOOK_SECRET_FILE:-}" ]; then
+    OGM_PREVIEW_GRANTS="$(dirname "$OGM_HOOK_SECRET_FILE")/preview-grants" OGM_WORKSPACE_HASH="$workspace_hash" node -e 'require("node:fs").rmSync(process.env.OGM_PREVIEW_GRANTS+"/"+process.env.OGM_WORKSPACE_HASH+".json",{force:true})' || true
   fi

@@ -25,7 +25,7 @@ export type HookDaemonResolver = (secret: string, deps: AppDeps) => Promise<stri
 export type HookGameResolver = (secret: string, deps: AppDeps) => Promise<{ repo: string; slug: string } | null>;
 export type HookIdentityResolver = HookGameResolver;
 export type SkillTarball = { version: string; tgz: Buffer };
-type TicketAccess = (
+export type TicketAccess = (
   token: string,
   workspaceHash: string,
   repo: string,

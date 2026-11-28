@@ -6,11 +6,15 @@ import { join } from 'node:path';
 import { env } from 'node:process';
 
 import { serve } from '@hono/node-server';
+import { schema } from '@ogm/db';
 import { renderDaemonFiles } from '@ogm/game-repo-template';
 import { describe, expect, it } from 'vitest';
 
 import { publishStaged } from '../../src/builds/publish.js';
-import { builtFiles, completeRun, gamesHost, ids, jobState, SECRET, TICKET, world } from './fixtures.js';
+import { createApp } from '../../src/app/app.js';
+import { buildRoutes } from '../../src/builds/routes.js';
+import { managedTicketAccess } from '../../src/internal/bundle.js';
+import { builtFiles, completeRun, gamesHost, ids, jobState, REPO, SECRET, TICKET, world } from './fixtures.js';
 
 // aiur daemons run hooks with plain git; drop an agent workspace's git guard from PATH.
 const HOOK_PATH = (env.PATH ?? '')
@@ -81,6 +85,52 @@ async function serveApi(app: ReturnType<typeof world>['app']) {
 }
 
 describe('before_remove hook to a playable build', () => {
+  it('authorizes the upload with its real ticket grant and removes it afterwards', async () => {
+    const { deps } = world();
+    const home = mkdtempSync(join(tmpdir(), 'ogm-grant-home-'));
+    const daemonDir = join(home, '.config/ogm/daemons/castle-game');
+    mkdirSync(daemonDir, { recursive: true });
+    const secretFile = join(daemonDir, 'hook-secret');
+    writeFileSync(secretFile, SECRET);
+    deps.db
+      .insert(schema.gameDaemons)
+      .values({
+        slug: 'castle-game',
+        repo: REPO,
+        checkoutPath: '/fixture',
+        unit: 'fixture',
+        envFile: '/fixture',
+        port: 4101,
+        status: 'running',
+        createdAt: '2026-11-01T00:00:00Z',
+      })
+      .run();
+    const access = managedTicketAccess(home);
+    let captured: [string, string, string, string] | undefined;
+    const app = createApp(deps);
+    app.route(
+      '/internal',
+      buildRoutes({
+        daemonForSecret: async (secret) => (secret === SECRET ? REPO : null),
+        gameForSecret: async () => ({ repo: REPO, slug: 'castle-game' }),
+        ticketAccess: async (token, hash, repo, ticket, requestDeps) => {
+          captured = [token, hash, repo, ticket];
+          return access(token, hash, repo, ticket, requestDeps);
+        },
+      }),
+    );
+    const api = await serveApi(app);
+    const { dir } = workspace();
+    try {
+      const hook = await runHook(dir, api.base, { OGM_HOOK_SECRET_FILE: secretFile });
+      expect(hook.stderr).toContain('build upload: HTTP 202');
+      expect(captured).toBeDefined();
+      expect(await access(...captured!, deps)).toBeNull();
+    } finally {
+      await api.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it('uploads the merged workspace build, which the API publishes and the games host serves', async () => {
     const { deps, app } = world();
     const api = await serveApi(app);

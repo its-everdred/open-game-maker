@@ -11,7 +11,14 @@ import {
 import { bodyLimit } from 'hono/body-limit';
 
 import type { ApiBindings } from '../app/types.js';
-import { hookSecretFiles, hookSecretGame, type HookDaemonResolver, type HookGameResolver } from '../internal/bundle.js';
+import {
+  hookSecretFiles,
+  hookSecretGame,
+  managedTicketAccess,
+  type HookDaemonResolver,
+  type HookGameResolver,
+  type TicketAccess,
+} from '../internal/bundle.js';
 import { ticketJobResolver } from '../internal/ticket-job.js';
 import { findGameBySlugOrId } from '../games/slug.js';
 import { createPreview, listEditorPreviews, submitReviewRound } from '../previews/store.js';
@@ -34,6 +41,7 @@ const SHA = /^[0-9a-f]{40}$/u;
 export function buildRoutes(opts: {
   daemonForSecret: HookDaemonResolver;
   gameForSecret?: HookGameResolver;
+  ticketAccess?: TicketAccess;
   trackFor?: (checkout: string, gamePath: string, sha: string, track: string) => Promise<ReviewTrack>;
   authorizedAudio?: ReadonlySet<string>;
   publishLog?: typeof logReviewPublish;
@@ -58,6 +66,17 @@ export function buildRoutes(opts: {
       const identity = await opts.gameForSecret(bearer![1]!, deps);
       const game = identity ? findGameBySlugOrId(deps.db, identity.slug) : null;
       if (!identity || identity.repo.toLowerCase() !== repo.toLowerCase() || game?.id !== job.gameId)
+        return c.json({ error: { code: 'not_found' } }, 404);
+    }
+    if (opts.ticketAccess) {
+      const slug = await opts.ticketAccess(
+        c.req.header('x-ogm-preview-token') ?? '',
+        c.req.header('x-ogm-workspace') ?? '',
+        repo,
+        c.req.param('identifier') ?? '',
+        deps,
+      );
+      if (!slug || findGameBySlugOrId(deps.db, slug)?.id !== job.gameId)
         return c.json({ error: { code: 'not_found' } }, 404);
     }
     if (!awaitsBuild(deps, job.jobId) || isPublishing(job.jobId)) {
@@ -279,4 +298,8 @@ export function buildRoutes(opts: {
     });
 }
 
-export default buildRoutes({ daemonForSecret: hookSecretFiles(homedir()), gameForSecret: hookSecretGame(homedir()) });
+export default buildRoutes({
+  daemonForSecret: hookSecretFiles(homedir()),
+  gameForSecret: hookSecretGame(homedir()),
+  ticketAccess: managedTicketAccess(homedir()),
+});

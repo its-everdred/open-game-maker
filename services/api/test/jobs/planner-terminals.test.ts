@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { expect, it, vi } from 'vitest';
 
 import { createPlannerTerminals } from '../../src/jobs/planner-terminals.js';
+import { finishRun } from '../../src/builds/publish.js';
 import { insertJob, worked } from '../budget/fixture.js';
 
 it('serializes cancellation with child dispatch and replays a persisted terminal projection', async () => {
@@ -46,5 +47,38 @@ it('serializes cancellation with child dispatch and replays a persisted terminal
     .run();
   await terminal.reconcile();
   expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_parent')).get()?.state).toBe('cancelled');
+  deps.sqlite.close();
+});
+
+it('reconciles a completed planner that paused while finishing', async () => {
+  const deps = worked();
+  insertJob(deps, { id: 'j_paused', kind: 'new_game', state: 'paused_budget' });
+  deps.db
+    .insert(schema.jobTickets)
+    .values({
+      jobId: 'j_paused',
+      key: 'new-game-plan',
+      issueNumber: 42,
+      repo: 'owner/game',
+      sig: 'planner',
+    })
+    .run();
+  deps.db
+    .insert(schema.jobProjections)
+    .values({
+      jobId: 'j_paused',
+      daemonSlug: 'game',
+      ticket: '42',
+      stage: 'working',
+      stageText: 'Working',
+      lifecycle: 'completed',
+      updatedAt: new Date().toISOString(),
+    })
+    .run();
+  const log = vi.fn();
+  const terminal = createPlannerTerminals(deps.db, (id, state) => finishRun(deps, id, state), log);
+  await terminal.reconcile();
+  expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_paused')).get()?.state).toBe('done');
+  expect(log).not.toHaveBeenCalled();
   deps.sqlite.close();
 });
