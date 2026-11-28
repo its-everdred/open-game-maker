@@ -75,6 +75,7 @@ export function feedCards(name: string, lines: string, stage: (path: string) => 
         view_only?: boolean;
         at?: string;
         play?: string;
+        preview_url?: string;
         link?: string;
         price?: string;
         licence?: string;
@@ -88,7 +89,8 @@ export function feedCards(name: string, lines: string, stage: (path: string) => 
         (item): item is Media => !!item,
       );
       const shared = [...new Map(items.map((item) => [item.src, item])).values()];
-      if (!shared.length && name !== 'humble') return [];
+      const play = entry.preview_url ?? entry.play;
+      if (!shared.length && name !== 'humble' && !play?.startsWith('https://')) return [];
       const labels = entry.view_only ? [] : entry.options?.length ? entry.options : ['Like', 'Dislike'];
       return [
         {
@@ -102,7 +104,8 @@ export function feedCards(name: string, lines: string, stage: (path: string) => 
           at: entry.at ?? '',
           mode: 'review' as const,
           shared,
-          ...(entry.play?.startsWith('https://') ? { play: entry.play } : {}),
+          ...(play?.startsWith('https://') ? { play } : {}),
+          ...(entry.preview_url?.startsWith('https://') ? { playSource: 'preview' as const } : {}),
           ...(entry.link?.startsWith('https://') ? { link: entry.link } : {}),
           ...(name === 'humble' ? { top: 1, big: 1 } : {}),
           take: [entry.price, entry.licence, entry.notes].filter(Boolean).join(' · '),

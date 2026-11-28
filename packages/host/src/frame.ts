@@ -29,6 +29,8 @@ export interface GameFrameOptions {
   buildId: string;
   /** A scoped preview capability, served outside the published-build service worker scope. */
   preview?: boolean;
+  live?: boolean;
+  liveVersion?: string;
   /** Revocable owner access to a draft build. */
   draftGrant?: string;
   build: 'draft' | 'test' | 'published';
@@ -81,6 +83,7 @@ export class HostError extends Error {
 }
 
 export function createGameFrame(options: GameFrameOptions): GameFrame {
+  const isPreview = !!(options.preview || options.live || options.draftGrant);
   let gamesOrigin: URL;
   let appOrigin: URL;
   try {
@@ -100,16 +103,20 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   iframe.title = 'Game';
   iframe.setAttribute(
     'sandbox',
-    options.preview || options.draftGrant
-      ? 'allow-scripts allow-pointer-lock'
-      : 'allow-scripts allow-same-origin allow-pointer-lock',
+    isPreview ? 'allow-scripts allow-pointer-lock' : 'allow-scripts allow-same-origin allow-pointer-lock',
   );
   iframe.setAttribute('allow', 'autoplay; fullscreen; gamepad');
   iframe.setAttribute('referrerpolicy', 'origin');
   Object.assign(iframe.style, { border: '0', width: '100%', height: '100%', display: 'block' });
+  const prefix = options.live ? 'l' : isPreview ? 'p' : 'g';
+  const suffix = options.live
+    ? options.liveVersion
+      ? `${encodeURIComponent(options.liveVersion)}/index.html`
+      : ''
+    : 'index.html';
   const path = options.draftGrant
     ? `/d/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/${encodeURIComponent(options.draftGrant)}/index.html`
-    : `/${options.preview ? 'p' : 'g'}/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/index.html`;
+    : `/${prefix}/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/${suffix}`;
   const source = new URL(path, gamesOrigin.origin);
   /* The host's own parameters are set after, so a scenario can never change the build or the protocol. */
   for (const [key, value] of Object.entries(options.params ?? {})) source.searchParams.set(key, value);
@@ -127,7 +134,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     if (
       !iframe.contentWindow ||
       event.source !== iframe.contentWindow ||
-      event.origin !== (options.preview || options.draftGrant ? 'null' : gamesOrigin.origin)
+      event.origin !== (isPreview ? 'null' : gamesOrigin.origin)
     )
       return;
     if (typeof event.data !== 'object' || event.data === null || event.data.type !== 'ogm.frame.ready.v2') return;
@@ -156,7 +163,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   const bridge = new HostBridge({
     iframe,
     origin: gamesOrigin.origin,
-    ...(options.preview || options.draftGrant ? { opaqueOrigin: true } : {}),
+    ...(isPreview ? { opaqueOrigin: true } : {}),
     role: options.role,
     readyTimeoutMs: options.readyTimeoutMs,
     onFatal: dispose,
@@ -170,7 +177,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
       tier: options.tier,
     },
   });
-  if (options.preview || options.draftGrant) {
+  if (isPreview) {
     let loaded = false;
     iframe.addEventListener('load', () => {
       if (!loaded) {

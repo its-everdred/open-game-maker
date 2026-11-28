@@ -18,15 +18,28 @@ it('resolves a persisted child ticket for its own game before accepting a build'
     .insert(schema.jobTickets)
     .values({ jobId: ids.job, key: 'child', issueNumber: Number(TICKET), repo: REPO, sig: 'test' })
     .run();
+  deps.db
+    .insert(schema.gameDaemons)
+    .values({
+      slug: 'shared-daemon',
+      repo: REPO,
+      checkoutPath: '/fixture',
+      unit: 'fixture',
+      envFile: '/fixture',
+      port: 4101,
+      status: 'running',
+      createdAt: '2026-11-01T00:00:00Z',
+    })
+    .run();
   const app = createApp(deps);
   app.route(
     '/internal',
     buildRoutes({
       daemonForSecret: async (secret) => (secret === SECRET || secret === 'other' ? REPO : null),
       gameForSecret: async (secret) =>
-        secret === SECRET ? { repo: REPO, slug: 'castle-game' } : { repo: REPO, slug: 'other-game' },
+        secret === SECRET ? { repo: REPO, slug: 'shared-daemon' } : { repo: REPO, slug: 'other-game' },
       ticketAccess: async (token, workspace, _repo, ticket) =>
-        token === 'ticket-12' && workspace === 'workspace-12' && ticket === TICKET ? 'castle-game' : null,
+        token === 'ticket-12' && workspace === 'workspace-12' && ticket === TICKET ? 'shared-daemon' : null,
     }),
   );
   const request = (secret: string, token = 'ticket-12') =>

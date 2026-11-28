@@ -103,6 +103,8 @@ export type MountGameFrameOptions = {
   gameId: string;
   buildId: string;
   preview?: boolean;
+  live?: boolean;
+  liveVersion?: string;
   /** The embedding surface renders and handles the shared Back button. */
   hostBack?: boolean;
   draftGrant?: string;
@@ -246,7 +248,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   const observeOrigin = (event: MessageEvent) => {
     if (event.origin === trustedOrigin) return;
     if (
-      (options.preview || options.draftGrant) &&
+      (options.preview || options.live || options.draftGrant) &&
       event.origin === 'null' &&
       event.source === options.container.querySelector('iframe')?.contentWindow
     )
@@ -264,7 +266,10 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       gameId: options.gameId,
       buildId: options.buildId,
       ...(options.preview ? { preview: true } : {}),
+      ...(options.live ? { live: true } : {}),
+      ...(options.liveVersion ? { liveVersion: options.liveVersion } : {}),
       ...(options.draftGrant ? { draftGrant: options.draftGrant } : {}),
+
       build: options.build ?? 'draft',
       ...(options.params === undefined ? {} : { params: options.params }),
       mode: options.mode,

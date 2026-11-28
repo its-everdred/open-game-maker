@@ -9,6 +9,7 @@ import { parseBody } from '../app/validate.js';
 import type { ApiBindings } from '../app/types.js';
 import { authorizedGame } from '../games/authorize.js';
 import { requirePrincipal } from '../app/principal.js';
+import { issueLiveAccess } from './live.js';
 import { bindPreview, hasCreatorMembership } from '../artifacts/grants.js';
 import { latestRoundForTicket, roundForBuild } from '../review-rounds/store.js';
 import {
@@ -56,6 +57,20 @@ function bindPreviews<T extends { accessId: string }>(
 }
 
 export default new Hono<ApiBindings>()
+  .get('/games/:gameId/live/:ticket', async (c) => {
+    const game = authorizedGame(c, 'game.edit');
+    c.header('Cache-Control', 'no-store');
+    const principal = requirePrincipal(c, ['user']);
+    if (
+      principal.userId !== game.ownerId ||
+      principal.capability !== 'creator' ||
+      !hasCreatorMembership(c.get('deps'), game.familyId, principal.userId)
+    )
+      throw new HttpError(404, 'live_preview_not_found');
+    const live = await issueLiveAccess(c.get('deps'), game, c.req.param('ticket'));
+    const accessId = bindPreview(c.get('deps'), game.id, live.accessId, principal.userId, c.req.raw.headers);
+    return c.json({ gameId: game.id, ...live, accessId });
+  })
   .get('/games/:gameId/editor/preview-history', async (c) => {
     const game = authorizedGame(c, 'game.edit');
     const previews = await listPreviewHistory(c.get('deps'), game.id);

@@ -11,6 +11,7 @@ import { gameHeaders, healthHeaders } from './headers.js';
 import { FRAME_OBSERVER, FRAME_OBSERVER_FILE, observeFrameHtml } from './frame-observer.js';
 import { BadBlobName, BadId, blobPath, buildDir, isComplete, resolveFile } from './layout.js';
 import { isCompressiblePath, mimeForPath } from './mime.js';
+import { liveAsset, liveEntry } from './live-route.js';
 import { bootstrapPreviewHtml, PREVIEW_BOOTSTRAP, PREVIEW_BOOTSTRAP_FILE } from './preview-bootstrap.js';
 import { artifactBlobIndex } from './blob-index.js';
 import { rewriteRootReferences } from './root-references.js';
@@ -42,13 +43,13 @@ export function createApp(options: GamesHostOptions): Hono {
     for (const [name, value] of gameHeaderEntries) {
       context.res.headers.set(name, value);
     }
-    if (/^\/(?:p|d)\//u.test(new URL(context.req.url).pathname)) {
+    if (/^\/(?:p|d|l)\//u.test(new URL(context.req.url).pathname)) {
       context.res.headers.set('Access-Control-Allow-Origin', '*');
       const policy = context.res.headers.get('Content-Security-Policy');
       if (policy)
         context.res.headers.set('Content-Security-Policy', `${policy}; sandbox allow-scripts allow-pointer-lock`);
     }
-    if (context.res.status !== 200 || /^(?:\/p\/|\/d\/|\/g\/|\/a\/)/u.test(new URL(context.req.url).pathname)) {
+    if (context.res.status !== 200 || /^(?:\/p\/|\/d\/|\/l\/|\/g\/|\/a\/)/u.test(new URL(context.req.url).pathname)) {
       context.res.headers.set('Cache-Control', 'no-store');
     } else if (new URL(context.req.url).pathname === '/game-cache.js') {
       context.res.headers.set('Cache-Control', 'no-cache');
@@ -57,6 +58,7 @@ export function createApp(options: GamesHostOptions): Hono {
   };
   app.use('/g/*', secureResponse);
   app.use('/p/*', secureResponse);
+  app.use('/l/*', secureResponse);
   app.use('/d/*', secureResponse);
   app.use('/a/*', secureResponse);
   app.use('/game-cache.js', secureResponse);
@@ -245,6 +247,9 @@ export function createApp(options: GamesHostOptions): Hono {
   app.on(['GET', 'HEAD'], '/g/:gameId/:buildId/*', serveGame);
   app.on(['GET', 'HEAD'], '/d/:gameId/:buildId/:grant/*', serveGame);
   app.on(['GET', 'HEAD'], '/p/:gameId/:buildId/*', serveGame);
+  app.on(['GET', 'HEAD'], '/l/:gameId/:accessId', liveEntry(options.root, options.resolvePreview));
+  app.on(['GET', 'HEAD'], '/l/:gameId/:accessId/', liveEntry(options.root, options.resolvePreview));
+  app.on(['GET', 'HEAD'], '/l/:gameId/:accessId/:version/*', liveAsset(options.root, options.resolvePreview));
   app.on(['GET', 'HEAD'], '/a/:file', serveBlob);
   app.on(['GET', 'HEAD'], '/game-cache.js', (context) =>
     serveFile(context, options.workerScript, { 'Service-Worker-Allowed': '/g/' }),

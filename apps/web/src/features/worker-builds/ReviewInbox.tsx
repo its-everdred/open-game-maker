@@ -114,6 +114,7 @@ export function ReviewInbox({
     ...pendingReviews.flatMap((review) =>
       review.kind === 'round' &&
       review.round.track !== 'prototype-publish' &&
+      review.round.buildId !== `live-${review.round.id}` &&
       ((!review.round.media.some((item) => item.role !== 'target') && !review.round.buildId) ||
         Boolean(review.round.buildId))
         ? [
@@ -450,6 +451,7 @@ export function ReviewInbox({
             />
             {current.round.buildId &&
               current.round.track !== 'prototype-publish' &&
+              current.round.buildId !== `live-${current.round.id}` &&
               missingStatus(
                 `/games/${encodeURIComponent(current.gameId)}/review-rounds/${encodeURIComponent(current.round.id)}/missing-media?kind=build`,
               )}

@@ -34,6 +34,8 @@ export interface Card {
   rows?: { label: string; cells: (Option & { orig: boolean })[] }[];
   link?: string;
   play?: string;
+  /** Internal precedence marker, removed before cards are published. */
+  playSource?: 'preview';
   take?: string;
   top?: number;
   big?: number;

@@ -17,13 +17,13 @@ import {
   affectedSaves,
   type Changelog,
   preparePublish,
-  releaseVersion,
   requireGameBranch,
   requireMainBuild,
   requireRollbackTarget,
 } from './preview.js';
 import { withPublishLock } from './publish-lock.js';
 import type { RightsReason } from './rights.js';
+import { reserveReleaseVersion } from './tag-reservations.js';
 
 type BuildRow = typeof schema.builds.$inferSelect;
 type ReleaseRow = typeof schema.releases.$inferSelect;
@@ -230,16 +230,34 @@ function appendRelease(
     noteIds?: string[];
     // The game's folder name under games/, so tags read `<slug>/v<version>` and never collide across games.
     slug: string;
+    requireListed?: boolean;
+    requireLatestBuild?: boolean;
+    activeJobId?: string;
   },
 ): ReleaseRow {
   return deps.sqlite
     .transaction(() => {
       const current = deps.sqlite
-        .prepare<[string], { published_release_id: string | null }>(
-          'SELECT published_release_id FROM games WHERE id = ?',
+        .prepare<[string], { published_release_id: string | null; visibility: string }>(
+          'SELECT published_release_id, visibility FROM games WHERE id = ?',
         )
         .get(input.gameId);
       if (!current || current.published_release_id !== input.expected) throw new ReleaseError('pointer_moved', 409);
+      if (input.requireListed && current.visibility !== 'listed') throw new ReleaseError('game_unpublished', 409);
+      if (input.requireLatestBuild) {
+        const branch = deps.sqlite
+          .prepare<[string], { latest_build_id: string | null }>(
+            "SELECT latest_build_id FROM branches WHERE game_id = ? AND name = 'main'",
+          )
+          .get(input.gameId);
+        if (branch?.latest_build_id !== input.buildId) throw new ReleaseError('build_superseded', 409);
+      }
+      if (input.activeJobId) {
+        const job = deps.sqlite
+          .prepare<[string, string], { state: string }>('SELECT state FROM jobs WHERE id = ? AND game_id = ?')
+          .get(input.activeJobId, input.gameId);
+        if (!job || ['done', 'failed', 'cancelled'].includes(job.state)) throw new ReleaseError('job_not_active', 409);
+      }
       const seq =
         (deps.sqlite
           .prepare<[string], { seq: number | null }>('SELECT MAX(seq) AS seq FROM releases WHERE game_id = ?')
@@ -297,9 +315,17 @@ async function requireGameplayCompliant(deps: AppDeps, artifactPath: string): Pr
 export async function publish(
   deps: AppDeps,
   runtime: ReleaseRuntime,
-  input: { gameId: string; buildId: string; actor: string; changelog?: Changelog },
+  input: {
+    gameId: string;
+    buildId: string;
+    actor: string;
+    changelog?: Changelog;
+    requireListed?: boolean;
+    activeJobId?: string;
+  },
 ): Promise<Release> {
   const { build, game } = requireMainBuild(deps, input.gameId, input.buildId);
+  if (input.requireListed && game.visibility !== 'listed') throw new ReleaseError('game_unpublished', 409);
   let directory: string;
   try {
     directory = buildDir(deps.config.gamesRoot, build.gameId, build.id);
@@ -336,7 +362,8 @@ export async function publish(
     if (!current || current.publishedReleaseId !== expected) throw new ReleaseError('pointer_moved', 409);
 
     const snapshot = await prepareSnapshot(deps, runtime, build);
-    const { version, prepared } = await preparePublish(deps, runtime, input.gameId, input.changelog);
+    const { prepared } = await preparePublish(deps, runtime, input.gameId, input.changelog);
+    const version = reserveReleaseVersion(deps, runtime, input.gameId);
     const result = await runtime.commit.execute({
       kind: 'release',
       gameId: input.gameId,
@@ -357,6 +384,9 @@ export async function publish(
         noteIds: prepared.noteIds,
         actor: input.actor,
         slug: releaseSlug(game),
+        ...(input.requireListed ? { requireListed: true } : {}),
+        ...(input.requireListed ? { requireLatestBuild: true } : {}),
+        ...(input.activeJobId ? { activeJobId: input.activeJobId } : {}),
       }),
     );
   });
@@ -383,7 +413,6 @@ export async function rollback(
     if (!current || current.publishedReleaseId !== expected) throw new ReleaseError('pointer_moved', 409);
 
     const saves = await affectedSaves(runtime, input.gameId, build);
-    const version = await releaseVersion(deps, runtime, input.gameId);
     const changelog = { summary: `Restores ${target.version}`, items: [] };
     /* Restoring rewrites only this game's folder on main; the tag then points at the commit that did it. */
     const restored = await runtime.commit.execute({
@@ -392,6 +421,7 @@ export async function rollback(
       sha: foldSha,
     });
     if (!restored.ok) throw new ReleaseError('gate_refused', 403, { verdict: restored.verdict });
+    const version = reserveReleaseVersion(deps, runtime, input.gameId);
     const result = await runtime.commit.execute({
       kind: 'release',
       gameId: input.gameId,

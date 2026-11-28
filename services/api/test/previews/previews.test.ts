@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import previewRoutes from '../../src/previews/routes.js';
 import roundRoutes from '../../src/review-rounds/routes.js';
 import { answerPreview, previewDirectory } from '../../src/previews/store.js';
-import { getRound, postRound } from '../../src/review-rounds/store.js';
+import { getRound, postRound, submitRound } from '../../src/review-rounds/store.js';
 import { createReviewSync } from '../../src/review-rounds/runner.js';
 import type { AiurClient } from '@ogm/aiur-client';
 import { scanPreviewRelay } from '../../src/previews/relay.js';
@@ -30,7 +30,7 @@ import { builtFiles, ids, REPO, SECRET, SHA, world } from '../builds/fixtures.js
 
 const archive = () => execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', builtFiles(), '.']);
 
-function setup() {
+function setup(authorizedLive = false) {
   const { deps } = world();
   deps.registry.principalResolvers.push(async (c) =>
     c.req.header('cookie') === 'session=test'
@@ -59,6 +59,13 @@ function setup() {
         ],
       }),
       publishLog,
+      authorizedLive,
+      ...(authorizedLive
+        ? {
+            submitReview: async (context, gameId, value, effort, audioVerified) =>
+              submitRound(context.db, gameId, value, effort, audioVerified),
+          }
+        : {}),
     }),
   );
   const [owner, repo] = REPO.split('/');
@@ -651,6 +658,54 @@ describe('review round previews', () => {
       }),
     });
     expect(response.status).toBe(422);
+    const id = 'd9428888-122b-4b0e-b1c8-9f7900000003';
+    const unscoped = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        track: 'game',
+        phase: 'concept',
+        category: 'gameplay',
+        ticket: '12',
+        sha: SHA,
+        media: [{ kind: 'build', ref: `live-${id}`, scenario: 'yard' }],
+        question: 'Is it fun?',
+      }),
+    });
+    expect(unscoped.status).toBe(422);
+  });
+  it('accepts an authorized live round and exposes its scenario for review', async () => {
+    const { app, deps } = setup(true);
+    enableTracks(deps);
+    const id = 'd9428888-122b-4b0e-b1c8-9f7900000002';
+    const response = await app.request('http://example.test/internal/games/castle-game/review-rounds', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        track: 'game',
+        phase: 'concept',
+        category: 'gameplay',
+        ticket: '12',
+        sha: SHA,
+        media: [{ kind: 'build', ref: `live-${id}`, scenario: 'yard' }],
+        question: 'Is it fun?',
+      }),
+    });
+    expect(response.status).toBe(201);
+    const list = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds?includeGameplay=1`, {
+      headers: asUser(ids.user),
+    });
+    expect(await list.json()).toMatchObject({
+      rounds: [{ buildId: `live-${id}`, playUrl: expect.stringContaining('/live/castle-game/12?scenario=yard') }],
+    });
+    const answer = await app.request(`http://example.test/api/v1/games/${ids.game}/review-rounds/${id}/answer`, {
+      method: 'POST',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ verdict: 'approved' }),
+    });
+    expect(answer.status).toBe(200);
   });
   it('records a verdict against the posted build and retains the prior build', async () => {
     const { deps, app, upload, answer, message, publishLog } = setup();
@@ -707,6 +762,10 @@ describe('review round previews', () => {
 });
 
 describe('preview builds', () => {
+  it('requires a signed-in user before issuing live access', async () => {
+    const { app } = setup();
+    expect((await app.request(`http://example.test/api/v1/games/${ids.game}/live/12`)).status).toBe(401);
+  });
   it('rejects closed tickets and changed game labels', async () => {
     let state = 'open';
     let label = 'game:castle-game';

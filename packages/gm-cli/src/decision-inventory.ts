@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-import { DecisionInventory, type CreatorDecision, type DecisionInventory as Inventory } from '@ogm/contracts';
+import { CreatorDecision, DecisionInventory, type DecisionInventory as Inventory } from '@ogm/contracts';
 
 import { CommandError } from './command.js';
 import { gameDir, workspaceRoot } from './outbox.js';
@@ -18,6 +18,13 @@ export function inventoryFile(root: string, slug: string): string {
 }
 
 export function readInventory(file: string): Inventory {
+  const value = readInventoryJson(file);
+  const parsed = DecisionInventory.safeParse(value);
+  if (!parsed.success) throw new CommandError(`invalid decision inventory: ${parsed.error.message}`);
+  return parsed.data;
+}
+
+function readInventoryJson(file: string): unknown {
   if (!existsSync(file)) throw new CommandError(`decision inventory missing: ${file}`);
   let value: unknown;
   try {
@@ -25,9 +32,32 @@ export function readInventory(file: string): Inventory {
   } catch (error) {
     throw new CommandError(`cannot read decision inventory: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const parsed = DecisionInventory.safeParse(value);
-  if (!parsed.success) throw new CommandError(`invalid decision inventory: ${parsed.error.message}`);
-  return parsed.data;
+  return value;
+}
+
+export function readRenderableInventory(file: string, warn: (message: string) => void): Inventory {
+  const value = readInventoryJson(file);
+  if (!Array.isArray(value)) throw new CommandError('invalid decision inventory: expected an array');
+  const entries: Inventory = [];
+  const seen = new Set<string>();
+  value.forEach((entry: unknown, index) => {
+    const id =
+      typeof entry === 'object' && entry !== null && 'id' in entry && typeof entry.id === 'string'
+        ? entry.id
+        : `index ${index}`;
+    const parsed = CreatorDecision.safeParse(entry);
+    if (!parsed.success) {
+      warn(
+        `invalid decision ${id}: ${parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')}`,
+      );
+    } else if (seen.has(parsed.data.id)) {
+      warn(`invalid decision ${id}: duplicate id`);
+    } else {
+      seen.add(parsed.data.id);
+      entries.push(parsed.data);
+    }
+  });
+  return entries;
 }
 
 export function writeInventory(file: string, inventory: Inventory): void {
@@ -36,23 +66,33 @@ export function writeInventory(file: string, inventory: Inventory): void {
   writeFileSync(file, `${JSON.stringify(checked, null, 2)}\n`);
 }
 
+function tableCell(value: string): string {
+  return value.replaceAll('|', '\\|').replace(/\r?\n/g, '<br>');
+}
+
 export function renderInventory(inventory: Inventory): string {
   const areas = new Map<string, CreatorDecision[]>();
   for (const decision of inventory) areas.set(decision.area, [...(areas.get(decision.area) ?? []), decision]);
   const lines = ['# Creator decisions', ''];
   for (const [area, decisions] of [...areas].sort(([a], [b]) => a.localeCompare(b))) {
     lines.push(`## ${area}`, '');
-    if (lines.at(-1) !== '| ID | Question | Options | Recommendation | Status | Answer | Ticket |')
+    if (
+      lines.at(-1) !==
+      '| ID | Question | Why | Options | Recommendation | Sources | Status | Answer | Answered | Ticket |'
+    )
       lines.push(
-        '| ID | Question | Options | Recommendation | Status | Answer | Ticket |',
-        '| --- | --- | --- | --- | --- | --- | --- |',
+        '| ID | Question | Why | Options | Recommendation | Sources | Status | Answer | Answered | Ticket |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
       );
     for (const decision of decisions) {
       const options = decision.options
-        .map((option) => `${option.label}${option.media ? ` (${option.media})` : ` (needs ${option.media_needed})`}`)
+        .map((option) =>
+          tableCell(`${option.label}${option.media ? ` (${option.media})` : ` (needs ${option.media_needed})`}`),
+        )
         .join('<br>');
+      const recommendation = `${decision.recommendation}${typeof decision.recommendation_reason === 'string' ? `: ${decision.recommendation_reason}` : ''}`;
       lines.push(
-        `| ${decision.id} | ${decision.question} | ${options} | ${decision.recommendation} | ${decision.status} | ${decision.answer ?? ''} | ${decision.ticket ?? ''} |`,
+        `| ${tableCell(decision.id)} | ${tableCell(decision.question)} | ${tableCell(decision.why)} | ${options} | ${tableCell(recommendation)} | ${decision.sources.map(tableCell).join('<br>')} | ${decision.status} | ${tableCell(decision.answer ?? '')} | ${decision.answered_at ?? ''} | ${decision.ticket ?? ''} |`,
       );
     }
     lines.push('');
