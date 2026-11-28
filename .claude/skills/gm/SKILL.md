@@ -57,6 +57,7 @@ Only aiur main runs on the NUC: fixes reach us by ticket → branch → PR → m
 - Titles are plain words, never bare ticket numbers.
 
 ## Host steps and protection
+- **Use the design's code, never re-draw it** (Kevin 11-27: "can't they just use the code?"). UI work imports prototypes/ogm-glass CSS, tokens and markup; raw hex or rgba in app CSS is a defect to send back.
 - **Approved designs are replicated exactly** (Kevin 2026-11-26: "i care about replicating even the smallest details"). A redesign PR needs the `gm design parity` report (#1449): artboard renders vs app screenshots, strict thresholds, token/component lint. Reject any visible deviation in the side-by-side even when the score passes.
 - **Core auto-merge sweep** (`executor/automerge.sh`, every 3 min) merges green aiur/* core PRs, except pc:* tickets (the PC merges those) and PRs labelled `hold-for-look`. Label any visual PR before Kevin's card (11-27: it merged the churchyard before his look).
 - **Visual looks:** `executor/host-steps.done` (`judged:<pr>@<sha>`) / `host-steps.looked-back` (`rejected:…`). Look at the stills first.
