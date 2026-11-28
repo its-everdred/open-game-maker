@@ -128,8 +128,50 @@ describe('gm plan check', () => {
     expect(JSON.parse(unassigned.out[0]!).inventoryProblems).toContain(
       'decision enemy-style is not listed on a game:blobs ticket',
     );
+    const bounded = await gm(
+      ['plan', 'check', '--tickets', 'issues.json', '--game', 'blobs', '--first-playable', '--json'],
+      { cwd: base },
+    );
+    expect(bounded.code).toBe(0);
+    expect(JSON.parse(bounded.out[0]!).inventoryProblems).toEqual([]);
+    writeFileSync(
+      ticketsFile,
+      JSON.stringify([
+        { number: 20, body: '## Creator decisions\n- None', labels: ['game:blobs', 'role:qa'] },
+        { number: 21, body: '## Creator decisions\n- None', labels: ['game:blobs', 'role:qa'] },
+        {
+          number: 22,
+          body: '<!-- gm-job:j_1 gm-ticket:new-game-plan gm-sig:x -->\n## Creator decisions\n- None',
+          labels: ['game:blobs', 'role:qa'],
+        },
+      ]),
+    );
+    const over = await gm(
+      [
+        'plan',
+        'check',
+        '--tickets',
+        'issues.json',
+        '--game',
+        'blobs',
+        '--first-playable',
+        '--max-tickets',
+        '1',
+        '--json',
+      ],
+      { cwd: base },
+    );
+    expect(over.code).toBe(1);
+    expect(JSON.parse(over.out[0]!).limitProblem).toContain('2 child tickets; maximum is 1');
     inventory[0]!.ticket = 21;
     writeFileSync(join(base, 'docs', 'blobs', 'decisions.json'), JSON.stringify(inventory));
+    const missingAssigned = await gm(
+      ['plan', 'check', '--tickets', 'issues.json', '--game', 'blobs', '--first-playable', '--json'],
+      { cwd: base },
+    );
+    expect(JSON.parse(missingAssigned.out[0]!).inventoryProblems).toContain(
+      'decision enemy-style is not listed on a game:blobs ticket',
+    );
     const wrongTicket = await run([
       { number: 20, body: '## Creator decisions\n- enemy-style\n', labels: ['game:blobs', 'role:qa'] },
     ]);
@@ -142,6 +184,34 @@ describe('gm plan check', () => {
     ]);
     expect(malformed.code).toBe(1);
     expect(JSON.parse(malformed.out[0]!).inventoryProblems[0]).toContain('game blobs has no valid');
+    mkdirSync(join(base, 'games', 'blobs', 'docs'), { recursive: true });
+    inventory[0]!.ticket = null;
+    writeFileSync(join(base, 'games', 'blobs', 'docs', 'decisions.json'), JSON.stringify(inventory));
+    const local = await gm(
+      ['plan', 'check', '--tickets', 'issues.json', '--game', 'blobs', '--first-playable', '--json'],
+      { cwd: base },
+    );
+    expect(local.code).toBe(0);
+    writeFileSync(
+      join(base, 'games', 'blobs', 'docs', 'decisions.json'),
+      JSON.stringify([
+        inventory[0],
+        {
+          ...inventory[0],
+          id: 'duplicate',
+          area: inventory[0]!.area.toUpperCase(),
+          question: inventory[0]!.question.toUpperCase(),
+        },
+      ]),
+    );
+    const duplicate = await gm(
+      ['plan', 'check', '--tickets', 'issues.json', '--game', 'blobs', '--first-playable', '--json'],
+      { cwd: base },
+    );
+    expect(duplicate.code).toBe(1);
+    expect(JSON.parse(duplicate.out[0]!).inventoryProblems).toContain(
+      'decisions enemy-style and duplicate ask the same question in the same area',
+    );
   });
 
   it('reads the roles from the platform pack the builder uses, never a game repo’s older installed copy', async () => {

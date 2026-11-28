@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { CreateJobRequest, Id, JobPlan, MicroUsd } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { authorize } from '@ogm/policy';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { hasGameGrant, listGames as listVisibleGames } from '../games/games.js';
@@ -67,6 +67,7 @@ const routes = new Hono<ApiBindings>()
             sqlite: deps.sqlite,
             events: deps.events,
             defaults: defaults(deps),
+            newGameDailyLimit: deps.config.testerNewGamesPerDay,
             qaEnergyProbe: isEnergyProbe(c, principal.userId),
           },
           body,
@@ -120,13 +121,15 @@ const routes = new Hono<ApiBindings>()
     requireAuthorization(
       authorize(actorFromPrincipal(principal), 'game.edit', { familyId: game.familyId, ownerId: game.ownerId }),
     );
-    if (row.state !== 'queued') throw new HttpError(409, 'job_not_queued');
+    if (row.state !== 'queued' || (row.idempotencyKey ?? '').startsWith('planner:'))
+      throw new HttpError(409, 'job_not_queued');
     const { plan } = await parseBody(c, patchBody);
-    deps.db
+    const updated = deps.db
       .update(schema.jobs)
       .set({ plan: JSON.stringify(plan), updatedAt: new Date().toISOString() })
-      .where(eq(schema.jobs.id, row.id))
+      .where(and(eq(schema.jobs.id, row.id), eq(schema.jobs.state, 'queued')))
       .run();
+    if (updated.changes !== 1) throw new HttpError(409, 'job_not_queued');
     return c.json(findJob(deps.db, row.id));
   })
   .post('/jobs/:id/raise-cap', async (c) => {

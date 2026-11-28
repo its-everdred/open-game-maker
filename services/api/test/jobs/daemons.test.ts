@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { schema } from '@ogm/db';
 import { expect, it, vi } from 'vitest';
@@ -60,4 +62,20 @@ it('keeps a game on its own daemon when the repository has others', async () => 
   const daemonFor = vi.fn(async (name: string) => ({ client: { baseUrl: name } }));
   const directory = createDaemonDirectory(deps.db, { daemonFor } as unknown as Pick<FeedFleet, 'daemonFor'>);
   expect((await directory.clientForGame(GAME)).baseUrl).toBe(slug);
+});
+
+it('routes a new game to the registered daemon when managed rows share its repository', async () => {
+  const deps = makeDeps();
+  seedDesignGame(deps);
+  deps.db.update(schema.games).set({ githubOwner: 'owner', githubRepo: 'repo' }).where(eq(schema.games.id, GAME)).run();
+  deps.db
+    .insert(schema.gameDaemons)
+    .values([
+      { ...row, slug: 'registered', port: 12345 },
+      { ...row, slug: 'managed', port: 12346, checkoutPath: join(homedir(), '.local/share/ogm/daemons/managed') },
+    ])
+    .run();
+  const daemonFor = vi.fn(async (name: string) => ({ client: { baseUrl: name } }));
+  const directory = createDaemonDirectory(deps.db, { daemonFor } as unknown as Pick<FeedFleet, 'daemonFor'>);
+  expect((await directory.clientForGame(GAME)).baseUrl).toBe('registered');
 });

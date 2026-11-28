@@ -30,6 +30,9 @@ import { gameStats } from './stats.js';
 import { assignSlug, findGameBySlugOrId } from './slug.js';
 import { CommitServiceRepoProvisioner } from './repo-provisioner.js';
 import { readQaState } from '../qa/state.js';
+import { budgetDefaults } from '../admin/family.js';
+import { getBudgetSettings } from '../budget/settings.js';
+import { newGameDailyUsage } from '../jobs/new-game-daily-limit.js';
 import { publicCardMedia, readPublicCardImage } from './public-card.js';
 
 export const prefix = '/api/v1';
@@ -162,14 +165,40 @@ const routes = new Hono<ApiBindings>()
           `${deps.config.instanceRepo.owner}/${deps.config.instanceRepo.name}`.toLowerCase())
     )
       throw new HttpError(503, 'qa_repository_not_configured');
-    const game = createGameRow(deps.db, {
-      familyId: principal.familyId,
-      ownerId: principal.userId,
-      title: body.title,
-      repoVisibility: body.repoVisibility,
-      allowAiGeneratedAssets: body.allowAiGeneratedAssets,
-      repository,
-    });
+    const result = deps.sqlite
+      .transaction(() => {
+        const zone = getBudgetSettings(deps.db, principal.familyId, budgetDefaults(deps)).resetZone;
+        const daily = newGameDailyUsage(deps.db, principal.userId, new Date(), zone);
+        if (
+          principal.platformRole === 'none' &&
+          deps.config.testerNewGamesPerDay !== undefined &&
+          daily.count >= deps.config.testerNewGamesPerDay
+        )
+          return { refusal: daily.resetsAt } as const;
+        return {
+          game: createGameRow(deps.db, {
+            familyId: principal.familyId,
+            ownerId: principal.userId,
+            title: body.title,
+            repoVisibility: body.repoVisibility,
+            allowAiGeneratedAssets: body.allowAiGeneratedAssets,
+            repository,
+          }),
+        } as const;
+      })
+      .immediate();
+    if ('refusal' in result)
+      return c.json(
+        {
+          error: 'energy_limit_reached',
+          remainingMicroUsd: 0,
+          resetsAt: result.refusal,
+          offers: ['ask_admin'],
+          window: 'day',
+        },
+        402,
+      );
+    const game = result.game;
     try {
       return c.json(gameResponse(await provisionGame(deps, game)), 201);
     } catch (error) {

@@ -78,6 +78,28 @@ async function createJob(app: Awaited<ReturnType<typeof makeApp>>['app'], overri
 }
 
 describe('jobs routes', () => {
+  it('enforces the configured daily New Game limit through the public route', async () => {
+    const deps = setup();
+    deps.config.testerNewGamesPerDay = 1;
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: ids.otherGame,
+        familyId: ids.family,
+        ownerId: ids.user,
+        title: 'Other',
+        visibility: 'private',
+        repoVisibility: 'private',
+        createdAt: '2020-01-01T00:00:00.000Z',
+      })
+      .run();
+    const { app } = await makeApp(deps);
+    expect((await createJob(app, { kind: 'new_game' })).status).toBe(202);
+    const refused = await createJob(app, { kind: 'new_game', gameId: ids.otherGame });
+    expect(refused.status).toBe(402);
+    expect(await refused.json()).toMatchObject({ error: 'energy_limit_reached', window: 'day' });
+  });
+
   it('rejects arbitrary scope jobs on the public job route', async () => {
     const { app } = await makeApp(setup());
     const response = await createJob(app, { kind: 'scope' });
@@ -254,6 +276,27 @@ describe('jobs routes', () => {
         .all()
         .map(({ kind }) => kind),
     ).toEqual(['reservation', 'release']);
+  });
+
+  it('does not edit a queued planner child after its issue has been staged', async () => {
+    const deps = setup();
+    const { app } = await makeApp(deps);
+    const created = await createJob(app, { start: 'at_reset' });
+    const { jobId } = (await created.json()) as { jobId: string };
+    deps.db
+      .update(schema.jobs)
+      .set({ idempotencyKey: 'planner:j_parent:starter', aiurIssueNumber: 42 })
+      .where(eq(schema.jobs.id, jobId))
+      .run();
+    const response = await app.request(`/api/v1/jobs/${jobId}`, {
+      method: 'PATCH',
+      headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+      body: JSON.stringify({ plan: { ...plan, title: 'Changed' } }),
+    });
+    expect(response.status).toBe(409);
+    expect(JSON.parse(deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).get()!.plan).title).toBe(
+      plan.title,
+    );
   });
 
   it('lets an admin raise a filed job cap through its daemon', async () => {

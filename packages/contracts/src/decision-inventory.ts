@@ -73,6 +73,19 @@ export const DecisionInventory = z.array(CreatorDecision).superRefine((inventory
 export type CreatorDecision = z.infer<typeof CreatorDecision>;
 export type DecisionInventory = z.infer<typeof DecisionInventory>;
 
+/** Questions in one first-playable plan must have one stable owner. */
+export function duplicateDecisionQuestions(inventory: DecisionInventory): { first: string; second: string }[] {
+  const seen = new Map<string, string>();
+  const duplicates: { first: string; second: string }[] = [];
+  for (const entry of inventory) {
+    const key = `${entry.area.trim().toLowerCase()}\u0000${entry.question.trim().toLowerCase()}`;
+    const first = seen.get(key);
+    if (first) duplicates.push({ first, second: entry.id });
+    else seen.set(key, entry.id);
+  }
+  return duplicates;
+}
+
 export const decisioninventorySchemas = {
   'decision-inventory.v1': DecisionInventory,
 } satisfies Record<string, z.ZodType>;
