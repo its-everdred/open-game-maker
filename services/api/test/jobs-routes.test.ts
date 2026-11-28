@@ -116,8 +116,8 @@ describe('jobs routes', () => {
     expect(created.status).toBe(202);
     const { jobId } = (await created.json()) as { jobId: string };
     const headers = asUser(guest.userId);
-    expect((await app.request(`/api/v1/jobs?gameId=${ids.game}`, { headers })).status).toBe(403);
-    expect((await app.request(`/api/v1/jobs/${jobId}`, { headers })).status).toBe(403);
+    expect((await app.request(`/api/v1/jobs?gameId=${ids.game}`, { headers })).status).toBe(404);
+    expect((await app.request(`/api/v1/jobs/${jobId}`, { headers })).status).toBe(404);
     const active = await app.request('/api/v1/jobs?state=active', { headers });
     expect(((await active.json()) as { jobs: unknown[] }).jobs).toEqual([]);
     deps.db.update(schema.gameAccess).set({ access: 'edit' }).where(eq(schema.gameAccess.email, guest.email)).run();

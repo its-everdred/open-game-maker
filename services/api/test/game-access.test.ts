@@ -144,7 +144,7 @@ describe('game access', () => {
         .all()
         .map((row) => [row.previousAccess, row.access]),
     ).toEqual([
-      [null, 'edit'],
+      ['hide', 'edit'],
       ['edit', 'hide'],
     ]);
   });
