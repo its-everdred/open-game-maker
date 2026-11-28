@@ -43,13 +43,6 @@ export function authorize(actor: Actor, action: Action, resource: Resource = {})
   )
     return denied('game_hidden');
 
-  if (actor.platformRole === 'maintainer') {
-    if (ownerActions.has(action) && resource.ownerId !== actor.userId) {
-      return resource.audit ? { ok: true, reason: 'audited' } : denied('audit_required');
-    }
-    return allowed();
-  }
-
   if (action === 'game.create') return actor.capability === 'creator' ? allowed() : denied('creator_required');
 
   if (
@@ -58,12 +51,21 @@ export function authorize(actor: Actor, action: Action, resource: Resource = {})
   )
     return denied('creator_required');
 
+  // An owner's explicit edit grant is ordinary authorization, not maintainer
+  // break-glass access, and applies equally to creators with that role.
   if (
     (action === 'game.edit' || action === 'game.publish') &&
     resource.gameAccess === 'edit' &&
     actor.capability === 'creator'
   )
     return allowed();
+
+  if (actor.platformRole === 'maintainer') {
+    if (ownerActions.has(action) && resource.ownerId !== actor.userId) {
+      return resource.audit ? { ok: true, reason: 'audited' } : denied('audit_required');
+    }
+    return allowed();
+  }
 
   if (ownerActions.has(action)) {
     return resource.ownerId === actor.userId ? allowed() : denied('not_owner');

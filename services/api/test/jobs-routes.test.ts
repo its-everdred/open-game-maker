@@ -78,6 +78,54 @@ async function createJob(app: Awaited<ReturnType<typeof makeApp>>['app'], overri
 }
 
 describe('jobs routes', () => {
+  it('only exposes development jobs to editors, and hides delisted games across families', async () => {
+    const deps = setup();
+    const guest = {
+      kind: 'user' as const,
+      userId: 'guest',
+      familyId: 'other',
+      platformRole: 'none' as const,
+      capability: 'creator' as const,
+      email: 'guest@example.test',
+    };
+    installUsers(deps, [guest]);
+    const now = new Date();
+    deps.db
+      .insert(schema.user)
+      .values({
+        id: guest.userId,
+        email: guest.email,
+        name: 'Guest',
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    deps.db
+      .insert(schema.gameAccess)
+      .values({
+        gameId: ids.game,
+        email: guest.email,
+        access: 'play',
+        updatedBy: ids.user,
+        updatedAt: now.toISOString(),
+      })
+      .run();
+    const { app } = await makeApp(deps);
+    const created = await createJob(app);
+    expect(created.status).toBe(202);
+    const { jobId } = (await created.json()) as { jobId: string };
+    const headers = asUser(guest.userId);
+    expect((await app.request(`/api/v1/jobs?gameId=${ids.game}`, { headers })).status).toBe(403);
+    expect((await app.request(`/api/v1/jobs/${jobId}`, { headers })).status).toBe(403);
+    const active = await app.request('/api/v1/jobs?state=active', { headers });
+    expect(((await active.json()) as { jobs: unknown[] }).jobs).toEqual([]);
+    deps.db.update(schema.gameAccess).set({ access: 'edit' }).where(eq(schema.gameAccess.email, guest.email)).run();
+    expect((await app.request(`/api/v1/jobs/${jobId}`, { headers })).status).toBe(200);
+    deps.db.update(schema.games).set({ delistedAt: now.toISOString() }).where(eq(schema.games.id, ids.game)).run();
+    expect((await app.request(`/api/v1/jobs/${jobId}`, { headers })).status).toBe(404);
+  });
+
   it('enforces the configured daily New Game limit through the public route', async () => {
     const deps = setup();
     deps.config.testerNewGamesPerDay = 1;

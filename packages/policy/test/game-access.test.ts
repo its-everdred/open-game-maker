@@ -6,6 +6,18 @@ const editor: Actor = { userId: 'editor', familyId: 'other-family', platformRole
 const game = { familyId: 'family', ownerId: 'owner', visibility: 'private' as const };
 
 describe('per-game access', () => {
+  it('honors explicit grants for maintainers while enforcing their user type', () => {
+    const maintainer: Actor = { ...editor, platformRole: 'maintainer' };
+    const granted = { ...game, gameAccess: 'edit' as const };
+    expect(authorize(maintainer, 'game.edit', granted)).toEqual({ ok: true });
+    expect(authorize(maintainer, 'game.publish', granted)).toEqual({ ok: true });
+    expect(authorize({ ...maintainer, capability: 'player' }, 'game.edit', granted).ok).toBe(false);
+    expect(authorize({ ...maintainer, capability: 'player' }, 'game.create').ok).toBe(false);
+    expect(
+      authorize({ ...maintainer, capability: 'player' }, 'game.publish', { ...game, ownerId: maintainer.userId }).ok,
+    ).toBe(false);
+  });
+
   it('allows a creator with an edit grant to edit across families, but does not grant ownership', () => {
     const resource = { ...game, gameAccess: 'edit' as const };
     expect(authorize(editor, 'game.edit', resource)).toEqual({ ok: true });

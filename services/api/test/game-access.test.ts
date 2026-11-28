@@ -72,6 +72,28 @@ const put = (app: Awaited<ReturnType<typeof makeApp>>['app'], actor: string, ema
   });
 
 describe('game access', () => {
+  it('updates an existing player membership when promoted to editor', async () => {
+    const { deps } = await setup();
+    deps.db
+      .insert(schema.familyMembers)
+      .values({
+        familyId: owner.familyId,
+        userId: player.userId,
+        role: 'member',
+        capability: 'player',
+        joinedAt: new Date().toISOString(),
+      })
+      .run();
+    expect(setAllowedRole(deps.db, player.email, 'maker', owner.userId)).toBe(true);
+    expect(
+      deps.db
+        .select()
+        .from(schema.familyMembers)
+        .all()
+        .find((member) => member.userId === player.userId)?.capability,
+    ).toBe('creator');
+  });
+
   it('keeps pending invitations hidden on games created before or after the invite', async () => {
     const { deps } = await setup();
     addAllowedUser(deps.db, { email: 'new@example.test', role: 'maker', addedBy: owner.userId });

@@ -35,6 +35,7 @@ it('preserves historical aggregate play counts when upgrading', () => {
       '20261127002110_fixed_roughhouse.sql',
       '20261127152311_coming_soon.sql',
       '20261128050146_publish_checks.sql',
+      '20261128094519_game_access.sql',
     ]);
     expect(sqlite.prepare('SELECT game_id, plays FROM game_play_totals').all()).toEqual([{ game_id: 'g', plays: 7 }]);
     expect(migrate({ sqlite }).applied).toEqual([]);
