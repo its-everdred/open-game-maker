@@ -3,8 +3,8 @@ body .game-access {
   inset: 0;
   z-index: 100;
   overflow: hidden;
-  background: #0f0e16;
-  color: #f2ead6;
+  background: var(--access-art-6);
+  color: var(--access-art-9);
   font:
     600 15px/1.35 Nunito,
     sans-serif;
@@ -29,22 +29,22 @@ body .game-access {
 .game-access-glows i:nth-child(1) {
   top: 10%;
   left: 10%;
-  background: radial-gradient(closest-side, rgb(214 93 14 / 0.34), rgb(214 93 14 / 0.13) 55%, transparent);
+  background: var(--access-art-43);
 }
 .game-access-glows i:nth-child(2) {
   top: 16%;
   left: 92%;
-  background: radial-gradient(closest-side, rgb(177 98 134 / 0.32), rgb(177 98 134 / 0.13) 55%, transparent);
+  background: var(--access-art-44);
 }
 .game-access-glows i:nth-child(3) {
   top: 92%;
   left: 30%;
-  background: radial-gradient(closest-side, rgb(69 133 136 / 0.36), rgb(69 133 136 / 0.14) 55%, transparent);
+  background: var(--access-art-45);
 }
 .game-access-glows i:nth-child(4) {
   top: 86%;
   left: 88%;
-  background: radial-gradient(closest-side, rgb(215 153 33 / 0.22), rgb(215 153 33 / 0.08) 55%, transparent);
+  background: var(--access-art-46);
 }
 .game-access-top {
   position: absolute;
@@ -70,9 +70,9 @@ body .game-access {
   border-radius: 50%;
   color: inherit;
   border: 1px solid;
-  border-color: rgba(242, 234, 214, 0.34) rgba(0, 0, 0, 0.42);
-  background: rgba(57, 54, 67, 0.55);
-  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.55);
+  border-color: var(--access-art-42) var(--access-art-47);
+  background: var(--access-art-48);
+  box-shadow: 0 6px 18px -6px var(--access-art-49);
 }
 .game-access-body {
   position: absolute;
@@ -84,12 +84,12 @@ body .game-access {
 }
 .game-access-card {
   border-radius: 20px;
-  background: rgba(36, 33, 46, 0.62);
+  background: var(--access-art-50);
   backdrop-filter: blur(22px) saturate(1.4);
   overflow: hidden;
   border: 1px solid;
-  border-color: rgba(242, 234, 214, 0.34) rgba(0, 0, 0, 0.42);
-  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.55);
+  border-color: var(--access-art-42) var(--access-art-47);
+  box-shadow: 0 6px 18px -6px var(--access-art-49);
 }
 .game-access-row {
   display: flex;
@@ -99,7 +99,7 @@ body .game-access {
   padding: 10px 10px 10px 14px;
 }
 .game-access-row + .game-access-row {
-  box-shadow: inset 0 1px 0 rgba(242, 234, 214, 0.08);
+  box-shadow: inset 0 1px 0 var(--access-art-51);
 }
 .game-access-avatar {
   width: 38px;
@@ -111,9 +111,7 @@ body .game-access {
     700 17px Fredoka,
     sans-serif;
   flex: none;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.04) 50%, transparent 51%),
-    rgba(116, 200, 237, 0.26);
+  background: var(--access-art-40), var(--access-art-52);
 }
 .game-access-name {
   flex: 1;
@@ -133,7 +131,7 @@ body .game-access {
   font:
     700 13px/1.3 Nunito,
     sans-serif;
-  color: #c4beb0;
+  color: var(--access-art-11);
 }
 .game-access-caption {
   margin-bottom: 8px;
@@ -142,14 +140,14 @@ body .game-access {
     sans-serif;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: #c4beb0;
+  color: var(--access-art-11);
 }
 .game-access-segment {
   display: flex;
   gap: 2px;
   padding: 3px;
   border-radius: 999px;
-  background: rgba(15, 14, 22, 0.55);
+  background: var(--access-art-41);
   flex: none;
 }
 .game-access-segment button {
@@ -159,15 +157,14 @@ body .game-access {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #c4beb0;
+  color: var(--access-art-11);
   font:
     700 14px Nunito,
     sans-serif;
 }
 .game-access-segment button[aria-pressed='true'] {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.04) 50%, transparent 51%), #74c8ed;
-  color: #1d1b16;
+  background: var(--access-art-40), var(--access-art-20);
+  color: var(--access-art-14);
 }
 .game-access-segment button:disabled {
   opacity: 0.3;
@@ -207,7 +204,7 @@ body .game-access {
   padding: 0 5px;
   margin-left: 4px;
   border-radius: 999px;
-  background: rgba(242, 234, 214, 0.14);
+  background: var(--access-art-13);
   letter-spacing: 0;
 }
 .game-access .game-access-top {

@@ -1,40 +1,35 @@
 /* Glass kit primitives used by the access and users screens. */
 .g {
-  --night: #0f0e16;
-  --night-2: #1a1824;
-  --night-3: #282532;
-  --ink: #f2ead6;
-  --ink-2: rgba(242, 234, 214, 0.82);
-  --muted: #c4beb0;
-  --faint: rgba(242, 234, 214, 0.6);
-  --rule: rgba(242, 234, 214, 0.14);
-  --dark: #1d1b16;
-  --green: #94d742;
-  --yellow: #ffbf32;
-  --orange: #ff9133;
-  --red: #f76d67;
-  --red-ink: #ff9b8f;
-  --blue: #74c8ed;
-  --aqua: #6fd6b4;
-  --purple: #d795e4;
-  --pink: #eca2b8;
-  --mineral-1: #05cde6;
-  --mineral-2: #168efd;
-  --mineral-3: #4146ff;
-  --gas-1: #b7f171;
-  --gas-2: #46c46a;
-  --gas-3: #1f8a52;
-  --glass-fill: rgba(24, 22, 32, 0.55);
-  --glass-fill-strong: rgba(30, 27, 40, 0.88);
+  --night: var(--access-art-6);
+  --night-2: var(--access-art-7);
+  --night-3: var(--access-art-8);
+  --ink: var(--access-art-9);
+  --ink-2: var(--access-art-10);
+  --muted: var(--access-art-11);
+  --faint: var(--access-art-12);
+  --rule: var(--access-art-13);
+  --dark: var(--access-art-14);
+  --green: var(--access-art-15);
+  --yellow: var(--access-art-16);
+  --orange: var(--access-art-17);
+  --red: var(--access-art-18);
+  --red-ink: var(--access-art-19);
+  --blue: var(--access-art-20);
+  --aqua: var(--access-art-21);
+  --purple: var(--access-art-22);
+  --pink: var(--access-art-23);
+  --mineral-1: var(--access-art-24);
+  --mineral-2: var(--access-art-25);
+  --mineral-3: var(--access-art-26);
+  --gas-1: var(--access-art-27);
+  --gas-2: var(--access-art-28);
+  --gas-3: var(--access-art-29);
+  --glass-fill: var(--access-art-30);
+  --glass-fill-strong: var(--access-art-31);
   --glass-blur: blur(22px) saturate(1.4);
-  --edge-top: rgba(242, 234, 214, 0.05);
-  --edge-bottom: rgba(242, 234, 214, 0.42);
-  --gloss: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.24),
-    rgba(255, 255, 255, 0.04) 50%,
-    rgba(255, 255, 255, 0) 51%
-  );
+  --edge-top: var(--access-art-32);
+  --edge-bottom: var(--access-art-33);
+  --gloss: var(--access-art-1);
   --r-xs: 8px;
   --r-sm: 12px;
   --r-md: 16px;
@@ -103,22 +98,22 @@
 .glows i:nth-child(1) {
   top: 10%;
   left: 10%;
-  background: radial-gradient(closest-side, rgb(214 93 14/0.34), rgb(214 93 14/0.13) 55%, transparent);
+  background: var(--access-art-2);
 }
 .glows i:nth-child(2) {
   top: 16%;
   left: 92%;
-  background: radial-gradient(closest-side, rgb(177 98 134/0.32), rgb(177 98 134/0.13) 55%, transparent);
+  background: var(--access-art-3);
 }
 .glows i:nth-child(3) {
   top: 92%;
   left: 30%;
-  background: radial-gradient(closest-side, rgb(69 133 136/0.36), rgb(69 133 136/0.14) 55%, transparent);
+  background: var(--access-art-4);
 }
 .glows i:nth-child(4) {
   top: 86%;
   left: 88%;
-  background: radial-gradient(closest-side, rgb(215 153 33/0.22), rgb(215 153 33/0.08) 55%, transparent);
+  background: var(--access-art-5);
 }
 .h1 {
   font: 700 30px/1.1 var(--display);
@@ -141,11 +136,11 @@
   place-items: center;
   padding: 0;
   color: var(--ink);
-  border: 1px solid rgba(255, 255, 255, 0.38);
-  background: var(--gloss), rgba(55, 51, 64, 0.5);
+  border: 1px solid var(--access-art-34);
+  background: var(--gloss), var(--access-art-35);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    0 8px 22px rgba(0, 0, 0, 0.3);
+    inset 0 1px 0 var(--access-art-36),
+    0 8px 22px var(--access-art-37);
   -webkit-backdrop-filter: blur(14px) saturate(1.35);
   backdrop-filter: blur(14px) saturate(1.35);
 }
@@ -160,7 +155,7 @@
   height: 20px;
   padding: 0 6px;
   border-radius: 10px;
-  background: #393643;
+  background: var(--access-art-38);
   color: var(--ink);
   font: 800 12px/1 var(--body);
   letter-spacing: 0;
@@ -170,7 +165,7 @@
   gap: 4px;
   padding: 4px;
   border-radius: var(--r-pill);
-  background: rgba(15, 14, 22, 0.5);
+  background: var(--access-art-39);
   border: 1px solid var(--rule);
 }
 .seg button {

@@ -875,10 +875,10 @@
   gap: 4px;
   min-height: 72px;
   min-width: 0;
-  border: 1px solid rgba(242, 234, 214, 0.34);
+  border: 1px solid var(--access-art-42);
   border-radius: 16px;
-  color: #f2ead6;
-  background: rgba(36, 33, 46, 0.62);
+  color: var(--access-art-9);
+  background: var(--access-art-50);
   font:
     700 13px Nunito,
     sans-serif;

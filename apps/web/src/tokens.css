@@ -1,4 +1,63 @@
 :root {
+  /* Glass access artboard palette. */
+  --access-art-1: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.24),
+    rgba(255, 255, 255, 0.04) 50%,
+    rgba(255, 255, 255, 0) 51%
+  );
+  --access-art-2: radial-gradient(closest-side, rgb(214 93 14/0.34), rgb(214 93 14/0.13) 55%, transparent);
+  --access-art-3: radial-gradient(closest-side, rgb(177 98 134/0.32), rgb(177 98 134/0.13) 55%, transparent);
+  --access-art-4: radial-gradient(closest-side, rgb(69 133 136/0.36), rgb(69 133 136/0.14) 55%, transparent);
+  --access-art-5: radial-gradient(closest-side, rgb(215 153 33/0.22), rgb(215 153 33/0.08) 55%, transparent);
+  --access-art-6: #0f0e16;
+  --access-art-7: #1a1824;
+  --access-art-8: #282532;
+  --access-art-9: #f2ead6;
+  --access-art-10: rgba(242, 234, 214, 0.82);
+  --access-art-11: #c4beb0;
+  --access-art-12: rgba(242, 234, 214, 0.6);
+  --access-art-13: rgba(242, 234, 214, 0.14);
+  --access-art-14: #1d1b16;
+  --access-art-15: #94d742;
+  --access-art-16: #ffbf32;
+  --access-art-17: #ff9133;
+  --access-art-18: #f76d67;
+  --access-art-19: #ff9b8f;
+  --access-art-20: #74c8ed;
+  --access-art-21: #6fd6b4;
+  --access-art-22: #d795e4;
+  --access-art-23: #eca2b8;
+  --access-art-24: #05cde6;
+  --access-art-25: #168efd;
+  --access-art-26: #4146ff;
+  --access-art-27: #b7f171;
+  --access-art-28: #46c46a;
+  --access-art-29: #1f8a52;
+  --access-art-30: rgba(24, 22, 32, 0.55);
+  --access-art-31: rgba(30, 27, 40, 0.88);
+  --access-art-32: rgba(242, 234, 214, 0.05);
+  --access-art-33: rgba(242, 234, 214, 0.42);
+  --access-art-34: rgba(255, 255, 255, 0.38);
+  --access-art-35: rgba(55, 51, 64, 0.5);
+  --access-art-36: rgba(255, 255, 255, 0.5);
+  --access-art-37: rgba(0, 0, 0, 0.3);
+  --access-art-38: #393643;
+  --access-art-39: rgba(15, 14, 22, 0.5);
+  --access-art-40: linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.04) 50%, transparent 51%);
+  --access-art-41: rgba(15, 14, 22, 0.55);
+  --access-art-42: rgba(242, 234, 214, 0.34);
+  --access-art-43: radial-gradient(closest-side, rgb(214 93 14 / 0.34), rgb(214 93 14 / 0.13) 55%, transparent);
+  --access-art-44: radial-gradient(closest-side, rgb(177 98 134 / 0.32), rgb(177 98 134 / 0.13) 55%, transparent);
+  --access-art-45: radial-gradient(closest-side, rgb(69 133 136 / 0.36), rgb(69 133 136 / 0.14) 55%, transparent);
+  --access-art-46: radial-gradient(closest-side, rgb(215 153 33 / 0.22), rgb(215 153 33 / 0.08) 55%, transparent);
+  --access-art-47: rgba(0, 0, 0, 0.42);
+  --access-art-48: rgba(57, 54, 67, 0.55);
+  --access-art-49: rgba(0, 0, 0, 0.55);
+  --access-art-50: rgba(36, 33, 46, 0.62);
+  --access-art-51: rgba(242, 234, 214, 0.08);
+  --access-art-52: rgba(116, 200, 237, 0.26);
+
   color-scheme: dark;
   --surface-page: #0f0e16;
   --surface-deep: #1d1b16;

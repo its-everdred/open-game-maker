@@ -8,16 +8,15 @@
   font:
     700 25px/1 Nunito,
     sans-serif;
-  color: #1d1b16;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.04) 50%, transparent 51%), #74c8ed;
+  color: var(--access-art-14);
+  background: var(--access-art-40), var(--access-art-20);
 }
 .glass-users-tabs {
   display: flex;
   gap: 3px;
   padding: 4px;
   border-radius: 999px;
-  background: rgba(15, 14, 22, 0.55);
+  background: var(--access-art-41);
 }
 .glass-users-tabs button {
   flex: 1;
@@ -25,16 +24,15 @@
   padding: 0 8px;
   border: 0;
   border-radius: 999px;
-  color: #c4beb0;
+  color: var(--access-art-11);
   background: transparent;
   font:
     700 14px Nunito,
     sans-serif;
 }
 .glass-users-tabs button[aria-pressed='true'] {
-  color: #1d1b16;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.04) 50%, transparent 51%), #74c8ed;
+  color: var(--access-art-14);
+  background: var(--access-art-40), var(--access-art-20);
 }
 .glass-users-row {
   width: 100%;
@@ -69,7 +67,7 @@
   height: 44px;
   border: 0;
   background: transparent;
-  color: #f2ead6;
+  color: var(--access-art-9);
   font:
     600 16px Nunito,
     sans-serif;
@@ -89,11 +87,10 @@
 .glass-users-primary {
   width: 100%;
   min-height: 52px;
-  border: 1px solid rgba(242, 234, 214, 0.34);
+  border: 1px solid var(--access-art-42);
   border-radius: 999px;
-  color: #1d1b16;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.04) 50%, transparent 51%), #74c8ed;
+  color: var(--access-art-14);
+  background: var(--access-art-40), var(--access-art-20);
   font:
     600 18px Fredoka,
     Nunito,
@@ -106,7 +103,7 @@
   position: absolute;
   inset: 0;
   z-index: 6;
-  background: rgba(15, 14, 22, 0.5);
+  background: var(--access-art-39);
   backdrop-filter: blur(5px);
 }
 .glass-users-sheet {
@@ -115,14 +112,14 @@
   right: 10px;
   bottom: 10px;
   z-index: 7;
-  border: 1px solid rgba(242, 234, 214, 0.34);
+  border: 1px solid var(--access-art-42);
   border-radius: 28px;
   padding: 24px 16px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  background: rgba(30, 27, 40, 0.88);
+  background: var(--access-art-31);
   backdrop-filter: blur(22px) saturate(1.4);
 }
 .glass-users-sheet h2 {
@@ -142,7 +139,7 @@
   min-height: 52px;
   border: 0;
   border-radius: 999px;
-  color: #ff9b8f;
+  color: var(--access-art-19);
   background: transparent;
   font:
     600 18px Fredoka,

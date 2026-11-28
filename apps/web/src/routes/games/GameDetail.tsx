@@ -272,7 +272,7 @@ export function GameDetail({
                       width="22"
                       height="22"
                       fill="none"
-                      stroke={label === 'Activity' ? '#d795e4' : 'currentColor'}
+                      stroke={label === 'Activity' ? 'var(--purple-b)' : 'currentColor'}
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
