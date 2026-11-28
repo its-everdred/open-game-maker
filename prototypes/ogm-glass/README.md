@@ -14,6 +14,12 @@ Design runtime. Unlike the archived prototypes beside it, this one is the live U
   music. `catalogue.css` holds the 2026-11-27 button and field material (thin border light top and bottom, dark left
   and right, soft shadow; flat buttons inside fields) and the one-blue accent; it is page-scoped until `glass.css`
   adopts it.
+- **New Game page (core #1527, 2026-11-28, awaiting review):** 8 `Ng*` artboards. Today's style questions restyled
+  (`NgGenre`, `NgLook`; the Look answer pre-filters the catalogue), then Adjust: sets (`NgAdjust`), packs in a set
+  (`NgAdjustPacks`) and assets in a pack with a preview (`NgAdjustAssets`), each tile with want / don't-want toggles;
+  `NgAdjustLandscape` and `NgAdjustDesktop`; `NgSummary` is the allowlist the game starts with. The used-in count pill
+  (`.ngames`, games using a set, pack or asset, omitted at 0) is on these tiles and on the Catalogue home and add tiles.
+  `CatKit` (System page) collects the catalogue components with the new pill, toggle, drill count, tally and tiles.
 
 ## Use it
 
