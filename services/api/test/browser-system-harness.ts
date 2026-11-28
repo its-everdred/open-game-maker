@@ -118,9 +118,7 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
           version: 'test',
           workerScript: join(scratch, 'game-cache.js'),
         });
-        // eslint-disable-next-line no-restricted-properties -- optional private browser-test host port.
-        const gamesPort = Number(process.env.OGM_TEST_GAMES_HOST_PORT ?? 0);
-        gamesServer = serve({ fetch: gameHost.fetch, hostname: '127.0.0.1', port: gamesPort });
+        gamesServer = serve({ fetch: gameHost.fetch, hostname: '127.0.0.1', port: 0 });
         await new Promise<void>((resolve, reject) => {
           gamesServer!.once('listening', resolve);
           gamesServer!.once('error', reject);

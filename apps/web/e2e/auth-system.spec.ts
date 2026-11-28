@@ -260,20 +260,18 @@ for (const viewport of [
       await signIn(page, system);
       system.seedChat();
       const game = await system.seedEditor(dist);
-      // eslint-disable-next-line no-restricted-properties -- direct host avoids buffering every game asset.
-      if (!process.env.OGM_TEST_GAMES_HOST_PORT)
-        await page.route(
-          (url) => [bridgeOrigin, 'http://127.0.0.1:10000'].includes(url.origin),
-          async (route) => {
-            const incoming = new URL(route.request().url());
-            const target = new URL(incoming.pathname + incoming.search, game.origin);
-            try {
-              await route.fulfill({ response: await route.fetch({ url: target.href, maxRedirects: 0 }) });
-            } catch {
-              await route.abort('failed').catch(() => undefined);
-            }
-          },
-        );
+      await page.route(
+        (url) => [bridgeOrigin, 'http://127.0.0.1:10000'].includes(url.origin),
+        async (route) => {
+          const incoming = new URL(route.request().url());
+          const target = new URL(incoming.pathname + incoming.search, game.origin);
+          try {
+            await route.fulfill({ response: await route.fetch({ url: target.href, maxRedirects: 0 }) });
+          } catch {
+            await route.abort('failed').catch(() => undefined);
+          }
+        },
+      );
       await page.goto(`/g/${game.gameId}?test`, { waitUntil: 'domcontentloaded' });
       await expect
         .poll(
@@ -369,21 +367,18 @@ for (const viewport of [
           [page, ownerGrant.grant],
           [peer, peerGrant.grant],
         ] as const) {
-          // eslint-disable-next-line no-restricted-properties -- direct host is a local test optimization.
-          if (!process.env.OGM_TEST_GAMES_HOST_PORT) {
-            await target.route(
-              (url) => [bridgeOrigin, 'http://127.0.0.1:10000'].includes(url.origin),
-              async (route) => {
-                const incoming = new URL(route.request().url());
-                const destination = new URL(incoming.pathname + incoming.search, game.origin);
-                try {
-                  await route.fulfill({ response: await route.fetch({ url: destination.href, maxRedirects: 0 }) });
-                } catch {
-                  await route.abort('failed').catch(() => undefined);
-                }
-              },
-            );
-          }
+          await target.route(
+            (url) => [bridgeOrigin, 'http://127.0.0.1:10000'].includes(url.origin),
+            async (route) => {
+              const incoming = new URL(route.request().url());
+              const destination = new URL(incoming.pathname + incoming.search, game.origin);
+              try {
+                await route.fulfill({ response: await route.fetch({ url: destination.href, maxRedirects: 0 }) });
+              } catch {
+                await route.abort('failed').catch(() => undefined);
+              }
+            },
+          );
           // Grants are fixture-issued; transport, room and both hosted games are real local services.
           await target.route('**/api/v1/rooms/*/grant', (route) =>
             route.fulfill({
