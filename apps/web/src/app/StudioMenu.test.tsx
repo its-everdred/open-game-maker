@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactElement } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -6,10 +7,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GameCommand } from '@ogm/contracts';
 import type { EnergyView } from '@ogm/contracts/browser';
 import type { WorkerReview } from '../features/worker-builds/useWorkerReviews';
+import { buildChatJob } from '../features/build-chat/test-fixtures';
 
 import { useDeckDraft, useReviewDraft } from '../features/commands-inbox/drafts';
 import { GameMenuProvider, useGameMenuControls, type GameMenuControls } from './GameMenu';
 import { StudioMenu } from './StudioMenu';
+import { queryClient } from './query';
 import { pushUpdate, setUpdateOwner } from '../lib/notify/slice';
 
 function TestStudioMenu() {
@@ -84,7 +87,11 @@ function GameMenuScreen({ hideButton }: { hideButton: boolean }) {
 }
 
 const state = vi.hoisted(() => ({
-  admin: { data: undefined as { platformRole: 'maintainer' | 'admin' | 'none' } | undefined },
+  admin: { data: undefined, attested: undefined } as {
+    data?: { platformRole: 'maintainer' | 'admin' | 'none'; capability?: 'creator' | 'player' };
+    attested?: boolean;
+  },
+  adminReviewGames: null as null | { games: { id: string; ownerId: string; title: string; slug: string | null }[] },
   jobs: {
     jobs: [] as TestJob[],
     active: [] as TestJob[],
@@ -132,6 +139,9 @@ vi.mock('../features/worker-builds/useWorkers', () => ({
     workerHooks.observed(games);
     return { workers: state.workers, feeds: [] };
   },
+}));
+vi.mock('../features/worker-builds/useAdminReviewGames', () => ({
+  useAdminReviewGames: () => ({ data: state.adminReviewGames, isError: false, isLoading: false }),
 }));
 vi.mock('../features/worker-builds/useWorkerReviews', () => ({
   useWorkerReviews: () => ({ reviews: state.workerReviews, error: false, loading: state.workerReviewsLoading }),
@@ -245,7 +255,8 @@ const runningJob = (overrides: Partial<TestJob> = {}): TestJob => ({
 
 afterEach(() => {
   cleanup();
-  state.admin = { data: undefined };
+  state.admin = { data: undefined, attested: undefined };
+  state.adminReviewGames = null;
   state.jobs = { jobs: [], active: [], games: [] };
   state.jobsLoading = false;
   state.workerReviews = [];
@@ -269,6 +280,86 @@ afterEach(() => {
 });
 
 describe('StudioMenu', () => {
+  it('hides cached creator work while the current session is awaiting attestation', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.admin = { data: { platformRole: 'none', capability: 'creator' }, attested: false };
+    state.decisions = [decision('private')];
+    const job = buildChatJob({ creatorId: 'user-1', state: 'done' });
+    state.jobs = { jobs: [job], active: [], games: [{ id: 'game-1', title: 'Mine', ownerId: 'user-1' }] };
+    renderMenu('/games');
+    expect(screen.queryByText('1', { selector: '.studio-menu-badge' })).toBeNull();
+    expect(screen.queryByText(job.plan.title)).toBeNull();
+  });
+  it('closes an open foreign review when the same administrator is demoted', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.admin = { data: { platformRole: 'admin', capability: 'creator' } };
+    state.adminReviewGames = { games: [{ id: 'foreign', ownerId: 'other', title: 'Other', slug: 'other' }] };
+    state.workerReviews = [
+      {
+        kind: 'round',
+        gameId: 'foreign',
+        round: { id: 'r', ticket: '3', question: 'Private review', media: [{ kind: 'still', url: '/review.png' }] },
+      },
+    ];
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/games']}>
+          <TestStudioMenu />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '1 builds to review' }));
+    fireEvent.click(screen.getByRole('button', { name: '1 need review' }));
+    fireEvent.click(screen.getByRole('button', { name: /Private review, Needs review/ }));
+    expect(screen.getByRole('dialog', { name: 'Needs Review' })).toBeVisible();
+    state.admin = { data: { platformRole: 'none', capability: 'creator' } };
+    state.adminReviewGames = null;
+    state.workerReviews = [];
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/games']}>
+          <TestStudioMenu />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByRole('dialog', { name: 'Needs Review' })).toBeNull();
+    expect(screen.queryByText('Private review')).toBeNull();
+  });
+  it('removes cached decisions and builds after the same user becomes a player', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.admin = { data: { platformRole: 'none', capability: 'creator' } };
+    state.decisions = [decision('d1')];
+    const job = buildChatJob({ creatorId: 'user-1', state: 'done' });
+    state.jobs = { jobs: [job], active: [], games: [{ id: 'game-1', title: 'Mine', ownerId: 'user-1' }] };
+    const view = renderMenu('/games');
+    expect(screen.getByText('1', { selector: '.studio-menu-badge' })).toBeVisible();
+    state.admin = { data: { platformRole: 'none', capability: 'player' } };
+    view.rerender(
+      <MemoryRouter initialEntries={['/games']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText('1', { selector: '.studio-menu-badge' })).toBeNull();
+    expect(screen.queryByText(job.plan.title)).toBeNull();
+  });
+  it('hides a cached build update when an open Builds sheet is demoted to player', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
+    state.admin = { data: { platformRole: 'none', capability: 'creator' } };
+    setUpdateOwner('user-1');
+    const view = renderMenu('/g/game-blobs');
+    act(() => pushUpdate('Private build update', 'game-blobs'));
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: '0 builds running, 1 new update' }));
+    expect(screen.getByText('Private build update')).toBeVisible();
+    state.admin = { data: { platformRole: 'none', capability: 'player' } };
+    view.rerender(
+      <MemoryRouter initialEntries={['/g/game-blobs']}>
+        <TestStudioMenu />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText('Private build update')).toBeNull();
+    setUpdateOwner(undefined);
+  });
   it('requests build data only for the signed-in creator’s games', () => {
     state.session = { data: { user: { id: 'user-1' } } };
     state.jobs.games = [
@@ -323,6 +414,7 @@ describe('StudioMenu', () => {
     expect(volume).toHaveAttribute('aria-expanded', 'false');
   });
   it('shows live worker progress in the builds control', () => {
+    state.session = { data: { user: { id: 'user-1' } } };
     state.workers = [{ ticket: '12', title: 'Forest backdrop', percent: 50, etaSeconds: 10 }];
     renderMenu('/games');
     const builds = screen.getByRole('button', { name: '1 build running' });

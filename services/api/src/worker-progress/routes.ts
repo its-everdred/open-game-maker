@@ -15,7 +15,7 @@ import {
 import { listEditorPreviews, listPreviewHistory, listPreviews } from '../previews/store.js';
 import type { ApiBindings } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
-import { authorizedGame } from '../games/authorize.js';
+import { authorizedCreatorReviewGame, authorizedReviewGame } from '../games/authorize.js';
 import { requirePrincipal } from '../app/principal.js';
 import { listWorkers } from './list.js';
 import { logIncomplete, sourceError } from './incomplete-log.js';
@@ -42,7 +42,7 @@ function orderConversation<T extends { at?: string }>(messages: T[]): Omit<T, 'a
 
 export const prefix = '/api/v1';
 const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) => {
-  const game = authorizedGame(c, 'game.edit');
+  const game = authorizedReviewGame(c);
   const deps = c.get('deps');
   const history = game.slug ? recentCompletions(deps.db, game.slug) : { cursor: 0, completed: [] };
   // The QA game (#859) has no repository and no workers.
@@ -166,7 +166,7 @@ const routes = new Hono<ApiBindings>().get('/games/:gameId/workers', async (c) =
 });
 
 routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
-  const game = authorizedGame(c, 'game.edit');
+  const game = authorizedCreatorReviewGame(c);
   if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
   const deps = c.get('deps');
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
@@ -243,7 +243,7 @@ routes.post('/games/:gameId/tickets/:ticket/missing-review', async (c) => {
 });
 
 routes.get('/games/:gameId/tickets/completed', async (c) => {
-  const game = authorizedGame(c, 'game.edit');
+  const game = authorizedReviewGame(c);
   const deps = c.get('deps');
   if (isQaGame(deps.db, game.id)) return c.json({ tickets: qaCompleted(deps), stale: false });
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
@@ -268,7 +268,7 @@ routes.get('/games/:gameId/tickets/completed', async (c) => {
   return c.json({ tickets, stale: snapshot.stale });
 });
 routes.get('/games/:gameId/tickets/:ticket/conversation', async (c) => {
-  const game = authorizedGame(c, 'game.edit');
+  const game = authorizedReviewGame(c);
   const deps = c.get('deps');
   const ticketId = c.req.param('ticket');
   const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
@@ -309,7 +309,7 @@ routes.get('/games/:gameId/tickets/:ticket/conversation', async (c) => {
   }
 });
 routes.post('/games/:gameId/tickets/:ticket/conversation', async (c) => {
-  const game = authorizedGame(c, 'game.edit');
+  const game = authorizedCreatorReviewGame(c);
   if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
   const deps = c.get('deps');
   const ticket = c.req.param('ticket');
@@ -356,7 +356,7 @@ routes.post('/games/:gameId/tickets/:ticket/conversation', async (c) => {
   return c.json({ status: 'sent' });
 });
 routes.get('/games/:gameId/tickets/:ticket/detail', async (c) => {
-  const game = authorizedGame(c, 'game.edit');
+  const game = authorizedReviewGame(c);
   const deps = c.get('deps');
   const ticket = c.req.param('ticket');
   if (!/^[\w-]{1,64}$/u.test(ticket)) throw new HttpError(404, 'ticket_not_found');

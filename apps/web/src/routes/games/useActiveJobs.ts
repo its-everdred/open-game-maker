@@ -1,16 +1,31 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { api, ApiError } from '../../lib/api/client';
+import { useSession } from '../../lib/api/session';
+import { useAdminMe } from '../admin/api';
 import { TERMINAL_JOB_STATES, type JobView } from './types';
 
 type JobsResponse = JobView[] | { jobs: JobView[] };
 
 export function useActiveJobs() {
-  return useQuery({
-    queryKey: ['jobs', 'active'],
+  const { data: session } = useSession();
+  const me = useAdminMe(Boolean(session));
+  const userId = session?.user.id;
+  const capability = me.data?.capability;
+  const role = me.data?.platformRole;
+  const enabled = Boolean(
+    userId &&
+    me.attested !== false &&
+    capability &&
+    (capability === 'creator' || role === 'admin' || role === 'maintainer'),
+  );
+  const query = useQuery({
+    queryKey: ['jobs', 'active', userId, capability, role],
+    enabled,
     queryFn: fetchActiveJobs,
     refetchInterval: (query) => nextActiveJobsPoll(query.state.data),
   });
+  return { ...query, data: enabled ? query.data : undefined };
 }
 
 export function nextActiveJobsPoll(jobs: JobView[] | undefined): number | false {

@@ -7,6 +7,28 @@ const api = vi.hoisted(() => vi.fn());
 vi.mock('../../lib/api/client', () => ({ api }));
 
 describe('worker reviews', () => {
+  it('loads another creator’s rounds and previews for an admin', async () => {
+    api.mockClear();
+    api.mockImplementation((path: string) =>
+      Promise.resolve(
+        path.includes('review-rounds')
+          ? { rounds: [{ id: 'r', ticket: '12', buildId: 'b', media: [] }] }
+          : { previews: [{ ticket: '12', buildId: 'b' }] },
+      ),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(() => useWorkerReviews([{ id: 'foreign', ownerId: 'other' }], 'admin'), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.reviews).toHaveLength(1));
+    expect(api).toHaveBeenCalledTimes(2);
+    expect(result.current.reviews[0]).toMatchObject({ kind: 'preview', gameId: 'foreign' });
+    unmount();
+    client.clear();
+  });
   it('loads open ledger rounds and playable previews for the creator', async () => {
     api.mockImplementation((path: string) =>
       Promise.resolve(

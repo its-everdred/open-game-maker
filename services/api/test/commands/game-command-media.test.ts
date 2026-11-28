@@ -313,6 +313,21 @@ describe('a jobless Command’s option media', () => {
     ];
     const deps = seed();
     deps.config.instanceOwnerId = ids.user;
+    deps.config.coreRepo = { owner: 'fixture', name: 'core' };
+    deps.registry.trackerTickets = async () => ({
+      stale: false,
+      tickets: [
+        {
+          ticket: '12',
+          title: 'Core',
+          labels: [],
+          closedAt: null,
+          updatedAt: AT,
+          outcome: 'Closed',
+          url: 'https://example.test/12',
+        },
+      ],
+    });
     deps.registry.coreAiurClient = {
       baseUrl: 'https://core.example.test',
       decisions: async () => [decision(options)],
@@ -332,6 +347,21 @@ describe('a jobless Command’s option media', () => {
   it('lists marker metadata on the core creator command endpoint', async () => {
     const deps = seed();
     deps.config.instanceOwnerId = ids.user;
+    deps.config.coreRepo = { owner: 'fixture', name: 'core' };
+    deps.registry.trackerTickets = async () => ({
+      stale: false,
+      tickets: [
+        {
+          ticket: '12',
+          title: 'Core',
+          labels: [],
+          closedAt: null,
+          updatedAt: AT,
+          outcome: 'Closed',
+          url: 'https://example.test/12',
+        },
+      ],
+    });
     const marker = reviewMetaMarker(
       new Map([
         [

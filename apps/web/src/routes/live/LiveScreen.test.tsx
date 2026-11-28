@@ -26,7 +26,7 @@ it('opens the authorized workspace generation at the linked scenario', async () 
       async (input: RequestInfo | URL) =>
         new Response(
           JSON.stringify(
-            String(input).includes('/resolve/')
+            String(input).includes('/live-resolve/')
               ? { game: { id: 'g1', slug: 'demo' } }
               : {
                   gameId: 'g1',
@@ -66,7 +66,7 @@ it('waits for a fresh generation instead of mounting a cached one', async () => 
   vi.stubGlobal(
     'fetch',
     vi.fn((input: RequestInfo | URL) =>
-      String(input).includes('/resolve/')
+      String(input).includes('/live-resolve/')
         ? Promise.resolve(
             new Response(JSON.stringify({ game: { id: 'g1', slug: 'demo' } }), {
               headers: { 'content-type': 'application/json' },

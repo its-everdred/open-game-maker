@@ -994,9 +994,28 @@ it('lists and answers core Commands only for the instance owner', async () => {
   expect((await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).status).toBe(403);
   deps.config.instanceOwnerId = ids.user;
   deps.config.coreRepo = { owner: 'fixture', name: 'core' };
+  deps.sqlite.prepare('UPDATE games SET github_repo = ? WHERE id = ?').run('core', ids.game);
   deps.registry.trackerTickets = async () => ({
     stale: false,
     tickets: [
+      {
+        ticket: '478',
+        title: 'Core decision',
+        labels: [],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue/478',
+      },
+      {
+        ticket: '7',
+        title: 'PC decision',
+        labels: [],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue/7',
+      },
       {
         ticket: '479',
         title: 'Review core build',
@@ -1006,7 +1025,28 @@ it('lists and answers core Commands only for the instance owner', async () => {
         outcome: 'Closed',
         url: 'https://example.test/issue',
       },
+      {
+        ticket: '480',
+        title: 'Game review',
+        labels: ['agent:human-review', 'game:game-1'],
+        closedAt: null,
+        updatedAt: AT,
+        outcome: 'Closed',
+        url: 'https://example.test/issue/480',
+      },
     ],
+  });
+  postRound(deps.db, {
+    id: 'foreign-round',
+    gameId: ids.game,
+    track: 'art',
+    phase: 'mock',
+    category: 'art',
+    round: 1,
+    ticket: '480',
+    sha: 'a'.repeat(40),
+    media: '[]',
+    postedAt: AT,
   });
   const coreDecision = decision({
     audience: 'creator',
@@ -1064,6 +1104,26 @@ it('lists and answers core Commands only for the instance owner', async () => {
       expect.objectContaining({ source: 'core', daemon: 'core', decision_id: 'd_aiur_1' }),
     ]),
   });
+  expect(pageBody.targets).not.toEqual(expect.arrayContaining([expect.objectContaining({ ticket: '480' })]));
+  const gameDecision = decision({ decision_id: 'd_game', ticket: { identifier: '480' }, audience: 'creator' });
+  vi.mocked(deps.registry.coreAiurClient!.decisions).mockResolvedValue([coreDecision, gameDecision]);
+  vi.mocked(deps.registry.coreAiurClient!.decision).mockResolvedValue(gameDecision);
+  const scopedPage = await (await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).json();
+  expect(scopedPage.commands).not.toEqual(expect.arrayContaining([expect.objectContaining({ decision_id: 'd_game' })]));
+  const denied = await app.request('/api/v1/core/commands/d_game/answer', {
+    method: 'POST',
+    headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+    body: JSON.stringify({ option_id: 'round', version: 2 }),
+  });
+  expect(denied.status).toBe(404);
+  expect(
+    (await app.request('/api/v1/core/commands/d_game/missing-media', { method: 'POST', headers: asUser(ids.user) }))
+      .status,
+  ).toBe(404);
+  expect((await app.request('/api/v1/core/tickets/480/state', { headers: asUser(ids.user) })).status).toBe(404);
+  expect(answerAsCreator).not.toHaveBeenCalled();
+  vi.mocked(deps.registry.coreAiurClient!.decisions).mockResolvedValue([coreDecision]);
+  vi.mocked(deps.registry.coreAiurClient!.decision).mockResolvedValue(coreDecision);
   expect(pageBody.commands).toEqual(
     expect.arrayContaining([expect.objectContaining({ decision_id: 'd_pc_9', daemon: 'pc' })]),
   );
@@ -1094,8 +1154,17 @@ it('lists and answers core Commands only for the instance owner', async () => {
   const partial = await (await app.request('/api/v1/me/core-commands', { headers: asUser(ids.user) })).json();
   expect(partial).toMatchObject({
     targetsUnavailable: true,
-    commands: expect.arrayContaining([expect.objectContaining({ decision_id: 'd_aiur_1' })]),
+    commands: [],
   });
+  expect(
+    (
+      await app.request('/api/v1/core/commands/d_aiur_1/answer', {
+        method: 'POST',
+        headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+        body: JSON.stringify({ option_id: 'square', version: 2 }),
+      })
+    ).status,
+  ).toBe(503);
   expect(
     (await app.request('/api/v1/core/tickets/479/missing-review', { method: 'POST', headers: asUser(ids.user) }))
       .status,
@@ -1233,6 +1302,8 @@ it('does not report a declared attachment as absent while its copy is pending', 
 it('does not expose a core daemon error or its connection details', async () => {
   const { app, deps } = await appWithAiur([]);
   deps.config.instanceOwnerId = ids.user;
+  deps.config.coreRepo = { owner: 'fixture', name: 'core' };
+  deps.registry.trackerTickets = async () => ({ stale: false, tickets: [] });
   deps.registry.coreAiurClient = {
     decisions: vi.fn().mockRejectedValue(new Error('private-core-value')),
   } as unknown as AiurClient;

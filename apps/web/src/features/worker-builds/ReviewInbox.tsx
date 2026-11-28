@@ -30,6 +30,7 @@ import '../commands-inbox/decision-deck.css';
 export function ReviewInbox({
   reviews,
   commands,
+  readOnlyReviewGames = [],
   onClose,
   targets = [],
   workers = [],
@@ -41,6 +42,7 @@ export function ReviewInbox({
 }: {
   reviews: readonly WorkerReview[];
   commands: readonly ReviewCommand[];
+  readOnlyReviewGames?: readonly string[];
   onClose(): void;
   targets?: readonly ReviewTarget[];
   workers?: readonly WorkerBuild[];
@@ -112,6 +114,7 @@ export function ReviewInbox({
   ];
   const missingPaths = [
     ...pendingReviews.flatMap((review) =>
+      !readOnlyReviewGames.includes(review.gameId) &&
       review.kind === 'round' &&
       review.round.track !== 'prototype-publish' &&
       review.round.buildId !== `live-${review.round.id}` &&
@@ -123,6 +126,8 @@ export function ReviewInbox({
         : [],
     ),
     ...pendingCommands.flatMap((item) =>
+      readOnlyReviewGames.includes(commandSource(item)) ||
+      item.text_only ||
       item.options.every(({ media, audio, audioClips, playable }) => media || audio || audioClips?.length || playable)
         ? []
         : [commandPath(item, `/${encodeURIComponent(item.decision_id)}/missing-media`)],
@@ -308,7 +313,10 @@ export function ReviewInbox({
   }
   if (
     command &&
-    command.options.every(({ media, audio, audioClips, playable }) => media || audio || audioClips?.length || playable)
+    (command.text_only ||
+      command.options.every(
+        ({ media, audio, audioClips, playable }) => media || audio || audioClips?.length || playable,
+      ))
   ) {
     return (
       <Dialog
@@ -334,6 +342,7 @@ export function ReviewInbox({
           <CommandReviewCard
             key={`${commandSource(command)}:${command.decision_id}`}
             command={command}
+            readOnly={readOnlyReviewGames.includes(commandSource(command))}
             onSendingChange={setSending}
             ticketState={
               workers.find((worker) => worker.ticket === `${commandSource(command)}:${command.ticket}`)?.state
@@ -434,6 +443,7 @@ export function ReviewInbox({
           </p>
         ) : null}
         {current.kind === 'round' &&
+        !readOnlyReviewGames.includes(current.gameId) &&
         !current.round.media.some((item) => item.role !== 'target') &&
         !current.round.buildId ? (
           missingStatus(
@@ -444,12 +454,14 @@ export function ReviewInbox({
             <RoundCard
               gameId={current.gameId}
               round={current.round}
+              readOnly={readOnlyReviewGames.includes(current.gameId)}
               onAnswered={done}
               swipe
               onPendingChange={setSending}
               onPlay={onClose}
             />
-            {current.round.buildId &&
+            {!readOnlyReviewGames.includes(current.gameId) &&
+              current.round.buildId &&
               current.round.track !== 'prototype-publish' &&
               current.round.buildId !== `live-${current.round.id}` &&
               missingStatus(
@@ -461,6 +473,7 @@ export function ReviewInbox({
             <PreviewCard
               gameId={current.gameId}
               preview={current.preview}
+              readOnly={readOnlyReviewGames.includes(current.gameId)}
               onAnswered={done}
               swipe
               onPendingChange={setSending}

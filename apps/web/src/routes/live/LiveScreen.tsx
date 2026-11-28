@@ -5,7 +5,6 @@ import { useParams, useSearchParams } from 'react-router';
 
 import { mountGameFrame, type GameFrameState } from '../../features/editor/frame';
 import { api } from '../../lib/api/client';
-import { usePlayLink } from '../play/api';
 import '../../features/commands-inbox/review-deck.css';
 import '../slice/slice.css';
 
@@ -15,7 +14,17 @@ export function LiveScreen() {
   const { slug = '', ticket = '' } = useParams();
   const [search] = useSearchParams();
   const scenario = search.get('scenario')?.trim();
-  const game = usePlayLink(slug);
+  const game = useQuery({
+    queryKey: ['live-resolve', slug, ticket],
+    queryFn: async () =>
+      (
+        await api<{ game: { id: string } }>(
+          `/games/live-resolve/${encodeURIComponent(slug)}/${encodeURIComponent(ticket)}`,
+        )
+      ).game,
+    enabled: Boolean(slug && ticket),
+    retry: false,
+  });
   const access = useQuery({
     queryKey: ['live-access', game.data?.id, ticket],
     queryFn: () => api<LiveAccess>(`/games/${encodeURIComponent(game.data!.id)}/live/${encodeURIComponent(ticket)}`),

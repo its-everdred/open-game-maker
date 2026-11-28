@@ -11,6 +11,7 @@ import { and, eq } from 'drizzle-orm';
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
+import { hasCreatorMembership } from '../artifacts/grants.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import type { IssueStateWriter } from '../app/registry.js';
 import { parseBody } from '../app/validate.js';
@@ -68,6 +69,12 @@ function loadAuthorized(
   const row = findJobRow(deps.db, id);
   const game = deps.db.select().from(schema.games).where(eq(schema.games.id, row.gameId)).get();
   if (!game) throw new HttpError(404, 'game_not_found');
+  if (
+    principal.capability !== 'creator' ||
+    principal.userId !== game.ownerId ||
+    !hasCreatorMembership(deps, game.familyId, principal.userId)
+  )
+    throw new HttpError(403, 'forbidden');
   requireAuthorization(
     authorize(actorFromPrincipal(principal), action, {
       gameId: game.id,

@@ -1,4 +1,6 @@
 import { authorize } from '@ogm/policy';
+import { schema } from '@ogm/db';
+import { isNull } from 'drizzle-orm';
 
 import { GameCommand, type CreatorCommandsPage, type GameCommandsPage, type Principal } from '@ogm/contracts';
 
@@ -12,6 +14,8 @@ import { gameCommandsFromAiur } from './aiur.js';
 import { withPhases } from './advance.js';
 import { reviewMediaUrl } from '../blobs/review-url.js';
 import { isCreatorCommand } from './audience.js';
+import { isReviewAdmin } from '../games/review-admin.js';
+import { hasCreatorMembership } from '../artifacts/grants.js';
 
 type UserPrincipal = Extract<Principal, { kind: 'user' }>;
 
@@ -22,7 +26,12 @@ async function optionMedia(deps: AppDeps, jobId: string, mediaId: string, sign: 
 }
 
 // Resolve all creator Commands, including incomplete reviews that need the media-repair action.
-async function resolveGameCommands(deps: AppDeps, game: GameRow, onUnavailable?: () => void): Promise<GameCommand[]> {
+async function resolveGameCommands(
+  deps: AppDeps,
+  game: GameRow,
+  onUnavailable?: () => void,
+  decisionIds?: Set<string>,
+): Promise<GameCommand[]> {
   const sign: MediaSigner = (hash) => reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash);
   const commands: GameCommand[] = [];
   const jobs = listJobs(deps.db, game.id);
@@ -77,7 +86,9 @@ async function resolveGameCommands(deps: AppDeps, game: GameRow, onUnavailable?:
   const listed = new Map(
     commands.map((command) => [command.decision_id, { version: command.version, ticket: command.ticket }]),
   );
-  for (const command of await gameCommandsFromAiur(deps, game, jobTickets, sign, onUnavailable, listed)) {
+  for (const command of await gameCommandsFromAiur(deps, game, jobTickets, sign, onUnavailable, listed, (id) =>
+    decisionIds?.add(id),
+  )) {
     const index = commands.findIndex(
       (item) =>
         item.decision_id === command.decision_id && item.version === command.version && item.ticket === command.ticket,
@@ -218,26 +229,41 @@ export async function listCreatorCommands(
   deps: AppDeps,
   principal: UserPrincipal,
   includeQuestions = false,
+  ownOnly = false,
 ): Promise<CreatorCommandsPage & { unavailable?: boolean }> {
+  if (
+    !isReviewAdmin(deps, principal) &&
+    (principal.capability !== 'creator' || !hasCreatorMembership(deps, principal.familyId, principal.userId))
+  )
+    return { commands: [], question_sessions: [] };
   let unavailable = false;
   const actor = actorFromPrincipal(principal);
-  const games = listGames(deps.db, principal.familyId, principal.userId).filter(
-    (game) =>
-      authorize(actor, 'game.edit', {
-        familyId: game.familyId,
-        ownerId: game.ownerId,
-        visibility: game.visibility,
-        releaseState: game.releaseState,
-        granted: hasGameGrant(deps.db, game.id, principal.userId),
-      }).ok,
-  );
+  const games =
+    includeQuestions && !ownOnly && isReviewAdmin(deps, principal)
+      ? deps.db.select().from(schema.games).where(isNull(schema.games.delistedAt)).all()
+      : listGames(deps.db, principal.familyId, principal.userId).filter(
+          (game) =>
+            authorize(actor, 'game.edit', {
+              familyId: game.familyId,
+              ownerId: game.ownerId,
+              visibility: game.visibility,
+              releaseState: game.releaseState,
+              granted: hasGameGrant(deps.db, game.id, principal.userId),
+            }).ok,
+        );
   // One game that fails to list is left out of this read, so it never hides the other games' decisions.
   const perGame = await Promise.all(
     games.map(async (game) => {
       try {
-        const resolved = await resolveGameCommands(deps, game, () => {
-          unavailable = true;
-        });
+        const decisionIds = new Set<string>();
+        const resolved = await resolveGameCommands(
+          deps,
+          game,
+          () => {
+            unavailable = true;
+          },
+          decisionIds,
+        );
         const commands = numberedReviewableCommands(deps, game.id, resolved).map((command) => ({
           ...command,
           game_id: game.id,
@@ -245,11 +271,12 @@ export async function listCreatorCommands(
         }));
         const missingMediaCommands =
           includeQuestions && game.ownerId === principal.userId ? missingMediaReviewCommands(game, resolved) : [];
-        return { commands, missingMediaCommands };
+        for (const command of resolved) decisionIds.add(command.decision_id);
+        return { commands, missingMediaCommands, decisionIds: [...decisionIds] };
       } catch (error) {
         unavailable = true;
         deps.log({ event: 'creator_commands_game_failed', gameId: game.id, error: (error as Error).name });
-        return { commands: [], missingMediaCommands: [] };
+        return { commands: [], missingMediaCommands: [], decisionIds: [] };
       }
     }),
   );
@@ -268,7 +295,9 @@ export async function listCreatorCommands(
   return {
     commands,
     question_sessions: questionSessions,
-    ...(includeQuestions ? { missing_media_commands: missingMediaCommands } : {}),
+    ...(includeQuestions
+      ? { missing_media_commands: missingMediaCommands, game_decision_ids: perGame.flatMap((game) => game.decisionIds) }
+      : {}),
     ...(unavailable ? { unavailable: true } : {}),
   };
 }

@@ -7,7 +7,7 @@ import type { ApiBindings } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
-import { authorizedGame } from '../games/authorize.js';
+import { authorizedCreatorReviewGame, authorizedReviewGame } from '../games/authorize.js';
 import { editorBuildUrl, sliceUrl } from '../games/editor-url.js';
 import { reviewMediaUrl } from '../blobs/review-url.js';
 import { currentPreview, listPreviews } from '../previews/store.js';
@@ -23,7 +23,7 @@ const Answer = z
 type Media = { kind: string; ref: string; role?: 'target'; meta?: unknown; scenario?: string };
 export default new Hono<ApiBindings>()
   .get('/games/:gameId/review-rounds', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedReviewGame(c);
     const deps = c.get('deps');
     const includeGameplay = c.req.query('includeGameplay') === '1';
     const historyTicket = c.req.query('historyTicket');
@@ -127,7 +127,7 @@ export default new Hono<ApiBindings>()
     return c.json({ rounds: result });
   })
   .get('/games/:gameId/review-rounds/:id/status', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedCreatorReviewGame(c);
     if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
     const deps = c.get('deps');
     const round = getRound(deps.db, game.id, c.req.param('id'));
@@ -157,7 +157,7 @@ export default new Hono<ApiBindings>()
     });
   })
   .post('/games/:gameId/review-rounds/:id/missing-media', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedCreatorReviewGame(c);
     if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
     const deps = c.get('deps');
     const round = getRound(deps.db, game.id, c.req.param('id'));
@@ -212,7 +212,7 @@ export default new Hono<ApiBindings>()
     return c.json({ status: 'asked' });
   })
   .post('/games/:gameId/review-rounds/:id/answer', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedCreatorReviewGame(c);
     if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
     const answer = await parseBody(c, Answer);
     const deps = c.get('deps');

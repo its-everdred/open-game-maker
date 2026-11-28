@@ -7,6 +7,7 @@ import { principalMiddleware } from '../app/principal.js';
 import { authorize } from '@ogm/policy';
 import { actorFromPrincipal } from '../accounts/families.js';
 import { hasGameGrant } from '../games/games.js';
+import { isReviewAdmin } from '../games/review-admin.js';
 import { currentPublishedBuild } from './published.js';
 import { sameSecret } from '../app/internal-auth.js';
 import { HttpError } from '../app/errors.js';
@@ -256,10 +257,11 @@ async function validOwner(deps: AppDeps, grant: Grant): Promise<boolean> {
             releaseState: game.releaseState,
             granted: hasGameGrant(deps.db, game.id, principal.userId),
           }).ok
-        : principal.userId === game.ownerId &&
-          principal.familyId === game.familyId &&
-          principal.capability === 'creator' &&
-          hasCreatorMembership(deps, game.familyId, principal.userId);
+        : (Boolean(grant.previewSource) && isReviewAdmin(deps, principal)) ||
+          (principal.userId === game.ownerId &&
+            principal.familyId === game.familyId &&
+            principal.capability === 'creator' &&
+            hasCreatorMembership(deps, game.familyId, principal.userId));
     return c.json({ allowed });
   });
   const response = await app.request('http://127.0.0.1/', { headers: grant.headers });

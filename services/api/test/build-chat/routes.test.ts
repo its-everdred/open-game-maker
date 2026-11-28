@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getChatRuntime } from '../../src/build-chat/routes.js';
 import { insertChatRow, listSince } from '../../src/build-chat/store.js';
-import { as, chatJob, jobTable, JOB_ID, makeChatApp } from './setup.js';
+import { as, chatJob, jobTable, JOB_ID, makeChatApp, users } from './setup.js';
 
 const url = (path = '') => `/api/v1/jobs/${JOB_ID}/chat${path}`;
 const json = { 'content-type': 'application/json' };
@@ -65,6 +65,24 @@ function recordingAiur() {
 }
 
 describe('build chat routes', () => {
+  it('stops an open chat stream when its creator is demoted', async () => {
+    const { app, deps } = await makeChatApp();
+    let creator = true;
+    deps.registry.principalResolvers = [async () => ({ ...users.owner, capability: creator ? 'creator' : 'player' })];
+    const response = await app.request(url(), { headers: as('owner') });
+    expect(response.status).toBe(200);
+    const stream = sse(response);
+    creator = false;
+    insertChatRow(deps.sqlite, {
+      jobId: JOB_ID,
+      actor: 'agent',
+      kind: 'text',
+      text: 'private reply',
+      at: new Date().toISOString(),
+    });
+    getChatRuntime(deps).hub.publish(JOB_ID);
+    await expect(stream.next()).rejects.toThrow('stream ended');
+  });
   it('stores a creator post and mirrors it to the job ticket through the aiur client', async () => {
     const aiur = recordingAiur();
     const { app, deps } = await makeChatApp(jobTable(chatJob()), aiur.client);

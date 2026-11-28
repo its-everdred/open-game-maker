@@ -56,11 +56,14 @@ export function useCreatorCommands(creatorId: string | undefined) {
 }
 
 // The review screen includes every creator Command, including questions queued for voice.
-export function useCreatorReviewCommands(creatorId: string | undefined) {
+export function useCreatorReviewCommands(creatorId: string | undefined, allGames = false) {
   const query = useQuery({
-    queryKey: [...creatorCommandsQueryKey, creatorId, 'review'],
+    queryKey: [...creatorCommandsQueryKey, creatorId, 'review', allGames ? 'all' : 'own'],
     enabled: Boolean(creatorId),
-    queryFn: () => api<CreatorCommandsPage & { unavailable?: boolean }>('/me/commands?includeQuestions=1'),
+    queryFn: () =>
+      api<CreatorCommandsPage & { unavailable?: boolean }>(
+        `/me/commands?includeQuestions=1${allGames ? '' : '&owned=1'}`,
+      ),
     refetchInterval: REVIEW_POLL_MS,
     retry: false,
   });
@@ -73,6 +76,7 @@ export function useCreatorReviewCommands(creatorId: string | undefined) {
   useMissingMedia(missingMediaPaths);
   return {
     commands: creatorId ? (query.data?.commands ?? NO_DECISIONS) : NO_DECISIONS,
+    decisionIds: creatorId ? (query.data?.game_decision_ids ?? []) : [],
     error: query.isError || query.data?.unavailable === true,
     loading: query.isLoading,
   };

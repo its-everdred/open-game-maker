@@ -6,7 +6,7 @@ import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
 import type { ApiBindings } from '../app/types.js';
-import { authorizedGame } from '../games/authorize.js';
+import { authorizedCreatorReviewGame, authorizedReviewGame } from '../games/authorize.js';
 import { listDrafts, saveDraft } from './drafts.js';
 import { listReviews } from './store.js';
 
@@ -17,19 +17,19 @@ export const prefix = '/api/v1';
 // into the game's design/feedback.json.
 export default new Hono<ApiBindings>()
   .get('/games/:gameId/reviews', (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedReviewGame(c);
     const page: CommandReviewsPage = { reviews: listReviews(c.get('deps').db, game.id) };
     return c.json(page);
   })
   // The signed-in creator's review-deck drafts for the game (#631): the votes saved as they were cast.
   .get('/games/:gameId/review-drafts', (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedCreatorReviewGame(c);
     const { userId } = requirePrincipal(c, ['user']);
     const page: ReviewDraftsPage = { drafts: listDrafts(c.get('deps').db, game.id, userId) };
     return c.json(page);
   })
   .put('/games/:gameId/review-drafts/:key', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedCreatorReviewGame(c);
     const { userId } = requirePrincipal(c, ['user']);
     const key = ReviewDraftKey.safeParse(c.req.param('key'));
     if (!key.success) throw new HttpError(400, 'invalid_request');

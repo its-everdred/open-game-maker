@@ -40,6 +40,7 @@ type PanelProps = {
   workers: WorkerBuild[];
   reviews?: readonly WorkerReview[];
   commands?: readonly ReviewCommand[];
+  readOnlyReviewGames?: readonly string[];
   coreTargets?: readonly ReviewTarget[];
   past?: readonly PastTicket[];
   historyError?: boolean;
@@ -56,6 +57,7 @@ export function BuildTracker({
   finished = [],
   reviews = [],
   commands = [],
+  readOnlyReviewGames,
   coreTargets = [],
   past = [],
   historyError,
@@ -140,6 +142,7 @@ export function BuildTracker({
           workers={workers}
           reviews={reviews}
           commands={commands}
+          readOnlyReviewGames={readOnlyReviewGames}
           coreTargets={coreTargets}
           past={past}
           historyError={historyError}
@@ -162,6 +165,7 @@ export function BuildPanel({
   workers,
   reviews = [],
   commands = [],
+  readOnlyReviewGames,
   coreTargets = [],
   past = [],
   historyError,
@@ -356,6 +360,7 @@ export function BuildPanel({
           workers={workers}
           reviews={reviews}
           commands={commands}
+          readOnlyReviewGames={readOnlyReviewGames}
           initialReview={selectedReview}
           initialCommand={selectedCommand}
           initialTarget={selectedTarget}

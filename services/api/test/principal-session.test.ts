@@ -94,12 +94,16 @@ describe('session principal resolver', () => {
         "INSERT INTO family_members (family_id, user_id, role, capability, joined_at) VALUES ('f_1', ?, 'admin', 'creator', '2026-11-01')",
       )
       .run(userId('sam@example.com'));
-    // The family row supplies the games this session can see; the allow-list role decides what it may do.
+    // Both the allow list and current family membership constrain creator capability.
     expect(await whoami(app, { cookie: session })).toMatchObject({
       familyId: 'f_1',
       platformRole: 'none',
       capability: 'creator',
     });
+    deps.sqlite
+      .prepare("UPDATE family_members SET capability = 'player' WHERE user_id = ?")
+      .run(userId('sam@example.com'));
+    expect(await whoami(app, { cookie: session })).toMatchObject({ capability: 'player' });
   });
 
   it('registers auth-backed user-directory and mail providers for the accounts contexts', async () => {

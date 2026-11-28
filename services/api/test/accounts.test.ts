@@ -34,6 +34,7 @@ describe('accounts routes', () => {
       user: { id: owner.userId, email: owner.email },
       family: { id: family.id, name: 'Our House', role: 'owner', capability: 'creator' },
       platformRole: 'admin',
+      capability: 'creator',
     });
 
     const members = await app.request(`/api/v1/families/${family.id}/members`, {

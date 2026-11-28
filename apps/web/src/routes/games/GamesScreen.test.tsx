@@ -14,6 +14,10 @@ const session = vi.hoisted(() => ({ userId: undefined as string | undefined }));
 vi.mock('../../lib/api/session', () => ({
   useSession: () => ({ data: session.userId ? { user: { id: session.userId } } : undefined }),
 }));
+vi.mock('../admin/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../admin/api')>()),
+  useAdminMe: () => ({ data: session.userId ? { capability: 'creator', platformRole: 'none' } : undefined }),
+}));
 vi.mock('../../lib/sound', () => ({ set: vi.fn(), getVolume: () => 1, status: () => 'on', onChange: () => () => {} }));
 
 const games = [
@@ -378,6 +382,7 @@ describe('GamesScreen', () => {
   });
 
   it('updates build progress without selecting a game', async () => {
+    session.userId = 'u_1';
     let resolveJobs!: (response: Response) => void;
     const pendingJobs = new Promise<Response>((resolve) => {
       resolveJobs = resolve;
@@ -405,6 +410,7 @@ describe('GamesScreen', () => {
   });
 
   it('renders real tiles, prioritizes the building game, and shows its friendly progress', async () => {
+    session.userId = 'u_1';
     const { container } = renderGames();
 
     await screen.findByRole('button', { name: /^Midnight Crumbs/ });

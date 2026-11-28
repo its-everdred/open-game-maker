@@ -59,6 +59,7 @@ export function PreviewCard({
   onPendingChange,
   media = [],
   roundId,
+  readOnly = false,
 }: {
   gameId: string;
   preview: Preview;
@@ -67,6 +68,7 @@ export function PreviewCard({
   onPendingChange?(pending: boolean): void;
   media?: readonly Round['media'][number][];
   roundId?: string;
+  readOnly?: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const [note, setNote] = useState('');
@@ -139,7 +141,9 @@ export function PreviewCard({
       className="review-deck"
       aria-label={`Preview for ticket ${preview.ticket}`}
     >
-      {swipeControls ? (
+      {readOnly ? (
+        content
+      ) : swipeControls ? (
         <SwipeVerdict
           disabled={answer.isPending || answer.isSuccess}
           onPendingChange={onPendingChange}

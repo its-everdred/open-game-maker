@@ -68,6 +68,7 @@ export function CommandReviewCard({
   onAnswered,
   ticketState,
   onSendingChange,
+  readOnly = false,
 }: {
   command: ReviewCommand;
   onAnswered(review: {
@@ -78,6 +79,7 @@ export function CommandReviewCard({
   }): void;
   ticketState?: string;
   onSendingChange?(sending: boolean): void;
+  readOnly?: boolean;
 }) {
   const [note, setNote] = useState('');
   const [votes, setVotes] = useState<Record<string, 'like' | 'dislike'>>({});
@@ -239,20 +241,22 @@ export function CommandReviewCard({
           {withoutLinks(command.options.find(({ id }) => id === command.recommend)?.label ?? '')}
         </p>
       ) : null}
-      <label>
-        Note (optional)
-        <textarea
-          value={note}
-          disabled={sending || saved}
-          maxLength={2000}
-          onChange={(event) => setNote(event.target.value)}
-        />
-      </label>
+      {!readOnly && (
+        <label>
+          Note (optional)
+          <textarea
+            value={note}
+            disabled={sending || saved || readOnly}
+            maxLength={2000}
+            onChange={(event) => setNote(event.target.value)}
+          />
+        </label>
+      )}
       {rows ? (
         <ReviewMatrix
           key={command.version}
           rows={rows}
-          disabled={sending || saved}
+          disabled={sending || saved || readOnly}
           votes={Object.fromEntries(
             candidates.map(({ id }) => [
               id,
@@ -348,7 +352,7 @@ export function CommandReviewCard({
                       aria-label={`${option.label} audio ${index + 2}`}
                     />
                   ))}
-                  {isOriginal(option) ? null : (
+                  {isOriginal(option) || readOnly ? null : (
                     <>
                       <div
                         className="worker-review-votes"
@@ -419,34 +423,36 @@ export function CommandReviewCard({
           </div>
         </>
       )}
-      <div className="worker-review-submit">
-        <button
-          className="worker-review-change"
-          disabled={sending || saved || !canSend}
-          type="button"
-          onClick={() => sendReview()}
-        >
-          Send
-        </button>
-        <button
-          className="worker-review-change"
-          disabled={sending || saved}
-          type="button"
-          onClick={() => sendReview(true)}
-        >
-          None of these
-        </button>
-        {advance && (
+      {!readOnly && (
+        <div className="worker-review-submit">
           <button
-            className="worker-review-change worker-review-advance"
+            className="worker-review-change"
+            disabled={sending || saved || !canSend}
+            type="button"
+            onClick={() => sendReview()}
+          >
+            Send
+          </button>
+          <button
+            className="worker-review-change"
             disabled={sending || saved}
             type="button"
-            onClick={() => sendReview(false, advance)}
+            onClick={() => sendReview(true)}
           >
-            Approve → {RUNG_LABEL[advance]}
+            None of these
           </button>
-        )}
-      </div>
+          {advance && (
+            <button
+              className="worker-review-change worker-review-advance"
+              disabled={sending || saved}
+              type="button"
+              onClick={() => sendReview(false, advance)}
+            >
+              Approve → {RUNG_LABEL[advance]}
+            </button>
+          )}
+        </div>
+      )}
       {saved && (
         <p role="status">
           Saved · sent to agent · Ticket state:{' '}
@@ -455,7 +461,7 @@ export function CommandReviewCard({
       )}
       {error && <p role="alert">That answer did not send. Try again.</p>}
       {advanceFailed && <p role="alert">Answer sent, but the ticket did not move to the next phase.</p>}
-      {picking && picking.version === command.version && (
+      {!readOnly && picking && picking.version === command.version && (
         <div onKeyDown={(event) => event.stopPropagation()}>
           <Dialog
             title={picking.label}
