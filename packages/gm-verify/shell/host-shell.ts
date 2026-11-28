@@ -15,7 +15,13 @@ const query = new URLSearchParams(location.search);
 /* The local build's URL: its origin stands in for the games origin and its query goes on to the game. */
 const games = new URL(query.get('games')!);
 
-createGameFrame({
+const back = document.querySelector<HTMLButtonElement>('.studio-back-button')!;
+let backEnabled = false;
+let firstFrame = false;
+const updateBack = () => {
+  back.hidden = !firstFrame || !backEnabled;
+};
+const frame = createGameFrame({
   container: document.querySelector<HTMLElement>('#game')!,
   gamesOrigin: games.origin,
   gameId: 'local',
@@ -24,6 +30,23 @@ createGameFrame({
   params: { ...Object.fromEntries(games.searchParams), capture: '1', tier: query.get('tier') ?? 'mobile' },
   mode: 'play',
   playerIndex: 0,
-  capabilities: [],
+  capabilities: ['host.back'],
   role: () => 'owner',
+  onLoad: (event) => {
+    if (event.t === 'load.frame') {
+      firstFrame = true;
+      updateBack();
+    }
+  },
+  onError: () => {
+    firstFrame = false;
+    updateBack();
+  },
 });
+
+frame.on('host.back', (state) => {
+  backEnabled = state.enabled;
+  updateBack();
+  back.setAttribute('aria-label', state.label ?? 'Back');
+});
+back.addEventListener('click', () => frame.send('navigation.back', {}));

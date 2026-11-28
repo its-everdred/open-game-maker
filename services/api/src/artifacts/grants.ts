@@ -253,6 +253,7 @@ async function validOwner(deps: AppDeps, grant: Grant): Promise<boolean> {
             familyId: game.familyId,
             ownerId: game.ownerId,
             visibility: game.visibility,
+            releaseState: game.releaseState,
             granted: hasGameGrant(deps.db, game.id, principal.userId),
           }).ok
         : principal.userId === game.ownerId &&

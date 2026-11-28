@@ -2,7 +2,7 @@ import type { AppDeps } from '../app/types.js';
 
 export type PublishedBuild = { game_id: string; build_id: string; visibility: string };
 
-/** A pointer grants access only when its release, snapshot, and tested build agree. */
+/** A pointer grants public access only when its release, snapshot, and tested build agree and the game is released. */
 export function publishedBuilds(deps: AppDeps): PublishedBuild[] {
   return deps.sqlite
     .prepare<[], PublishedBuild>(
@@ -11,7 +11,7 @@ export function publishedBuilds(deps: AppDeps): PublishedBuild[] {
     JOIN releases r ON r.id = g.published_release_id AND r.game_id = g.id
     JOIN builds b ON b.id = r.build_id AND b.game_id = g.id
     JOIN override_snapshots s ON s.id = r.snapshot_id AND s.game_id = g.id AND s.build_id = b.id
-    WHERE g.delisted_at IS NULL AND b.status = 'tested' AND b.artifact = 'present'
+    WHERE g.delisted_at IS NULL AND g.release_state = 'released' AND b.status = 'tested' AND b.artifact = 'present'
   `,
     )
     .all();

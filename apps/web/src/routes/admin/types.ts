@@ -84,6 +84,7 @@ export type AdminGame = {
   ownerId: string;
   title: string;
   visibility: 'listed' | 'private';
+  releaseState?: 'released' | 'coming_soon';
   repoVisibility: 'public' | 'private';
   createdAt: string;
   delistedAt: string | null;

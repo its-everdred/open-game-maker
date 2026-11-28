@@ -7,5 +7,5 @@ export const route: ScreenRoute = {
   path: '/play/:ref',
   element: <PlayScreen />,
   chrome: 'app',
-  auth: 'required',
+  auth: 'none',
 };

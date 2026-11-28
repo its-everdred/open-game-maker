@@ -31,6 +31,7 @@ function mount() {
     gameId: 'game',
     buildId: 'build',
     mode: 'play',
+    hostBack: true,
     design: { rev: 0, doc: {} as DesignDoc },
     create: (value) => {
       options = value;
@@ -38,9 +39,11 @@ function mount() {
     },
     onState: (state) => states.push(state),
   });
+  expect(options?.capabilities).toContain('host.back');
   options?.onReady?.({ id: 'blobs', title: 'Blobs', inputs: { actions: {} } } as GameManifest, []);
   const tell = (visible: boolean) => listeners.get('host.pause.visible')?.({ visible } as never);
-  return { controller, states, stops, tell };
+  const tellBack = (enabled: boolean, label?: string) => listeners.get('host.back')?.({ enabled, label } as never);
+  return { controller, states, stops, tell, tellBack, frame };
 }
 
 it('reports the game asking to hide and show the host Pause control', () => {
@@ -69,8 +72,26 @@ it('stops listening when the game exits, so a late message cannot hide the contr
 it('hides the control only in play with a live bridge, never stranding a player on a failed or loading game', () => {
   expect(hidesHostPause('play', { bridgeState: 'ready', hostPauseVisible: false })).toBe(true);
   expect(hidesHostPause('play', { bridgeState: 'ready', hostPauseVisible: true })).toBe(false);
+  expect(hidesHostPause('play', { bridgeState: 'ready', hostPauseVisible: false, back: { enabled: true } })).toBe(
+    false,
+  );
   expect(hidesHostPause('play', { bridgeState: 'ready' })).toBe(false);
   expect(hidesHostPause('play', { bridgeState: 'error', hostPauseVisible: false })).toBe(false);
   expect(hidesHostPause('play', { bridgeState: 'connecting', hostPauseVisible: false })).toBe(false);
   expect(hidesHostPause('edit', { bridgeState: 'ready', hostPauseVisible: false })).toBe(false);
+});
+
+it('relays Back availability and sends the player action to the game', () => {
+  const { controller, states, stops, tellBack, frame } = mount();
+  expect(controller.state().back).toBeUndefined();
+  tellBack(true, 'Choose mode');
+  expect(states.at(-1)?.back).toEqual({ enabled: true, label: 'Choose mode' });
+  controller.back?.();
+  expect(frame.send).toHaveBeenCalledWith('navigation.back', {});
+  tellBack(false);
+  expect(controller.state().back?.enabled).toBe(false);
+  controller.dispose();
+  expect(stops.get('host.back')).toHaveBeenCalledOnce();
+  tellBack(true);
+  expect(controller.state().back?.enabled).toBe(false);
 });
