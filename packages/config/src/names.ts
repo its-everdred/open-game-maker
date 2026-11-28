@@ -310,6 +310,12 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
     doc: 'loopback URL of the internal API (commit, games-host, voice-host, repair)',
   },
   {
+    name: 'OGM_ARTIFACT_RELEASE_GATE',
+    unit: 'shared',
+    kind: 'bool',
+    doc: 'api + games-host serve game artifacts only for released builds (default false until #1505)',
+  },
+  {
     name: 'OGM_BUILDER_WORKSPACES_ROOT',
     unit: 'api',
     kind: 'path',

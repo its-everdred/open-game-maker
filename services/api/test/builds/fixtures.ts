@@ -165,6 +165,8 @@ export async function gamesHost(root: string) {
     OGM_GAMES_PORT: String(port),
     OGM_GAMES_ROOT: root,
     OGM_APP_ORIGIN: 'https://app.example.test',
+    // These tests check #1473's privacy, which holds only with the release gate on (#1505).
+    OGM_ARTIFACT_RELEASE_GATE: '1',
   });
   await new Promise((resolve) => server.once('listening', resolve));
   return { base: `http://127.0.0.1:${port}`, close: () => new Promise((resolve) => server.close(resolve)) };
