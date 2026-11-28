@@ -1,6 +1,11 @@
 /** CIE76 and block SSIM for equally sized sRGB screenshots. */
 export type PixelMask = { x: number; y: number; width: number; height: number };
 
+const linearChannels = Float64Array.from({ length: 256 }, (_, value) => {
+  const c = value / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+});
+
 export function glassMetrics(
   reference: Uint8Array,
   actual: Uint8Array,
@@ -41,15 +46,19 @@ export function glassMetrics(
         for (let x = bx; x < Math.min(bx + 8, width); x++) {
           if (masks.some((m) => x >= m.x && x < m.x + m.width && y >= m.y && y < m.y + m.height)) continue;
           const i = (y * width + x) * 3;
-          const a = [reference[i]!, reference[i + 1]!, reference[i + 2]!];
-          const b = [actual[i]!, actual[i + 1]!, actual[i + 2]!];
-          if (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2]) {
-            const labA = lab(a),
-              labB = lab(b);
+          const ar = reference[i]!,
+            ag = reference[i + 1]!,
+            ab = reference[i + 2]!;
+          const br = actual[i]!,
+            bg = actual[i + 1]!,
+            bb = actual[i + 2]!;
+          if (ar !== br || ag !== bg || ab !== bb) {
+            const labA = lab(ar, ag, ab),
+              labB = lab(br, bg, bb);
             if (Math.hypot(labA[0]! - labB[0]!, labA[1]! - labB[1]!, labA[2]! - labB[2]!) > 3) changed++;
           }
-          xs.push(0.2126 * a[0]! + 0.7152 * a[1]! + 0.0722 * a[2]!);
-          ys.push(0.2126 * b[0]! + 0.7152 * b[1]! + 0.0722 * b[2]!);
+          xs.push(0.2126 * ar + 0.7152 * ag + 0.0722 * ab);
+          ys.push(0.2126 * br + 0.7152 * bg + 0.0722 * bb);
         }
       const n = xs.length;
       if (!n) continue;
@@ -76,11 +85,10 @@ export function glassMetrics(
   return { ssim: weightedSsim / count, deltaEOver3Percent: (changed / count) * 100 };
 }
 
-function lab(rgb: number[]): number[] {
-  const [r, g, b] = rgb.map((v) => {
-    const c = v / 255;
-    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
+function lab(red: number, green: number, blue: number): number[] {
+  const r = linearChannels[red]!,
+    g = linearChannels[green]!,
+    b = linearChannels[blue]!;
   const f = (v: number) => (v > 216 / 24389 ? Math.cbrt(v) : ((24389 / 27) * v + 16) / 116);
   const x = f((0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047);
   const y = f(0.2126729 * r + 0.7151522 * g + 0.072175 * b);
