@@ -2,6 +2,10 @@
 
 These prototypes are frozen; do not port them into production code. Read their write-ups, then use the maintained replacements.
 
+## `ogm-glass` (live, not archived)
+
+Approved OGM UI: [`ogm-glass/`](ogm-glass/) (open `index.html`); match it exactly. It is refreshed from the Claude Design canvas, never edited by hand; see its README.
+
 ## `studio-v0`
 
 The studio prototype proved the title-to-library-to-editor loop, visual language, build tracker, and deploy shape. Its detailed notes remain in [`studio-v0/README.md`](studio-v0/README.md). The product and deploy flow now live in `apps/web` and `apps/web/tools/deploy.sh`.

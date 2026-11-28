@@ -23,6 +23,9 @@ export type GameSummary = {
   /** The shareable `/play/<slug>` segment; null only for a game written before slugs existed. */
   slug?: string | null;
   visibility?: 'listed' | 'private';
+  releaseState?: 'released' | 'coming_soon';
+  canPlay?: boolean;
+  canManageRelease?: boolean;
   repoVisibility?: 'public' | 'private';
   repo: { owner: string; name: string; url?: string; visibility?: 'public' | 'private' } | null;
   createdAt: string;

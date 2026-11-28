@@ -227,6 +227,7 @@ export async function listCreatorCommands(
         familyId: game.familyId,
         ownerId: game.ownerId,
         visibility: game.visibility,
+        releaseState: game.releaseState,
         granted: hasGameGrant(deps.db, game.id, principal.userId),
       }).ok,
   );

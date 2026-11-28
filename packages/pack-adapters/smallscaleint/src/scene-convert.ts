@@ -34,9 +34,15 @@ const defaultSolid = (layer: string): boolean => layer === 'wall';
 export function isoMapToScene(json: TiledIsoMap, ids: { game: string; scene: string }): SceneDoc {
   const map = new IsoMap(json);
   const tagsByGid = new Map<number, string>();
+  const rolesByGid = new Map<number, string>();
+  const scalesByGid = new Map<number, unknown>();
   for (const set of json.tilesets)
     for (const tile of set.tiles) {
       const value = tile.properties?.find((property) => property.name === 'tags')?.value;
+      const role = tile.properties?.find((property) => property.name === 'role')?.value;
+      const scale = tile.properties?.find((property) => property.name === 'scale')?.value;
+      if (scale !== undefined) scalesByGid.set(set.firstgid + tile.id, scale);
+      if (typeof role === 'string') rolesByGid.set(set.firstgid + tile.id, role);
       const tags = typeof value === 'string' ? value : undefined;
       const flags = SCENE_TAGS.filter(
         (name) => tile.properties?.find((property) => property.name === name)?.value === true,
@@ -50,11 +56,16 @@ export function isoMapToScene(json: TiledIsoMap, ids: { game: string; scene: str
       layer.type === 'objectgroup' ? { kind: 'objects', order } : { kind: 'tiles', order, tiles: {} };
   });
   for (const piece of map.pieces()) {
+    if (scalesByGid.has(piece.gid) && piece.scale === undefined)
+      throw new Error(`tile gid ${piece.gid} has an unsupported scale and cannot become a scene`);
     const layerName = piece.key.slice(0, piece.key.indexOf(':'));
     const tags = tagsByGid.get(piece.gid);
     const props = {
       ...(piece.solid === defaultSolid(piece.layer) ? {} : { solid: piece.solid }),
       ...(tags === undefined ? {} : { tags }),
+      ...(piece.scale === undefined ? {} : { scale: piece.scale }),
+      ...(piece.depthOffset === undefined ? {} : { depthOffset: piece.depthOffset }),
+      ...(rolesByGid.has(piece.gid) ? { role: rolesByGid.get(piece.gid)! } : {}),
     };
     const tile: SceneTile = {
       asset: piece.asset,
@@ -145,11 +156,38 @@ export function sceneToIsoMap(input: SceneDoc): TiledIsoMap {
       if (tile.flip) refuse(`tile ${id}:${cell} is flipped; the pack draws facings instead`);
       const facing = (tile.facing ?? 'E') as TileFacing;
       if (!Object.hasOwn(ROTATION, facing)) refuse(`tile ${id}:${cell} facing ${tile.facing} is not E, N, W or S`);
-      const { solid = defaultSolid(id.replace(/-\d+$/, '')), tags, ...rest } = tile.props ?? {};
+      const {
+        solid = defaultSolid(id.replace(/-\d+$/, '')),
+        tags,
+        scale,
+        role,
+        depthOffset,
+        ...rest
+      } = tile.props ?? {};
       if (typeof solid !== 'boolean') refuse(`tile ${id}:${cell} solid must be a boolean`);
       if (tags !== undefined && typeof tags !== 'string') refuse(`tile ${id}:${cell} tags must be a string`);
+      if (role !== undefined && typeof role !== 'string') refuse(`tile ${id}:${cell} role must be a string`);
+      if (
+        depthOffset !== undefined &&
+        (typeof depthOffset !== 'number' || !Number.isFinite(depthOffset) || (id === 'floor' && depthOffset !== 0))
+      )
+        refuse(`tile ${id}:${cell} depthOffset must be finite and 0 on floor`);
+      if (
+        scale !== undefined &&
+        (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0 || (id === 'floor' && scale !== 1))
+      )
+        refuse(`tile ${id}:${cell} scale must be positive; floor scale must be 1`);
       if (Object.keys(rest).length > 0) refuse(`tile ${id}:${cell} has props ${Object.keys(rest).join(', ')}`);
-      const signature = JSON.stringify([tile.asset, facing, solid, tile.elevation ?? null, tags]);
+      const signature = JSON.stringify([
+        tile.asset,
+        facing,
+        solid,
+        tile.elevation ?? null,
+        tags,
+        scale,
+        role,
+        depthOffset,
+      ]);
       let gid = gids.get(signature);
       if (gid === undefined) {
         gid = tiles.length + 1;
@@ -161,6 +199,9 @@ export function sceneToIsoMap(input: SceneDoc): TiledIsoMap {
             { name: 'rotation', value: ROTATION[facing] },
             { name: 'solid', value: solid },
             ...(tags === undefined ? [] : [{ name: 'tags', value: tags }]),
+            ...(scale === undefined ? [] : [{ name: 'scale', value: scale }]),
+            ...(depthOffset === undefined ? [] : [{ name: 'depthOffset', value: depthOffset }]),
+            ...(role === undefined ? [] : [{ name: 'role', value: role }]),
             ...(tile.elevation === undefined ? [] : [{ name: 'elevation', value: tile.elevation }]),
           ],
         });

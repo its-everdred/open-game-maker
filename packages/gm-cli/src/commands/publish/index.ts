@@ -630,7 +630,7 @@ export const command: GmCommand = {
 
       if (upload.status === 201) {
         const buildId = String(answer.buildId ?? '');
-        const play = `${env.OGM_GAMES_ORIGIN?.replace(/\/+$/, '') ?? ''}/g/${encodeURIComponent(facts.gameId)}/${encodeURIComponent(buildId)}/`;
+        const play = `${env.OGM_APP_ORIGIN?.replace(/\/+$/, '') ?? ''}/g/${encodeURIComponent(facts.gameId)}?build=${encodeURIComponent(buildId)}`;
         if (answer.publishResult !== 'published') {
           const outcome = answer.publishResult === 'skipped' ? 'skipped' : 'unknown';
           if (ctx.json)
@@ -761,58 +761,74 @@ export const command: GmCommand = {
             }
           };
           if (gamesOrigin) {
-            const url = `${gamesOrigin}/g/${encodeURIComponent(facts.gameId)}/${encodeURIComponent(buildId)}/`;
-            const coreRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
-            const qaExecutable = ctx.env?.OGM_QA_GM === 'true' ? 'true' : process.execPath;
-            const qaArgs =
-              qaExecutable === 'true'
-                ? []
-                : [
-                    join(coreRoot, 'packages/gm-cli/dist/index.js'),
-                    'qa',
-                    'playtest',
-                    game,
-                    '--all-modes',
-                    '--url',
-                    url,
-                    '--out',
-                    captureDir,
-                  ];
-            const capture = exec(qaExecutable, qaArgs, work, {}, 600_000);
-            if (!capture.ok)
-              publishAttention ||= `Prototype playtest capture failed for ${facts.slug}; posted with fallback media.`;
-            let clipPath: string | null = null;
-            if (existsSync(join(captureDir, 'playtest.json'))) {
-              try {
-                const runs = JSON.parse(readFileSync(join(captureDir, 'playtest.json'), 'utf8')) as { clip?: string }[];
-                const clip = runs.find((run) => run.clip)?.clip;
-                if (clip) clipPath = join(captureDir, clip);
-              } catch {
-                /* retain still fallback below */
-              }
-            }
-            if (clipPath && existsSync(clipPath)) {
-              const hash = await uploadMedia(clipPath, 'video/mp4');
-              if (hash) {
-                media.push({ kind: 'clip', ref: hash, hasAudio: false });
-                clipStatus = 'captured';
-              }
-            }
-            if (clipStatus === 'unchecked') {
-              const pngs: string[] = [];
-              const visit = (directory: string) => {
-                if (!existsSync(directory)) return;
-                for (const entry of readdirSync(directory, { withFileTypes: true })) {
-                  const path = join(directory, entry.name);
-                  if (entry.isDirectory()) visit(path);
-                  else if (/\.png$/iu.test(entry.name)) pngs.push(path);
+            try {
+              const access = await request(
+                `${api}/internal/operator/games/${encodeURIComponent(facts.slug)}/builds/${encodeURIComponent(buildId)}/access`,
+                {
+                  method: 'POST',
+                  headers: { 'x-ogm-internal': token },
+                  signal: AbortSignal.timeout(20_000),
+                },
+              );
+              const accessBody = access.status === 200 ? (JSON.parse(access.body) as { url?: unknown }) : {};
+              if (typeof accessBody.url !== 'string') throw new Error('draft access unavailable for prototype capture');
+              const url = accessBody.url;
+              const coreRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
+              const qaExecutable = ctx.env?.OGM_QA_GM === 'true' ? 'true' : process.execPath;
+              const qaArgs =
+                qaExecutable === 'true'
+                  ? []
+                  : [
+                      join(coreRoot, 'packages/gm-cli/dist/index.js'),
+                      'qa',
+                      'playtest',
+                      game,
+                      '--all-modes',
+                      '--url',
+                      url,
+                      '--out',
+                      captureDir,
+                    ];
+              const capture = exec(qaExecutable, qaArgs, work, {}, 600_000);
+              if (!capture.ok)
+                publishAttention ||= `Prototype playtest capture failed for ${facts.slug}; posted with fallback media.`;
+              let clipPath: string | null = null;
+              if (existsSync(join(captureDir, 'playtest.json'))) {
+                try {
+                  const runs = JSON.parse(readFileSync(join(captureDir, 'playtest.json'), 'utf8')) as {
+                    clip?: string;
+                  }[];
+                  const clip = runs.find((run) => run.clip)?.clip;
+                  if (clip) clipPath = join(captureDir, clip);
+                } catch {
+                  /* retain still fallback below */
                 }
-              };
-              visit(captureDir);
-              for (const still of pngs.slice(0, 15)) {
-                const hash = await uploadMedia(still, 'image/png');
-                if (hash) media.push({ kind: 'still', ref: hash });
               }
+              if (clipPath && existsSync(clipPath)) {
+                const hash = await uploadMedia(clipPath, 'video/mp4');
+                if (hash) {
+                  media.push({ kind: 'clip', ref: hash, hasAudio: false });
+                  clipStatus = 'captured';
+                }
+              }
+              if (clipStatus === 'unchecked') {
+                const pngs: string[] = [];
+                const visit = (directory: string) => {
+                  if (!existsSync(directory)) return;
+                  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+                    const path = join(directory, entry.name);
+                    if (entry.isDirectory()) visit(path);
+                    else if (/\.png$/iu.test(entry.name)) pngs.push(path);
+                  }
+                };
+                visit(captureDir);
+                for (const still of pngs.slice(0, 15)) {
+                  const hash = await uploadMedia(still, 'image/png');
+                  if (hash) media.push({ kind: 'still', ref: hash });
+                }
+              }
+            } catch {
+              publishAttention ||= `Prototype playtest capture failed for ${facts.slug}; posted with fallback media.`;
             }
           } else publishAttention ||= 'The games origin is unavailable; published prototype capture was skipped.';
           if (media.length === 1 && ctx.env?.OGM_QA_GM !== 'true')

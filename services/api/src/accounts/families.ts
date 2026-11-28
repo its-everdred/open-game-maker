@@ -3,11 +3,12 @@ import { randomUUID } from 'node:crypto';
 import type { Principal } from '@ogm/contracts';
 import type { Db } from '@ogm/db';
 import { schema } from '@ogm/db';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 
 import type { Actor, Authorization } from '@ogm/policy';
 
 import { HttpError } from '../app/errors.js';
+import { invalidateArtifactGrants } from '../artifacts/session-grants.js';
 
 type UserPrincipal = Extract<Principal, { kind: 'user' }>;
 
@@ -83,9 +84,20 @@ export function removeMember(db: Db, familyId: string, userId: string): void {
   const family = db.select().from(schema.families).where(eq(schema.families.id, familyId)).get();
   if (!family) throw new HttpError(404, 'family_not_found');
   if (family.ownerUserId === userId) throw new HttpError(409, 'owner_immutable');
-  db.delete(schema.familyMembers)
-    .where(and(eq(schema.familyMembers.familyId, familyId), eq(schema.familyMembers.userId, userId)))
-    .run();
+  db.transaction((tx) => {
+    const familyGames = tx
+      .select({ id: schema.games.id })
+      .from(schema.games)
+      .where(eq(schema.games.familyId, familyId));
+    tx.delete(schema.gameEarlyAccess)
+      .where(and(eq(schema.gameEarlyAccess.userId, userId), inArray(schema.gameEarlyAccess.gameId, familyGames)))
+      .run();
+    const result = tx
+      .delete(schema.familyMembers)
+      .where(and(eq(schema.familyMembers.familyId, familyId), eq(schema.familyMembers.userId, userId)))
+      .run();
+    if (result.changes) invalidateArtifactGrants(tx, 'user', userId);
+  });
 }
 
 export function setRole(db: Db, familyId: string, userId: string, role: 'admin' | 'member'): void {
@@ -96,15 +108,35 @@ export function setRole(db: Db, familyId: string, userId: string, role: 'admin' 
     .get();
   if (!family) throw new HttpError(404, 'family_not_found');
   if (family.ownerUserId === userId) throw new HttpError(409, 'owner_immutable');
-  db.update(schema.familyMembers)
-    .set({ role })
-    .where(and(eq(schema.familyMembers.familyId, familyId), eq(schema.familyMembers.userId, userId)))
-    .run();
+  db.transaction((tx) => {
+    const result = tx
+      .update(schema.familyMembers)
+      .set({ role })
+      .where(
+        and(
+          eq(schema.familyMembers.familyId, familyId),
+          eq(schema.familyMembers.userId, userId),
+          ne(schema.familyMembers.role, role),
+        ),
+      )
+      .run();
+    if (result.changes) invalidateArtifactGrants(tx, 'user', userId);
+  });
 }
 
 export function setCapability(db: Db, familyId: string, userId: string, capability: 'creator' | 'player'): void {
-  db.update(schema.familyMembers)
-    .set({ capability })
-    .where(and(eq(schema.familyMembers.familyId, familyId), eq(schema.familyMembers.userId, userId)))
-    .run();
+  db.transaction((tx) => {
+    const result = tx
+      .update(schema.familyMembers)
+      .set({ capability })
+      .where(
+        and(
+          eq(schema.familyMembers.familyId, familyId),
+          eq(schema.familyMembers.userId, userId),
+          ne(schema.familyMembers.capability, capability),
+        ),
+      )
+      .run();
+    if (result.changes) invalidateArtifactGrants(tx, 'user', userId);
+  });
 }

@@ -83,7 +83,10 @@ IFS=$'\x1f' read -r game_id repo_path daemon_checkout latest < <(printf '%s' "$f
 [[ -n $game_id ]] || fail "the API's answer for \"$slug\" carried no game id" 65
 build=${build:-$latest}
 [[ -n $build ]] || fail "game \"$slug\" has no build on main yet; publish one first (ops/bin/ogm-publish $slug)" 65
-url="${origin%/}/g/$game_id/$build/"
+access=$(curl -fsS --max-time 20 -X POST -H "x-ogm-internal: $token" "$api/internal/operator/games/$slug/builds/$build/access" 2> /dev/null) ||
+  fail "the API could not authorize the selected build" 65
+url=$(printf '%s' "$access" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>process.stdout.write(JSON.parse(s).url ?? ""))')
+[[ $url == "${origin%/}/d/"* ]] || fail "the API returned an unexpected games origin" 65
 
 checkout=${checkout:-$daemon_checkout}
 game_dir=${checkout:+$checkout/$repo_path}
@@ -96,7 +99,9 @@ read -r -a gm <<< "${OGM_GM:-node $repo/packages/gm-cli/dist/index.js}"
 
 worst=0
 step() {
-  printf '== gm %s\n' "$*"
+  local displayed=("$@")
+  for i in "${!displayed[@]}"; do [[ ${displayed[$i]} == "$url" ]] && displayed[$i]='<scoped-build-url>'; done
+  printf '== gm %s\n' "${displayed[*]}"
   (cd "$game_dir" && "${gm[@]}" "$@") || worst=1
 }
 

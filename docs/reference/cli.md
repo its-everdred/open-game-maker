@@ -101,7 +101,7 @@ play link with “Limitations not stated” and reports the merged PRs that need
 limitations and eligible decision ids. When the merged PRs' Play links name a `scenario=`, the latest one rides on the
 build, and the review card embeds that slice (`/g/<gameId>/play?build=<buildId>&scenario=<name>`) to play in place.
 
-The publish host's `api.env` supplies `OGM_GAMES_ORIGIN` so the review link opens the exact published build. Set
+The publish host's `api.env` supplies `OGM_APP_ORIGIN` for the owner link and `OGM_GAMES_ORIGIN` for scoped capture. Set
 `OGM_PUBLISH_BUILD_TIMEOUT_MS` in that file to change the production build deadline in milliseconds; it defaults to
 1,800,000 (30 minutes). A timed-out build reports its deadline directly and is not reported as missing `dist/` output.
 
@@ -120,9 +120,9 @@ logo and thumbnail URLs, HTTP status, transferred bytes, duration, response `Cac
 duration. A zero transfer size means no network bytes were transferred; Chromium does not identify whether the source
 was memory or disk cache. The default game is `blobs`. `--origin` must match the app origin configured for the QA host.
 After a no-op `gm publish`, pass its build ID with `--after-publish`; the command loads that build and its predecessor
-in one browser context, totals bytes transferred for the game's files, and fails if a file other than the build
-manifest or `index.html` changed URL, or if an unchanged URL transferred bytes. This mode also needs
-`OGM_GAMES_ORIGIN` in the QA host's `api.env`.
+in one browser context, totals bytes transferred and compares content hashes. It fails if a file other than the build
+manifest or `index.html` changes. Restricted artifacts use `no-store`, so repeated transfers are expected. This mode
+needs `OGM_GAMES_ORIGIN`, `OGM_API_PORT` and `OGM_INTERNAL_TOKEN` in the QA host's `api.env`.
 
 ```text
 gm qa games-cache [--origin <app origin>] [--game <slug>] [--after-publish <buildId>] [--json]

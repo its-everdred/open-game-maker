@@ -12,13 +12,28 @@ const parse = (key: string): Cell => {
  */
 export function unmeasured(grid: Grid): Finding[] {
   const missing = new Map<string, Cell[]>();
+  const scaled = new Map<string, Cell[]>();
+  const scaledRoofs = new Map<string, Cell[]>();
+  const scaledPosts = new Map<string, Cell[]>();
   for (const piece of grid.scene.pieces) {
     if ((piece.role === 'fence' || piece.role === 'wall') && !piece.edge) {
       if (!missing.has(piece.asset)) missing.set(piece.asset, []);
       missing.get(piece.asset)!.push({ x: piece.x, y: piece.y });
     }
+    if (RUN.has(piece.role) && piece.scale !== undefined && piece.scale !== 1) {
+      if (!scaled.has(piece.asset)) scaled.set(piece.asset, []);
+      scaled.get(piece.asset)!.push({ x: piece.x, y: piece.y });
+    }
+    if (piece.role === 'roof' && piece.scale !== undefined && piece.scale !== 1) {
+      if (!scaledRoofs.has(piece.asset)) scaledRoofs.set(piece.asset, []);
+      scaledRoofs.get(piece.asset)!.push({ x: piece.x, y: piece.y });
+    }
+    if (piece.role === 'post' && piece.scale !== undefined && piece.scale !== 1 && !piece.postSocket) {
+      if (!scaledPosts.has(piece.asset)) scaledPosts.set(piece.asset, []);
+      scaledPosts.get(piece.asset)!.push({ x: piece.x, y: piece.y });
+    }
   }
-  return [...missing].map(([asset, cells]) => ({
+  const missingFindings: Finding[] = [...missing].map(([asset, cells]) => ({
     check: 'facts',
     id: 'facts/unmeasured-edge',
     severity: 'high',
@@ -26,6 +41,33 @@ export function unmeasured(grid: Grid): Finding[] {
     cells,
     objects: [asset],
   }));
+  return [
+    ...missingFindings,
+    ...[...scaled].map(([asset, cells]): Finding => ({
+      check: 'facts',
+      id: 'facts/scaled-edge',
+      severity: 'high',
+      message: `${cells.length} ${asset} piece(s) are scaled; their measured full-cell edges cannot establish a connected run`,
+      cells,
+      objects: [asset],
+    })),
+    ...[...scaledRoofs].map(([asset, cells]): Finding => ({
+      check: 'facts',
+      id: 'facts/scaled-roof',
+      severity: 'high',
+      message: `${cells.length} ${asset} roof piece(s) are scaled; their full-cell coverage cannot be assumed`,
+      cells,
+      objects: [asset],
+    })),
+    ...[...scaledPosts].map(([asset, cells]): Finding => ({
+      check: 'facts',
+      id: 'facts/scaled-post',
+      severity: 'high',
+      message: `${cells.length} ${asset} post(s) are scaled without an inspected socket; fence continuity is unchecked`,
+      cells,
+      objects: [asset],
+    })),
+  ];
 }
 
 /**

@@ -26,16 +26,19 @@ createServer(async (request, response) => {
     servePrototype(request, response);
     return;
   }
-  const file = Object.keys(files).find((name) => pathname.startsWith('/g/') && pathname.endsWith(`/${name}`));
+  const file = Object.keys(files).find(
+    (name) => (pathname.startsWith('/g/') || pathname.startsWith('/d/')) && pathname.endsWith(`/${name}`),
+  );
   if (!file) {
     response.writeHead(404, { 'content-type': 'text/plain' }).end('not found');
     return;
   }
   response.writeHead(200, {
+    'access-control-allow-origin': '*',
     'cache-control': 'no-store',
     'content-type': files[file],
   });
-  response.end(await readFile(new URL(file, pathname.startsWith('/g/g_fall') ? fallFixture : fixture)));
+  response.end(await readFile(new URL(file, /^\/[gd]\/g_fall/.test(pathname) ? fallFixture : fixture)));
 }).listen(port, host, () => {
   process.stdout.write(`bridge fixture listening on http://${host}:${port}\n`);
 });

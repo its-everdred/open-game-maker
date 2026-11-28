@@ -14,6 +14,7 @@ import operatorRoutes, { prefix as operatorPrefix } from '../../src/operator/rou
 import { builtFiles, CHECK_ID, ids, SHA, world } from '../builds/fixtures.js';
 import { INTERNAL_TOKEN } from '../helpers.js';
 import { answerRound, postRound } from '../../src/review-rounds/store.js';
+import artifactRoutes from '../../src/artifacts/routes.js';
 
 const NEWER_SHA = 'f'.repeat(40);
 
@@ -71,6 +72,32 @@ function buildRow(deps: ReturnType<typeof operator>['deps'], jobId: string) {
 function branchRow(deps: ReturnType<typeof operator>['deps']) {
   return deps.db.select().from(schema.branches).where(eq(schema.branches.id, ids.main)).get()!;
 }
+
+it('issues revocable operator access only for a tested build', async () => {
+  const { app, deps } = operator();
+  app.route('/api/v1/artifacts', artifactRoutes);
+  const response = await publish(app, 'castle-game', SHA, archiveOf(builtFiles()));
+  expect(response.status).toBe(201);
+  const { buildId } = (await response.json()) as { buildId: string };
+  const path = `${operatorPrefix}/games/castle-game/builds/${buildId}/access`;
+  expect((await app.request(path, { method: 'POST' })).status).toBe(401);
+  const access = await app.request(path, { method: 'POST', headers: { 'x-ogm-internal': INTERNAL_TOKEN } });
+  expect(access.status).toBe(200);
+  const { grant } = (await access.json()) as { grant: string };
+  const check = async () =>
+    (
+      (await (
+        await app.request('/api/v1/artifacts/authorize', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ gameId: ids.game, buildId, grant }),
+        })
+      ).json()) as { allowed: boolean }
+    ).allowed;
+  expect(await check()).toBe(true);
+  deps.config.internalToken = 'rotated-internal-token';
+  expect(await check()).toBe(false);
+});
 
 it('reports whether a prototype review round exists for a build SHA', async () => {
   const { app, deps } = operator();

@@ -63,7 +63,7 @@ async function openReadyGame(page: Page): Promise<void> {
 }
 
 async function signalFirstFrame(page: Page): Promise<void> {
-  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`));
   if (!frame) throw new Error('game frame missing');
   await frame.evaluate(() => (window as Window & { __fixture: FixtureHook }).__fixture.send('load.frame', {}));
 }
@@ -73,7 +73,7 @@ function gameState(page: Page): Promise<GameHook | undefined> {
 }
 
 async function tellHost(page: Page, visible: boolean): Promise<void> {
-  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`));
   if (!frame) throw new Error('game frame missing');
   await frame.evaluate(
     (value) => (window as Window & { __fixture: FixtureHook }).__fixture.send('host.pause.visible', { visible: value }),

@@ -20,7 +20,7 @@ import { markTerminal } from '../jobs/spend-cap.js';
 import { releaseRuntimeFor } from '../releases/routes.js';
 import { publish, registerBuild, ReleaseError, updateBuild } from '../releases/service.js';
 import { withArtifactMutation } from './artifact-lock.js';
-import { BuildCacheError, completeBuildCache, sharedBuildFileUrls, storeDisplayImageBlobs } from './cache-plan.js';
+import { BuildCacheError, completeBuildCache } from './cache-plan.js';
 import { BadArchive, untarGz } from './untar.js';
 import { makeDisplayImages, type DisplayImage } from './display-images.js';
 
@@ -176,12 +176,8 @@ async function publishStagedLocked(deps: AppDeps, jobId: string): Promise<Publis
         buildId: build.id,
         previousBuildId,
         sdkVersion: manifest.data.sdk,
+        privateAssets: true,
       });
-      const sharedUrls = await sharedBuildFileUrls(files, [
-        'media/thumbnail.png',
-        ...(manifest.data.logo ? [manifest.data.logo] : []),
-        ...(manifest.data.loading ? [manifest.data.loading.portrait, manifest.data.loading.landscape] : []),
-      ]);
       await rename(files, buildTarget);
       await writeFile(
         join(buildTarget, '.ogm-display.json'),
@@ -191,7 +187,6 @@ async function publishStagedLocked(deps: AppDeps, jobId: string): Promise<Publis
           genres: manifest.data.genres,
           description: manifest.data.description,
           tags: manifest.data.tags,
-          sharedUrls,
           pending: true,
         }),
       );
@@ -319,7 +314,7 @@ function scheduleDisplayImages(
   // Limit expensive encoders to one build at a time; the sweep picks up the remainder.
   if (deriving.size > 0) return;
   deriving.add(target);
-  void writeDisplayImages(deps, target, manifest)
+  void writeDisplayImages(target, manifest)
     .then(() => rm(marker, { force: true }))
     .catch((error: unknown) => deps.log({ event: 'build_display_images_failed', reason: errorName(error) }))
     .finally(() => {
@@ -369,21 +364,14 @@ async function retryDisplayImages(deps: AppDeps, attempted = new Set<string>()):
 // Publish the metadata atomically only after every referenced variant exists. Until then readers use originals.
 // The list's card art (thumbnail and logo) is published first: a build's loading screens can take the encoder many
 // minutes, and until its card art has variants every phone downloads the multi-megabyte originals.
-async function writeDisplayImages(deps: AppDeps, target: string, manifest: DisplayManifest): Promise<void> {
+async function writeDisplayImages(target: string, manifest: DisplayManifest): Promise<void> {
   const current = await readJson(join(target, '.ogm-display.json'));
   let cards =
     current && typeof current === 'object' && 'partial' in current && current.partial === true && 'images' in current
       ? (current.images as Record<string, DisplayImage>)
       : undefined;
   if (!cards) {
-    cards = await publishDisplayImages(
-      deps,
-      target,
-      manifest,
-      {},
-      await makeDisplayImages(target, manifest.logo),
-      true,
-    );
+    cards = await publishDisplayImages(target, manifest, {}, await makeDisplayImages(target, manifest.logo), true);
   }
   const rest = await makeDisplayImages(
     target,
@@ -392,21 +380,16 @@ async function writeDisplayImages(deps: AppDeps, target: string, manifest: Displ
     Object.values(manifest.images ?? {}).flatMap((slot) => Object.values(slot.variants ?? {})),
     Object.keys(cards),
   );
-  await publishDisplayImages(deps, target, manifest, cards, rest, false);
+  await publishDisplayImages(target, manifest, cards, rest, false);
 }
 
 async function publishDisplayImages(
-  deps: AppDeps,
   target: string,
   manifest: DisplayManifest,
   published: Record<string, DisplayImage>,
   fresh: Record<string, DisplayImage>,
   partial: boolean,
 ): Promise<Record<string, DisplayImage>> {
-  await withArtifactMutation(() => storeDisplayImageBlobs(deps.config.gamesRoot, target, fresh));
-  for (const image of Object.values(fresh))
-    for (const format of ['avif', 'webp', 'png'] as const)
-      for (const entry of image.sources[format]) entry.path = `/a/${entry.path.split('/').at(-1)}`;
   const images = { ...published, ...fresh };
   const temporary = join(target, `.ogm-display-${randomUUID()}.tmp`);
   try {

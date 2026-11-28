@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -29,6 +29,8 @@ const ELEVENLABS_KEY = `sk_${'0123456789abcdef'.repeat(3)}`;
 
 function dir(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), 'ogm-scan-'));
+  writeFileSync(join(root, '.complete'), 'complete');
+  writeFileSync(join(root, 'index.html'), '<title>g</title>');
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(join(root, path, '..'), { recursive: true });
     writeFileSync(join(root, path), text);
@@ -115,7 +117,7 @@ describe('release validation', () => {
     const { deps, source, commit } = setup();
     insertBuild(deps, source);
     const artifact = dir({ 'index.html': '<title>g</title>', 'assets/main.js': CALLS_OPENAI });
-    deps.db.update(schema.builds).set({ artifactPath: artifact }).run();
+    cpSync(artifact, join(deps.config.gamesRoot, ids.game, ids.build), { recursive: true });
     const { app } = await makeApp(deps);
 
     const refused = await publish(app);
@@ -132,10 +134,9 @@ describe('release validation', () => {
     const { deps, source } = setup();
     setPaidApisDuringGameplay(deps.db, true);
     insertBuild(deps, source);
-    deps.db
-      .update(schema.builds)
-      .set({ artifactPath: dir({ 'assets/main.js': CALLS_OPENAI }) })
-      .run();
+    cpSync(dir({ 'assets/main.js': CALLS_OPENAI }), join(deps.config.gamesRoot, ids.game, ids.build), {
+      recursive: true,
+    });
     const { app } = await makeApp(deps);
     const first = (await (await publish(app)).json()) as { id: string };
     setPaidApisDuringGameplay(deps.db, false);
@@ -154,10 +155,7 @@ describe('release validation', () => {
     const { deps, source, commit } = setup();
     setPaidApisDuringGameplay(deps.db, true);
     insertBuild(deps, source);
-    deps.db
-      .update(schema.builds)
-      .set({ artifactPath: dir({ 'assets/k.js': `"${KEY}"` }) })
-      .run();
+    cpSync(dir({ 'assets/k.js': `"${KEY}"` }), join(deps.config.gamesRoot, ids.game, ids.build), { recursive: true });
     const { app } = await makeApp(deps);
 
     const response = await publish(app);

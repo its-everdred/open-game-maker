@@ -179,8 +179,19 @@ describe('worker progress route', () => {
         { issue_identifier: '12', title: 'Forest backdrop', runtime_seconds: 10, workspace_path: '/private/path' },
       ],
     });
-    const progress = vi.fn().mockResolvedValue({ progress: { status: 'known', percent: 50 } });
-    deps.aiurClientForGame = async () => ({ state, progress }) as unknown as AiurClient;
+    const progress = vi
+      .fn()
+      .mockResolvedValue({ progress: { status: 'known', percent: 50 }, events: [{ label: 'Working' }] });
+    const sendMessage = vi.fn().mockResolvedValue({ request_id: 'receipt' });
+    const ticketTranscript = vi.fn().mockResolvedValue({
+      events: [
+        { body: 'Worker reply', role: 'assistant', timestamp: '9999-01-01T00:00:00Z' },
+        { body: 'private tool output', role: 'tool' },
+      ],
+      nextCursor: null,
+    });
+    deps.aiurClientForGame = async () =>
+      ({ state, progress, ticketTranscript, message: sendMessage }) as unknown as AiurClient;
     const { app } = await makeApp(deps);
     const denied = await app.request(`/api/v1/games/${game}/workers`, { headers: asUser(outsider) });
     expect(denied.status).toBeGreaterThanOrEqual(400);
@@ -251,7 +262,10 @@ describe('worker progress route', () => {
     const ownConversation = await app.request(`/api/v1/games/${game}/tickets/11/conversation`, {
       headers: asUser(user),
     });
-    expect(await ownConversation.json()).toEqual({ messages: [{ text: 'A creator message' }] });
+    expect(await ownConversation.json()).toEqual({
+      messages: [{ text: 'A creator message' }, { text: 'Working' }, { text: 'Worker reply' }],
+      workerUnavailable: false,
+    });
     expect(conversation).toHaveBeenCalledWith({ owner: 'owner', name: 'shared' }, '11', ['test-game'], false);
     // An Executor-filed ticket still running has no job, yet its review card must open its conversation (#1110).
     const runningConversation = await app.request(`/api/v1/games/${game}/tickets/12/conversation`, {
@@ -259,6 +273,41 @@ describe('worker progress route', () => {
     });
     expect(runningConversation.status).toBe(200);
     expect(conversation).toHaveBeenLastCalledWith({ owner: 'owner', name: 'shared' }, '12', ['test-game'], false);
+    const send = (ticket: string, userId: string, id = 'message-1') =>
+      app.request(`/api/v1/games/${game}/tickets/${ticket}/conversation`, {
+        method: 'POST',
+        headers: { ...asUser(userId), 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'Hello worker', id }),
+      });
+    expect((await send('99', user)).status).toBe(404);
+    expect((await send('12', outsider)).status).toBeGreaterThanOrEqual(400);
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect((await send('12', user)).status).toBe(200);
+    expect(sendMessage).toHaveBeenCalledWith('12', 'Hello worker', 'message-1', expect.any(AbortSignal));
+    expect((await send('12', user)).status).toBe(200);
+    expect(sendMessage).toHaveBeenCalledOnce();
+    sendMessage.mockResolvedValueOnce({ request_id: 'receipt', warning: 'outcome_unknown' });
+    expect((await send('12', user, 'message-2')).status).toBe(502);
+    conversation.mockRejectedValueOnce(new Error('ticket_not_found'));
+    expect((await send('12', user)).status).toBeGreaterThanOrEqual(400);
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    progress.mockRejectedValueOnce(new Error('daemon unavailable'));
+    const offline = await app.request(`/api/v1/games/${game}/tickets/12/conversation`, { headers: asUser(user) });
+    expect(await offline.json()).toEqual({
+      messages: [
+        { text: 'A creator message' },
+        { text: 'Hello worker' },
+        { text: 'Hello worker', pending: true, id: 'message-2' },
+        { text: 'Worker reply' },
+      ],
+      workerUnavailable: true,
+    });
+    expect((await send('12', user, 'message-2')).status).toBe(200);
+    expect(sendMessage).toHaveBeenLastCalledWith('12', 'Hello worker', 'message-2', expect.any(AbortSignal));
+    deps.db.update(schema.games).set({ githubRepo: 'new-repo' }).where(eq(schema.games.id, game)).run();
+    const relinked = await app.request(`/api/v1/games/${game}/tickets/12/conversation`, { headers: asUser(user) });
+    expect((await relinked.json()).messages).not.toContainEqual({ text: 'Hello worker' });
+    deps.db.update(schema.games).set({ githubRepo: 'shared' }).where(eq(schema.games.id, game)).run();
     state.mockResolvedValue({
       running: [],
       idle: [{ issue_identifier: '12', title: 'Forest backdrop', runtime_seconds: 10, state: 'agent:ci-wait' }],
@@ -418,6 +467,26 @@ describe('worker progress route', () => {
       media: '[]',
       postedAt: at,
     });
+    deps.db
+      .update(schema.reviewRounds)
+      .set({ verdict: 'approved', verdictAt: at, verdictSource: 'comment' })
+      .where(eq(schema.reviewRounds.id, 'round'))
+      .run();
+    const history = await app.request(`/api/v1/games/${game}/review-rounds?includeGameplay=1&historyTicket=12`, {
+      headers: asUser(user),
+    });
+    expect((await history.json()).rounds).toEqual([
+      expect.objectContaining({ id: 'round', ticket: '12', verdict: 'approved' }),
+    ]);
+    const otherHistory = await app.request(`/api/v1/games/${game}/review-rounds?includeGameplay=1&historyTicket=99`, {
+      headers: asUser(user),
+    });
+    expect((await otherHistory.json()).rounds).toEqual([]);
+    deps.db
+      .update(schema.reviewRounds)
+      .set({ verdict: null, verdictAt: null, verdictSource: null })
+      .where(eq(schema.reviewRounds.id, 'round'))
+      .run();
     expect((await app.request(missing, { method: 'POST', headers: asUser(user) })).status).toBe(409);
     expect(message).toHaveBeenCalledOnce();
     // Restore the tracker snapshot for the unavailable-daemon check below.

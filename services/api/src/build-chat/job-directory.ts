@@ -3,7 +3,7 @@ import { schema, type Db } from '@ogm/db';
 import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm';
 
 import type { ChatJob, ChatJobDirectory } from '../app/registry.js';
-import { daemonRowForGame } from '../jobs/daemons.js';
+import { daemonRowForGame, daemonRowForRepo } from '../jobs/daemons.js';
 
 const ACTIVE_CHAT_STATES: JobState[] = ['filed', 'running', 'paused_budget'];
 
@@ -68,7 +68,10 @@ export function createChatJobDirectory(db: Db): ChatJobDirectory {
         ownerId: draft.creatorId,
         kind: 'scope',
         state: 'running',
-        aiur: { daemonSlug: 'core', ticket: String(draft.ticketNumber) },
+        aiur:
+          draft.ticketRepo && daemonRowForRepo(db, draft.ticketRepo)
+            ? { daemonSlug: daemonRowForRepo(db, draft.ticketRepo)!.slug, ticket: String(draft.ticketNumber) }
+            : null,
       };
     },
     async active() {
@@ -98,7 +101,10 @@ export function createChatJobDirectory(db: Db): ChatJobDirectory {
                   ownerId: draft.creatorId,
                   kind: 'scope',
                   state: 'running',
-                  aiur: { daemonSlug: 'core', ticket: String(draft.ticketNumber) },
+                  aiur:
+                    draft.ticketRepo && daemonRowForRepo(db, draft.ticketRepo)
+                      ? { daemonSlug: daemonRowForRepo(db, draft.ticketRepo)!.slug, ticket: String(draft.ticketNumber) }
+                      : null,
                 },
               ],
         );

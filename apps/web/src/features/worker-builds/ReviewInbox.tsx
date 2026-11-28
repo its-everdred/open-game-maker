@@ -9,6 +9,7 @@ import {
 } from './review-command';
 import { Dialog } from '../../components/Dialog';
 import { CommandReviewCard } from './CommandReviewCard';
+import { AnsweredReviewCard } from './AnsweredReviewCard';
 import { MissingMediaStatus, useMissingMedia } from './MissingMedia';
 import { PreviewCard } from '../../routes/review/PreviewReviews';
 import { RoundCard } from '../../routes/review/RoundReviews';
@@ -204,12 +205,7 @@ export function ReviewInbox({
                         sent.decision_id === entry.item.decision_id,
                     )?.review,
                   );
-        return (
-          <button type="button" className="worker-review-answered" key={entry.key} onClick={() => show(entry)}>
-            <strong>{title}</strong>
-            <span>{answer}</span>
-          </button>
-        );
+        return <AnsweredReviewCard key={entry.key} title={title} summary={answer} onClick={() => show(entry)} />;
       })}
     </section>
   ) : null;

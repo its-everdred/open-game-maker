@@ -51,8 +51,8 @@ it('publishes three display images within the budget while derivation is still r
   expect(metadata.images).toBeUndefined();
   expect(metadata.pending).toBe(true);
   const media = (await gameMedia(deps, [ids.game])).get(ids.game)!;
-  expect(media.coverUrl).toMatch(/^https:\/\/games\.example\.test\/a\/[a-f0-9]{64}\.png$/u);
-  expect(media.loadingUrls?.portrait).toMatch(/^https:\/\/games\.example\.test\/a\/[a-f0-9]{64}\.png$/u);
+  expect(media.coverUrl).toBe(`https://games.example.test/g/${ids.game}/${buildId}/media/thumbnail.png`);
+  expect(media.loadingUrls?.portrait).toBe(`https://games.example.test/g/${ids.game}/${buildId}/media/portrait.png`);
   expect(media.loadingImages).toBeUndefined();
   (await pass(start)).finish({});
   (await pass(start + 1)).finish({});

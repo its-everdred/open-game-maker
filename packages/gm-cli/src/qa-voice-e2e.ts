@@ -13,17 +13,34 @@ type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPa
 /** Spoken by Piper's public-domain LJSpeech voice, 16 kHz mono; together 3.2 s, under the ticket's 10 s cap. */
 export const CLIPS = { dictate: 'say.wav', talk: 'hello.wav' } as const;
 export const CLIP_SECONDS = { dictate: 1.61, talk: 1.62 } as const;
-/** What the dictation clip says; the box must show at least one of its words, so stray text cannot pass. */
-export const DICTATED = /\b(sky|blue)\b/iu;
+/** The clip's distinctive words must both reach the box in order. */
+export const DICTATED = /\bsk(?:y|ies)\b.*\bblue\b/iu;
 const MEDIA_DIR = new URL('../qa/voice-e2e/', import.meta.url);
 const VIEWPORT = { width: 390, height: 844 };
 const TITLE = 'QA voice';
 /** The vendored aiur composer's button names (apps/web/vendor/aiur-conversation); a renamed button blinds this check. */
 export const LABELS = {
-  dictate: 'Hold to dictate',
-  startVoice: 'Start voice conversation',
+  dictate: 'Dictate',
+  startVoice: 'Switch to voice conversation',
   endVoice: 'End voice conversation',
 } as const;
+
+/** Voice is offered from the active dictation row in the shared composer. */
+export async function startVoiceFromDictation(dialog: ReturnType<Page['getByRole']>): Promise<void> {
+  await dialog.getByRole('button', { name: LABELS.dictate }).click({ timeout: 20_000 });
+  await dialog.getByRole('button', { name: LABELS.startVoice }).click({ timeout: 20_000 });
+}
+
+export async function endVoiceConversation(dialog: ReturnType<Page['getByRole']>): Promise<void> {
+  await dialog.getByRole('button', { name: LABELS.endVoice }).click({ timeout: 20_000 });
+}
+
+/** Release a failed one-way attempt so it cannot hide the next attempt's microphone. */
+export async function cancelFailedDictation(page: Page, dialog: ReturnType<Page['getByRole']>): Promise<void> {
+  const cancel = dialog.getByRole('button', { name: 'Cancel dictation' });
+  if (await cancel.isVisible().catch(() => false)) await cancel.dispatchEvent('click').catch(() => undefined);
+  await page.mouse.up().catch(() => undefined);
+}
 
 export type VoiceE2eConfig = {
   origin: string;
@@ -257,6 +274,17 @@ async function until(check: () => boolean | Promise<boolean>, timeoutMs: number)
   }
 }
 
+/** Wait for the composer to finish committing, and reject its reported errors. */
+export async function waitForDictationCommit(
+  isSettled: () => Promise<boolean>,
+  error: () => Promise<string | null>,
+  timeoutMs: number,
+): Promise<void> {
+  if (!(await until(isSettled, timeoutMs))) throw new StepFailed('dictation did not finish committing');
+  const message = await error();
+  if (message) throw new StepFailed(`dictation failed: ${message}`);
+}
+
 export async function openChat(page: Page, origin: string, title = TITLE): Promise<void> {
   const timeout = { timeout: 20_000 };
   await page.goto(`${origin}/all`, { waitUntil: 'load', timeout: 60_000 });
@@ -316,11 +344,15 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
     const dialog = page
       .getByRole('dialog', { name: TITLE })
       .and(page.locator('.job-conversation-dialog:not(.ticket-detail-dialog)'));
+    let reopenForVoice = false;
 
     try {
       await openChat(page, config.origin);
       const mic = dialog.getByRole('button', { name: LABELS.dictate });
       await mic.waitFor({ timeout: 20_000 });
+      await dialog.locator('aiur-composer').evaluate((composer) => {
+        composer.addEventListener('aiur-composer-error', () => composer.setAttribute('data-qa-dictation-error', ''));
+      });
       const box = (await mic.boundingBox())!;
       const textbox = dialog.locator('textarea').first();
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -334,25 +366,41 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       cost.audioSentSeconds += CLIP_SECONDS.dictate;
       await page.waitForTimeout(CLIP_SECONDS.dictate * 1000 + 800);
       await page.mouse.up();
+      // Partials appear while recording; only inspect the draft after the final commit settles.
+      const alert = dialog.getByRole('alert');
+      await waitForDictationCommit(
+        async () => textbox.evaluate((input) => !(input as HTMLTextAreaElement).readOnly),
+        async () =>
+          (await dialog.locator('aiur-composer').getAttribute('data-qa-dictation-error')) !== null
+            ? 'the composer reported an error'
+            : (await alert.isVisible())
+              ? await alert.innerText()
+              : null,
+        wait,
+      );
       await until(async () => dictationFailure(await textbox.inputValue()) === null, wait);
       const text = await textbox.inputValue();
       const failure = dictationFailure(text);
-      if (failure) await failed('dictation', new StepFailed(failure));
-      else {
+      if (failure) {
+        reopenForVoice = true;
+        await failed('dictation', new StepFailed(failure));
+      } else {
         await still('dictation');
         // The words stay a draft: the run never sends them.
         await textbox.fill('');
         steps.push({ name: 'dictation', ok: true, detail: text });
       }
     } catch (error) {
+      await cancelFailedDictation(page, dialog);
+      reopenForVoice = true;
       await failed('dictation', error);
     }
 
     try {
-      if (!(await dialog.isVisible())) await openChat(page, config.origin);
+      if (reopenForVoice || !(await dialog.isVisible())) await openChat(page, config.origin);
       frames.length = 0;
       callStarted = Date.now();
-      await dialog.getByRole('button', { name: LABELS.startVoice }).click({ timeout: 20_000 });
+      await startVoiceFromDictation(dialog);
       const listening = await until(() => tallyFrames(frames).states.includes('listening'), wait);
       if (!listening)
         throw new StepFailed(
@@ -367,8 +415,7 @@ export async function voiceE2e(browser: Browser, config: VoiceE2eConfig): Promis
       const playedSeconds = await played();
       await still('voice');
       // Hang up as soon as the reply is in: the call is billed by the minute.
-      const end = dialog.getByRole('button', { name: LABELS.endVoice });
-      if (await end.isVisible().catch(() => false)) await end.click();
+      await endVoiceConversation(dialog);
       cost.callSeconds = (Date.now() - callStarted) / 1000;
       callStarted = undefined;
       let stored: { actor: string; text: string | null }[] = [];

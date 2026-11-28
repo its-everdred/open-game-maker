@@ -59,7 +59,40 @@ describe('deny-wins precedence', () => {
     expect(authorize(creator, 'game.play', { ...base, ownerId: creator.userId })).toEqual({ ok: true });
   });
 
+  it('restricts coming soon games to owners, admins, and grant holders', () => {
+    const base = {
+      familyId: 'family-a',
+      ownerId: 'another-user',
+      visibility: 'listed' as const,
+      releaseState: 'coming_soon' as const,
+    };
+    expect(authorize(creator, 'game.play', base)).toEqual({ ok: false, reason: 'coming_soon' });
+    expect(authorize(creator, 'game.play', { ...base, granted: true })).toEqual({ ok: true });
+    expect(authorize(creator, 'game.play', { ...base, ownerId: creator.userId })).toEqual({ ok: true });
+    expect(authorize(admin, 'game.play', base)).toEqual({ ok: true });
+    expect(authorize(admin, 'game.play', { ...base, familyId: 'family-b' })).toEqual({ ok: true });
+    expect(authorize(creator, 'game.play', { ...base, familyId: 'family-b', granted: true })).toEqual({ ok: true });
+    expect(authorize(creator, 'game.play', { ...base, familyId: 'family-b' })).toEqual({
+      ok: false,
+      reason: 'cross_family',
+    });
+    expect(
+      authorize(creator, 'game.play', { ...base, familyId: 'family-b', releaseState: 'released', granted: true }),
+    ).toEqual({ ok: true });
+    expect(authorize(creator, 'game.edit', { ...base, familyId: 'family-b', granted: true })).toEqual({
+      ok: false,
+      reason: 'cross_family',
+    });
+  });
+
   it('fails closed when game visibility or invitation kind is missing', () => {
+    expect(
+      authorize(creator, 'game.play', {
+        familyId: 'family-a',
+        visibility: 'listed',
+        releaseState: 'invalid' as 'released',
+      }),
+    ).toEqual({ ok: false, reason: 'release_state_invalid' });
     expect(authorize(creator, 'game.play', { familyId: 'family-a', ownerId: creator.userId })).toEqual({
       ok: false,
       reason: 'visibility_required',

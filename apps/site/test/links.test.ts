@@ -10,6 +10,7 @@ const repositoryRoot = fileURLToPath(new URL('../../..', import.meta.url));
 
 const allowedHosts = new Set([
   'github.com',
+  'aiur.team',
   'tailscale.com',
   'netlify.com',
   'console.cloud.google.com',

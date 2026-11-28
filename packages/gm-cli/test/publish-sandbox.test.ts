@@ -9,13 +9,13 @@ it('constructs a network-off profile input without host credentials in the game 
   const root = tempDir('publish-sandbox-');
   const profile = join(root, 'profile');
   mkdirSync(profile);
-  writePublishSandbox(profile, '/home/example', '/home/example/publish', '/home/example/publish/this-game');
+  writePublishSandbox(profile, '/sandbox/user', '/sandbox/user/publish', '/sandbox/user/publish/this-game');
   const config = readFileSync(join(profile, 'config.toml'), 'utf8');
-  expect(config).toContain('"/home/example/.config/ogm" = "deny"');
-  expect(config).toContain('"/home/example/.cache/ogm/assets" = "deny"');
+  expect(config).toContain('"/sandbox/user/.config/ogm" = "deny"');
+  expect(config).toContain('"/sandbox/user/.cache/ogm/assets" = "deny"');
   expect(config).toContain(`${JSON.stringify(profile)} = "deny"`);
-  expect(config).toContain('"/home/example/publish" = "deny"');
-  expect(config).toContain('"/home/example/publish/this-game" = "write"');
+  expect(config).toContain('"/sandbox/user/publish" = "deny"');
+  expect(config).toContain('"/sandbox/user/publish/this-game" = "write"');
   expect(config).toContain('":slash_tmp" = "deny"');
   const env = publishSandboxEnv({ PATH: '/bin', GITHUB_TOKEN: 'private', OGM_INTERNAL_TOKEN: 'private' }, profile);
   expect(env).toEqual({ PATH: '/bin', CODEX_HOME: profile, GIT_TERMINAL_PROMPT: '0' });

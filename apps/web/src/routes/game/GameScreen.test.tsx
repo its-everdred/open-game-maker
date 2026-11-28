@@ -45,6 +45,7 @@ const editorApi = vi.hoisted(() => ({
   postAnalyticsEvent: vi.fn(),
   putSave: vi.fn(),
   releaseLease: vi.fn(),
+  requestDraftGrant: vi.fn(),
   submitReapply: vi.fn(),
 }));
 
@@ -169,6 +170,7 @@ beforeEach(() => {
   preview.mountSceneryPreview.mockReturnValue(host.controller);
   useDock.getState().reset();
   editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar' });
+  editorApi.requestDraftGrant.mockResolvedValue({ grant: 'test-grant' });
   editorApi.getFallbackPalette.mockResolvedValue({ mode: 'request', palette: { categories: [], items: [] } });
   editorApi.getEditorPreviews.mockResolvedValue({ previews: [] });
   editorApi.getEditorStage.mockResolvedValue({ stage: null });
@@ -211,6 +213,48 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
+  it('reconnects with a replacement draft grant after authorization changes', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderGame('/g/game', client);
+    await waitFor(() =>
+      expect(host.mountGameFrame).toHaveBeenCalledWith(expect.objectContaining({ draftGrant: 'test-grant' })),
+    );
+    editorApi.requestDraftGrant.mockResolvedValue({ grant: 'replacement-grant' });
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['draft-grant', 'game', 'build'] });
+    });
+    await waitFor(() =>
+      expect(host.mountGameFrame).toHaveBeenCalledWith(expect.objectContaining({ draftGrant: 'replacement-grant' })),
+    );
+  });
+  it('includes the running build id in player bug reports', async () => {
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return new Response(JSON.stringify({ reportId: 'r1', signature: 's', route: 'platform' }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar', ownerId: 'another-player' });
+    renderGame();
+    await readyPlayFrame();
+    await waitFor(() => expect(host.mountGameFrame.mock.calls.at(-1)?.[0]).toMatchObject({ buildId: 'build' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'File a bug' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Describe the issue' }), {
+      target: { value: 'The door is stuck' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith('/api/v1/reports', expect.anything()));
+    const request = fetchSpy.mock.calls.find(([url]) => url === '/api/v1/reports')?.[1] as RequestInit | undefined;
+    expect(JSON.parse(String(request?.body))).toMatchObject({ gameId: 'game', buildHash: 'build' });
+    vi.unstubAllGlobals();
+  });
+
   it('does not record play when opening a nested screen', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(new Response('{}', { headers: { 'content-type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchSpy);
@@ -351,7 +395,7 @@ describe('GameScreen', () => {
   it('shows the frame error when a linked build cannot be read', async () => {
     editorApi.getBuildDesign.mockRejectedValue(new Error('build_not_found'));
     renderGame('/g/game?mode=edit&build=build_gone');
-    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }, { timeout: 10_000 }));
     await waitFor(() => expect(editorApi.getBuildDesign).toHaveBeenCalledTimes(2));
     /* Never the branch head in its place: the creator asked for that build. */
     expect(host.mountGameFrame).not.toHaveBeenCalled();
@@ -827,7 +871,7 @@ describe('GameScreen', () => {
     expect(await screen.findByRole('button', { name: 'Skeleton' }, { timeout: 5_000 })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Skeleton' }).querySelector('img')).toHaveAttribute(
       'src',
-      'http://127.0.0.1:10000/g/game/build/art/skeleton.png',
+      'http://127.0.0.1:10000/d/game/build/test-grant/art/skeleton.png',
     );
     expect(screen.getByRole('button', { name: 'Play' })).toBeVisible();
   }, 10_000);

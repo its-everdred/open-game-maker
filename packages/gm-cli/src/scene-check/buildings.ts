@@ -108,7 +108,7 @@ export function coherentBuildings(grid: Grid): Finding[] {
         objects,
       });
     }
-    const roofed = new Set(roofs.map(cellKey));
+    const roofed = new Set(roofs.filter((roof) => roof.scale === undefined || roof.scale === 1).map(cellKey));
     const bare = footprint.filter((cell) => !roofed.has(cellKey(cell)));
     if (bare.length) {
       findings.push({

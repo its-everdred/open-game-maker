@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Report a bug</title>
+<link rel="stylesheet" href="./glass.css">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&amp;family=Nunito:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0f0e16}a{color:#74c8ed}a:hover{color:#f2ead6}
+.shot{position:relative;flex:1;border-radius:12px;overflow:hidden;aspect-ratio:9/16;border:1px solid rgba(242,234,214,.18);padding:0;background:#000}
+.shot img{width:100%;height:100%;object-fit:cover;display:block}
+.shot b{position:absolute;left:6px;bottom:6px;font:800 11px Nunito;padding:3px 6px;border-radius:8px;background:rgba(15,14,22,.75);color:#f2ead6}
+.shot[aria-pressed="false"]{opacity:.45}</style>
+</head>
+<body>
+<div class="g phone">
+<img src="../../assets-local/review/design-ogm-glass/img/play-bg.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+<div class="scrim"></div>
+<div class="sheet pane strong" style="top:40px">
+<div style="display:flex;align-items:center;gap:10px;padding:14px 12px 8px 18px">
+<span class="orb sm" aria-hidden="true" style="color:#ff9b8f"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="8" width="10" height="12" rx="5"></rect><path d="M12 11v9M7 13H3M21 13h-4M7 18l-3 2M17 18l3 2M9.5 8a2.5 2.5 0 0 1 5 0"></path></svg></span>
+<h1 class="h2" style="flex:1">Report a bug</h1>
+<a class="orb sm" href="PauseMenu.html" aria-label="Cancel"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></a>
+</div>
+<div style="padding:4px 14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;gap:8px">
+<button class="shot" aria-pressed="true" aria-label="Screenshot now, included"><img src="../../assets-local/review/design-ogm-glass/img/play-bg.jpg" alt=""><b>now</b></button>
+<button class="shot" aria-pressed="true" aria-label="Screenshot 5 seconds ago, included"><img src="../../assets-local/review/design-ogm-glass/img/play-bg.jpg" alt="" style="object-position:30% 50%"><b>−5 s</b></button>
+<button class="shot" aria-pressed="false" aria-label="Screenshot 10 seconds ago, left out"><img src="../../assets-local/review/design-ogm-glass/img/play-bg.jpg" alt="" style="object-position:70% 50%"><b>−10 s</b></button>
+</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<span class="tag">Dusk Helm · v14</span>
+<span class="tag" style="border-color:#f76d67;color:#ff9b8f">2 errors</span>
+<span class="tag">Logs</span>
+<span class="tag"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Private issue</span>
+</div>
+</div>
+<div class="thread" style="flex:1;min-height:0;overflow:hidden;padding:10px 14px;justify-content:flex-end">
+<div class="msg me" style="background:transparent;border:2px solid #f76d67;color:#f2ead6">The goblin walked through the wall by the camp</div>
+<div class="step"><span class="pulse" style="width:8px;height:8px;background:#74c8ed;box-shadow:none"></span>Reading collision for the camp scene</div>
+</div>
+<div style="padding:8px 14px 18px;display:flex;align-items:center;gap:14px">
+<span class="wave" aria-hidden="true" style="flex:1;justify-content:center;height:36px"><i style="height:8px;background:#f76d67"></i><i style="height:20px;background:#f76d67"></i><i style="height:32px;background:#f76d67"></i><i style="height:14px;background:#f76d67"></i><i style="height:26px;background:#f76d67"></i><i style="height:10px;background:#f76d67"></i><i style="height:22px;background:#f76d67"></i><i style="height:12px;background:#f76d67"></i></span>
+<button class="orb lg rec" aria-label="Stop talking" style="color:#1d1b16"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"></rect></svg></button>
+<button class="orb lg" aria-label="Type instead"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"></rect><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"></path></svg></button>
+</div>
+</div>
+</div>
+<script src="fallback.js"></script>
+</body>
+</html>

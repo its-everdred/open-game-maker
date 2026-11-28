@@ -18,7 +18,12 @@ test('renders overlapping walls independently and positions an elevated roof', a
     () =>
       (
         window as unknown as {
-          overlap: { before: { key: string; y: number }[]; after: boolean[]; collision: boolean[][]; renderer: number };
+          overlap: {
+            before: { key: string; y: number; scale: number; depth: number }[];
+            after: boolean[];
+            collision: boolean[][];
+            renderer: number;
+          };
         }
       ).overlap,
   );
@@ -26,6 +31,8 @@ test('renders overlapping walls independently and positions an elevated roof', a
   expect(result.before).toHaveLength(3);
   expect(new Set(result.before.map(({ key }) => key)).size).toBe(3);
   expect(result.before.map(({ y }) => y)).toEqual([64, 64, -48]);
+  expect(result.before.map(({ scale }) => scale)).toEqual([0.4, 1, 1]);
+  expect(result.before.map(({ depth }) => depth)).toEqual([-15.9, 16.1, 64.3]);
   expect(result.after).toEqual([false, true, true]);
   expect(result.collision).toEqual([[true]]);
 });
