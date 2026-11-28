@@ -1,6 +1,7 @@
-import { expect, test as base, type Locator, type Page } from '@playwright/test';
+import { chromium, expect, test as base, type Locator, type Page } from '@playwright/test';
 
 import { startBrowserSystem } from '../../../services/api/test/browser-system-harness';
+import { joinOptions, newRoom, startHarness } from '../../../services/rooms/test/helpers';
 import { startDictationSystemServer } from '../../../packages/voice-client/e2e/dictation-system-server';
 
 import { launchArgs } from './support/gpu';
@@ -28,6 +29,7 @@ const test = base.extend<{ system: System }>({
         // A live event stream must not be buffered by route.fetch.
         if (
           incoming.pathname === '/api/v1/notifications/stream' ||
+          (route.request().method() === 'GET' && incoming.pathname === '/auth/get-session') ||
           (route.request().method() === 'GET' &&
             (/\/jobs\/[^/]+\/chat$/.test(incoming.pathname) || /\/transactions$/.test(incoming.pathname)))
         ) {
@@ -305,6 +307,190 @@ for (const viewport of [
       }
       await expect(flow.locator('.results__reason')).toHaveText(/^(You win|CPU wins) the match$/);
       expect(errors).toEqual([]);
+    });
+
+    test('hosted Blobs starts an online match with two players', async ({ page, system }, testInfo) => {
+      // eslint-disable-next-line no-restricted-properties -- the real game is built outside this repository.
+      const dist = process.env.OGM_BLOBS_DIST;
+      test.skip(!dist, 'OGM_BLOBS_DIST must point to a local Blobs draft build');
+      test.setTimeout(1_200_000);
+      await signIn(page, system);
+      system.seedChat();
+      const game = await system.seedEditor(dist);
+      const rooms = await startHarness({}, 0);
+      let peerBrowser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+      let peerPage: Page | undefined;
+      let onlineRoom: Awaited<ReturnType<typeof newRoom>> | undefined;
+      try {
+        peerBrowser = await chromium.launch({ headless: true, args: launchArgs() });
+        const peerContext = await peerBrowser.newContext({
+          baseURL: new URL(page.url()).origin,
+          storageState: await page.context().storageState(),
+          viewport,
+          isMobile: true,
+          hasTouch: true,
+          serviceWorkers: 'block',
+        });
+        const peer = await peerContext.newPage();
+        peerPage = peer;
+        const address = rooms.gameServer.transport.server?.address();
+        if (!address || typeof address === 'string') throw new Error('rooms server did not bind');
+        const room = await newRoom(rooms.testServer, {
+          protocol: 2,
+          mode: 'per-seat',
+          gameId: game.gameId,
+          branchId: game.branchId,
+          buildId: game.buildId,
+          maxPlayers: 2,
+          timings: { idleDisposeSec: 300, seatReconnectSec: 30 },
+        });
+        onlineRoom = room;
+        const ownerGrant = await joinOptions(room, 'owner', 'owner');
+        const peerGrant = await joinOptions(room, 'peer', 'player');
+        // The second context copies the real sign-in session; requests still reach the local API.
+        await peer.route(/\/(auth|api)\//, async (route) => {
+          const incoming = new URL(route.request().url());
+          if (incoming.origin !== new URL(page.url()).origin) return route.continue();
+          const target = new URL(incoming.pathname + incoming.search, system.origin);
+          if (
+            incoming.pathname === '/api/v1/notifications/stream' ||
+            (route.request().method() === 'GET' && incoming.pathname === '/auth/get-session') ||
+            (route.request().method() === 'GET' && /\/transactions$/.test(incoming.pathname))
+          ) {
+            return route.continue({ url: target.href });
+          }
+          try {
+            await route.fulfill({ response: await route.fetch({ url: target.href, maxRedirects: 0 }) });
+          } catch {
+            await route.abort('failed').catch(() => undefined);
+          }
+        });
+        for (const [target, grant] of [
+          [page, ownerGrant.grant],
+          [peer, peerGrant.grant],
+        ] as const) {
+          // eslint-disable-next-line no-restricted-properties -- direct host is a local test optimization.
+          if (!process.env.OGM_TEST_GAMES_HOST_PORT) {
+            await target.route(
+              (url) => [bridgeOrigin, 'http://127.0.0.1:10000'].includes(url.origin),
+              async (route) => {
+                const incoming = new URL(route.request().url());
+                const destination = new URL(incoming.pathname + incoming.search, game.origin);
+                try {
+                  await route.fulfill({ response: await route.fetch({ url: destination.href, maxRedirects: 0 }) });
+                } catch {
+                  await route.abort('failed').catch(() => undefined);
+                }
+              },
+            );
+          }
+          // Grants are fixture-issued; transport, room and both hosted games are real local services.
+          await target.route('**/api/v1/rooms/*/grant', (route) =>
+            route.fulfill({
+              json: {
+                roomId: room.roomId,
+                grant,
+                pin: { gameId: game.gameId, branchId: game.branchId, buildId: game.buildId },
+                roomsUrl: `ws://127.0.0.1:${address.port}`,
+              },
+            }),
+          );
+          await target.goto(`/g/${game.gameId}?room=${room.roomId}&test`, { waitUntil: 'domcontentloaded' });
+          await expect
+            .poll(
+              () =>
+                target.evaluate(
+                  () =>
+                    (
+                      window as Window & { __ogmHost?: { room?: { state(): { status?: string } } } }
+                    ).__ogmHost?.room?.state().status,
+                ),
+              { timeout: 120_000 },
+            )
+            .toBe('connected');
+        }
+        await page.evaluate(() => (window as Window & { __ogmHost: { room: { play(): void } } }).__ogmHost.room.play());
+        await expect.poll(() => room.state.phase, { timeout: 120_000 }).toBe('playing');
+        for (const target of [page, peer]) {
+          await target.bringToFront();
+          await expect(target.getByRole('progressbar', { name: 'Loading' })).toBeHidden({ timeout: 600_000 });
+          const flow = target.frameLocator('.game-frame iframe').locator('#blobs-flow');
+          await touchControl(flow.getByRole('button', { name: 'Play', exact: true }));
+          await touchControl(flow.getByRole('button', { name: 'Online', exact: true }));
+          await touchControl(flow.getByRole('button', { name: 'Blocks', exact: true }));
+          await touchControl(flow.locator('.lobby-seat--local').getByRole('button', { name: 'Ready up' }));
+        }
+        await page.bringToFront();
+        const ownerFlow = page.frameLocator('.game-frame iframe').locator('#blobs-flow');
+        await expect(ownerFlow.getByRole('button', { name: 'Start match' })).toBeEnabled({ timeout: 120_000 });
+        await ownerFlow.getByRole('button', { name: 'Start match' }).tap();
+        await expect.poll(() => room.state.epoch, { timeout: 120_000 }).not.toBe('');
+        for (const target of [page, peer]) {
+          const frame = target.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+          if (!frame) throw new Error('hosted Blobs frame is missing');
+          await expect
+            .poll(
+              () =>
+                frame.evaluate(() => {
+                  const snapshot = JSON.parse((window as TestWindow).render_game_to_text!()) as {
+                    tick: number;
+                    net: { players: unknown[] };
+                    state: { entities?: Record<string, unknown> };
+                  };
+                  return {
+                    tick: snapshot.tick,
+                    players: snapshot.net.players.length,
+                    entities: Object.keys(snapshot.state.entities ?? {}).length,
+                  };
+                }),
+              { timeout: 120_000 },
+            )
+            .toMatchObject({ tick: expect.any(Number), players: 2, entities: 2 });
+          await expect
+            .poll(() =>
+              frame.evaluate(
+                () => (JSON.parse((window as TestWindow).render_game_to_text!()) as { tick: number }).tick,
+              ),
+            )
+            .toBeGreaterThan(0);
+        }
+      } catch (error) {
+        if (onlineRoom) {
+          await testInfo.attach('room-state', {
+            body: JSON.stringify(onlineRoom.state.toJSON()),
+            contentType: 'application/json',
+          });
+        }
+        if (peerPage && !peerPage.isClosed()) {
+          const frame = peerPage.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+          const lobby = await frame
+            ?.locator('#blobs-flow')
+            .textContent({ timeout: 5_000 })
+            .catch(() => null);
+          await testInfo.attach('peer-lobby', {
+            body: lobby ?? 'game frame or lobby unavailable',
+            contentType: 'text/plain',
+          });
+          const seat = await frame
+            ?.evaluate(
+              () =>
+                (window as unknown as { __gm?: { runtime: { net: { localSeat: number | null } } } }).__gm?.runtime.net
+                  .localSeat,
+            )
+            .catch(() => undefined);
+          await testInfo.attach('peer-local-seat', {
+            body: JSON.stringify(seat ?? null),
+            contentType: 'application/json',
+          });
+        }
+        throw error;
+      } finally {
+        try {
+          await peerBrowser?.close();
+        } finally {
+          await rooms.testServer.shutdown();
+        }
+      }
     });
 
     test('manual edit persists through the real game host', async ({ page, system }) => {

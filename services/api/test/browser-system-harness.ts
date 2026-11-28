@@ -127,7 +127,7 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
         });
         const address = gamesServer.address();
         if (!address || typeof address === 'string') throw new Error('games host did not bind a TCP port');
-        return { origin: `http://127.0.0.1:${address.port}`, gameId, buildId };
+        return { origin: `http://127.0.0.1:${address.port}`, gameId, buildId, branchId: branch.id };
       },
       editorTransactions: () =>
         (
