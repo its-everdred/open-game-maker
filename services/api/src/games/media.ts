@@ -126,6 +126,7 @@ export async function gameMedia(
   const branches = deps.db
     .select({
       gameId: schema.branches.gameId,
+      draftBuildId: schema.branches.latestBuildId,
       buildId: sql<
         string | null
       >`CASE WHEN ${schema.games.visibility} = 'listed' AND ${schema.games.publishedReleaseId} IS NOT NULL THEN ${schema.releases.buildId}
@@ -136,7 +137,6 @@ export async function gameMedia(
             AND NOT EXISTS (SELECT 1 FROM publish_checks AS checked WHERE checked.build_id = legacy.id)
           ORDER BY legacy.created_at DESC, legacy.rowid DESC LIMIT 1
         )
-        WHEN ${schema.games.visibility} = 'listed' THEN NULL
         ELSE ${schema.branches.latestBuildId} END`,
     })
     .from(schema.branches)
@@ -165,7 +165,7 @@ export async function gameMedia(
   for (let index = 0; index < branches.length; index += 8) {
     entries.push(
       ...(await Promise.all(
-        branches.slice(index, index + 8).map(async ({ gameId, buildId: latestBuildId }) => {
+        branches.slice(index, index + 8).map(async ({ gameId, buildId: visibleBuildId, draftBuildId }) => {
           const game = deps.db.select().from(schema.games).where(eq(schema.games.id, gameId)).get();
           const releaseBuildId = currentPublishedBuild(deps, gameId);
           const owner =
@@ -175,7 +175,7 @@ export async function gameMedia(
             viewer.principal.familyId === game.familyId &&
             viewer.principal.capability === 'creator' &&
             hasCreatorMembership(deps, game.familyId, viewer.principal.userId);
-          const buildId = viewer && !owner ? releaseBuildId : latestBuildId;
+          const buildId = viewer ? (owner ? draftBuildId : releaseBuildId) : visibleBuildId;
           if (!buildId) return [gameId, {}] as const;
           let directory: string;
           try {
