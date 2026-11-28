@@ -8,7 +8,17 @@ import { describe, expect, it } from 'vitest';
 
 import { scanBuild } from '../../src/gameplay/paid-integrations.js';
 import { setPaidApisDuringGameplay } from '../../src/gameplay/policy.js';
-import { builtFiles, completeRun, jobState, SECRET, SHA, TICKET, world } from '../builds/fixtures.js';
+import {
+  allowArchive,
+  builtFiles,
+  CHECK_ID,
+  completeRun,
+  jobState,
+  SECRET,
+  SHA,
+  TICKET,
+  world,
+} from '../builds/fixtures.js';
 import { ids, insertBuild, publish, setup } from '../release-fixtures.js';
 import { asUser, makeApp } from '../helpers.js';
 
@@ -66,10 +76,17 @@ async function ingest(edit: (root: string) => void, allowed = false) {
   completeRun(deps);
   const root = builtFiles();
   edit(root);
+  const archive = archiveOf(root);
+  allowArchive(deps, archive);
   const response = await app.request(`http://127.0.0.1:4000/internal/jobs/by-ticket/${TICKET}/build`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${SECRET}`, 'x-gm-sha': SHA, 'content-type': 'application/gzip' },
-    body: archiveOf(root),
+    headers: {
+      authorization: `Bearer ${SECRET}`,
+      'x-gm-sha': SHA,
+      'x-gm-check-id': CHECK_ID,
+      'content-type': 'application/gzip',
+    },
+    body: archive,
   });
   return { deps, response };
 }

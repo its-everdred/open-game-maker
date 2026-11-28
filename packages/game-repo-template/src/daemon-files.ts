@@ -7,6 +7,7 @@ export type DaemonFilesContext = {
   // The game this daemon builds. Present for every game daemon in an instance repo; absent for the
   // whole-repo fallback the game-repo template still renders.
   gameSlug?: string;
+  publishHost?: { helper: string; assetsRoot: string; blobRoot: string };
 };
 
 // Directory roots a game daemon checks out beside its own game folder. Cone-mode sparse checkout always keeps the
@@ -16,6 +17,7 @@ const SHARED_ROOTS = ['packages'] as const;
 
 const CLONE = '%%CLONE%%';
 const GAME_SCOPE = '%%GAME_SCOPE%%';
+const PUBLISH_HOST = '%%PUBLISH_HOST%%';
 
 /**
  * The same text for every game repo, except when a game slug is given: then the hook clones the instance repository
@@ -25,12 +27,20 @@ export function renderDaemonFiles(context: DaemonFilesContext = {}): DaemonFiles
   const gameSlug = context.gameSlug?.trim();
   if (gameSlug === undefined || gameSlug === '') {
     return {
-      hooks: replaceLine(readTemplate('hooks.sh'), CLONE, plainClone()),
+      hooks: replaceLine(
+        replaceLine(readTemplate('hooks.sh'), CLONE, plainClone()),
+        PUBLISH_HOST,
+        publishHost(context),
+      ),
       prompt: withoutLine(readTemplate('prompt.md.liquid'), GAME_SCOPE),
     };
   }
   return {
-    hooks: replaceLine(readTemplate('hooks.sh'), CLONE, sparseClone(gameSlug)),
+    hooks: replaceLine(
+      replaceLine(readTemplate('hooks.sh'), CLONE, sparseClone(gameSlug)),
+      PUBLISH_HOST,
+      publishHost(context),
+    ),
     prompt: replaceLine(readTemplate('prompt.md.liquid'), GAME_SCOPE, gameScope(gameSlug)),
   };
 }
@@ -63,6 +73,13 @@ export function gameScope(gameSlug: string): string {
     '- If the work needs a change to a shared package under `packages/` or to another game, stop and open a separate',
     '  GitHub issue for the executor describing the change. Do not make that change here.',
   ].join('\n');
+}
+
+function publishHost(context: DaemonFilesContext): string {
+  const quote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
+  if (!context.publishHost)
+    return 'publish_helper="${OGM_PUBLISH_STAGER:-}"\npublish_assets="${OGM_PUBLISH_ASSETS:-}"\npublish_blobs="${OGM_PUBLISH_BLOBS:-}"';
+  return `publish_helper=${quote(context.publishHost.helper)}\npublish_assets=${quote(context.publishHost.assetsRoot)}\npublish_blobs=${quote(context.publishHost.blobRoot)}`;
 }
 
 // A whole-line placeholder the template keeps so a non-game daemon renders the original text byte for byte.

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 
 import { Hono, type Context } from 'hono';
@@ -22,6 +23,10 @@ import { phaseOwner } from '../review-rounds/owners.js';
 import { reviewDaemonForGame } from '../review-rounds/daemon.js';
 import { logReviewPublish } from '../review-rounds/feed-log.js';
 import { BuildCacheError } from './cache-plan.js';
+import { checkRecordBody, passedChecks, recordChecks } from './check-records.js';
+import { parseBody } from '../app/validate.js';
+import { schema } from '@ogm/db';
+import { eq } from 'drizzle-orm';
 import { awaitsBuild, isPublishing, publishStaged, runCompleted, stageArtifact } from './publish.js';
 import { ARCHIVE_LIMITS, BadArchive } from './untar.js';
 
@@ -54,6 +59,22 @@ export function buildRoutes(opts: {
     const resolver = deps.registry.ticketJobResolver;
     const job = resolver ? await resolver(repo, c.req.param('identifier') ?? '') : null;
     if (!job || job.repo.toLowerCase() !== repo.toLowerCase()) return c.json({ error: { code: 'not_found' } }, 404);
+    if (opts.gameForSecret) {
+      const identity = bearer ? await opts.gameForSecret(bearer[1]!, deps) : null;
+      const target = deps.db
+        .select({ gameId: schema.jobs.gameId })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.id, job.jobId))
+        .get();
+      const daemon = target && reviewDaemonForGame(deps.db, target.gameId);
+      if (
+        !identity ||
+        !daemon ||
+        identity.slug !== daemon.slug ||
+        identity.repo.toLowerCase() !== daemon.repo.toLowerCase()
+      )
+        return c.json({ error: { code: 'not_found' } }, 404);
+    }
     if (!awaitsBuild(deps, job.jobId) || isPublishing(job.jobId)) {
       return c.json({ error: { code: 'job_not_awaiting_build' } }, 409);
     }
@@ -63,6 +84,33 @@ export function buildRoutes(opts: {
   }
 
   return new Hono<ApiBindings>()
+    .get('/jobs/by-ticket/:identifier/publish-context', async (c) => {
+      const admitted = await admit(c);
+      if (admitted instanceof Response) return admitted;
+      const game = c
+        .get('deps')
+        .db.select({ path: schema.games.githubPath, visibility: schema.games.repoVisibility, slug: schema.games.slug })
+        .from(schema.jobs)
+        .innerJoin(schema.games, eq(schema.jobs.gameId, schema.games.id))
+        .where(eq(schema.jobs.id, admitted.jobId))
+        .get();
+      if (!game) return c.json({ error: { code: 'not_found' } }, 404);
+      return c.json({ path: game.path, visibility: game.visibility });
+    })
+    .post('/jobs/by-ticket/:identifier/publish-checks', bodyLimit({ maxSize: 65536 }), async (c) => {
+      const admitted = await admit(c);
+      if (admitted instanceof Response) return admitted;
+      const deps = c.get('deps');
+      const input = await parseBody(c, checkRecordBody);
+      if (input.gitSha !== admitted.gitSha) return c.json({ error: { code: 'invalid_sha' } }, 400);
+      const job = deps.db
+        .select({ gameId: schema.jobs.gameId })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.id, admitted.jobId))
+        .get();
+      if (!job) return c.json({ error: { code: 'not_found' } }, 404);
+      return c.json(recordChecks(deps, job.gameId, input), 201);
+    })
     .post(
       '/jobs/by-ticket/:identifier/build',
       async (c, next) => {
@@ -80,10 +128,27 @@ export function buildRoutes(opts: {
         const admitted = await admit(c);
         if (admitted instanceof Response) return admitted;
         const { jobId, gitSha } = admitted;
+        const job = deps.db
+          .select({ gameId: schema.jobs.gameId })
+          .from(schema.jobs)
+          .where(eq(schema.jobs.id, jobId))
+          .get();
+        const checkId = c.req.header('x-gm-check-id') ?? '';
+        const archive = Buffer.from(await c.req.arrayBuffer());
+        const hash = createHash('sha256').update(archive).digest('hex');
+        // Older daemon hooks still deliver editor builds during rollout. Only a build with a
+        // passing record may advance the public release pointer in publishStaged.
+        if (!job || (checkId !== '' && !passedChecks(deps, checkId, job.gameId, gitSha, hash)))
+          return c.json({ error: { code: 'checks_required' } }, 422);
         try {
-          await stageArtifact(deps, jobId, gitSha, Buffer.from(await c.req.arrayBuffer()));
+          await stageArtifact(deps, jobId, gitSha, archive, checkId);
         } catch (error) {
           if (error instanceof BadArchive) {
+            deps.db
+              .update(schema.publishChecks)
+              .set({ publishResult: 'failed' })
+              .where(eq(schema.publishChecks.id, checkId))
+              .run();
             // The job keeps waiting: a later good upload can still land, else the sweep fails it after the grace.
             deps.log({ event: 'build_upload_refused', jobId, reason: error.message });
             return c.json({ error: { code: error.message } }, 422);

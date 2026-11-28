@@ -32,10 +32,13 @@ recognized public SPDX license; `LicenseRef-*`, unknown, and missing licenses fa
 Push requests use a 10-second socket timeout. Expired subscriptions are removed immediately; other failures are
 removed after five consecutive attempts without failing the notification emitter.
 
-Build publishing (`src/builds`): a game repo's `before_remove` hook runs `pnpm run build` and posts the fresh `dist/` (plus `manifest.json`,
+Build publishing (`src/builds`): a game repo's `before_remove` hook resolves its game path and repository visibility from
+`GET /internal/jobs/by-ticket/:id/publish-context`, stages lock-listed assets, runs the game's `pnpm run build` and
+`pnpm run test` in a network-off sandbox, records their results, and posts the fresh `dist/` (plus `manifest.json`,
 `design/design.json`, `achievements.json`) as a gzipped ustar archive to `POST /internal/jobs/by-ticket/:id/build` with
 its daemon hook secret and `x-gm-sha`. Once Aiur reports the run completed, the API registers the build, moves it to
-`$OGM_GAMES_ROOT/<gameId>/<buildId>/`, writes `.complete`, switches the job's branch to it and finishes the job. New-game,
+`$OGM_GAMES_ROOT/<gameId>/<buildId>/`, writes `.complete`, switches the job's branch to it and finishes the job. A
+passing main-branch build of a listed game is also released; the release transaction rechecks visibility. New-game,
 feature and repair jobs stay running until then; a run with no build 30 minutes after completion fails
 (`build_not_received`). A refused archive is logged as `build_upload_refused` with its reason and leaves the job
 waiting; a staged build that fails to publish fails the job with the reason in the `build_publish_failed` log line.

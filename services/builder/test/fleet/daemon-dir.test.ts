@@ -8,6 +8,18 @@ import { cleanupHomes, fleetEnv, liveRow, tempHome } from './helpers.js';
 
 afterEach(cleanupHomes);
 
+it('refuses an asset or blob store overlapping daemon workspaces', async () => {
+  const home = await tempHome();
+  const row = liveRow(1);
+  const paths = daemonPaths(home, row.slug);
+  expect(() =>
+    renderInputFor(row, paths, fleetEnv(home, { blobRoot: join(paths.workspaces, 'blobs') }), 'feature', [row]),
+  ).toThrow('configured asset or blob store overlaps a daemon workspace');
+  expect(() => renderInputFor(row, paths, fleetEnv(home, { assetsLocalDir: paths.dir }), 'feature', [row])).toThrow(
+    'configured asset or blob store overlaps a daemon workspace',
+  );
+});
+
 describe('shared Codex auth', () => {
   async function setup() {
     const home = await tempHome();
