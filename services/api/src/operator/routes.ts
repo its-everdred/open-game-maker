@@ -372,6 +372,10 @@ const routes = new Hono<ApiBindings>()
               buildId,
               actor: PUBLISH_ACTOR,
               requireCurrentMain: true,
+              expectedRights: {
+                allowAiGeneratedAssets: game.allowAiGeneratedAssets,
+                repoVisibility: game.repoVisibility,
+              },
             },
           );
         }),

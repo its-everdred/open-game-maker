@@ -229,6 +229,7 @@ function appendRelease(
     actor: string;
     noteIds?: string[];
     expectedMainBuildId?: string;
+    expectedRights?: { allowAiGeneratedAssets: boolean; repoVisibility: 'public' | 'private' };
     // The game's folder name under games/, so tags read `<slug>/v<version>` and never collide across games.
     slug: string;
   },
@@ -241,6 +242,22 @@ function appendRelease(
         )
         .get(input.gameId);
       if (!current || current.published_release_id !== input.expected) throw new ReleaseError('pointer_moved', 409);
+      if (input.expectedRights) {
+        const policy = deps.db
+          .select({
+            allowAiGeneratedAssets: schema.games.allowAiGeneratedAssets,
+            repoVisibility: schema.games.repoVisibility,
+          })
+          .from(schema.games)
+          .where(eq(schema.games.id, input.gameId))
+          .get();
+        if (
+          !policy ||
+          policy.allowAiGeneratedAssets !== input.expectedRights.allowAiGeneratedAssets ||
+          policy.repoVisibility !== input.expectedRights.repoVisibility
+        )
+          throw new ReleaseError('rights_policy_moved', 409);
+      }
       if (input.expectedMainBuildId) {
         const main = deps.sqlite
           .prepare<[string], { latest_build_id: string | null }>(
@@ -306,9 +323,22 @@ async function requireGameplayCompliant(deps: AppDeps, artifactPath: string): Pr
 export async function publish(
   deps: AppDeps,
   runtime: ReleaseRuntime,
-  input: { gameId: string; buildId: string; actor: string; changelog?: Changelog; requireCurrentMain?: boolean },
+  input: {
+    gameId: string;
+    buildId: string;
+    actor: string;
+    changelog?: Changelog;
+    requireCurrentMain?: boolean;
+    expectedRights?: { allowAiGeneratedAssets: boolean; repoVisibility: 'public' | 'private' };
+  },
 ): Promise<Release> {
   const { build, game } = requireMainBuild(deps, input.gameId, input.buildId);
+  if (
+    input.expectedRights &&
+    (game.allowAiGeneratedAssets !== input.expectedRights.allowAiGeneratedAssets ||
+      game.repoVisibility !== input.expectedRights.repoVisibility)
+  )
+    throw new ReleaseError('rights_policy_moved', 409);
   let directory: string;
   try {
     directory = buildDir(deps.config.gamesRoot, build.gameId, build.id);
@@ -366,6 +396,7 @@ export async function publish(
         noteIds: prepared.noteIds,
         actor: input.actor,
         ...(input.requireCurrentMain ? { expectedMainBuildId: input.buildId } : {}),
+        ...(input.expectedRights ? { expectedRights: input.expectedRights } : {}),
         slug: releaseSlug(game),
       }),
     );

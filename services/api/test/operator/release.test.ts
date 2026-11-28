@@ -245,3 +245,22 @@ it('does not release an older build when main moves during the release gate', as
   expect(deps.db.select().from(schema.games).get()?.publishedReleaseId).toBeNull();
   expect(deps.db.select().from(schema.releases).all()).toHaveLength(0);
 });
+
+it('does not release when the AI asset setting changes during the rights check', async () => {
+  const { deps, source, runtime } = setup();
+  const buildId = insertBuild(deps, source);
+  installSource(deps, buildId);
+  deps.db.update(schema.branches).set({ latestBuildId: buildId }).where(eq(schema.branches.id, ids.main)).run();
+  runtime.checkRights = async () => {
+    deps.db.update(schema.games).set({ allowAiGeneratedAssets: false }).where(eq(schema.games.id, ids.game)).run();
+    return [];
+  };
+  const app = createApp(deps);
+  app.route(prefix, operatorRoutes);
+  const response = await app.request(`${prefix}/games/castle-game/builds/${buildId}/release`, {
+    method: 'POST',
+    headers: { 'x-ogm-internal': INTERNAL_TOKEN },
+  });
+  expect(response.status).toBe(409);
+  expect(deps.db.select().from(schema.releases).all()).toHaveLength(0);
+});
