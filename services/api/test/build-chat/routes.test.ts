@@ -236,6 +236,13 @@ describe('build chat routes', () => {
     await expect(stream.next()).rejects.toThrow('stream ended');
   });
 
+  it('streams a creator scope chat before its game row exists', async () => {
+    const { app, deps } = await makeChatApp(jobTable(chatJob({ kind: 'scope' })), undefined, false);
+    insertChatRow(deps.sqlite, { jobId: JOB_ID, actor: 'agent', kind: 'text', text: 'draft' });
+    const stream = sse(await app.request(url(), { headers: as('owner') }));
+    expect((await stream.next()).data.text).toBe('draft');
+  });
+
   it('shows a creator post on the open stream', async () => {
     const { app } = await makeChatApp(jobTable(chatJob({ aiur: null })));
     const stream = await app.request(url(), { headers: as('owner') });

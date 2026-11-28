@@ -68,32 +68,34 @@ export function jobTable(...jobs: ChatJob[]) {
 
 export type FakeAiur = Pick<AiurClient, 'message' | 'progress' | 'decisions' | 'decision' | 'decide'>;
 
-export function makeChatDeps(jobs = jobTable(chatJob()), client?: FakeAiur) {
+export function makeChatDeps(jobs = jobTable(chatJob()), client?: FakeAiur, seedGame = true) {
   const deps = makeDeps();
   const now = '2026-11-01T00:00:00.000Z';
-  deps.db
-    .insert(schema.families)
-    .values({ id: FAMILY, name: 'Family', ownerUserId: users.owner.userId, createdAt: now })
-    .run();
-  deps.db
-    .insert(schema.games)
-    .values({
-      id: chatJob().gameId,
-      familyId: FAMILY,
-      ownerId: users.owner.userId,
-      title: 'Game',
-      visibility: 'private',
-      repoVisibility: 'private',
-      createdAt: now,
-    })
-    .run();
+  if (seedGame) {
+    deps.db
+      .insert(schema.families)
+      .values({ id: FAMILY, name: 'Family', ownerUserId: users.owner.userId, createdAt: now })
+      .run();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: chatJob().gameId,
+        familyId: FAMILY,
+        ownerId: users.owner.userId,
+        title: 'Game',
+        visibility: 'private',
+        repoVisibility: 'private',
+        createdAt: now,
+      })
+      .run();
+  }
   deps.registry.chatJobs = jobs.directory;
   if (client) deps.registry.aiurClientFor = () => client;
   return deps;
 }
 
-export async function makeChatApp(jobs = jobTable(chatJob()), client?: FakeAiur) {
-  const result = await makeApp(makeChatDeps(jobs, client));
+export async function makeChatApp(jobs = jobTable(chatJob()), client?: FakeAiur, seedGame = true) {
+  const result = await makeApp(makeChatDeps(jobs, client, seedGame));
   result.deps.registry.principalResolvers.push(async (c) => {
     const user = c.req.header('x-test-user') as keyof typeof users | undefined;
     return user && user in users ? users[user] : null;

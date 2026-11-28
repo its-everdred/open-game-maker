@@ -35,7 +35,7 @@ import {
 } from './store.js';
 import { createChatHub, formatChatFrame, type ChatHub } from './stream.js';
 import { getNarrationRenderer } from '../narration/render.js';
-import { authorizedGameById } from '../games/authorize.js';
+import { authorizeChatJobAccess } from './authorization.js';
 
 export const prefix = '/api/v1/jobs';
 
@@ -156,7 +156,7 @@ function chatStream(c: Context<ApiBindings>, job: ChatJob, since: number) {
   auth.get('/', (context) => {
     const principal = requirePrincipal(context, ['user']);
     if (principal.userId !== userId) return context.body(null, 403);
-    authorizedGameById(context, 'game.edit', job.gameId);
+    authorizeChatJobAccess(context, job);
     return context.body(null, 204);
   });
   const allowed = async () => {
