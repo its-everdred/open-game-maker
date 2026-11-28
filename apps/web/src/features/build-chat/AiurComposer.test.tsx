@@ -270,6 +270,7 @@ it('keeps the microphone as a mute control and shows both live voice transcripts
   expect(fake.dictationMuted).toHaveBeenCalledWith(true);
   expect(mic.getAttribute('aria-label')).toBe('Unmute microphone');
   expect(mic.style.opacity).toBe('0.58');
+  fake.listeners.get('level')!(0.6);
   expect(Array.from(waveform.querySelectorAll('i')).every((bar) => bar.style.transform === 'scaleY(0.10)')).toBe(true);
 
   composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="voice"]')!.click();
@@ -282,6 +283,8 @@ it('keeps the microphone as a mute control and shows both live voice transcripts
 
   mic.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, button: 0 }));
   expect(fake.voiceMuted).toHaveBeenCalledWith(true);
+  fake.voiceLevel?.(0.8);
+  expect(Array.from(waveform.querySelectorAll('i')).every((bar) => bar.style.transform === 'scaleY(0.10)')).toBe(true);
   fake.listeners.get('voice:transcript')!({ type: 'transcript', kind: 'final', text: 'Start run' });
   fake.listeners.get('voice:agent_text')!({ type: 'agent_text', turn_id: 'turn-1', text: 'Run started.', final: true });
   await waitFor(() => expect(container.querySelector('[aria-label="Live voice conversation"]')).not.toBeNull());

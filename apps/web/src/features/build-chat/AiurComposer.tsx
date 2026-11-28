@@ -304,7 +304,12 @@ export function AiurComposer({
                     offLevel();
                   };
                 });
-                offLevel = dictation.on('level', onLevel);
+                offLevel = dictation.on('level', (level) => {
+                  if (microphoneMuted.current) {
+                    onLevel(0);
+                    drawComposerWave(element, 0);
+                  } else onLevel(level);
+                });
                 // The microphone or token can fail before the user releases the button.
                 void result.catch(() => {});
                 cancelDictation.current = () => {
@@ -347,7 +352,7 @@ export function AiurComposer({
                   url: available.url,
                   token: available.token,
                   target: voiceTarget,
-                  onLevel: (level) => drawComposerWave(element, level),
+                  onLevel: (level) => drawComposerWave(element, microphoneMuted.current ? 0 : level),
                 });
                 microphoneMuted.current = false;
                 setVoiceTranscript({ captions: { you: [], builder: [] }, order: [] });
