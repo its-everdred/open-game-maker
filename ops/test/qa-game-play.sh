@@ -19,9 +19,9 @@ db=$scratch/ogm.sqlite3
 python3 - "$db" << 'PY'
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
-c.execute('create table games (id text, slug text, delisted_at text)')
+c.execute("create table games (id text, slug text, delisted_at text, visibility text default 'listed', release_state text default 'released')")
 c.execute('create table builds (id text, game_id text, status text, created_at text)')
-c.executemany('insert into games values (?, ?, null)',
+c.executemany('insert into games (id, slug, delisted_at) values (?, ?, null)',
               [('g_ok', 'ok'), ('g_bad', 'bad'), ('g_qa', 'qa-review'), ('g_new', 'new')])
 c.executemany('insert into builds values (?, ?, ?, ?)', [
   ('build_old', 'g_ok', 'tested', '2026-11-20'), ('build_new', 'g_ok', 'tested', '2026-11-21'),
@@ -203,5 +203,14 @@ set -e
 assert_eq 1 "$rc" 'an unconfigured frame check fails the run'
 assert_grep 'qa-frame-check failed: frames: not checked: OGM_PUBLIC_APP_ORIGIN in web.env or OGM_GAMES_ORIGIN' "$attention"
 mv "$scratch/api.env" "$scratch/env/api.env"
+
+python3 - "$db" << 'PY'
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    db.execute("update games set release_state = 'coming_soon' where slug = 'ok'")
+PY
+"$check" --db "$db" --repo "$stack" --game ok > "$scratch/out"
+assert_grep 'ok: not checked (coming soon)' "$scratch/out"
+assert_grep 'exit=0 qa-game-play' "$scratch/out"
 
 echo 'qa-game-play: ok'

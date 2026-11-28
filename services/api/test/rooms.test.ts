@@ -225,6 +225,9 @@ describe('room lifecycle service', () => {
     });
     expect(JSON.stringify(deps.db.select().from(schema.invitations).get())).not.toContain(token);
 
+    deps.db.update(schema.games).set({ releaseState: 'coming_soon' }).run();
+    await expect(joinRoom(deps, member, token, nowMs)).rejects.toMatchObject({ status: 403, code: 'coming_soon' });
+    deps.db.insert(schema.gameEarlyAccess).values({ gameId: 'g-1', userId: member.userId }).run();
     const joined = await joinRoom(deps, member, token, nowMs);
     expect((await verifyGrant(joined.grant, deps.config.roomGrantSecret, nowMs)).ok).toBe(true);
     expect(deps.db.select().from(schema.roomMembers).get()).toMatchObject({

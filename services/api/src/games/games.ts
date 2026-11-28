@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Db } from '@ogm/db';
 import { schema } from '@ogm/db';
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 
 import type { AppDeps } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
@@ -10,6 +10,7 @@ import { gameFolder } from '@ogm/contracts';
 import { assignSlug } from './slug.js';
 import { GitHubRateLimitError, ProvisioningOutcomeUnknownError } from './repo-provisioner.js';
 import { readQaState } from '../qa/state.js';
+import type { Actor } from '@ogm/policy';
 
 export type GameRow = typeof schema.games.$inferSelect;
 
@@ -27,6 +28,7 @@ export function gameResponse(game: GameRow) {
     title: game.title,
     slug: game.slug,
     visibility: game.visibility,
+    releaseState: game.releaseState,
     repoVisibility: game.repoVisibility,
     repo:
       game.githubOwner && game.githubRepo && game.repoUrl
@@ -58,8 +60,30 @@ export function findGameForFamily(db: Db, id: string, familyId: string): GameRow
     .from(schema.games)
     .where(and(eq(schema.games.id, id), eq(schema.games.familyId, familyId)))
     .get();
-  if (!game) throw new HttpError(404, 'game_not_found');
+  if (!game) {
+    const visible = db
+      .select({ releaseState: schema.games.releaseState, delistedAt: schema.games.delistedAt })
+      .from(schema.games)
+      .where(eq(schema.games.id, id))
+      .get();
+    if (visible?.releaseState === 'coming_soon' && visible.delistedAt === null) throw new HttpError(403, 'coming_soon');
+    throw new HttpError(404, 'game_not_found');
+  }
   return game;
+}
+
+export function findGameForPlay(db: Db, id: string, actor: Actor): GameRow {
+  const game = findGame(db, id);
+  /* A delisted game stays reachable to its own family, as before, and to no one outside it. */
+  if (game.familyId === actor.familyId) return game;
+  if (game.delistedAt !== null) throw new HttpError(404, 'game_not_found');
+  if (
+    hasGameGrant(db, id, actor.userId) ||
+    (game.releaseState === 'coming_soon' && (actor.platformRole === 'admin' || actor.platformRole === 'maintainer'))
+  )
+    return game;
+  if (game.releaseState === 'coming_soon' && game.delistedAt === null) throw new HttpError(403, 'coming_soon');
+  throw new HttpError(404, 'game_not_found');
 }
 
 export function listGames(db: Db, familyId: string, userId: string): GameRow[] {
@@ -68,21 +92,49 @@ export function listGames(db: Db, familyId: string, userId: string): GameRow[] {
     .from(schema.games)
     .where(
       and(
-        eq(schema.games.familyId, familyId),
         isNull(schema.games.delistedAt),
-        or(eq(schema.games.visibility, 'listed'), eq(schema.games.ownerId, userId)),
+        or(
+          eq(schema.games.releaseState, 'coming_soon'),
+          inArray(
+            schema.games.id,
+            db
+              .select({ id: schema.gameEarlyAccess.gameId })
+              .from(schema.gameEarlyAccess)
+              .where(eq(schema.gameEarlyAccess.userId, userId)),
+          ),
+          inArray(
+            schema.games.id,
+            db
+              .select({ id: schema.gameGrants.gameId })
+              .from(schema.gameGrants)
+              .where(eq(schema.gameGrants.userId, userId)),
+          ),
+          and(
+            eq(schema.games.familyId, familyId),
+            or(eq(schema.games.visibility, 'listed'), eq(schema.games.ownerId, userId)),
+          ),
+        ),
       ),
     )
     .all();
 }
 
 export function hasGameGrant(db: Db, gameId: string, userId: string): boolean {
-  return Boolean(
-    db
-      .select({ gameId: schema.gameGrants.gameId })
-      .from(schema.gameGrants)
-      .where(and(eq(schema.gameGrants.gameId, gameId), eq(schema.gameGrants.userId, userId)))
-      .get(),
+  return (
+    Boolean(
+      db
+        .select({ gameId: schema.gameGrants.gameId })
+        .from(schema.gameGrants)
+        .where(and(eq(schema.gameGrants.gameId, gameId), eq(schema.gameGrants.userId, userId)))
+        .get(),
+    ) ||
+    Boolean(
+      db
+        .select({ gameId: schema.gameEarlyAccess.gameId })
+        .from(schema.gameEarlyAccess)
+        .where(and(eq(schema.gameEarlyAccess.gameId, gameId), eq(schema.gameEarlyAccess.userId, userId)))
+        .get(),
+    )
   );
 }
 

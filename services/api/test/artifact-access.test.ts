@@ -459,4 +459,98 @@ describe('artifact access', () => {
     deps.db.update(schema.games).set({ publishedReleaseId: null }).where(eq(schema.games.id, ids.game)).run();
     expect(await allowed({ gameId: ids.game, buildId, grant: playerGrant })).toBe(false);
   });
+  it('keeps a coming soon build off the public path and serves it only to an early-access tester', async () => {
+    const { deps, source } = setup();
+    insertBuild(deps, source, { id: buildId });
+    deps.db
+      .insert(schema.overrideSnapshots)
+      .values({
+        id: 'snap_soon',
+        gameId: ids.game,
+        branchId: ids.main,
+        buildId,
+        headRev: 0,
+        sha256: 'b'.repeat(64),
+        entriesJson: '[]',
+        entityOpsJson: '[]',
+        createdAt: now,
+      })
+      .run();
+    deps.db
+      .insert(schema.releases)
+      .values({
+        id: 'rel_soon',
+        gameId: ids.game,
+        seq: 1,
+        version: '1.0.0',
+        buildId,
+        snapshotId: 'snap_soon',
+        gitTag: 'castle-game/v1.0.0',
+        kind: 'publish',
+        changelogJson: '{}',
+        publishedBy: ids.user,
+        publishedAt: now,
+      })
+      .run();
+    const releaseState = (state: 'released' | 'coming_soon') =>
+      deps.db.update(schema.games).set({ releaseState: state }).where(eq(schema.games.id, ids.game)).run();
+    deps.db
+      .update(schema.games)
+      .set({ visibility: 'listed', publishedReleaseId: 'rel_soon' })
+      .where(eq(schema.games.id, ids.game))
+      .run();
+    // A tester in the owner's family: a player who is not the owner, so only early access lets them in.
+    const tester = 'u_00000000-0000-4000-8000-000000000077';
+    deps.registry.principalResolvers = [
+      async (c) =>
+        c.req.header('cookie') === 'session=tester'
+          ? {
+              kind: 'user',
+              userId: tester,
+              familyId: ids.family,
+              displayName: 'Tester',
+              platformRole: 'none',
+              capability: 'player',
+            }
+          : null,
+    ];
+    const app = createApp(deps);
+    app.route('/api/v1/artifacts', routes);
+    const post = (path: string, body: object, cookie?: string) =>
+      app.request(`/api/v1/artifacts/${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
+        body: JSON.stringify(body),
+      });
+    const allowed = async (body: object) =>
+      ((await (await post('authorize', body)).json()) as { allowed: boolean }).allowed;
+    const host = createGamesHost({
+      root: deps.config.gamesRoot,
+      appOrigin: 'https://app.example.test',
+      version: 'test',
+      workerScript: join(deps.config.gamesRoot, 'unused'),
+      authorize: allowed,
+    });
+
+    expect((await host.request(`/g/${ids.game}/${buildId}/`)).status).toBe(200);
+    releaseState('coming_soon');
+    // The public path is how a listed game reaches anyone: a coming soon game must not be on it.
+    expect(await allowed({ gameId: ids.game, buildId })).toBe(false);
+    expect((await host.request(`/g/${ids.game}/${buildId}/`)).status).toBe(404);
+    expect((await post('grant', { gameId: ids.game, buildId }, 'session=tester')).status).toBe(404);
+
+    deps.db.insert(schema.gameEarlyAccess).values({ gameId: ids.game, userId: tester }).run();
+    const grantResponse = await post('grant', { gameId: ids.game, buildId }, 'session=tester');
+    expect(grantResponse.status).toBe(200);
+    const { grant } = (await grantResponse.json()) as { grant: string };
+    expect((await host.request(`/d/${ids.game}/${buildId}/${grant}/`)).status).toBe(200);
+
+    // Revoking early access revokes the URL already in the tester's frame.
+    deps.db.delete(schema.gameEarlyAccess).where(eq(schema.gameEarlyAccess.userId, tester)).run();
+    expect(await allowed({ gameId: ids.game, buildId, grant })).toBe(false);
+    expect((await host.request(`/d/${ids.game}/${buildId}/${grant}/`)).status).toBe(404);
+
+    releaseState('released');
+    expect((await host.request(`/g/${ids.game}/${buildId}/`)).status).toBe(200);
+  });
 });

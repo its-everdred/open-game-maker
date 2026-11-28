@@ -324,6 +324,16 @@ describe('GamesScreen', () => {
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/g/g_2'));
   });
 
+  it('does not open a restricted game with Enter', async () => {
+    gamesResponse = [{ ...games[1]!, releaseState: 'coming_soon', canPlay: false }];
+    renderGames('/all?test');
+    fireEvent.click(await screen.findByRole('button', { name: 'Goblin Cellar: Coming Soon' }, { timeout: 20_000 }));
+    expect(await screen.findByRole('region', { name: 'Goblin Cellar spotlight' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Play Goblin Cellar' })).toBeNull();
+    fireEvent.keyDown(screen.getByRole('grid', { name: 'Your games' }), { key: 'Enter' });
+    expect(screen.getByTestId('location')).not.toHaveTextContent('/g/g_2');
+  });
+
   it('stops a gesture-started trailer if the screen unmounts before the detail mounts', async () => {
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});

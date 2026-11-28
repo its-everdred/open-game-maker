@@ -214,6 +214,65 @@ const routes = new Hono<ApiBindings>()
       .all();
     return c.json({ games: games.map(gameResponse) });
   })
+  .get('/games/:id/early-access', (c) => {
+    admin(c, 'admin.members.manage');
+    const db = c.get('deps').db;
+    const game = findGame(db, c.req.param('id'));
+    return c.json({
+      userIds: db
+        .select({ userId: schema.gameEarlyAccess.userId })
+        .from(schema.gameEarlyAccess)
+        .where(eq(schema.gameEarlyAccess.gameId, game.id))
+        .all()
+        .map((row) => row.userId),
+    });
+  })
+  .post('/games/:id/early-access', async (c) => {
+    admin(c, 'admin.members.manage');
+    const deps = c.get('deps');
+    const game = findGame(deps.db, c.req.param('id'));
+    const body = await parseBody(c, z.object({ email: z.email() }).strict());
+    const userId = await deps.registry.userDirectory?.userIdForEmail(body.email);
+    if (
+      !userId ||
+      !deps.db
+        .select({ email: schema.allowedUsers.email })
+        .from(schema.allowedUsers)
+        .where(eq(schema.allowedUsers.email, body.email.trim().toLowerCase()))
+        .get()
+    )
+      throw new HttpError(404, 'member_not_found');
+    deps.db.insert(schema.gameEarlyAccess).values({ gameId: game.id, userId }).onConflictDoNothing().run();
+    return c.body(null, 204);
+  })
+  .put('/games/:id/early-access/:userId', async (c) => {
+    admin(c, 'admin.members.manage');
+    const deps = c.get('deps');
+    const game = findGame(deps.db, c.req.param('id'));
+    const userId = c.req.param('userId');
+    const email = await deps.registry.userDirectory?.emailForUser(userId);
+    if (
+      !email ||
+      !deps.db
+        .select({ email: schema.allowedUsers.email })
+        .from(schema.allowedUsers)
+        .where(eq(schema.allowedUsers.email, email.trim().toLowerCase()))
+        .get()
+    )
+      throw new HttpError(404, 'member_not_found');
+    deps.db.insert(schema.gameEarlyAccess).values({ gameId: game.id, userId }).onConflictDoNothing().run();
+    return c.body(null, 204);
+  })
+  .delete('/games/:id/early-access/:userId', (c) => {
+    admin(c, 'admin.members.manage');
+    const deps = c.get('deps');
+    const game = findGame(deps.db, c.req.param('id'));
+    deps.db
+      .delete(schema.gameEarlyAccess)
+      .where(and(eq(schema.gameEarlyAccess.gameId, game.id), eq(schema.gameEarlyAccess.userId, c.req.param('userId'))))
+      .run();
+    return c.body(null, 204);
+  })
   // Register a game whose repository already exists — a game living in an Open-Games monorepo — so the next game in
   // that repository takes this path instead of a hand-edited row. The row names the repository and the game's
   // `games/<slug>` folder in it; no provisioner runs and no repository or folder is created. The daemon block links

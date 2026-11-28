@@ -10,7 +10,7 @@ import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
 import { resolveBranch } from '../design/store.js';
-import { findGameForFamily, hasGameGrant } from '../games/games.js';
+import { findGameForPlay, hasGameGrant } from '../games/games.js';
 import { LeaseHeld, LeaseMismatch, acquirePlayLease, heartbeatPlayLease } from './lease.js';
 import { deriveSaveStatus } from './status.js';
 import {
@@ -56,12 +56,13 @@ function playableGame(c: Parameters<typeof requirePrincipal>[0]): {
   gameId: string;
 } {
   const principal = requirePrincipal(c, ['user']);
-  const game = findGameForFamily(c.get('deps').db, routeParam(c, 'gameId'), principal.familyId);
+  const game = findGameForPlay(c.get('deps').db, routeParam(c, 'gameId'), actorFromPrincipal(principal));
   requireAuthorization(
     authorize(actorFromPrincipal(principal), 'game.play', {
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      releaseState: game.releaseState,
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
     }),
   );

@@ -96,6 +96,10 @@ export function GameDetail({
   job,
   onPlay,
   onEdit,
+  onRelease,
+  onComingSoon,
+  releasePending,
+  releaseError,
   onClose,
   sharedCover,
 }: {
@@ -104,6 +108,10 @@ export function GameDetail({
   sharedCover?: boolean;
   onPlay(): void;
   onEdit(): void;
+  onRelease?(): void;
+  onComingSoon?(): void;
+  releasePending?: boolean;
+  releaseError?: boolean;
   onClose(): void;
 }) {
   const close = useRef<HTMLButtonElement>(null);
@@ -205,12 +213,39 @@ export function GameDetail({
           </dl>
         )}
         <div className="games-spotlight-actions">
-          <button type="button" className="tap-primary games-play" aria-label={`Play ${game.title}`} onClick={onPlay}>
-            ▶
-          </button>
-          <button type="button" className="tap-primary games-edit" aria-label={`Edit ${game.title}`} onClick={onEdit}>
-            <Icon name="pencil" />
-          </button>
+          {game.releaseState === 'coming_soon' && game.canPlay === false ? (
+            <span>Coming Soon</span>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="tap-primary games-play"
+                aria-label={`Play ${game.title}`}
+                onClick={onPlay}
+              >
+                ▶
+              </button>
+              <button
+                type="button"
+                className="tap-primary games-edit"
+                aria-label={`Edit ${game.title}`}
+                onClick={onEdit}
+              >
+                <Icon name="pencil" />
+              </button>
+            </>
+          )}
+          {game.releaseState === 'coming_soon' && game.canManageRelease && onRelease && (
+            <button type="button" className="tap-secondary" onClick={onRelease} disabled={releasePending}>
+              Release
+            </button>
+          )}
+          {game.releaseState === 'released' && game.canManageRelease && onComingSoon && (
+            <button type="button" className="tap-secondary" onClick={onComingSoon} disabled={releasePending}>
+              Coming Soon
+            </button>
+          )}
+          {releaseError && <p role="alert">Couldn’t change the release state. Try again.</p>}
         </div>
       </div>
       <div
