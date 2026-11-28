@@ -57,6 +57,10 @@
   {
    "id": "catalogue",
    "name": "Catalogue"
+  },
+  {
+   "id": "newgame",
+   "name": "New Game"
   }
  ],
  "boards": {
@@ -709,11 +713,91 @@
    "h": 900,
    "title": "Catalogue home · desktop",
    "page": "catalogue"
+  },
+  "CatKit.dc.html": {
+   "x": 3040,
+   "y": 0,
+   "w": 1440,
+   "h": 820,
+   "title": "Catalogue components",
+   "page": "system"
+  },
+  "NgGenre.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Genre · restyled",
+   "page": "newgame",
+   "radius": 38
+  },
+  "NgLook.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Look · restyled, pre-filters the catalogue",
+   "page": "newgame",
+   "radius": 38
+  },
+  "NgAdjust.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Adjust: sets · new",
+   "page": "newgame",
+   "radius": 38
+  },
+  "NgAdjustPacks.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Adjust: packs in a set · new",
+   "page": "newgame",
+   "radius": 38
+  },
+  "NgAdjustAssets.dc.html": {
+   "x": 1880,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Adjust: assets + preview · new",
+   "page": "newgame",
+   "radius": 38
+  },
+  "NgSummary.dc.html": {
+   "x": 2350,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Start with: allowlist · new",
+   "page": "newgame",
+   "radius": 38
+  },
+  "NgAdjustLandscape.dc.html": {
+   "x": 0,
+   "y": 964,
+   "w": 844,
+   "h": 390,
+   "title": "Adjust · phone landscape",
+   "page": "newgame",
+   "radius": 30
+  },
+  "NgAdjustDesktop.dc.html": {
+   "x": 924,
+   "y": 964,
+   "w": 1440,
+   "h": 900,
+   "title": "Adjust · desktop",
+   "page": "newgame"
   }
  },
  "order": [
   "Main.dc.html",
   "Components.dc.html",
+  "CatKit.dc.html",
   "Title.dc.html",
   "SignIn.dc.html",
   "Join.dc.html",
@@ -784,7 +868,15 @@
   "CatEditorAnim.dc.html",
   "CatEditorMusic.dc.html",
   "CatHomeLandscape.dc.html",
-  "CatHomeDesktop.dc.html"
+  "CatHomeDesktop.dc.html",
+  "NgGenre.dc.html",
+  "NgLook.dc.html",
+  "NgAdjust.dc.html",
+  "NgAdjustPacks.dc.html",
+  "NgAdjustAssets.dc.html",
+  "NgSummary.dc.html",
+  "NgAdjustLandscape.dc.html",
+  "NgAdjustDesktop.dc.html"
  ],
  "notes": {},
  "designSystems": []

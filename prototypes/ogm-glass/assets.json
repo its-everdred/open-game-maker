@@ -751,90 +751,6 @@
    "height": 450
   },
   {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/cat-fx-fire.jpg",
-   "source": "Hivemind fire VFX store preview, torches crop (NoAI)",
-   "width": 300,
-   "height": 300
-  },
-  {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/cat-m-chest.png",
-   "source": "KayKit Dungeon gold chest thumbnail, background keyed out (CC0)",
-   "width": 512,
-   "height": 512
-  },
-  {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/cat-m-knight.png",
-   "source": "KayKit Adventurers knight thumbnail, background keyed out (CC0)",
-   "width": 512,
-   "height": 512
-  },
-  {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/cat-m-village.jpg",
-   "source": "Leartes Medieval Russian Village store preview (NoAI)",
-   "width": 480,
-   "height": 270
-  },
-  {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/cat-map-hall.jpg",
-   "source": "CC3+ Rothenburg town hall crop (ProFantasy, reference only)",
-   "width": 520,
-   "height": 600
-  },
-  {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/cat-minotaur.png",
-   "source": "chierit Minotaur idle frame (CC-BY-4.0)",
-   "width": 288,
-   "height": 160
-  },
-  {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/cat-q-roll.png",
-   "source": "Quaternius UAL Roll clip thumbnail (CC0)",
-   "width": 256,
-   "height": 256
-  },
-  {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/cat-q-sword.png",
-   "source": "Quaternius UAL Sword_Attack clip thumbnail (CC0)",
-   "width": 256,
-   "height": 256
-  },
-  {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
-   "source": "Knight hero sprite (SmallScaleInt)",
-   "width": 160,
-   "height": 160
-  },
-  {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/spr-skeleton.png",
-   "source": "Skeleton sprite (SmallScaleInt)",
-   "width": 160,
-   "height": 160
-  },
-  {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/spr-wizard.png",
-   "source": "Wizard sprite (SmallScaleInt)",
-   "width": 160,
-   "height": 160
-  },
-  {
-   "artboard": "CatHome.html",
-   "path": "assets-local/review/design-ogm-glass/img/thumb-16.jpg",
-   "source": "Dusk Helm village thumbnail (SmallScaleInt)",
-   "width": 240,
-   "height": 240
-  },
-  {
    "artboard": "CatAnim.html",
    "path": "assets-local/review/design-ogm-glass/img/cat-q-death.png",
    "source": "Quaternius UAL Death01 clip thumbnail (CC0)",
@@ -1080,6 +996,132 @@
    "height": 240
   },
   {
+   "artboard": "CatEditorAnim.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-q-punch.png",
+   "source": "Quaternius UAL Punch_Jab clip thumbnail (CC0)",
+   "width": 256,
+   "height": 256
+  },
+  {
+   "artboard": "CatEditorAnim.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-q-spell.png",
+   "source": "Quaternius UAL Spell_Simple_Shoot clip thumbnail (CC0)",
+   "width": 256,
+   "height": 256
+  },
+  {
+   "artboard": "CatEditorAnim.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-q-sword.png",
+   "source": "Quaternius UAL Sword_Attack clip thumbnail (CC0)",
+   "width": 256,
+   "height": 256
+  },
+  {
+   "artboard": "CatEditorAnim.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "CatEditorAnim.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
+   "source": "Knight hero sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "CatEditorMusic.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-fx-fire.jpg",
+   "source": "Hivemind fire VFX store preview, torches crop (NoAI)",
+   "width": 300,
+   "height": 300
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-chest.png",
+   "source": "KayKit Dungeon gold chest thumbnail, background keyed out (CC0)",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-knight.png",
+   "source": "KayKit Adventurers knight thumbnail, background keyed out (CC0)",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-village.jpg",
+   "source": "Leartes Medieval Russian Village store preview (NoAI)",
+   "width": 480,
+   "height": 270
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-map-hall.jpg",
+   "source": "CC3+ Rothenburg town hall crop (ProFantasy, reference only)",
+   "width": 520,
+   "height": 600
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-minotaur.png",
+   "source": "chierit Minotaur idle frame (CC-BY-4.0)",
+   "width": 288,
+   "height": 160
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-q-roll.png",
+   "source": "Quaternius UAL Roll clip thumbnail (CC0)",
+   "width": 256,
+   "height": 256
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-q-sword.png",
+   "source": "Quaternius UAL Sword_Attack clip thumbnail (CC0)",
+   "width": 256,
+   "height": 256
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
+   "source": "Knight hero sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-skeleton.png",
+   "source": "Skeleton sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-wizard.png",
+   "source": "Wizard sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "CatHome.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-16.jpg",
+   "source": "Dusk Helm village thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
    "artboard": "CatAllowAdd.html",
    "path": "assets-local/review/design-ogm-glass/img/cat-minotaur.png",
    "source": "chierit Minotaur idle frame (CC-BY-4.0)",
@@ -1162,48 +1204,6 @@
    "source": "Dusk Helm field thumbnail (SmallScaleInt)",
    "width": 240,
    "height": 240
-  },
-  {
-   "artboard": "CatEditorAnim.html",
-   "path": "assets-local/review/design-ogm-glass/img/cat-q-punch.png",
-   "source": "Quaternius UAL Punch_Jab clip thumbnail (CC0)",
-   "width": 256,
-   "height": 256
-  },
-  {
-   "artboard": "CatEditorAnim.html",
-   "path": "assets-local/review/design-ogm-glass/img/cat-q-spell.png",
-   "source": "Quaternius UAL Spell_Simple_Shoot clip thumbnail (CC0)",
-   "width": 256,
-   "height": 256
-  },
-  {
-   "artboard": "CatEditorAnim.html",
-   "path": "assets-local/review/design-ogm-glass/img/cat-q-sword.png",
-   "source": "Quaternius UAL Sword_Attack clip thumbnail (CC0)",
-   "width": 256,
-   "height": 256
-  },
-  {
-   "artboard": "CatEditorAnim.html",
-   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
-   "source": "Dusk Helm play still (SmallScaleInt)",
-   "width": 390,
-   "height": 780
-  },
-  {
-   "artboard": "CatEditorAnim.html",
-   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
-   "source": "Knight hero sprite (SmallScaleInt)",
-   "width": 160,
-   "height": 160
-  },
-  {
-   "artboard": "CatEditorMusic.html",
-   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
-   "source": "Dusk Helm arena still (SmallScaleInt)",
-   "width": 1280,
-   "height": 720
   },
   {
    "artboard": "CatHomeLandscape.html",
@@ -1405,6 +1405,433 @@
    "artboard": "CatHomeDesktop.html",
    "path": "assets-local/review/design-ogm-glass/img/spr-skeleton.png",
    "source": "Skeleton sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "CatKit.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-fx-fire.jpg",
+   "source": "Hivemind fire VFX store preview, torches crop (NoAI)",
+   "width": 300,
+   "height": 300
+  },
+  {
+   "artboard": "CatKit.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-knight.png",
+   "source": "KayKit Adventurers knight thumbnail, background keyed out (CC0)",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "artboard": "CatKit.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "CatKit.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "CatKit.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-boss.png",
+   "source": "Boss sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "CatKit.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
+   "source": "Knight hero sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgLook.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "NgLook.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-knight.png",
+   "source": "KayKit Adventurers knight thumbnail, background keyed out (CC0)",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "artboard": "NgLook.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-map-hall.jpg",
+   "source": "CC3+ Rothenburg town hall crop (ProFantasy, reference only)",
+   "width": 520,
+   "height": 600
+  },
+  {
+   "artboard": "NgLook.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-minotaur.png",
+   "source": "chierit Minotaur idle frame (CC-BY-4.0)",
+   "width": 288,
+   "height": 160
+  },
+  {
+   "artboard": "NgLook.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "NgAdjust.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-fx-fire.jpg",
+   "source": "Hivemind fire VFX store preview, torches crop (NoAI)",
+   "width": 300,
+   "height": 300
+  },
+  {
+   "artboard": "NgAdjust.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-knight.png",
+   "source": "KayKit Adventurers knight thumbnail, background keyed out (CC0)",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "artboard": "NgAdjust.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-village.jpg",
+   "source": "Leartes Medieval Russian Village store preview (NoAI)",
+   "width": 480,
+   "height": 270
+  },
+  {
+   "artboard": "NgAdjust.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-map-hall.jpg",
+   "source": "CC3+ Rothenburg town hall crop (ProFantasy, reference only)",
+   "width": 520,
+   "height": 600
+  },
+  {
+   "artboard": "NgAdjust.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-minotaur.png",
+   "source": "chierit Minotaur idle frame (CC-BY-4.0)",
+   "width": 288,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjust.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-q-sword.png",
+   "source": "Quaternius UAL Sword_Attack clip thumbnail (CC0)",
+   "width": 256,
+   "height": 256
+  },
+  {
+   "artboard": "NgAdjust.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "NgAdjust.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-goblin.png",
+   "source": "Goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjust.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
+   "source": "Knight hero sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustPacks.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "NgAdjustPacks.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-boss.png",
+   "source": "Boss sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustPacks.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-cave-goblin.png",
+   "source": "Cave goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustPacks.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-goblin.png",
+   "source": "Goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustPacks.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
+   "source": "Knight hero sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustPacks.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-skeleton.png",
+   "source": "Skeleton sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustPacks.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-wizard.png",
+   "source": "Wizard sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustPacks.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-41.jpg",
+   "source": "Dusk Helm field thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "NgAdjustAssets.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "NgAdjustAssets.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "NgAdjustAssets.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "NgAdjustAssets.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-41.jpg",
+   "source": "Dusk Helm field thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "NgSummary.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-fx-fire.jpg",
+   "source": "Hivemind fire VFX store preview, torches crop (NoAI)",
+   "width": 300,
+   "height": 300
+  },
+  {
+   "artboard": "NgSummary.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-knight.png",
+   "source": "KayKit Adventurers knight thumbnail, background keyed out (CC0)",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "artboard": "NgSummary.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-village.jpg",
+   "source": "Leartes Medieval Russian Village store preview (NoAI)",
+   "width": 480,
+   "height": 270
+  },
+  {
+   "artboard": "NgSummary.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-minotaur.png",
+   "source": "chierit Minotaur idle frame (CC-BY-4.0)",
+   "width": 288,
+   "height": 160
+  },
+  {
+   "artboard": "NgSummary.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "NgSummary.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-boss.png",
+   "source": "Boss sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgSummary.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
+   "source": "Knight hero sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-fx-fire.jpg",
+   "source": "Hivemind fire VFX store preview, torches crop (NoAI)",
+   "width": 300,
+   "height": 300
+  },
+  {
+   "artboard": "NgAdjustLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-knight.png",
+   "source": "KayKit Adventurers knight thumbnail, background keyed out (CC0)",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "artboard": "NgAdjustLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-village.jpg",
+   "source": "Leartes Medieval Russian Village store preview (NoAI)",
+   "width": 480,
+   "height": 270
+  },
+  {
+   "artboard": "NgAdjustLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-map-hall.jpg",
+   "source": "CC3+ Rothenburg town hall crop (ProFantasy, reference only)",
+   "width": 520,
+   "height": 600
+  },
+  {
+   "artboard": "NgAdjustLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-minotaur.png",
+   "source": "chierit Minotaur idle frame (CC-BY-4.0)",
+   "width": 288,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-q-sword.png",
+   "source": "Quaternius UAL Sword_Attack clip thumbnail (CC0)",
+   "width": 256,
+   "height": 256
+  },
+  {
+   "artboard": "NgAdjustLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "NgAdjustLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-goblin.png",
+   "source": "Goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
+   "source": "Knight hero sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-fx-fire.jpg",
+   "source": "Hivemind fire VFX store preview, torches crop (NoAI)",
+   "width": 300,
+   "height": 300
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-knight.png",
+   "source": "KayKit Adventurers knight thumbnail, background keyed out (CC0)",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-m-village.jpg",
+   "source": "Leartes Medieval Russian Village store preview (NoAI)",
+   "width": 480,
+   "height": 270
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-map-hall.jpg",
+   "source": "CC3+ Rothenburg town hall crop (ProFantasy, reference only)",
+   "width": 520,
+   "height": 600
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-minotaur.png",
+   "source": "chierit Minotaur idle frame (CC-BY-4.0)",
+   "width": 288,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/cat-q-sword.png",
+   "source": "Quaternius UAL Sword_Attack clip thumbnail (CC0)",
+   "width": 256,
+   "height": 256
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-boss.png",
+   "source": "Boss sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-cave-goblin.png",
+   "source": "Cave goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-goblin.png",
+   "source": "Goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
+   "source": "Knight hero sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-skeleton.png",
+   "source": "Skeleton sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "NgAdjustDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-wizard.png",
+   "source": "Wizard sprite (SmallScaleInt)",
    "width": 160,
    "height": 160
   }
