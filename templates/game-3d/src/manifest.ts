@@ -35,7 +35,16 @@ export const manifest: GameManifest = {
   id: 'game-3d',
   sdk: '*',
   title: '3D Game',
-  inputs: { actions: { move: 'stick', jump: 'button' } },
+  inputs: {
+    actions: { move: 'stick', jump: 'button' },
+    controls: {
+      gameplay: {
+        layout: 'stick',
+        stick: 'move',
+        buttons: [{ action: 'jump', icon: 'jump', label: 'Jump', behavior: 'tap' }],
+      },
+    },
+  },
   presentation: { orientation: 'landscape', minLogical: { w: 640, h: 360 }, fit: 'responsive' },
   view: 'fixed',
   dimension: '3d',

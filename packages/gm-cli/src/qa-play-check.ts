@@ -6,7 +6,7 @@ export type PlayManifest = {
   modes?: { tap?: string }[];
   playArea?: false | { tap?: string };
   controlBindings?: Record<string, string>;
-  inputs?: { actions?: Record<string, string>; touch?: string };
+  inputs?: { actions?: Record<string, string>; controls?: Record<string, { layout?: string; stick?: string }> };
 };
 
 /** One bridge message type seen by the shell; repeats of the same type in a row fold into `n`. */
@@ -31,7 +31,7 @@ export type PlayObservation = {
   idleChange: number | null;
   inputChange: number | null;
   input: PlayInput | null;
-  /** The host should draw a move stick (a `move` stick the game does not draw itself): a swipe then means it is gone. */
+  /** The host should draw a move stick (a declared `move` stick): a swipe then means it is gone. */
   expectsStick: boolean;
   /** Why the check stopped before it finished (its deadline, a browser crash). */
   stopped?: string;
@@ -55,9 +55,14 @@ export function firstTapPath(manifest: PlayManifest): string[] {
     : [];
 }
 
-/** The game declares a `move` stick and leaves touch controls to the host, so the host must draw that stick. */
+/** The game declares a `move` stick so the host must draw that stick. */
 export function expectsHostStick(manifest: PlayManifest): boolean {
-  return manifest.inputs?.actions?.move === 'stick' && manifest.inputs.touch !== 'self';
+  const controls = manifest.inputs?.controls;
+  if (controls) {
+    const set = controls.gameplay;
+    return set?.layout !== 'tap' && set?.stick === 'move';
+  }
+  return manifest.inputs?.actions?.move === 'stick';
 }
 
 /** The key bound to a move, rightward first: one step of the player when the host draws no stick. */

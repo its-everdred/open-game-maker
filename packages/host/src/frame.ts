@@ -192,6 +192,48 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   });
   overlay.setLoading(true);
   const gamepads = new GamepadPoller({ onActivity: (at) => overlay.noteGamepadInput(at) });
+  let controlInputs: GameManifest['inputs'] | undefined;
+  let legacySelfControls = false;
+  let frameMode = options.mode;
+  let controlLayout = 'gameplay';
+  const updateGamepad = (contextChanged = false) => {
+    if (!controlInputs) return;
+    const controls = controlInputs.controls;
+    const selected = controls && Object.hasOwn(controls, controlLayout) ? controls[controlLayout] : undefined;
+    if (!selected) return gamepads.setMapping(options.inputMapping?.gamepad, controlInputs.actions, contextChanged);
+    const actions: GameManifest['inputs']['actions'] = Object.create(null) as GameManifest['inputs']['actions'];
+    const sticks =
+      selected.layout === 'tap'
+        ? []
+        : [selected.stick, ...(selected.layout === 'two-stick' ? [selected.secondStick] : [])];
+    for (const action of sticks) {
+      if (action && controlInputs.actions[action] === 'stick') actions[action] = 'stick';
+    }
+    for (const button of selected.buttons) {
+      if (controlInputs.actions[button.action] === 'button') actions[button.action] = 'button';
+    }
+    const explicit = options.inputMapping?.gamepad ?? {};
+    const bindings: Record<string, string> = Object.create(null) as Record<string, string>;
+    const used = new Set(
+      selected.buttons.flatMap(({ action }) => (Object.hasOwn(explicit, action) ? [explicit[action]!] : [])),
+    );
+    for (const { action, icon } of selected.buttons) {
+      const preferred = icon === 'confirm' ? 'a' : icon === 'back' ? 'b' : undefined;
+      if (!Object.hasOwn(explicit, action) && preferred && !used.has(preferred)) {
+        bindings[action] = preferred;
+        used.add(preferred);
+      }
+    }
+    for (const { action } of selected.buttons) {
+      if (Object.hasOwn(explicit, action) || Object.hasOwn(bindings, action)) continue;
+      const available = ['a', 'x', 'b', 'y', 'lb', 'rb'].find((button) => !used.has(button));
+      if (available) {
+        bindings[action] = available;
+        used.add(available);
+      }
+    }
+    gamepads.setMapping({ ...bindings, ...explicit }, actions, contextChanged);
+  };
   gamepads.onFrame((frame) => bridge.send('input.frame', frame));
   const viewport = new ViewportTracker({
     container: options.container,
@@ -203,14 +245,22 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   bridge.on('ready', ({ manifest, marks, firstFrameSignal, startupHold }) => {
     sdkSignalsFrame = firstFrameSignal === true;
     if (!sdkSignalsFrame && pendingObservedFrame) firstFrame();
-    gamepads.setMapping(options.inputMapping?.gamepad, manifest.inputs.actions);
-    const sticks = Object.values(manifest.inputs.actions).filter((kind) => kind === 'stick').length;
-    const touch =
-      manifest.inputs.touch === 'self' ? 'tap' : (options.inputMapping?.touch ?? (sticks > 1 ? 'two-stick' : 'stick'));
-    overlay.setInputs(manifest.inputs, touch);
+    const { touch: legacyTouch, ...inputs } = manifest.inputs;
+    if (legacyTouch === 'self' && options.build !== 'published') {
+      options.onError?.({ code: 'invalid-controls', message: 'Self-drawn controls are not allowed in new builds.' });
+      return;
+    }
+    legacySelfControls = legacyTouch === 'self';
+    const normalizedManifest: GameManifest = { ...manifest, inputs };
+    controlInputs = inputs;
+    updateGamepad();
+    const sticks = Object.values(inputs.actions).filter((kind) => kind === 'stick').length;
+    const touch = options.inputMapping?.touch ?? (sticks > 1 ? 'two-stick' : 'stick');
+    overlay.setInputs(inputs, touch);
+    overlay.setEnabled(frameMode === 'play' && !legacySelfControls);
     viewport.sendNow();
     settings.resend();
-    options.onReady?.(manifest, marks, startupHold === true);
+    options.onReady?.(normalizedManifest, marks, startupHold === true);
   });
   bridge.on('haptics.pulse', ({ pattern }) => haptics.pulse(pattern));
   bridge.on('save.write', (payload) => options.onSaveWrite?.(payload));
@@ -221,7 +271,12 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     overlay.setLoading(false);
     options.onLoad?.({ t: 'load.frame', payload });
   });
-  bridge.on('host.controls', ({ layout }) => overlay.setLayout(layout));
+  bridge.on('host.controls', ({ layout }) => {
+    const contextChanged = layout !== controlLayout;
+    controlLayout = layout;
+    overlay.setLayout(layout);
+    updateGamepad(contextChanged);
+  });
   bridge.on('load.done', (payload) => options.onLoad?.({ t: 'load.done', payload }));
   bridge.on('audio.relay', (payload) => options.onAudioRelay?.(payload));
   bridge.on('input.rawKey', ({ code, down }) => {
@@ -246,8 +301,9 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     on: bridge.on.bind(bridge) as GameFrame['on'],
     setMode: (mode) => {
       if (!bridge.send('mode.set', { mode })) return;
+      frameMode = mode;
       gamepads.setMode(mode);
-      overlay.setEnabled(mode === 'play');
+      overlay.setEnabled(mode === 'play' && !legacySelfControls);
     },
     setSettings: (value) => {
       haptics.setSettings(value);

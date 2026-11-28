@@ -169,7 +169,16 @@ export const game: GameModule<PlatformDesign, PlatformSave> = {
     id: gmManifest.id,
     sdk: '*',
     title: 'Grey-box Multiplayer',
-    inputs: { actions: { move: 'axis', jump: 'button' } },
+    inputs: {
+      actions: { move: 'stick', jump: 'button' },
+      controls: {
+        gameplay: {
+          layout: 'stick',
+          stick: 'move',
+          buttons: [{ action: 'jump', icon: 'jump', label: 'Jump', behavior: 'tap' }],
+        },
+      },
+    },
     presentation: { orientation: 'landscape', minLogical: { w: 640, h: 480 }, fit: 'fixed' },
     view: 'side',
     dimension: '2d',

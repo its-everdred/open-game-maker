@@ -70,9 +70,6 @@ describe('gm build', () => {
     const capped = await gm(['build'], { cwd: game({ 'manifest.json': six, 'design/design.json': design }) });
     expect(capped.err).toHaveLength(5);
     expect(capped.err.join('\n')).not.toContain('button f ');
-    const self = { ...guessed, inputs: { ...guessed.inputs, touch: 'self' } };
-    const drawn = await gm(['build'], { cwd: game({ 'manifest.json': self, 'design/design.json': design }) });
-    expect(drawn.err).toEqual([]);
   }, 60_000);
 
   it('rejects origin-root assets with the publish error', async () => {

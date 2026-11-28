@@ -9,6 +9,8 @@ import { command as assetsCommand } from './assets.js';
 import { command as lookCommand } from '../look/check.js';
 import { gameDir, workspaceRoot } from '../../outbox.js';
 import { checkLoading } from '../../loading-check.js';
+import { checkControls } from '../../controls-check.js';
+import { findControlsGame } from '../../controls-manifest.js';
 import { checkImageSlots } from '../../image-slots-check.js';
 import { checkPlayArea } from '../../play-area-check.js';
 import { findPlayAreaGame } from '../../play-area-config.js';
@@ -233,6 +235,7 @@ export const command: GmCommand = {
     let lookCode: number = EXIT.ok;
     let lookReport: unknown;
     let loadingErrors: string[] = [];
+    let controlErrors: string[] = [];
     let imageErrors: string[] = [];
     let playArea: Awaited<ReturnType<typeof checkPlayArea>> | undefined;
     const prProblems =
@@ -266,6 +269,11 @@ export const command: GmCommand = {
       playArea = await checkPlayArea(ctx, playAreaGame);
       if (!ctx.json) playArea.output.forEach(playArea.ok ? ctx.out : ctx.err);
     }
+    const controlsGame = findControlsGame(ctx.cwd);
+    if (controlsGame) {
+      controlErrors = checkControls(controlsGame);
+      if (!ctx.json) controlErrors.forEach(ctx.err);
+    }
     if (existsSync(join(game, 'gm.manifest.json'))) {
       loadingErrors = await checkLoading(game);
       imageErrors = await checkImageSlots(game);
@@ -296,16 +304,21 @@ export const command: GmCommand = {
       gate.ok &&
       assetCode === EXIT.ok &&
       lookCode === EXIT.ok &&
+      controlErrors.length === 0 &&
       loadingErrors.length === 0 &&
       imageErrors.length === 0 &&
       playArea?.ok !== false &&
       prProblems.length === 0;
-    if (ctx.json && (lookReport !== undefined || playArea !== undefined || typeof flags.body === 'string'))
+    if (
+      ctx.json &&
+      (lookReport !== undefined || playArea !== undefined || controlErrors.length > 0 || typeof flags.body === 'string')
+    )
       ctx.out(
         JSON.stringify({
           ...gate,
           ok,
           look: lookReport,
+          controlErrors,
           loadingErrors,
           imageErrors,
           playArea,

@@ -310,16 +310,23 @@ export const command: GmCommand = {
             .first()
             .boundingBox()
             .catch(() => null);
+          const dpad = await page
+            .locator('[data-stick="move"][data-dpad] [data-direction="right"]')
+            .first()
+            .boundingBox()
+            .catch(() => null);
           const key = moveKey(manifest);
           const input: PlayInput = stick ? 'stick' : key ? 'key' : 'swipe';
           const touch = await context.newCDPSession(page);
           if (input === 'key') await page.keyboard.down(key!);
           else {
-            const from = stick
-              ? { x: stick.x + stick.width / 2, y: stick.y + stick.height / 2 }
-              : { x: frame.x + frame.width / 2 - 40, y: frame.y + frame.height / 2 };
+            const from = dpad
+              ? { x: dpad.x + dpad.width / 2, y: dpad.y + dpad.height / 2 }
+              : stick
+                ? { x: stick.x + stick.width / 2, y: stick.y + stick.height / 2 }
+                : { x: frame.x + frame.width / 2 - 40, y: frame.y + frame.height / 2 };
             await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] });
-            for (let step = 1; step <= 8; step += 1) {
+            for (let step = 1; !dpad && step <= 8; step += 1) {
               await touch.send('Input.dispatchTouchEvent', {
                 type: 'touchMove',
                 touchPoints: [{ x: from.x + step * 10, y: from.y }],

@@ -31,11 +31,8 @@ The default is that every game plays on a phone with ordinary translucent on-scr
 keyboard and a connected gamepad. The host normally draws and styles the buttons. Design the action list
 so all three reach every mechanic and every screen's way forward:
 
-- Phone: the host draws up to two declared sticks and five buttons, including for games with no stick. The first
-  declared button is the 64 px primary. Declare a `move` stick and keep button actions to five, most-used first.
-  A game that already draws its own controls must declare `inputs.touch: 'self'` to suppress the host overlay.
-- Buttons show icons, never letters: map each button action to a `touchIconSchema` id (`@ogm/contracts/input`) in
-  `inputs.icons`, e.g. `{ charge: 'heavy-attack' }`. Undeclared buttons get a guessed icon and a `gm build` warning.
+- Phone: declare `inputs.controls` named sets. Each set chooses `stick`, `two-stick`, `dpad`, or `tap`, the stick action(s), and up to five buttons in display order. Each button names its action, shared icon, spoken label, and `tap` or `hold` intent. The host draws and styles every control; games must not draw a controller.
+- Switch sets with `host.controls?.set({ layout: 'gameplay' })` or another declared set name; use `none` on title and loading screens. Switch sets for contextual actions, such as attack and talk. Button values remain held state; derive tap edges in the game.
 - Use `stick` or `button` for anything a player must reach: `axis` actions get no touch or gamepad default.
 - Keyboard: the default map binds WASD and arrows to `move`, Space to `jump`, and E or Enter to `use`. Give every
   other action a key: pass `{ keyboard: { KeyF: 'fire' } }` as the second argument to `defaultInputMapping`.
@@ -46,21 +43,19 @@ Never claim universal device support. Say which devices and viewports a journey 
 
 ## Device ownership
 
-The host owns gamepad discovery, standard mapping, connection changes, and rebinding. The host owns the touch overlay,
-including safe areas and 64 px primary targets. Games declare actions and normally leave touch buttons to the host; existing games with their own controls
-set `inputs.touch` to `self`. Games do not remember device bindings. Keyboard fallback and per-player device assignment are host settings.
+The host owns gamepad discovery, standard mapping, connection changes, rebinding and the touch overlay, including safe areas. Games do not draw their own controls or remember device bindings. Keyboard fallback and per-player device assignment are host settings.
 
 ## Menus
 
 Menus are not gameplay. Build each menu (title, class select, dialogs, won and lost) as DOM buttons, open it with
 `createMenu({ root, onBack })` from `@gm/sdk/menu`, and dispose the menu on close. The on-screen stick, a keyboard
-(arrows, Enter or Space, Escape), any gamepad (D-pad or left stick, A, B) and touch then move focus and press; on-screen
-A is the first declared button and B the third, so declare confirm and back in those slots. Mark the main action
+(arrows, Enter or Space, Escape), any gamepad (D-pad or left stick, A, B) and touch then move focus and press. Declare
+a menu control set with the actions that navigate that menu. Mark the main action
 `data-gm-primary` so Enter or a pad's A on the title starts the game, and style `[data-gm-focus]` in the game's UI kit.
 Newer menus take input until disposed; none react while the host's pause dialog is open. Never hand-roll menu key or pad
 handling; a gm-qa journey step pressing A on a `'menu'` screen checks it. Choose each screen's on-screen controls with
 `host.controls?.set({ layout })`: `'none'` on the title (players tap Play), cutscenes and self-advancing dialogue,
-`'menu'` (stick, A, B) on other menus, and `'gameplay'` (the default) when play starts. Set the title's while mounting.
+a declared menu set on other menus, and `'gameplay'` (the default) when play starts. Set the title's while mounting.
 
 ## Verify
 

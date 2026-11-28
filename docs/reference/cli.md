@@ -125,6 +125,7 @@ gm qa games-cache [--origin <app origin>] [--game <slug>] [--after-publish <buil
 gm check [--body <file>] [--base <ref>] [--lane <creative|clone>] [--phase mock|prototype|build|polish] [--json]
 gm check static [--json]
 gm check hooks [--json]
+gm check controls [--json]
 gm check images [--json]
 gm images compose
 gm check boot [--dist <dir>] [--viewport both|phone|tablet-landscape] [--json]
@@ -158,6 +159,10 @@ checked-in review decisions with an approval `phase` (`mock`, `prototype`, `buil
 attached originals, numeric scores and passing `gate_results`.
 `gm publish` requires a prototype review round for the commit when the game has a decision inventory; games without an
 inventory continue with a reported gate line.
+
+`gm check controls` validates the host control sets in `gm.manifest.json` and flags recognizable game-owned controller
+markup and lettered prompts. `gm check` runs it for games with a manifest. Source scanning cannot prove that arbitrary
+canvas drawing contains no controller; inspect the game as part of visual review.
 
 `gm check images` validates creator-visible image slots against `@ogm/contracts`; `gm check` runs the same check for
 games with a manifest. It checks required viewport variants, display aspect ratios, layered safe areas, and phone text

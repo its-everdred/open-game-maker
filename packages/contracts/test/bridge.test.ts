@@ -139,6 +139,15 @@ describe('bridge contract', () => {
   });
 
   /* A published bundle's inlined manifest names its media by shared address (#1250); a rejected ready never boots. */
+  it('accepts the ready manifest of an immutable legacy self-controls build', () => {
+    const ready = loadJson<{ payload: { manifest: { inputs: Record<string, unknown> } } }>(
+      'fixtures/bridge-ready.v1.json',
+    );
+    ready.payload.manifest.inputs.touch = 'self';
+    expect(gameToHostSchema.safeParse(ready).success).toBe(true);
+    expect(bridgeJson(ready)).toBe(true);
+  });
+
   it('accepts a ready whose logo and loading images point at shared blobs', () => {
     const ready = loadJson<{ payload: { manifest: Record<string, unknown> } }>('fixtures/bridge-ready.v1.json');
     const shared = (n: number) => `/a/${String(n).repeat(64)}.png`;

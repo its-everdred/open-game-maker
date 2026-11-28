@@ -17,12 +17,38 @@ const control = {
 };
 
 describe('game contract', () => {
-  it('validates the self-drawn touch control opt-out', () => {
+  it('rejects the self-drawn touch control opt-out', () => {
     const inputs = { actions: { move: 'stick' }, touch: 'self' };
-    expect(gameManifestSchema.parse({ ...manifest(), inputs }).inputs.touch).toBe('self');
+    expect(gameManifestSchema.safeParse({ ...manifest(), inputs }).success).toBe(false);
+    expect(gameJson({ ...manifest(), inputs })).toBe(false);
+  });
+
+  it('accepts named control sets with accessible labels and shared icons', () => {
+    const inputs = {
+      actions: { move: 'stick', attack: 'button', talk: 'button' },
+      controls: {
+        gameplay: {
+          layout: 'stick',
+          stick: 'move',
+          buttons: [{ action: 'attack', icon: 'attack', label: 'Attack', behavior: 'tap' }],
+        },
+        conversation: {
+          layout: 'stick',
+          stick: 'move',
+          buttons: [{ action: 'talk', icon: 'use', label: 'Talk', behavior: 'hold' }],
+        },
+      },
+    };
+    expect(gameManifestSchema.safeParse({ ...manifest(), inputs }).success).toBe(true);
     expect(gameJson({ ...manifest(), inputs })).toBe(true);
-    expect(gameManifestSchema.safeParse({ ...manifest(), inputs: { ...inputs, touch: 'other' } }).success).toBe(false);
-    expect(gameJson({ ...manifest(), inputs: { ...inputs, touch: 'other' } })).toBe(false);
+    const bad = {
+      ...inputs,
+      controls: {
+        gameplay: { layout: 'stick', buttons: [{ action: 'attack', icon: 'A', label: 'Attack', behavior: 'tap' }] },
+      },
+    };
+    expect(gameManifestSchema.safeParse({ ...manifest(), inputs: bad }).success).toBe(false);
+    expect(gameJson({ ...manifest(), inputs: bad })).toBe(false);
   });
 
   it('validates both optional loading image paths', () => {

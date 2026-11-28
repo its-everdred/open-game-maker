@@ -61,6 +61,57 @@ describe('GamepadPoller', () => {
     expect(frames).toHaveBeenCalledTimes(1);
   });
 
+  it('releases the old action when a control set changes', () => {
+    const frames = vi.fn();
+    let current = pad(0, [1]);
+    const poller = new GamepadPoller({ getGamepads: () => [current], now: () => 10 });
+    poller.setMapping(undefined, { attack: 'button' });
+    poller.onFrame(frames);
+    poller.poll();
+    poller.setMapping(undefined, { talk: 'button' });
+    expect(frames).toHaveBeenLastCalledWith(expect.objectContaining({ actions: { attack: false } }));
+    poller.poll();
+    expect(frames).toHaveBeenLastCalledWith(expect.objectContaining({ actions: { talk: false } }));
+    current = pad(0, [0]);
+    poller.poll(20);
+    current = pad(0, [1]);
+    poller.poll(30);
+    expect(frames).toHaveBeenLastCalledWith(expect.objectContaining({ actions: { talk: true } }));
+  });
+
+  it('cancels held input when a different control set has identical mappings', () => {
+    const frames = vi.fn();
+    let current = pad(0, [1]);
+    const poller = new GamepadPoller({ getGamepads: () => [current], now: () => 10 });
+    poller.setMapping(undefined, { confirm: 'button' });
+    poller.onFrame(frames);
+    poller.poll();
+    poller.setMapping(undefined, { confirm: 'button' }, true);
+    expect(frames).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cancelPending: true, actions: { confirm: false } }),
+    );
+    poller.poll();
+    expect(frames).toHaveBeenLastCalledWith(expect.objectContaining({ actions: { confirm: false } }));
+    current = pad(0, [0]);
+    poller.poll(20);
+    current = pad(0, [1]);
+    poller.poll(30);
+    expect(frames).toHaveBeenLastCalledWith(expect.objectContaining({ actions: { confirm: true } }));
+  });
+
+  it('uses B for a named menu back binding and does not treat X as back', () => {
+    let current = pad(0, [0, 1, 0]);
+    const frames = vi.fn();
+    const poller = new GamepadPoller({ getGamepads: () => [current], now: () => 10 });
+    poller.setMapping({ confirm: 'a', back: 'b' }, { confirm: 'button', back: 'button' });
+    poller.onFrame(frames);
+    poller.poll();
+    expect(frames).toHaveBeenLastCalledWith(expect.objectContaining({ actions: { confirm: false, back: true } }));
+    current = pad(0, [0, 0, 1]);
+    poller.poll(20);
+    expect(frames).toHaveBeenLastCalledWith(expect.objectContaining({ actions: { confirm: false, back: false } }));
+  });
+
   it('exposes snapshots instead of frames in edit mode', () => {
     const frames = vi.fn();
     const snapshots = vi.fn();

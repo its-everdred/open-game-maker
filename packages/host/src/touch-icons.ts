@@ -5,6 +5,10 @@ const line = (body: string) =>
   `<svg viewBox="0 0 256 256" width="100%" height="100%" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
 
 export const TOUCH_ICON_SVG: Record<TouchIcon, string> = {
+  talk: line('<path d="M40 48h176v120H112l-48 40v-40H40Z"/><path d="M72 88h112M72 120h80"/>'),
+  run: line(
+    '<circle cx="160" cy="40" r="16"/><path d="m136 72-40 40 32 24-40 56M136 72l32 32 40 8M128 136l48 24 24 48"/>',
+  ),
   attack: line('<path d="M216 40v40l-96 96-40-40 96-96Z"/><path d="m64 128 64 64M92 164l-52 52"/>'),
   'heavy-attack': line('<path d="M140 116 40 216"/><path d="m137 34 85 85-39 39-85-85Z"/>'),
   block: line('<path d="M128 32 48 64v56c0 56 36 92 80 112 44-20 80-56 80-112V64Z"/>'),

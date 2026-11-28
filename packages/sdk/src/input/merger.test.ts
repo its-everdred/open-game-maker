@@ -71,6 +71,15 @@ describe('InputMerger', () => {
     ]);
   });
 
+  it('does not let a connected idle gamepad mask active touch controls', () => {
+    const { host, merger } = setup();
+    host({ playerIndex: 0, tick: 1, source: 'touch', actions: { move: { x: 1, y: 0 }, jump: true } });
+    host({ playerIndex: 0, tick: 1, source: 'gamepad', actions: { move: { x: 0, y: 0 }, jump: false } });
+    expect(merger.sample(1)[0]).toMatchObject({ source: 'touch', actions: { move: { x: 1, y: 0 }, jump: true } });
+    host({ playerIndex: 0, tick: 2, source: 'touch', actions: { move: { x: 0, y: 0 }, jump: false } });
+    expect(merger.sample(2)[0]!.actions).toEqual({ move: { x: 0, y: 0 }, jump: false });
+  });
+
   it('keeps host players separate and drops indexes outside the configured local count', () => {
     const { host, merger } = setup();
     host({ playerIndex: 1, tick: 0, source: 'gamepad', actions: { jump: true } });
@@ -156,6 +165,18 @@ describe('InputMerger', () => {
     canvas.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyA' }));
     expect(merger.sample(4)[0]!.actions.move).toEqual({ x: -1, y: 1 });
     expect(merger.sample(5)[0]!.actions.move).toEqual({ x: 0, y: 1 });
+  });
+
+  it('keeps a quick host D-pad tap for one sample and drops it on cancellation', () => {
+    const { host, merger } = setup();
+    const frame: ActionFrame = { playerIndex: 0, tick: 1, source: 'touch', actions: { move: { x: 1, y: 0 } } };
+    host(frame);
+    host({ ...frame, actions: { move: { x: 0, y: 0 } } });
+    expect(merger.sample(1)[0]!.actions.move).toEqual({ x: 1, y: 0 });
+    expect(merger.sample(2)[0]!.actions.move).toEqual({ x: 0, y: 0 });
+    host(frame);
+    host({ ...frame, actions: { move: { x: 0, y: 0 } }, cancelPending: true });
+    expect(merger.sample(3)[0]!.actions.move).toEqual({ x: 0, y: 0 });
   });
 
   it('latches short keyboard and host presses once while preserving held keys', () => {

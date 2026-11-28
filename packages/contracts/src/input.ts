@@ -26,6 +26,8 @@ export const actionFrameSchema = z.looseObject({
     .max(MAX_PLAYERS - 1),
   tick: z.number().int().min(0),
   source: z.enum(['keyboard', 'pointer', 'touch', 'gamepad', 'network']),
+  /** Release pending input when the host changes or hides a control set. */
+  cancelPending: z.boolean().optional(),
   actions: z
     .record(z.string().min(1).max(32), actionValueSchema)
     .refine((actions) => Object.keys(actions).length <= MAX_ACTIONS_PER_FRAME, {
@@ -48,15 +50,16 @@ export const rigInputMappingSchema = z.looseObject({
 export type RigInputMapping = z.infer<typeof rigInputMappingSchema>;
 
 /**
- * Which host touch controls a screen needs: `gameplay` (all, the default), `menu` (the first stick, A and B, what
- * `@gm/sdk/menu` reads) or `none` (title art, cutscenes, dialogue the game drives itself).
+ * Named host control set for the current screen or context. `none` hides controls and `gameplay` is the default.
  */
-export const controlsLayoutSchema = z.enum(['none', 'menu', 'gameplay']);
+export const controlsLayoutSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/u);
 export type ControlsLayout = z.infer<typeof controlsLayoutSchema>;
 
 /** The shared icons the host touch overlay draws on its buttons; a manifest maps button actions to them. */
 export const touchIconSchema = z.enum([
   'attack',
+  'talk',
+  'run',
   'heavy-attack',
   'block',
   'roll',
@@ -79,6 +82,24 @@ export const touchIconSchema = z.enum([
   'action',
 ]);
 export type TouchIcon = z.infer<typeof touchIconSchema>;
+
+/** A named set describes the controls the host presents on one game screen or context. */
+export const controlSetSchema = z.strictObject({
+  layout: z.enum(['stick', 'two-stick', 'dpad', 'tap']),
+  stick: z.string().min(1).max(32).optional(),
+  secondStick: z.string().min(1).max(32).optional(),
+  buttons: z
+    .array(
+      z.strictObject({
+        action: z.string().min(1).max(32),
+        icon: touchIconSchema,
+        label: z.string().min(1).max(80),
+        behavior: z.enum(['tap', 'hold']),
+      }),
+    )
+    .max(5),
+});
+export type ControlSet = z.infer<typeof controlSetSchema>;
 
 /** One instance per local player; implemented by OGM-025. */
 export interface CameraRig {

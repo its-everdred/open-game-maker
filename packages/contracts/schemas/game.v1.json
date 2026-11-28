@@ -111,8 +111,104 @@
           }
         },
         "touch": {
-          "type": "string",
-          "const": "self"
+          "not": {}
+        },
+        "controls": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "layout": {
+                "type": "string",
+                "enum": [
+                  "stick",
+                  "two-stick",
+                  "dpad",
+                  "tap"
+                ]
+              },
+              "stick": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              },
+              "secondStick": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              },
+              "buttons": {
+                "maxItems": 5,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32
+                    },
+                    "icon": {
+                      "type": "string",
+                      "enum": [
+                        "attack",
+                        "talk",
+                        "run",
+                        "heavy-attack",
+                        "block",
+                        "roll",
+                        "use",
+                        "cast",
+                        "potion",
+                        "map",
+                        "inventory",
+                        "jump",
+                        "confirm",
+                        "back",
+                        "rotate-cw",
+                        "rotate-ccw",
+                        "down",
+                        "hard-drop",
+                        "left",
+                        "right",
+                        "swap",
+                        "pause",
+                        "action"
+                      ]
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "behavior": {
+                      "type": "string",
+                      "enum": [
+                        "tap",
+                        "hold"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "icon",
+                    "label",
+                    "behavior"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "layout",
+              "buttons"
+            ],
+            "additionalProperties": false
+          }
         },
         "icons": {
           "type": "object",
@@ -125,6 +221,8 @@
             "type": "string",
             "enum": [
               "attack",
+              "talk",
+              "run",
               "heavy-attack",
               "block",
               "roll",

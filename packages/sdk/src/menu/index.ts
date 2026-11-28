@@ -1,6 +1,6 @@
 import type { ActionFrame, ActionValue } from '@ogm/contracts/input';
 
-import { onMenuFrame, type ActionKinds } from './host-frames.js';
+import { onMenuFrame, type ActionKinds, type MenuBindings } from './host-frames.js';
 
 export type MenuDirection = 'up' | 'down' | 'left' | 'right';
 
@@ -163,18 +163,18 @@ function pressed(value: ActionValue | undefined): boolean {
   return value === true || (typeof value === 'number' && value > STICK_THRESHOLD);
 }
 
-function onHostFrame(frame: ActionFrame, kinds: ActionKinds, act: boolean): void {
+function onHostFrame(frame: ActionFrame, kinds: ActionKinds, act: boolean, bindings?: MenuBindings): void {
   if (frame.source !== 'touch' && frame.source !== 'gamepad') return;
   // A focused frame reads its pads directly; the host's copy of the same press would land twice.
   if (frame.source === 'gamepad' && document.hasFocus()) act = false;
   const buttons = Object.keys(kinds).filter((action) => kinds[action] === 'button');
-  const stick = Object.keys(kinds).find((action) => kinds[action] === 'stick');
+  const stick = bindings ? bindings.stick : Object.keys(kinds).find((action) => kinds[action] === 'stick');
   const vector = stick ? frame.actions[stick] : undefined;
   apply(
     `${frame.source}:${frame.playerIndex}`,
     {
-      confirm: pressed(frame.actions[buttons[CONFIRM_BUTTON] ?? '']),
-      back: pressed(frame.actions[buttons[BACK_BUTTON] ?? '']),
+      confirm: pressed(frame.actions[(bindings ? bindings.confirm : buttons[CONFIRM_BUTTON]) ?? '']),
+      back: pressed(frame.actions[(bindings ? bindings.back : buttons[BACK_BUTTON]) ?? '']),
       direction: typeof vector === 'object' ? directionOf(vector.x, vector.y) : null,
     },
     act,

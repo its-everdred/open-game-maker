@@ -434,6 +434,9 @@ importers:
       three:
         specifier: 0.186.1
         version: 0.186.1
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
       ulid:
         specifier: 3.0.2
         version: 3.0.2

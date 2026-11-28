@@ -16,7 +16,13 @@ it('fails gm check for stretched art and passes the same art as a nine-slice', a
   try {
     cpSync(fixture, join(root, 'source'), { recursive: true });
     mkdirSync(join(root, 'src'));
-    writeFileSync(join(root, 'gm.manifest.json'), JSON.stringify({ playArea: { disabled: true, tap: 'Play>Next' } }));
+    writeFileSync(
+      join(root, 'gm.manifest.json'),
+      JSON.stringify({
+        playArea: { disabled: true, tap: 'Play>Next' },
+        inputs: { actions: {}, controls: { gameplay: { layout: 'tap', buttons: [] } } },
+      }),
+    );
     writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: { build: 'node build.cjs' } }));
     writeFileSync(join(root, 'build.cjs'), "require('node:fs').cpSync('source', 'dist', { recursive: true });");
     writeFileSync(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { noEmit: true }, include: ['src'] }));

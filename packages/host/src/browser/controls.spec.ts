@@ -44,3 +44,72 @@ test('a menu layout keeps the stick, A and B and hides the rest', async ({ page 
   await expect(page.locator('[data-action="charge"]')).toBeVisible();
   await expect(page.locator('[data-action="block"]')).toBeHidden();
 });
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+]) {
+  test(`declared D-pad and three actions fit without overlap at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await open(page, 'controls=gameplay');
+    // The fixture omits the viewport meta tag supplied by the real shell.
+    await page.evaluate(() => {
+      const meta = document.createElement('meta');
+      meta.name = 'viewport';
+      meta.content = 'width=device-width, initial-scale=1';
+      document.head.append(meta);
+    });
+    await expect.poll(() => page.evaluate(() => window.__host.ready.length)).toBe(1);
+    await page.evaluate(() => {
+      const overlay = window.__host.frame.overlay;
+      overlay.setInputs(
+        {
+          actions: { move: 'stick', attack: 'button', block: 'button', run: 'button' },
+          controls: {
+            gameplay: {
+              layout: 'dpad',
+              stick: 'move',
+              buttons: [
+                { action: 'attack', icon: 'attack', label: 'Attack', behavior: 'tap' },
+                { action: 'block', icon: 'block', label: 'Block', behavior: 'hold' },
+                { action: 'run', icon: 'run', label: 'Run', behavior: 'hold' },
+              ],
+            },
+          },
+        },
+        'stick',
+      );
+      overlay.setLayout('gameplay');
+    });
+    const elements = page.locator('[data-ogm-dpad] [data-direction], [data-action]');
+    await expect(elements).toHaveCount(7);
+    const boxes = await elements.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+        };
+      }),
+    );
+    for (const [index, box] of boxes.entries()) {
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(viewport.width);
+      expect(box.bottom).toBeLessThanOrEqual(viewport.height);
+      for (const other of boxes.slice(index + 1)) {
+        expect(
+          box.right <= other.left || other.right <= box.left || box.bottom <= other.top || other.bottom <= box.top,
+        ).toBe(true);
+      }
+    }
+  });
+}
