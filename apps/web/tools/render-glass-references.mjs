@@ -93,10 +93,13 @@ try {
         timeout: 60_000,
       });
       const ready = await page.evaluate(async () => {
-        await Promise.all([document.fonts.load('600 16px Fredoka'), document.fonts.load('600 16px Nunito')]);
+        const faces = await Promise.all([
+          document.fonts.load('600 16px Fredoka'),
+          document.fonts.load('600 16px Nunito'),
+        ]);
         await document.fonts.ready;
         return {
-          fonts: document.fonts.check('600 16px Fredoka') && document.fonts.check('600 16px Nunito'),
+          fonts: faces.every((loaded) => loaded.length > 0),
           missingImages: [...document.images]
             .filter((image) => !image.complete || image.naturalWidth === 0 || image.dataset.fallback)
             .map((image) => image.dataset.fallback || image.getAttribute('src')),
