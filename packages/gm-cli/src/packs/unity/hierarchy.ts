@@ -13,6 +13,7 @@ export type UnityMeshNode = {
   materials: UnityReference[];
   active: boolean;
   rendererActive: boolean;
+  skinnedRendererActive?: boolean;
 };
 
 function object(value: unknown): ObjectValue {
@@ -67,7 +68,7 @@ export function resolveUnityHierarchy(
       if (!component) throw new Error(`missing Unity component ${id}`);
       return [component];
     });
-    if (linked.some((entry) => entry.type === 'SkinnedMeshRenderer')) throw new Error('unsupported Unity skinned mesh');
+    const skinned = linked.find((entry) => entry.type === 'SkinnedMeshRenderer');
     const filter = linked.find((entry) => entry?.type === 'MeshFilter');
     const renderer = linked.find((entry) => entry?.type === 'MeshRenderer');
     const mesh = filter ? reference(filter.data.m_Mesh) : undefined;
@@ -83,6 +84,7 @@ export function resolveUnityHierarchy(
       ...(mesh && mesh.fileId !== '0' ? { mesh } : {}),
       materials,
       active: gameObject.data.m_IsActive !== '0',
+      ...(skinned && skinned.data.m_Enabled !== '0' ? { skinnedRendererActive: true } : {}),
       rendererActive:
         !!renderer && renderer.data.m_Enabled !== '0' && (!lowerLods.has(renderer.id) || primaryLods.has(renderer.id)),
     });

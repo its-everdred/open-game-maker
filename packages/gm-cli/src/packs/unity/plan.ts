@@ -41,15 +41,16 @@ export type PlannedUnityMesh = UnityMeshNode & {
   surfaces: PlannedUnitySurface[];
 };
 
-/** Build a complete, checked local input plan before invoking any model converter. */
-export async function planUnityAssembly(
+async function loadUnityHierarchy(
   root: string,
   source: string,
   onWarning?: (message: string) => void,
-  objectName?: string,
   binary2text?: string,
-  pieceIds?: string[],
-): Promise<PlannedUnityMesh[]> {
+): Promise<{
+  nodes: UnityMeshNode[];
+  index: Map<string, string>;
+  file: (ref: UnityReference, extension: string | string[]) => string;
+}> {
   const canonicalRoot = realpathSync(root);
   const canonicalSource = realpathSync(source);
   const fromRoot = relative(canonicalRoot, canonicalSource);
@@ -76,6 +77,28 @@ export async function planUnityAssembly(
     },
     onWarning ? (guid, id, path) => onWarning(`stale override ${guid}:${id} ${path}`) : undefined,
   );
+  return { nodes, index, file };
+}
+
+/** List selectable scoped transforms without resolving or exporting materials. */
+export async function inspectUnityAssembly(
+  root: string,
+  source: string,
+  binary2text?: string,
+): Promise<UnityMeshNode[]> {
+  return (await loadUnityHierarchy(root, source, undefined, binary2text)).nodes;
+}
+
+/** Build a complete, checked local input plan before invoking any model converter. */
+export async function planUnityAssembly(
+  root: string,
+  source: string,
+  onWarning?: (message: string) => void,
+  objectName?: string,
+  binary2text?: string,
+  pieceIds?: string[],
+): Promise<PlannedUnityMesh[]> {
+  const { nodes, index, file } = await loadUnityHierarchy(root, source, onWarning, binary2text);
   const selected = pieceIds
     ? selectUnityPieces(nodes, pieceIds)
     : objectName
@@ -85,6 +108,7 @@ export async function planUnityAssembly(
   const warnedClip = new Set<string>();
   const warnedEmission = new Set<string>();
   const warnedFresnel = new Set<string>();
+  const surfaceCache = new Map<string, PlannedUnitySurface>();
   const visible = (node: UnityMeshNode): boolean => {
     let current: UnityMeshNode | undefined = node;
     while (current) {
@@ -94,6 +118,7 @@ export async function planUnityAssembly(
     return true;
   };
   return selected.map((node) => {
+    if (node.skinnedRendererActive && visible(node)) throw new Error('unsupported Unity skinned mesh');
     if (!node.mesh || !node.rendererActive || !visible(node)) return { ...node, surfaces: [] };
     const modelPath = node.mesh ? file(node.mesh, '.fbx') : undefined;
     const model =
@@ -117,6 +142,8 @@ export async function planUnityAssembly(
         : undefined;
     const surfaces = node.materials.map((ref) => {
       const path = file(ref, '.mat');
+      const cached = surfaceCache.get(path);
+      if (cached) return cached;
       const contents = readFileSync(path, 'utf8');
       const shaderGuid = materialShaderGuid(contents);
       const shaderPath = shaderGuid ? index.get(shaderGuid.toLowerCase()) : undefined;
@@ -130,6 +157,7 @@ export async function planUnityAssembly(
           const colors = materialColorProperties(contents);
           const textures = materialTextureProperties(contents);
           const additive =
+            materialIsTransparent(contents) &&
             Number(floats.get('_BlendMode')) === 1 &&
             Number(floats.get('_SrcBlend')) === 1 &&
             Number(floats.get('_DstBlend')) === 1;
@@ -232,7 +260,9 @@ export async function planUnityAssembly(
           `additive emission approximated with alpha blending and clipped brightness for ${path}; inspect overlapping effects`,
         );
       }
-      return resolveSurface(surface);
+      const planned = resolveSurface(surface);
+      surfaceCache.set(path, planned);
+      return planned;
     });
     return { ...node, ...(model ? { model } : {}), surfaces };
   });

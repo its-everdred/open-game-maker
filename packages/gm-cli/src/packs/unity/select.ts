@@ -32,6 +32,7 @@ export function selectUnityBuilding(nodes: UnityMeshNode[], name: string): Unity
       if (!ancestors.has(node.transformId)) return node;
       const transform = { ...node, materials: [], rendererActive: false };
       delete transform.mesh;
+      delete transform.skinnedRendererActive;
       return transform;
     });
 }
@@ -73,6 +74,7 @@ export function selectUnityPieces(nodes: UnityMeshNode[], ids: string[]): UnityM
       if (selected.has(node.transformId)) return node;
       const transform = { ...node, materials: [], rendererActive: false };
       delete transform.mesh;
+      delete transform.skinnedRendererActive;
       return transform;
     });
 }

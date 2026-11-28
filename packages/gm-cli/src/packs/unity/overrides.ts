@@ -26,6 +26,8 @@ export function applyPrefabOverrides(
       /^m_LODs\.Array\.data\[\d+\]\.(screenRelativeHeight|fadeTransitionWidth)$/.test(path)
     )
       continue;
+    if (options.sourceGuid && target.guid !== options.sourceGuid)
+      throw new Error(`foreign prefab override target ${id}`);
     const record = records.get(id);
     if (!record) {
       const directStale =

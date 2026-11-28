@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import { lstat, readFile, readdir, mkdir, unlink, writeFile } from 'node:fs/promises';
+import { link, lstat, readFile, readdir, mkdir, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, resolve } from 'node:path';
 import { measureGltf } from '@ogm/asset-measure';
 import { effectiveRights, rightsAgree, validateCard, type AssetCard } from '@ogm/contracts';
 import { resolveContainedPath } from '../../context.js';
 import { exportUnityAssembly } from './export.js';
-import { planUnityAssembly } from './plan.js';
+import { inspectUnityAssembly, planUnityAssembly } from './plan.js';
 
 async function assertUniformRights(cardsRoot: string): Promise<void> {
   for (const name of await readdir(cardsRoot)) {
@@ -29,11 +29,20 @@ export async function assemblePackBuilding(options: {
   pieceIds?: string[];
   binary2text?: string;
   env?: NodeJS.ProcessEnv;
-}): Promise<{ id: string; output: string; warnings: string[] }> {
+  listOnly?: boolean;
+}): Promise<{
+  id: string;
+  output: string;
+  warnings: string[];
+  nodes?: Array<{ id: string; name: string; parent: string | null }>;
+}> {
   const { pack, slug } = options;
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(pack) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(pack) || (!options.listOnly && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)))
     throw new Error('pack and assembly IDs must be kebab-case');
-  if (!options.title.trim() || options.title.length > 120 || /[\p{Cc}\p{Cf}]/u.test(options.title))
+  if (
+    !options.listOnly &&
+    (!options.title.trim() || options.title.length > 120 || /[\p{Cc}\p{Cf}]/u.test(options.title))
+  )
     throw new Error('invalid building title');
   if (
     isAbsolute(options.source) ||
@@ -68,9 +77,20 @@ export async function assemblePackBuilding(options: {
   if (!(await resolveContainedPath(packRoot, cardsRoot))) throw new Error('cards directory escapes the pack');
   await assertUniformRights(cardsRoot);
   const extracted = join(packRoot, match[2]!, 'extracted');
+  if (!(await resolveContainedPath(packRoot, extracted)))
+    throw new Error('extracted directory escapes the licensed pack');
   const source = await resolveContainedPath(extracted, resolve(extracted, options.source));
   if (!source || !/\.(?:prefab|unity)$/i.test(source))
     throw new Error('source must be a Unity prefab or scene in the extracted pack');
+  if (options.listOnly) {
+    const nodes = await inspectUnityAssembly(extracted, source, options.binary2text);
+    return {
+      id: '',
+      output: '',
+      warnings: [],
+      nodes: nodes.map((node) => ({ id: node.transformId, name: node.name, parent: node.parentId })),
+    };
+  }
   const warnings: string[] = ['material export preserves base color only; inspect surface shading before use'];
   if (options.objectName && options.pieceIds) throw new Error('choose either an object or scene piece IDs');
   if (source.toLowerCase().endsWith('.unity') && !options.objectName && !options.pieceIds)
@@ -118,14 +138,34 @@ export async function assemblePackBuilding(options: {
       geometry,
       describe: { description: `Assembled ${options.title}`, objects: ['building'] },
       ...(warnings.length ? { flags: ['needs-review'] } : {}),
-      provenance: { '*': { by: 'code', tool: 'gm-unity-assembly@0.1', at, input: options.source } },
+      provenance: {
+        '*': {
+          by: 'code',
+          tool: 'gm-unity-assembly@0.1',
+          at,
+          input:
+            options.objectName || options.pieceIds
+              ? JSON.stringify({
+                  source: options.source,
+                  ...(options.objectName ? { object: options.objectName } : { pieces: options.pieceIds }),
+                })
+              : options.source,
+        },
+      },
     };
     const valid = validateCard(card);
     if (!valid.ok) throw new Error(`invalid assembly card: ${valid.errors.join('; ')}`);
-    await writeFile(cardPath, `${JSON.stringify(card, null, 2)}\n`, { flag: 'wx' });
+    const staging = await mkdtemp(join(cardsRoot, '.unity-card-'));
+    try {
+      const stagedCard = join(staging, 'card.json');
+      await writeFile(stagedCard, `${JSON.stringify(card, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+      await link(stagedCard, cardPath);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
     return { id, output, warnings };
   } catch (error) {
-    await unlink(output);
+    await unlink(output).catch(() => {});
     throw error;
   }
 }

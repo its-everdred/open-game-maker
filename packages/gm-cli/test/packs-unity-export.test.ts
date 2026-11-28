@@ -342,7 +342,12 @@ it.skipIf(!available)(
         .listMeshes()
         .flatMap((mesh) => mesh.listPrimitives())
         .filter((primitive) => primitive.getMaterial() === bakedMaterial);
-      expect(bakedPrimitives).toHaveLength(2);
+      expect(bakedPrimitives).toHaveLength(1);
+      const mixedNodes = mixedDocument
+        .getRoot()
+        .listNodes()
+        .filter((node) => node.getMesh()?.listPrimitives().includes(bakedPrimitives[0]!));
+      expect(mixedNodes).toHaveLength(2);
       expect(bakedPrimitives.every((primitive) => primitive.getAttribute('TEXCOORD_0'))).toBe(true);
       const rgbPlan = [structuredClone(plan[3]!)];
       rgbPlan[0]!.parentId = null;
@@ -638,6 +643,24 @@ it.skipIf(!available)(
         const encoded = 255 * (linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055);
         expect(Math.abs(adjustedPixels[index]! - encoded)).toBeLessThan(3);
       }
+      const constantPlan = [structuredClone(plan[0]!)];
+      constantPlan[0]!.parentId = null;
+      constantPlan[0]!.surfaces = [
+        {
+          path: 'glass.mat',
+          textures: [],
+          texturePaths: [],
+          textureSrgb: [],
+          color: [1, 1, 1, 1],
+          opacity: { path: 'glass.mat', textures: [], texturePaths: [], textureSrgb: [], color: [0.4, 0.4, 0.4, 0.4] },
+        },
+      ];
+      const constantOutput = join(root, 'constant-alpha.glb');
+      await exportUnityAssembly(constantPlan, constantOutput);
+      const constantDocument = await new NodeIO().readBinary(await readFile(constantOutput));
+      const glass = constantDocument.getRoot().listMaterials()[0]!;
+      expect(glass.getAlphaMode()).toBe('BLEND');
+      expect(glass.getBaseColorFactor()[3]).toBeCloseTo(0.4);
       const missing = [structuredClone(plan[3]!)];
       missing[0]!.parentId = null;
       missing[0]!.surfaces[0]!.textures[0]!.uv = 8;

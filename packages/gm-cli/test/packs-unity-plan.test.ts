@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { planUnityAssembly } from '../src/packs/unity/plan.js';
+import { inspectUnityAssembly, planUnityAssembly } from '../src/packs/unity/plan.js';
 
 it('resolves mesh and material GUIDs and refuses missing model metadata', async () => {
   const root = await mkdtemp(join(tmpdir(), 'gm-unity-plan-'));
@@ -47,6 +47,9 @@ MeshRenderer:
         model: { path: join(root, 'model.fbx'), name: 'Roof' },
         surfaces: [{ path: join(root, 'roof.mat'), color: [1, 1, 1, 1] }],
       },
+    ]);
+    expect(await inspectUnityAssembly(root, prefab)).toMatchObject([
+      { transformId: 'root/2', name: 'Roof', parentId: null },
     ]);
     const shaderGuid = 'c'.repeat(32);
     const edge = (from: string, to: string, slot: number, output: number) => ({
@@ -104,6 +107,36 @@ MeshRenderer:
       { surfaces: [{ opacity: { color: [0.4, 0.4, 0.4, 0.4] } }] },
     ]);
     expect(warnings).toEqual([expect.stringContaining('view-dependent opacity approximated')]);
+    await writeFile(
+      join(root, 'roof.mat'),
+      `--- !u!21 &2100000\nMaterial:\n  m_Shader: {guid: ${shaderGuid}}\n  stringTagMap: {RenderType: Opaque}\n  m_SavedProperties:\n    m_Floats:\n    - _SurfaceType: 0\n    - _BlendMode: 1\n    - _SrcBlend: 1\n    - _DstBlend: 1\n`,
+    );
+    expect(await planUnityAssembly(root, prefab)).toMatchObject([{ surfaces: [{ color: [1, 1, 1, 1] }] }]);
+    const buildingOnly = await readFile(prefab, 'utf8');
+    await writeFile(
+      prefab,
+      buildingOnly +
+        `--- !u!1 &10
+GameObject:
+  m_Name: Character
+  m_Component:
+  - component: {fileID: 11}
+  - component: {fileID: 12}
+--- !u!4 &11
+Transform:
+  m_GameObject: {fileID: 10}
+  m_Father: {fileID: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+--- !u!137 &12
+SkinnedMeshRenderer:
+  m_Enabled: 1
+`,
+    );
+    expect(await planUnityAssembly(root, prefab, undefined, 'Roof')).toHaveLength(1);
+    await expect(planUnityAssembly(root, prefab)).rejects.toThrow('unsupported Unity skinned mesh');
+    await writeFile(prefab, buildingOnly);
     await writeFile(join(root, 'model.fbx.meta'), `guid: ${meshGuid}\nModelImporter: {}\n`);
     await expect(planUnityAssembly(root, prefab)).rejects.toThrow('missing Unity mesh name');
     const contents = await readFile(prefab, 'utf8');

@@ -227,7 +227,19 @@ def build_blended_material(material, surface, uv_names):
         value = constant(surface)
         if not np.all(np.isfinite(value)):
             raise ValueError("non-finite shader blend result")
-        material.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value = np.clip(value, 0, 1)
+        shader = material.node_tree.nodes.get("Principled BSDF")
+        shader.inputs["Base Color"].default_value = np.clip(value, 0, 1)
+        if surface.get("opacity"):
+            opacity = constant(surface["opacity"])[0]
+            if not np.isfinite(opacity):
+                raise ValueError("non-finite shader blend result")
+            opacity = np.clip(opacity, 0, 1)
+            if "alphaCutoff" in surface:
+                cutoff = surface["alphaCutoff"]
+                if not 0 <= cutoff <= 1:
+                    raise ValueError("invalid Unity alpha clip threshold")
+                opacity = float(opacity >= cutoff)
+            shader.inputs["Alpha"].default_value = opacity
         return material
     first = layers[0][0]
     if any(texture["scale"] != first["scale"] or texture["offset"] != first["offset"] or texture.get("uv", 0) != first.get("uv", 0) for texture, _, _ in layers):
@@ -381,7 +393,7 @@ def main():
                 world_matrix = None
             bake_key = json.dumps([model, surfaces, world_matrix], sort_keys=True) if mixed_uv else None
             if bake_key in baked_meshes:
-                obj.data = baked_meshes[bake_key].copy()
+                obj.data = baked_meshes[bake_key]
                 bpy.data.meshes.remove(mesh)
                 mesh = obj.data
             if mixed_uv and bake_key not in baked_meshes:

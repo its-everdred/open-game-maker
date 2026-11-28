@@ -10,6 +10,11 @@ Transform:
   const mods = [{ target: { fileID: '123' }, propertyPath: 'm_LocalPosition.x', value: '7.5' }];
   expect(applyPrefabOverrides(source, mods).get('123')?.data.m_LocalPosition).toEqual({ x: 7.5, y: '1', z: '2' });
   expect(source.get('123')?.data.m_LocalPosition).toEqual({ x: '0', y: '1', z: '2' });
+  expect(() =>
+    applyPrefabOverrides(source, [{ ...mods[0], target: { fileID: '123', guid: 'foreign' } }], {
+      sourceGuid: 'source',
+    }),
+  ).toThrow('foreign prefab override target');
   expect(() => applyPrefabOverrides(source, [{ ...mods[0], propertyPath: 'm_IsActive' }])).toThrow(
     'unsupported prefab override',
   );
@@ -47,7 +52,7 @@ it('reports a stale direct override only when its source prefab has no nested in
     'missing prefab override target',
   );
   expect(() => applyPrefabOverrides(source, [modification], { sourceGuid: 'other', onStale: () => {} })).toThrow(
-    'missing prefab override target',
+    'foreign prefab override target',
   );
 });
 
