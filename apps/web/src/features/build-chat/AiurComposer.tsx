@@ -142,6 +142,9 @@ export function AiurComposer({
       :host([data-recording]) .mic, :host([data-voice-live]) .mic { display:inline-grid !important; }
       .mic[data-muted='true']::after { content:''; position:absolute; width:2px; height:25px; border-radius:2px; background:currentColor; transform:rotate(-45deg); }
       .send { order:5; }
+      button { border:0; border-radius:999px; box-shadow:none; }
+      button[aria-pressed='true'] { animation:none; box-shadow:none; }
+      button.send:disabled { opacity:1; }
       :host(:not([data-recording]):not([data-voice-live])) .voice { display:none; }
     `
         : '';
@@ -154,7 +157,7 @@ export function AiurComposer({
       '--aiur-composer-line': 'rgba(242, 234, 214, .22)',
       '--aiur-composer-button-bg': 'rgba(55, 51, 64, .78)',
       '--aiur-composer-accent': '#74c8ed',
-      '--aiur-composer-on-accent': '#1d1b16',
+      '--aiur-composer-on-accent': '#f2ead6',
       '--aiur-composer-focus': '#74c8ed',
       '--aiur-composer-radius': '28px',
       '--aiur-composer-font': 'Nunito, system-ui, sans-serif',
@@ -166,11 +169,12 @@ export function AiurComposer({
     cardStyle.textContent = `
       aiur-composer.build-chat-aiur-composer::part(card) { gap:0; padding:5px; border-top:1px solid rgba(255,255,255,.42); border-right:1px solid rgba(0,0,0,.38); border-bottom:1px solid rgba(255,255,255,.32); border-left:1px solid rgba(0,0,0,.38); background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.02) 48%,rgba(0,0,0,.06)),rgba(24,22,32,.82); box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 8px 22px rgba(0,0,0,.24); -webkit-backdrop-filter:blur(22px) saturate(1.4); backdrop-filter:blur(22px) saturate(1.4); }
       aiur-composer.build-chat-aiur-composer::part(actions) { flex-wrap:nowrap; gap:8px; align-items:center; }
-      aiur-composer.build-chat-aiur-composer::part(attach), aiur-composer.build-chat-aiur-composer::part(mic), aiur-composer.build-chat-aiur-composer::part(voice), aiur-composer.build-chat-aiur-composer::part(send), aiur-composer.build-chat-aiur-composer::part(cancel) { color:#f2ead6; border:0; background:transparent; box-shadow:none; }
+      aiur-composer.build-chat-aiur-composer::part(attach), aiur-composer.build-chat-aiur-composer::part(mic), aiur-composer.build-chat-aiur-composer::part(voice), aiur-composer.build-chat-aiur-composer::part(cancel) { color:#f2ead6; border:0; background:rgba(116,200,237,.13); box-shadow:none; }
       aiur-composer.build-chat-aiur-composer::part(input) { color:#f2ead6; }
       aiur-composer.build-chat-aiur-composer::part(input)::placeholder { color:rgba(242,234,214,.6); }
-      aiur-composer.build-chat-aiur-composer::part(send) { color:#1d1b16; background:#74c8ed; }
-      aiur-composer.build-chat-aiur-composer[data-recording]::part(mic), aiur-composer.build-chat-aiur-composer[data-voice-live]::part(mic) { color:#1d1b16; background:#74c8ed; }
+      aiur-composer.build-chat-aiur-composer::part(send) { color:#f2ead6; background:#74c8ed; }
+      aiur-composer.build-chat-aiur-composer[data-recording]::part(mic), aiur-composer.build-chat-aiur-composer[data-voice-live]::part(mic) { color:#f2ead6; background:#74c8ed; }
+      aiur-composer.build-chat-aiur-composer::part(voice)[aria-pressed='true'] { color:#f2ead6; background:#74c8ed; }
     `;
     element.after(cardStyle);
     const input = element.shadowRoot?.querySelector('textarea');
@@ -188,7 +192,7 @@ export function AiurComposer({
         ? new Dictation({ connection: () => connectDictation(transcriptionTarget) })
         : undefined;
     if (twoWay)
-      twoWay.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h9a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2H7l-4 3v-4a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2Z" fill="#74c8ed" stroke="#74c8ed" stroke-width="1.5"/><path d="M11.5 3.5h7.5A1.5 1.5 0 0 1 20.5 5v5.5A1.5 1.5 0 0 1 19 12h-1v4l-4-4h-2.5A1.5 1.5 0 0 1 10 10.5V5A1.5 1.5 0 0 1 11.5 3.5Z" fill="none" stroke="#f2ead6" stroke-width="2"/></svg>`;
+      twoWay.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5h9a2 2 0 0 1 2 2V15a2 2 0 0 1-2 2h-5l-4 3v-4a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2Z" fill="#74c8ed" stroke="#74c8ed" stroke-width="1.5"/><path d="M12 3.5h7.5A2 2 0 0 1 21.5 5.5V11a2 2 0 0 1-2 2H18v4l-4-4h-2a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z" fill="none" stroke="#f2ead6" stroke-width="2"/></svg>`;
     const isVoiceActive = () => element.hasAttribute('data-recording') || element.hasAttribute('data-voice-live');
     const syncMicrophone = () => {
       if (!microphone) return;

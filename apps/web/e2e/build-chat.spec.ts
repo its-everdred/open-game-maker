@@ -523,8 +523,10 @@ test('build composer keeps voice controls at the right through dictation and liv
   await openBuildChat(page);
   const composer = page.locator('aiur-composer');
   const mic = composer.locator('[part="mic"]');
+  const voice = composer.locator('[part="voice"]');
   const send = composer.locator('[part="send"]');
   const input = composer.locator('[part="input"]');
+  const composerStack = page.locator('.build-chat-composer-stack');
 
   const idleMic = await mic.boundingBox();
   const idleSend = await send.boundingBox();
@@ -540,7 +542,11 @@ test('build composer keeps voice controls at the right through dictation and liv
   ).toBe('28px');
   await expect(mic).toHaveCSS('border-width', '0px');
   await expect(mic).toHaveCSS('box-shadow', 'none');
-  await page.screenshot({ path: 'e2e/screenshots/1087/composer-idle.png' });
+  await expect(mic).toHaveCSS('border-radius', '999px');
+  await expect(send).toHaveCSS('border-radius', '999px');
+  await expect(send).toHaveCSS('background-color', 'rgb(116, 200, 237)');
+  await expect(send).toHaveCSS('opacity', '1');
+  await composerStack.screenshot({ path: 'e2e/screenshots/1087/composer-idle.png' });
 
   await mic.click();
   await expect(composer).toHaveAttribute('data-recording', '');
@@ -583,7 +589,10 @@ test('build composer keeps voice controls at the right through dictation and liv
   expect(Math.abs(recordingSend!.x - idleSend!.x)).toBeLessThan(1);
   expect(inputBox!.width).toBeGreaterThan(composerBox!.width * 0.9);
   expect(inputBox!.y + inputBox!.height).toBeLessThan((await composer.locator('[part="voice"]').boundingBox())!.y);
-  await page.screenshot({ path: 'e2e/screenshots/1087/composer-dictating.png', animations: 'disabled' });
+  const dictationStackBox = await composerStack.boundingBox();
+  expect(inputBox!.x).toBeGreaterThanOrEqual(dictationStackBox!.x);
+  expect(inputBox!.x + inputBox!.width).toBeLessThanOrEqual(dictationStackBox!.x + dictationStackBox!.width + 1);
+  await composerStack.screenshot({ path: 'e2e/screenshots/1087/composer-dictating.png', animations: 'disabled' });
 
   await mic.click();
   await expect(mic).toHaveAttribute('aria-label', 'Unmute microphone');
@@ -603,13 +612,14 @@ test('build composer keeps voice controls at the right through dictation and liv
       ),
     )
     .toBeLessThanOrEqual(3);
-  await page.screenshot({ path: 'e2e/screenshots/1087/composer-dictating-muted.png', animations: 'disabled' });
+  await composerStack.screenshot({ path: 'e2e/screenshots/1087/composer-dictating-muted.png', animations: 'disabled' });
   await mic.click();
   await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
   await composer.locator('[part="voice"]').click();
   await expect(composer).toHaveAttribute('data-voice-live', '');
-  await expect(composer.locator('[part="voice"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(voice).toHaveAttribute('aria-pressed', 'true');
   await expect(composer.locator('[part="voice"] svg path').first()).toHaveAttribute('stroke-width', '1.5');
+  await expect(composer.locator('[part="voice"] svg path').first()).toHaveAttribute('fill', '#74c8ed');
   await expect(composer.locator('[part="waveform"]')).toBeVisible();
   await expect
     .poll(() =>
@@ -648,10 +658,16 @@ test('build composer keeps voice controls at the right through dictation and liv
     'background-color',
     await agentBubble.evaluate((node) => getComputedStyle(node).backgroundColor),
   );
+  await expect(userBubble).toHaveCSS('max-width', '84%');
+  await expect(userBubble).toHaveCSS('padding', '10px 14px');
+  await expect(userBubble).toHaveCSS('font-size', '15px');
+  await expect(agentBubble).toHaveCSS('align-self', 'flex-start');
+  await expect(userBubble).toHaveCSS('align-self', 'flex-end');
   const userBubbleBox = await userBubble.boundingBox();
   const agentBubbleBox = await agentBubble.boundingBox();
   expect(userBubbleBox!.x).toBeGreaterThan(agentBubbleBox!.x);
   expect(userBubbleBox!.y).toBeLessThan(agentBubbleBox!.y);
-  await page.screenshot({ path: 'e2e/screenshots/1087/composer-two-way-voice.png', animations: 'disabled' });
+  expect(userBubbleBox!.y + userBubbleBox!.height).toBeLessThan((await voice.boundingBox())!.y);
+  await composerStack.screenshot({ path: 'e2e/screenshots/1087/composer-two-way-voice.png', animations: 'disabled' });
   await composer.locator('[part="voice"]').click();
 });

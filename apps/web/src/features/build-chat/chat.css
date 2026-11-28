@@ -23,15 +23,23 @@
 }
 
 .build-chat-row.text {
-  max-width: 88%;
-  padding: 9px 12px;
-  border-radius: 14px 14px 14px 4px;
+  max-width: 84%;
+  padding: 10px 14px;
+  border-radius: 18px 18px 18px 6px;
   background: color-mix(in srgb, var(--blue-b) 22%, transparent);
+  font:
+    600 15px/1.38 Nunito,
+    system-ui,
+    sans-serif;
 }
 
 .build-chat-row.text.creator {
   align-self: flex-end;
-  border-radius: 14px 14px 4px;
+  border-radius: 18px 18px 6px;
+}
+
+.build-chat-row.text.agent {
+  align-self: flex-start;
 }
 
 .build-chat-row.text p {
@@ -251,13 +259,17 @@
 }
 
 .build-chat-voice {
+  width: 100%;
+  min-height: 0;
   max-height: min(34svh, 280px);
-  padding: 4px 2px;
+  padding: 4px 0 8px;
   overflow-y: auto;
 }
 
 .build-chat-composer-stack {
   display: grid;
+  width: 100%;
+  min-width: 0;
   gap: 8px;
 }
 
