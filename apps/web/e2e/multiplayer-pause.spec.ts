@@ -69,6 +69,15 @@ test('a room pause freezes both game frames until the shared countdown ends', as
             body: await readFile(new URL('./fixtures/fall-game/index.html', import.meta.url)),
           }),
         );
+        /* A routed page is not on loopback to Chrome, so its own fetches are routed too: an opaque frame may not reach
+           loopback. */
+        await target.route('http://127.0.0.1:10001/g/game/**/manifest.json', async (route) =>
+          route.fulfill({
+            contentType: 'application/json',
+            headers: { 'access-control-allow-origin': '*' },
+            body: await readFile(new URL('./fixtures/fall-game/manifest.json', import.meta.url)),
+          }),
+        );
         await target.goto(`/g/game?room=${room.roomId}&test`);
         await expect.poll(() => roomState(target), { timeout: 30_000 }).toBe('connected');
         await expect.poll(() => framePaused(target), { timeout: 30_000 }).toBe(false);
