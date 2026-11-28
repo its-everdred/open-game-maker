@@ -161,7 +161,7 @@ export async function assemblePackBuilding(options: {
       await writeFile(stagedCard, `${JSON.stringify(card, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
       await link(stagedCard, cardPath);
     } finally {
-      await rm(staging, { recursive: true, force: true });
+      await rm(staging, { recursive: true, force: true }).catch(() => {});
     }
     return { id, output, warnings };
   } catch (error) {

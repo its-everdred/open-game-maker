@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 
-const injected = vi.hoisted(() => ({ failCardWrite: false }));
+const injected = vi.hoisted(() => ({ failCardWrite: false, failCleanup: false }));
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
@@ -14,6 +14,10 @@ vi.mock('node:fs/promises', async (importOriginal) => {
         throw new Error('injected card write failure');
       }
       return actual.writeFile(...args);
+    },
+    rm: async (...args: Parameters<typeof actual.rm>) => {
+      if (injected.failCleanup && String(args[0]).includes('.unity-card-')) throw new Error('injected cleanup failure');
+      return actual.rm(...args);
     },
   };
 });
@@ -116,6 +120,13 @@ it('publishes a measured building card inheriting confirmed pack rights and refu
     await expect(assemblePackBuilding({ ...options, slug: 'retry' })).resolves.toMatchObject({
       id: 't1:example/assembled-retry@v1',
     });
+    injected.failCleanup = true;
+    await expect(assemblePackBuilding({ ...options, slug: 'cleanup' })).resolves.toMatchObject({
+      id: 't1:example/assembled-cleanup@v1',
+    });
+    injected.failCleanup = false;
+    await expect(stat(join(pack, 'cards', 'assembled-cleanup.card.json'))).resolves.toBeTruthy();
+    await expect(stat(join(pack, 'v1', 'extracted', 'assembled', 'cleanup.glb'))).resolves.toBeTruthy();
     vi.mocked(exportUnityAssembly).mockImplementationOnce(async (_plan, output) => {
       await writeFile(output, 'glb', { flag: 'wx' });
       await writeFile(join(pack, 'collection.card.json'), JSON.stringify({ id: 't1:example@v1', status: 'rejected' }));
@@ -187,6 +198,7 @@ it('publishes a measured building card inheriting confirmed pack rights and refu
     await expect(assemblePackBuilding({ ...options, slug: 'other' })).rejects.toThrow('per-asset rights');
   } finally {
     injected.failCardWrite = false;
+    injected.failCleanup = false;
     await rm(root, { recursive: true, force: true });
   }
 });
