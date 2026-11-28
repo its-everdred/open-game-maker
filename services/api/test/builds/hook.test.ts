@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -81,7 +81,7 @@ async function serveApi(app: ReturnType<typeof world>['app']) {
 }
 
 describe('before_remove hook to a playable build', () => {
-  it('uploads the merged workspace build, which the API publishes and the games host serves', async () => {
+  it('uploads the merged workspace build and keeps it private until release', async () => {
     const { deps, app } = world();
     const api = await serveApi(app);
     const { dir, sha } = workspace();
@@ -104,8 +104,10 @@ describe('before_remove hook to a playable build', () => {
       const host = await gamesHost(deps.config.gamesRoot);
       try {
         const page = await fetch(`${host.base}/g/${ids.game}/${buildId}/`);
-        expect(page.status).toBe(200);
-        expect(await page.text()).toContain('<title>Fixture</title>');
+        expect(page.status).toBe(404);
+        expect(readFileSync(join(deps.config.gamesRoot, ids.game, buildId, 'index.html'), 'utf8')).toContain(
+          '<title>Fixture</title>',
+        );
       } finally {
         await host.close();
       }

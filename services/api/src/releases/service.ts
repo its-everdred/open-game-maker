@@ -2,6 +2,9 @@ import type { Build, ChangeNote, Release } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { fold, reduce, type VersionCounts } from '@ogm/design-log';
 import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { buildDir, isComplete, resolveFile } from '@ogm/games-host/layout';
+import { realpath, stat } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 import type { AppDeps } from '../app/types.js';
 import type { BaseDocSource } from '../design/base-doc.js';
@@ -297,6 +300,29 @@ export async function publish(
   input: { gameId: string; buildId: string; actor: string; changelog?: Changelog },
 ): Promise<Release> {
   const { build, game } = requireMainBuild(deps, input.gameId, input.buildId);
+  let directory: string;
+  try {
+    directory = buildDir(deps.config.gamesRoot, build.gameId, build.id);
+  } catch {
+    throw new ReleaseError('artifact_missing', 409);
+  }
+  const entry = await resolveFile(directory, 'index.html');
+  const entryIsFile = entry
+    ? await stat(entry)
+        .then((value) => value.isFile())
+        .catch(() => false)
+    : false;
+  const actual = await realpath(directory).catch(() => '');
+  const recorded = await realpath(build.artifactPath).catch(() => '');
+  const root = await realpath(deps.config.gamesRoot).catch(() => '');
+  if (
+    !actual ||
+    actual !== recorded ||
+    dirname(dirname(actual)) !== root ||
+    !(await isComplete(directory)) ||
+    !entryIsFile
+  )
+    throw new ReleaseError('artifact_missing', 409);
   const expected = game.publishedReleaseId;
   await requireGameplayCompliant(deps, build.artifactPath);
   const rights = await runtime.checkRights(build.artifactPath, game.repoVisibility);

@@ -295,7 +295,7 @@ export const OGM_ENV_NAMES: readonly EnvName[] = [
     name: 'OGM_API_INTERNAL_URL',
     unit: 'shared',
     kind: 'url',
-    doc: 'loopback URL of the internal API (commit, voice-host, repair)',
+    doc: 'loopback URL of the internal API (commit, games-host, voice-host, repair)',
   },
   {
     name: 'OGM_BUILDER_WORKSPACES_ROOT',

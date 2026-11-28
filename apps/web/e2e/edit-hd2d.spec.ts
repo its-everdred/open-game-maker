@@ -169,7 +169,7 @@ async function openEditor(page: Page, query = '', routes?: () => Promise<void>):
       { timeout: 30_000 },
     )
     .toBe('ready');
-  const game = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`))!;
+  const game = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`))!;
   await game.evaluate(() => {
     Object.assign(window, { fixture: () => (window as unknown as { __fixture: Fixture }).__fixture });
   });

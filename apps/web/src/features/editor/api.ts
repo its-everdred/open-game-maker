@@ -21,6 +21,10 @@ import { PatchTooLargeError, validatePatches } from '@ogm/design-log/browser';
 import { api, ApiError, apiFetch, sse } from '../../lib/api/client';
 import { createStableId } from './transactions';
 
+export function requestDraftGrant(gameId: string, buildId: string): Promise<{ grant: string }> {
+  return api('/artifacts/grant', { method: 'POST', json: { gameId, buildId } });
+}
+
 export type GameMetadata = {
   id: string;
   familyId: string;

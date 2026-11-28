@@ -84,9 +84,11 @@ def main(argv):
         return 64
     with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as conn:
         rows = conn.execute(
-            """select g.id, g.slug, (select b.id from builds b where b.game_id = g.id and b.status = 'tested'
-                                      order by b.created_at desc limit 1)
-               from games g where g.delisted_at is null and g.slug not like 'qa-%' order by g.slug"""
+            """select g.id, g.slug, b.id from games g
+               join releases r on r.id = g.published_release_id and r.game_id = g.id
+               join builds b on b.id = r.build_id and b.game_id = g.id and b.status = 'tested' and b.artifact = 'present'
+               join override_snapshots s on s.id = r.snapshot_id and s.game_id = g.id and s.build_id = b.id
+               where g.delisted_at is null and g.visibility = 'listed' and g.slug not like 'qa-%' order by g.slug"""
         ).fetchall()
     failed = 0
     for game_id, slug, build_id in rows:

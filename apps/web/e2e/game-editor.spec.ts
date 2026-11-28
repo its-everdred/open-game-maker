@@ -150,7 +150,7 @@ function gameState(page: Page): Promise<GameHook | undefined> {
 }
 
 async function playFrameState(page: Page): Promise<{ attached: boolean; bridgeState?: string; mode?: string }> {
-  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`));
   if (!frame || frame.isDetached()) return { attached: false };
 
   try {

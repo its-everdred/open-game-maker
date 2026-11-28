@@ -35,6 +35,7 @@ describe('build id contract between the API and the games host', () => {
       version: '0123456789abcdef0123456789abcdef01234567',
       uptimeSec: () => 0,
       workerScript: join(root, 'unused-worker.js'),
+      authorize: async () => true,
     });
   }
 
