@@ -69,7 +69,10 @@ test('a room pause freezes both game frames until the shared countdown ends', as
         await target.route(`${bridgeOrigin}/d/game/**/index.html*`, async (route) =>
           route.fulfill({
             contentType: 'text/html',
-            body: await readFile(new URL('./fixtures/fall-game/index.html', import.meta.url)),
+            body: (await readFile(new URL('./fixtures/fall-game/index.html', import.meta.url), 'utf8')).replace(
+              "await (await fetch('./manifest.json')).json()",
+              await readFile(new URL('./fixtures/fall-game/manifest.json', import.meta.url), 'utf8'),
+            ),
           }),
         );
         await target.goto(`/g/game?room=${room.roomId}&test`);

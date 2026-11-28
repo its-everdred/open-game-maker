@@ -63,7 +63,7 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   const slow = await gameFrame(page, 'slow');
   await expect(page.locator('.review-deck-playable iframe')).toHaveAttribute(
     'sandbox',
-    'allow-scripts allow-same-origin allow-pointer-lock',
+    'allow-scripts allow-pointer-lock',
   );
   await expect.poll(() => slow.evaluate(() => window.__fixture.params)).toMatchObject({ scenario: 'sandbox' });
   await expect.poll(() => slow.evaluate(() => window.__fixture.messages.includes('design.apply'))).toBe(true);
@@ -112,7 +112,7 @@ test('plays each fall speed in the card, compares them, and sends the pick', asy
   // Each option's own slice loads in turn; the frame for that speed is the evidence it played.
   const loaded: string[] = [];
   page.on('framenavigated', (frame) => {
-    const speed = /\/g\/g_fall.*[?&]speed=(\w+)/.exec(frame.url())?.[1];
+    const speed = /\/d\/g_fall.*[?&]speed=(\w+)/.exec(frame.url())?.[1];
     if (speed !== undefined && loaded.at(-1) !== speed) loaded.push(speed);
   });
   await page.getByRole('button', { name: 'Compare every option' }).click();
