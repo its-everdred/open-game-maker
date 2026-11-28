@@ -6,16 +6,12 @@ import { fallbackEditorPalette, loadIndex, packOf, type ResolvedCard } from '@og
 import { loadEnv } from '@ogm/config';
 import { AgreedScope, type AssetsLock } from '@ogm/contracts';
 import { schema } from '@ogm/db';
-import { authorize } from '@ogm/policy';
-
-import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { thumbnailUrl } from '../catalog/routes.js';
 import { mediaSigner } from '../build-chat/media.js';
 import { getChatRow, listCommands } from '../build-chat/store.js';
-import { findGameForFamily } from '../games/games.js';
 import { authorizedGame } from '../games/authorize.js';
 import { listEditorPreviews } from '../previews/store.js';
 import { listSceneDocs, readGameLock, readSceneryFile, readScenerySource } from './source.js';
@@ -28,14 +24,10 @@ export const prefix = '/api/v1';
 
 export function sceneryRoutes(assetsRoot?: string): Hono<ApiBindings> {
   function checkout(c: Parameters<typeof requirePrincipal>[0]) {
-    const principal = requirePrincipal(c, ['user']);
     const deps = c.get('deps');
     const gameId = c.req.param('gameId');
     if (!gameId) throw new HttpError(400, 'invalid_request');
-    const game = findGameForFamily(deps.db, gameId, principal.familyId);
-    requireAuthorization(
-      authorize(actorFromPrincipal(principal), 'game.edit', { familyId: game.familyId, ownerId: game.ownerId }),
-    );
+    const game = authorizedGame(c, 'game.edit');
     const daemon = game.slug
       ? deps.db.select().from(schema.gameDaemons).where(eq(schema.gameDaemons.slug, game.slug)).get()
       : undefined;

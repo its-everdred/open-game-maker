@@ -191,11 +191,11 @@ function chatStream(c: Context<ApiBindings>, job: ChatJob, since: number) {
 
 export default new Hono<ApiBindings>()
   .get('/:jobId/chat', async (c) => {
-    const job = await authorizedChatJob(c, 'game.edit');
+    const job = await authorizedChatJob(c);
     return chatStream(c, job, sinceOf(c));
   })
   .get('/:jobId/chat/messages', async (c) => {
-    const job = await authorizedChatJob(c, 'game.edit');
+    const job = await authorizedChatJob(c);
     const since = sinceOf(c);
     const { sign } = getChatRuntime(c.get('deps'));
     const rows = listSince(c.get('deps').sqlite, job.jobId, since);
@@ -206,7 +206,7 @@ export default new Hono<ApiBindings>()
     return c.json(page);
   })
   .post('/:jobId/chat/attachments', async (c) => {
-    const job = await authorizedChatJob(c, 'job.create', true);
+    const job = await authorizedChatJob(c);
     const deps = c.get('deps');
     const runtime = getChatRuntime(deps);
     if (!allow(runtime.uploads, job.jobId, UPLOADS_PER_MINUTE)) throw new HttpError(429, 'rate_limited');
@@ -228,7 +228,7 @@ export default new Hono<ApiBindings>()
     return c.json(toChatAttachment(row), 201);
   })
   .post('/:jobId/chat', async (c) => {
-    const job = await authorizedChatJob(c, 'job.create', true);
+    const job = await authorizedChatJob(c);
     const body = await parseBody(c, ChatPostBody);
     const deps = c.get('deps');
     const runtime = getChatRuntime(deps);

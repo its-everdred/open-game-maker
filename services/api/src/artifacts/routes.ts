@@ -3,10 +3,10 @@ import { artifactBlobIndex, buildDir, isComplete } from '@ogm/games-host/layout'
 import { schema } from '@ogm/db';
 import { and, eq } from 'drizzle-orm';
 import type { ApiBindings, AppDeps } from '../app/types.js';
-import { hasCreatorMembership, issueGrant, validGrant, validPreview } from './grants.js';
+import { canAccessDraft, issueGrant, validGrant, validPreview } from './grants.js';
 import { authorize } from '@ogm/policy';
 import { actorFromPrincipal } from '../accounts/families.js';
-import { hasGameGrant } from '../games/games.js';
+import { getGameAccess, hasGameGrant } from '../games/games.js';
 import { currentPublishedBuild, publishedBuilds } from './published.js';
 
 export const prefix = '/api/v1/artifacts';
@@ -67,11 +67,7 @@ export default new Hono<ApiBindings>()
       )
       .get();
     if (!game || !build || !(await isComplete(buildDir(deps.config.gamesRoot, game.id, build.id)))) return c.notFound();
-    const owner =
-      principal.userId === game.ownerId &&
-      principal.familyId === game.familyId &&
-      principal.capability === 'creator' &&
-      hasCreatorMembership(deps, game.familyId, principal.userId);
+    const owner = canAccessDraft(deps, game, principal);
     const released = currentPublishedBuild(deps, game.id) === build.id;
     const canPlay =
       !!released &&
@@ -81,6 +77,7 @@ export default new Hono<ApiBindings>()
         visibility: game.visibility,
         releaseState: game.releaseState,
         granted: hasGameGrant(deps.db, game.id, principal.userId),
+        gameAccess: getGameAccess(deps.db, game.id, principal.userId),
       }).ok;
     if (!owner && !canPlay) return c.notFound();
     const token = await issueGrant(

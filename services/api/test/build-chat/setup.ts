@@ -1,5 +1,6 @@
 import type { AiurClient } from '@ogm/aiur-client';
 import type { Principal } from '@ogm/contracts';
+import { schema } from '@ogm/db';
 
 import type { ChatJob } from '../../src/app/registry.js';
 import { makeApp, makeDeps } from '../helpers.js';
@@ -69,6 +70,23 @@ export type FakeAiur = Pick<AiurClient, 'message' | 'progress' | 'decisions' | '
 
 export function makeChatDeps(jobs = jobTable(chatJob()), client?: FakeAiur) {
   const deps = makeDeps();
+  const now = '2026-11-01T00:00:00.000Z';
+  deps.db
+    .insert(schema.families)
+    .values({ id: FAMILY, name: 'Family', ownerUserId: users.owner.userId, createdAt: now })
+    .run();
+  deps.db
+    .insert(schema.games)
+    .values({
+      id: chatJob().gameId,
+      familyId: FAMILY,
+      ownerId: users.owner.userId,
+      title: 'Game',
+      visibility: 'private',
+      repoVisibility: 'private',
+      createdAt: now,
+    })
+    .run();
   deps.registry.chatJobs = jobs.directory;
   if (client) deps.registry.aiurClientFor = () => client;
   return deps;

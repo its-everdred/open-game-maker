@@ -7,7 +7,7 @@ import { authorize } from '@ogm/policy';
 import { eq } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
-import { hasGameGrant, listGames as listVisibleGames } from '../games/games.js';
+import { getGameAccess, hasGameGrant, listGames as listVisibleGames } from '../games/games.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
@@ -48,6 +48,7 @@ function requireRead(deps: AppDeps, gameId: string, actor: ReturnType<typeof act
       visibility: game.visibility,
       releaseState: game.releaseState,
       granted: hasGameGrant(deps.db, game.id, actor.userId),
+      gameAccess: getGameAccess(deps.db, game.id, actor.userId),
     }),
   );
   return game;
@@ -99,6 +100,7 @@ const routes = new Hono<ApiBindings>()
             visibility: game.visibility,
             releaseState: game.releaseState,
             granted: hasGameGrant(deps.db, game.id, principal.userId),
+            gameAccess: getGameAccess(deps.db, game.id, principal.userId),
           }).ok,
       )
       .map((game) => game.id);
@@ -118,7 +120,11 @@ const routes = new Hono<ApiBindings>()
     const row = findJobRow(deps.db, c.req.param('id'));
     const game = gameFor(deps, row.gameId);
     requireAuthorization(
-      authorize(actorFromPrincipal(principal), 'game.edit', { familyId: game.familyId, ownerId: game.ownerId }),
+      authorize(actorFromPrincipal(principal), 'game.edit', {
+        familyId: game.familyId,
+        ownerId: game.ownerId,
+        gameAccess: getGameAccess(deps.db, game.id, principal.userId),
+      }),
     );
     if (row.state !== 'queued') throw new HttpError(409, 'job_not_queued');
     const { plan } = await parseBody(c, patchBody);

@@ -11,7 +11,8 @@ import { HttpError } from '../app/errors.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
 import { FsBaseDocSource } from '../design/base-doc.js';
-import { findGameForFamily, findGameForPlay, hasGameGrant } from '../games/games.js';
+import { findGameForPlay, getGameAccess, hasGameGrant } from '../games/games.js';
+import { authorizedGameById } from '../games/authorize.js';
 import { countSavesAboveSchema } from '../saves/store.js';
 import { CommitUnavailable, HttpCommitClient } from './commit-client.js';
 import { checkPublishRights, RightsCheckUnavailable } from './rights.js';
@@ -82,16 +83,14 @@ function requirePlayer(c: Parameters<typeof requirePrincipal>[0], gameId: string
       visibility: game.visibility,
       releaseState: game.releaseState,
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
+      gameAccess: getGameAccess(c.get('deps').db, game.id, principal.userId),
     }),
   );
 }
 
 function requirePublisher(c: Parameters<typeof requirePrincipal>[0], gameId: string) {
   const principal = requirePrincipal(c, ['user']);
-  const game = findGameForFamily(c.get('deps').db, gameId, principal.familyId);
-  requireAuthorization(
-    authorize(actorFromPrincipal(principal), 'game.publish', { familyId: game.familyId, ownerId: game.ownerId }),
-  );
+  authorizedGameById(c, 'game.publish', gameId);
   return principal;
 }
 

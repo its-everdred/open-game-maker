@@ -4,9 +4,6 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { schema } from '@ogm/db';
 
-import { authorize } from '@ogm/policy';
-
-import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
@@ -14,7 +11,8 @@ import { parseBody } from '../app/validate.js';
 import { getDesignRuntime } from '../design/routes.js';
 import { BranchArchived, BranchNotFound } from '../design/store.js';
 import { LeaseMismatch } from '../design/lease.js';
-import { findGameForFamily, findGameForPlay, hasGameGrant, type GameRow } from '../games/games.js';
+import { authorizedGame as authorizeGame } from '../games/authorize.js';
+import type { GameRow } from '../games/games.js';
 import { InvalidResolution, PatchTooLargeError, UnresolvedConflict } from '@ogm/design-log';
 import {
   InvalidBranchPair,
@@ -65,26 +63,7 @@ function routeParam(c: Context<ApiBindings>, name: string): string {
 
 function authorizedGame(c: Context<ApiBindings>, action: 'game.edit' | 'game.play'): { game: GameRow; userId: string } {
   const principal = requirePrincipal(c, ['user']);
-  const game =
-    action === 'game.play'
-      ? findGameForPlay(c.get('deps').db, routeParam(c, 'gameId'), actorFromPrincipal(principal))
-      : findGameForFamily(c.get('deps').db, routeParam(c, 'gameId'), principal.familyId);
-  requireAuthorization(
-    authorize(
-      actorFromPrincipal(principal),
-      action,
-      action === 'game.edit'
-        ? { familyId: game.familyId, ownerId: game.ownerId }
-        : {
-            familyId: game.familyId,
-            ownerId: game.ownerId,
-            visibility: game.visibility,
-            releaseState: game.releaseState,
-            granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
-          },
-    ),
-  );
-  return { game, userId: principal.userId };
+  return { game: authorizeGame(c, action), userId: principal.userId };
 }
 
 function branchError(c: Context<ApiBindings>, error: unknown): Response {

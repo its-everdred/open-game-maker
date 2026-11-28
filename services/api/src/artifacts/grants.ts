@@ -6,12 +6,13 @@ import type { ApiBindings, AppDeps } from '../app/types.js';
 import { principalMiddleware } from '../app/principal.js';
 import { authorize } from '@ogm/policy';
 import { actorFromPrincipal } from '../accounts/families.js';
-import { hasGameGrant } from '../games/games.js';
+import { getGameAccess, hasGameGrant } from '../games/games.js';
 import { currentPublishedBuild } from './published.js';
 import { sameSecret } from '../app/internal-auth.js';
 import { HttpError } from '../app/errors.js';
 import { authContextFor } from '../auth/routes.js';
 import { artifactEpoch, issueSessionGrant, readSessionGrant } from './session-grants.js';
+import type { Principal } from '@ogm/contracts';
 
 interface Grant {
   gameId: string;
@@ -39,6 +40,24 @@ export function hasCreatorMembership(deps: AppDeps, familyId: string, userId: st
       .from(schema.familyMembers)
       .where(and(eq(schema.familyMembers.familyId, familyId), eq(schema.familyMembers.userId, userId)))
       .get()?.capability === 'creator'
+  );
+}
+
+export function canAccessDraft(
+  deps: AppDeps,
+  game: typeof schema.games.$inferSelect,
+  principal: Extract<Principal, { kind: 'user' }>,
+): boolean {
+  if (principal.capability !== 'creator') return false;
+  if (principal.userId === game.ownerId)
+    return principal.familyId === game.familyId && hasCreatorMembership(deps, game.familyId, principal.userId);
+  return (
+    game.delistedAt === null &&
+    authorize(actorFromPrincipal(principal), 'game.edit', {
+      familyId: game.familyId,
+      ownerId: game.ownerId,
+      gameAccess: getGameAccess(deps.db, game.id, principal.userId),
+    }).ok
   );
 }
 
@@ -255,11 +274,9 @@ async function validOwner(deps: AppDeps, grant: Grant): Promise<boolean> {
             visibility: game.visibility,
             releaseState: game.releaseState,
             granted: hasGameGrant(deps.db, game.id, principal.userId),
+            gameAccess: getGameAccess(deps.db, game.id, principal.userId),
           }).ok
-        : principal.userId === game.ownerId &&
-          principal.familyId === game.familyId &&
-          principal.capability === 'creator' &&
-          hasCreatorMembership(deps, game.familyId, principal.userId);
+        : canAccessDraft(deps, game, principal);
     return c.json({ allowed });
   });
   const response = await app.request('http://127.0.0.1/', { headers: grant.headers });

@@ -1,0 +1,216 @@
+body .game-access {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow: hidden;
+  background: #0f0e16;
+  color: #f2ead6;
+  font:
+    600 15px/1.35 Nunito,
+    sans-serif;
+}
+.game-access * {
+  box-sizing: border-box;
+}
+.game-access-glows {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.game-access-glows i {
+  position: absolute;
+  width: 330px;
+  height: 330px;
+  border-radius: 50%;
+  translate: -50% -50%;
+  filter: blur(8px);
+}
+.game-access-glows i:nth-child(1) {
+  top: 10%;
+  left: 10%;
+  background: radial-gradient(closest-side, rgb(214 93 14 / 0.34), rgb(214 93 14 / 0.13) 55%, transparent);
+}
+.game-access-glows i:nth-child(2) {
+  top: 16%;
+  left: 92%;
+  background: radial-gradient(closest-side, rgb(177 98 134 / 0.32), rgb(177 98 134 / 0.13) 55%, transparent);
+}
+.game-access-glows i:nth-child(3) {
+  top: 92%;
+  left: 30%;
+  background: radial-gradient(closest-side, rgb(69 133 136 / 0.36), rgb(69 133 136 / 0.14) 55%, transparent);
+}
+.game-access-glows i:nth-child(4) {
+  top: 86%;
+  left: 88%;
+  background: radial-gradient(closest-side, rgb(215 153 33 / 0.22), rgb(215 153 33 / 0.08) 55%, transparent);
+}
+.game-access-top {
+  position: absolute;
+  inset: 16px 14px auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.game-access-top h1 {
+  margin: 0;
+  font:
+    700 26px/40px Fredoka,
+    Nunito,
+    sans-serif;
+}
+.game-access-back {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  color: inherit;
+  border: 1px solid;
+  border-color: rgba(242, 234, 214, 0.34) rgba(0, 0, 0, 0.42);
+  background: rgba(57, 54, 67, 0.55);
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.55);
+}
+.game-access-body {
+  position: absolute;
+  inset: 76px 14px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: auto;
+}
+.game-access-card {
+  border-radius: 20px;
+  background: rgba(36, 33, 46, 0.62);
+  backdrop-filter: blur(22px) saturate(1.4);
+  overflow: hidden;
+  border: 1px solid;
+  border-color: rgba(242, 234, 214, 0.34) rgba(0, 0, 0, 0.42);
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.55);
+}
+.game-access-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 10px 10px 14px;
+}
+.game-access-row + .game-access-row {
+  box-shadow: inset 0 1px 0 rgba(242, 234, 214, 0.08);
+}
+.game-access-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font:
+    700 17px Fredoka,
+    sans-serif;
+  flex: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.04) 50%, transparent 51%),
+    rgba(116, 200, 237, 0.26);
+}
+.game-access-name {
+  flex: 1;
+  min-width: 0;
+}
+.game-access-name div {
+  font:
+    600 17px/1.2 Fredoka,
+    Nunito,
+    sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-access-name small {
+  display: block;
+  font:
+    700 13px/1.3 Nunito,
+    sans-serif;
+  color: #c4beb0;
+}
+.game-access-caption {
+  margin-bottom: 8px;
+  font:
+    800 11px/1 Nunito,
+    sans-serif;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #c4beb0;
+}
+.game-access-segment {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(15, 14, 22, 0.55);
+  flex: none;
+}
+.game-access-segment button {
+  height: 36px;
+  min-width: 54px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #c4beb0;
+  font:
+    700 14px Nunito,
+    sans-serif;
+}
+.game-access-segment button[aria-pressed='true'] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.04) 50%, transparent 51%), #74c8ed;
+  color: #1d1b16;
+}
+.game-access-segment button:disabled {
+  opacity: 0.3;
+}
+.game-access-portrait {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.game-access-landscape {
+  display: none;
+}
+@media (orientation: landscape) and (max-height: 600px) {
+  .game-access:not(.glass-users) .game-access-body {
+    inset: 64px 14px 10px;
+  }
+  .game-access-portrait {
+    display: none;
+  }
+  .game-access-landscape {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .game-access-landscape > div {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+  }
+}
+.game-access-caption span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: rgba(242, 234, 214, 0.14);
+  letter-spacing: 0;
+}
+.game-access .game-access-top {
+  height: 40px;
+  padding: 0;
+}

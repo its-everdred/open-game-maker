@@ -25,6 +25,8 @@ export type GameSummary = {
   visibility?: 'listed' | 'private';
   releaseState?: 'released' | 'coming_soon';
   canPlay?: boolean;
+  canEdit?: boolean;
+  canManageAccess?: boolean;
   canManageRelease?: boolean;
   repoVisibility?: 'public' | 'private';
   repo: { owner: string; name: string; url?: string; visibility?: 'public' | 'private' } | null;

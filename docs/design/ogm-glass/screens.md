@@ -30,6 +30,7 @@ Canvas: https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM. Each link opens that 
 | Publish + access | [Publish](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-Publish) | Monday | releases PublishDialog | #1456, #1405, #1447 |
 | Admin | [Admin](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-Admin) | existing | `/admin/*` (8 sections → 4 tabs) | #1421 |
 | Admin invite + access | [AdminInvite](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-AdminInvite) | Monday | `/admin/invites` | #1407, #1448, #1404 |
+| Game access | [Game access](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#page-access) | Round 2 | Owner's game access list; Admin users and invite | #1497 |
 | Versions + rollback | [Versions](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-Versions) | future | `/g/:id/versions`, releases | #1453 |
 | Cloud saves + snapshots | [Saves](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-Saves) | future | editor/hud/saves | #1454 |
 | Forks + contributions | [Forks](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-Forks) | future | `/g/:id/merge` | #1455 |
@@ -40,6 +41,10 @@ Canvas: https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM. Each link opens that 
 | Editor desktop / landscape | [EditorDesktop](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-EditorDesktop), [EditorLandscape](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-EditorLandscape) | existing + Monday chat | EditWorkspace | #1420, #1450 |
 | Pause landscape | [PauseLandscape](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-PauseLandscape) | existing | PauseMenu | #1420 |
 | Build order desktop | [BuildOrderDesktop](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-BuildOrderDesktop) | Monday | aiur build-order (aiur `docs/build-order/`) | #1452 |
+
+Instance users have a Player, Editor, or Admin type. An owner sets Hide, Play, or Edit for each user on each game;
+Player users cannot receive Edit access. Editor type permits creating games but does not itself grant access to
+another owner's game.
 
 ## Layout rules for screens without their own landscape or desktop artboard
 

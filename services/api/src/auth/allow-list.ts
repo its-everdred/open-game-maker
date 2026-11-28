@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { schema, type Db } from '@ogm/db';
 import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
@@ -20,6 +21,7 @@ export type AllowedUserRow = {
   addedBy: string;
   addedAt: string;
   lastSignInAt: string | null;
+  name: string | null;
 };
 
 export function roleForEmail(db: Db, email: string): AllowedRole | null {
@@ -81,11 +83,13 @@ type AllowedUserSqlRow = {
   added_by: string;
   added_at: string;
   last_sign_in_ms: number | null;
+  name: string | null;
 };
 
 export function listAllowedUsers(db: Db): AllowedUserRow[] {
   const rows = db.all<AllowedUserSqlRow>(sql`
     SELECT a.email, a.role, a.added_by, a.added_at,
+      (SELECT u.name FROM user u WHERE lower(u.email) = a.email LIMIT 1) AS name,
       (SELECT max(s.created_at) FROM session s JOIN user u ON u.id = s.user_id WHERE lower(u.email) = a.email)
         AS last_sign_in_ms
     FROM allowed_users a
@@ -97,6 +101,7 @@ export function listAllowedUsers(db: Db): AllowedUserRow[] {
     addedBy: row.added_by,
     addedAt: row.added_at,
     lastSignInAt: row.last_sign_in_ms === null ? null : new Date(row.last_sign_in_ms).toISOString(),
+    name: row.name,
   }));
 }
 
@@ -114,7 +119,7 @@ export function addAllowedUser(
   return listAllowedUsers(db).find((row) => row.email === email) ?? null;
 }
 
-export function setAllowedRole(db: Db, email: string, role: AllowedRole): boolean {
+export function setAllowedRole(db: Db, email: string, role: AllowedRole, actorId = 'system'): boolean {
   const address = normalizeEmail(email);
   if (roleForEmail(db, address) === null) return false;
   db.transaction((tx) => {
@@ -124,6 +129,31 @@ export function setAllowedRole(db: Db, email: string, role: AllowedRole): boolea
       .where(and(eq(schema.allowedUsers.email, address), ne(schema.allowedUsers.role, role)))
       .run();
     if (!result.changes) return;
+    if (role === 'player') {
+      const edits = tx
+        .select({ gameId: schema.gameAccess.gameId })
+        .from(schema.gameAccess)
+        .where(and(eq(schema.gameAccess.email, address), eq(schema.gameAccess.access, 'edit')))
+        .all();
+      const now = new Date().toISOString();
+      for (const { gameId } of edits) {
+        tx.update(schema.gameAccess)
+          .set({ access: 'play', updatedBy: actorId, updatedAt: now })
+          .where(and(eq(schema.gameAccess.email, address), eq(schema.gameAccess.gameId, gameId)))
+          .run();
+        tx.insert(schema.gameAccessAudit)
+          .values({
+            id: randomUUID(),
+            gameId,
+            email: address,
+            previousAccess: 'edit',
+            access: 'play',
+            actorId,
+            createdAt: now,
+          })
+          .run();
+      }
+    }
     for (const user of tx
       .select({ id: schema.user.id })
       .from(schema.user)

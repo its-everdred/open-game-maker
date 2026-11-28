@@ -161,7 +161,7 @@ export function GameScreen() {
   roomIdRef.current = roomId;
   const [canvasOptions, setCanvasOptions] = useState<{ prefab?: string; snap: SnapPrefs }>();
   const [editorPlaying, setEditorPlaying] = useState(true);
-  const { jobs, ...conversation } = useEditConversation(gameId, jobBranch);
+  const { jobs, ...conversation } = useEditConversation(gameId, jobBranch, game.data?.canEdit === true);
   useEffect(() => setEditorPlaying(true), [gameId, mode]);
   const fallbackInFlight = useRef(false);
   const [adopted, setAdopted] = useState<{ gameId: string; branch: string; snapshot: DesignSnapshot }>();

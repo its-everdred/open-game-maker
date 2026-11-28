@@ -5,7 +5,6 @@ import type { BlobHash } from '@ogm/blob-store';
 import { schema } from '@ogm/db';
 import type { ApiBindings } from '../app/types.js';
 import { HttpError } from '../app/errors.js';
-import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
 import { authorizedGame } from '../games/authorize.js';
 import { editorBuildUrl, sliceUrl } from '../games/editor-url.js';
@@ -116,7 +115,6 @@ export default new Hono<ApiBindings>()
   })
   .get('/games/:gameId/review-rounds/:id/status', async (c) => {
     const game = authorizedGame(c, 'game.edit');
-    if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
     const deps = c.get('deps');
     const round = getRound(deps.db, game.id, c.req.param('id'));
     if (!round) throw new HttpError(404, 'review_round_not_found');
@@ -146,7 +144,6 @@ export default new Hono<ApiBindings>()
   })
   .post('/games/:gameId/review-rounds/:id/missing-media', async (c) => {
     const game = authorizedGame(c, 'game.edit');
-    if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
     const deps = c.get('deps');
     const round = getRound(deps.db, game.id, c.req.param('id'));
     if (!round || round.verdict !== null) throw new HttpError(404, 'review_round_not_found');
@@ -200,7 +197,6 @@ export default new Hono<ApiBindings>()
   })
   .post('/games/:gameId/review-rounds/:id/answer', async (c) => {
     const game = authorizedGame(c, 'game.edit');
-    if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
     const answer = await parseBody(c, Answer);
     const deps = c.get('deps');
     const round = getRound(deps.db, game.id, c.req.param('id'));

@@ -96,6 +96,7 @@ export function GameDetail({
   job,
   onPlay,
   onEdit,
+  onAccess,
   onRelease,
   onComingSoon,
   releasePending,
@@ -108,6 +109,7 @@ export function GameDetail({
   sharedCover?: boolean;
   onPlay(): void;
   onEdit(): void;
+  onAccess?(): void;
   onRelease?(): void;
   onComingSoon?(): void;
   releasePending?: boolean;
@@ -225,14 +227,16 @@ export function GameDetail({
               >
                 ▶
               </button>
-              <button
-                type="button"
-                className="tap-primary games-edit"
-                aria-label={`Edit ${game.title}`}
-                onClick={onEdit}
-              >
-                <Icon name="pencil" />
-              </button>
+              {game.canEdit !== false && (
+                <button
+                  type="button"
+                  className="tap-primary games-edit"
+                  aria-label={`Edit ${game.title}`}
+                  onClick={onEdit}
+                >
+                  <Icon name="pencil" />
+                </button>
+              )}
             </>
           )}
           {game.releaseState === 'coming_soon' && game.canManageRelease && onRelease && (
@@ -247,6 +251,25 @@ export function GameDetail({
           )}
           {releaseError && <p role="alert">Couldn’t change the release state. Try again.</p>}
         </div>
+        {game.canManageAccess && onAccess && (
+          <button type="button" className="games-access-tile" onClick={onAccess}>
+            <svg
+              viewBox="0 0 24 24"
+              width="22"
+              height="22"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="9" cy="8" r="3.5" />
+              <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.3c1.8.8 3 2.9 3 5.7" />
+            </svg>
+            <span>Access</span>
+          </button>
+        )}
       </div>
       <div
         className="games-spotlight-media"

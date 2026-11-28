@@ -64,11 +64,11 @@ export function answerResponse(c: Context<ApiBindings>, outcome: AnswerOutcome) 
 
 export default new Hono<ApiBindings>()
   .get('/:jobId/commands/budget', async (c) => {
-    const job = await authorizedChatJob(c, 'game.edit', true);
+    const job = await authorizedChatJob(c);
     return c.json(commandBudget(c.get('deps').sqlite, job.jobId, job.kind));
   })
   .post('/:jobId/commands/:commandId/answer', async (c) => {
-    const job = await authorizedChatJob(c, 'job.create', true);
+    const job = await authorizedChatJob(c);
     const deps = c.get('deps');
     if (!allowAnswer(commandRuntime(deps), job.jobId)) throw new HttpError(429, 'rate_limited');
     const { option_id, review } = await parseBody(c, AnswerBody);
@@ -82,7 +82,7 @@ export default new Hono<ApiBindings>()
   // Skipping a question takes the recommendation, which is an answer like any other: dependent tickets unblock and the
   // decision history records that the player delegated rather than chose.
   .post('/:jobId/commands/:commandId/skip', async (c) => {
-    const job = await authorizedChatJob(c, 'job.create', true);
+    const job = await authorizedChatJob(c);
     const deps = c.get('deps');
     if (!allowAnswer(commandRuntime(deps), job.jobId)) throw new HttpError(429, 'rate_limited');
     const row = findCommand(deps.sqlite, job.jobId, c.req.param('commandId'));

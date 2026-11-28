@@ -142,12 +142,12 @@ const routes = new Hono<ApiBindings>()
     return c.json({ user: added }, 201);
   })
   .patch('/:email', async (c) => {
-    const { email: callerEmail } = admin(c);
+    const { email: callerEmail, actor } = admin(c);
     const body = await parseBody(c, PatchUserBody);
     const address = normalizeEmail(c.req.param('email'));
     const deps = c.get('deps');
     if (address === callerEmail && body.role !== 'admin') throw new HttpError(409, 'self_demote');
-    if (!setAllowedRole(deps.db, address, body.role)) throw new HttpError(404, 'user_not_found');
+    if (!setAllowedRole(deps.db, address, body.role, actor.userId)) throw new HttpError(404, 'user_not_found');
     return c.json({ user: listAllowedUsers(deps.db).find((row) => row.email === address) });
   })
   .put('/:email/weekly-budget', async (c) => {

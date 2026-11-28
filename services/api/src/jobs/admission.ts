@@ -25,6 +25,7 @@ import {
 } from '../budget/settings.js';
 import { HttpError } from '../app/errors.js';
 import { insertChatRow } from '../build-chat/store.js';
+import { getGameAccess } from '../games/games.js';
 import { energySource } from '../energy/source.js';
 import { energyBlock } from '../energy/view.js';
 import type { AppEvents } from '../app/events.js';
@@ -93,9 +94,18 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
   const now = (deps.now ?? (() => new Date()))();
   const game = deps.db.select().from(schema.games).where(eq(schema.games.id, request.gameId)).get();
   if (!game) throw new HttpError(404, 'game_not_found');
-  requireAuthorization(
-    authorize(actor, 'job.create', { gameId: game.id, familyId: game.familyId, ownerId: game.ownerId }),
-  );
+  const ownJob = authorize(actor, 'job.create', { gameId: game.id, familyId: game.familyId, ownerId: game.ownerId });
+  if (!ownJob.ok) {
+    if (request.kind !== 'feature' && request.kind !== 'repair') requireAuthorization(ownJob);
+    requireAuthorization(
+      authorize(actor, 'game.edit', {
+        gameId: game.id,
+        familyId: game.familyId,
+        ownerId: game.ownerId,
+        gameAccess: getGameAccess(deps.db, game.id, actor.userId),
+      }),
+    );
+  }
   if (request.branchId !== 'main') throw new HttpError(409, 'branch_not_main');
 
   const outcome = deps.sqlite

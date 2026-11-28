@@ -64,6 +64,23 @@ function shape(element: Element): string {
 }
 
 describe('game detail', () => {
+  it('offers Access to the owner and hides Edit from a play-only user', () => {
+    const onAccess = vi.fn();
+    const view = detail({ ...blobs, canManageAccess: true, canEdit: true }, { onAccess });
+    fireEvent.click(screen.getByRole('button', { name: 'Access' }));
+    expect(onAccess).toHaveBeenCalledOnce();
+    view.rerender(
+      <GameDetail
+        game={{ ...blobs, canManageAccess: false, canEdit: false }}
+        onPlay={vi.fn()}
+        onEdit={vi.fn()}
+        onClose={vi.fn()}
+        onAccess={onAccess}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Access' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit Blobs' })).not.toBeInTheDocument();
+  });
   it('offers release to an authorized owner of a coming soon game', () => {
     const onRelease = vi.fn();
     detail({ ...blobs, releaseState: 'coming_soon', canPlay: true, canManageRelease: true }, { onRelease });

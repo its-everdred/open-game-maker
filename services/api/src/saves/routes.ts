@@ -10,7 +10,7 @@ import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
 import { resolveBranch } from '../design/store.js';
-import { findGameForPlay, hasGameGrant } from '../games/games.js';
+import { findGameForPlay, getGameAccess, hasGameGrant } from '../games/games.js';
 import { LeaseHeld, LeaseMismatch, acquirePlayLease, heartbeatPlayLease } from './lease.js';
 import { deriveSaveStatus } from './status.js';
 import {
@@ -64,6 +64,7 @@ function playableGame(c: Parameters<typeof requirePrincipal>[0]): {
       visibility: game.visibility,
       releaseState: game.releaseState,
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
+      gameAccess: getGameAccess(c.get('deps').db, game.id, principal.userId),
     }),
   );
   return { principal, gameId: game.id };

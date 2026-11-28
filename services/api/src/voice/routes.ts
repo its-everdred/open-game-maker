@@ -23,7 +23,7 @@ import type { AppDeps } from '../app/types.js';
 import { parseBody } from '../app/validate.js';
 import { createRateLimiter } from '../auth/rate-limit.js';
 import { requireMeteredDispatch } from '../gameplay/policy.js';
-import { findGameForFamily } from '../games/games.js';
+import { authorizedGameById } from '../games/authorize.js';
 import { findJobRow } from '../jobs/repo.js';
 import { registerVoiceTarget } from './briefing-push.js';
 import { answerVoiceCommand } from './command-answer.js';
@@ -90,19 +90,11 @@ async function authorizedTarget(c: Context<ApiBindings>) {
       return { principal, target };
     }
   }
-  const game = findGameForFamily(db, target.game_id, principal.familyId);
-  requireAuthorization(
-    authorize(actorFromPrincipal(principal), 'game.edit', { familyId: game.familyId, ownerId: game.ownerId }),
-  );
+  const game = authorizedGameById(c, 'game.edit', target.game_id);
 
   if (target.kind === 'build') {
     const job = findJobRow(db, target.job_id);
-    if (
-      job.gameId !== game.id ||
-      job.creatorId !== principal.userId ||
-      job.aiurIssueNumber === null ||
-      String(job.aiurIssueNumber) !== target.ticket
-    ) {
+    if (job.gameId !== game.id || job.aiurIssueNumber === null || String(job.aiurIssueNumber) !== target.ticket) {
       throw new HttpError(403, 'job_not_in_game');
     }
   } else if (target.kind === 'scope') {

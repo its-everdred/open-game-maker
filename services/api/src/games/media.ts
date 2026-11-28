@@ -6,7 +6,7 @@ import { buildDir } from '@ogm/games-host/layout';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { AppDeps } from '../app/types.js';
 import type { DisplayImage } from '../builds/display-images.js';
-import { hasCreatorMembership, issueGrant } from '../artifacts/grants.js';
+import { canAccessDraft, issueGrant } from '../artifacts/grants.js';
 import { currentPublishedBuild } from '../artifacts/published.js';
 import type { Principal } from '@ogm/contracts';
 
@@ -152,13 +152,7 @@ export async function gameMedia(
         branches.slice(index, index + 8).map(async ({ gameId, buildId: latestBuildId }) => {
           const game = deps.db.select().from(schema.games).where(eq(schema.games.id, gameId)).get();
           const releaseBuildId = currentPublishedBuild(deps, gameId);
-          const owner =
-            !!viewer &&
-            !!game &&
-            viewer.principal.userId === game.ownerId &&
-            viewer.principal.familyId === game.familyId &&
-            viewer.principal.capability === 'creator' &&
-            hasCreatorMembership(deps, game.familyId, viewer.principal.userId);
+          const owner = !!viewer && !!game && canAccessDraft(deps, game, viewer.principal);
           const buildId = viewer && !owner ? releaseBuildId : latestBuildId;
           if (!buildId) return [gameId, {}] as const;
           let directory: string;

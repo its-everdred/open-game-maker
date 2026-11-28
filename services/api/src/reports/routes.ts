@@ -17,7 +17,7 @@ import { countDistinct, eq } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
 import { createRateLimiter } from '../auth/rate-limit.js';
-import { findGame, hasGameGrant } from '../games/games.js';
+import { findGame, getGameAccess, hasGameGrant } from '../games/games.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import { readBoundedBody } from '../app/read-body.js';
@@ -189,6 +189,7 @@ const routes = new Hono<ApiBindings>()
       visibility: game.visibility,
       releaseState: game.releaseState,
       granted: hasGameGrant(deps.db, game.id, actor.userId),
+      gameAccess: getGameAccess(deps.db, game.id, actor.userId),
     };
     requireAuthorization(authorize(actor, 'game.play', resource));
     requireAuthorization(authorize(actor, 'report.file', resource));
