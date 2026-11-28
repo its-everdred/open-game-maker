@@ -139,7 +139,7 @@ beforeEach(() => {
   branchList.value = undefined;
   preview.mountSceneryPreview.mockReturnValue(host.controller);
   useDock.getState().reset();
-  editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar' });
+  editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar', canEdit: true });
   editorApi.requestDraftGrant.mockResolvedValue({ grant: 'test-grant' });
   editorApi.getFallbackPalette.mockResolvedValue({ mode: 'request', palette: { categories: [], items: [] } });
   editorApi.getEditorPreviews.mockResolvedValue({ previews: [] });
