@@ -55,6 +55,17 @@
   font: 700 17px var(--display);
 }
 
+.build-chat-dock[data-state='chat'] .build-chat-chat-head {
+  padding-right: 124px;
+}
+
+.build-chat-chat-head h3 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .build-chat-close,
 .build-chat-back,
 .build-chat-queued-actions button,
@@ -206,6 +217,10 @@
 }
 
 @media (max-width: 600px) {
+  .app-chrome:has(.build-chat-dock[data-state='chat']) .studio-logo {
+    display: none;
+  }
+
   .build-chat-dock[data-state='chat'] {
     inset: 0;
     align-items: stretch;

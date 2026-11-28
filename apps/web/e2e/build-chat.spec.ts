@@ -4,7 +4,7 @@ import { installAuthRoutes } from './fixtures/auth-routes';
 import { installGameApi } from './support/mock-game-api';
 
 const jobId = 'j_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e6f';
-const imageUrl = 'https://media.example.test/image.svg';
+const imageUrl = '/proto/art/goblin-play.webp';
 const clipUrl = 'https://media.example.test/clip.mp4';
 
 const job = {
@@ -75,6 +75,21 @@ test('phone build dock opens the streamed chat and posts text once', async ({ pa
 
   await expect(page.locator('.studio-library-volume button')).toHaveAttribute('data-building', 'true');
   await openBuildChat(page);
+
+  const title = page.locator('.build-chat-chat-head h3');
+  await expect(title).toHaveText('Add the moonlit door');
+  await expect(title).toHaveCSS('text-overflow', 'ellipsis');
+  const titleBox = await title.boundingBox();
+  const studioControls = await page.locator('.studio-menu-control').boundingBox();
+  expect(titleBox).not.toBeNull();
+  expect(studioControls).not.toBeNull();
+  expect(titleBox!.x + titleBox!.width).toBeLessThan(studioControls!.x);
+  await expect(page.locator('.studio-logo')).toBeHidden();
+  const selectedTab = page.getByRole('tab', { name: 'Chat' });
+  await expect(selectedTab).toHaveAttribute('aria-selected', 'true');
+  await expect(selectedTab).toHaveCSS('background-color', 'rgb(116, 200, 237)');
+  await expect(selectedTab).toHaveCSS('border-width', '0px');
+  await expect(page.locator('.conversation-tabs')).toHaveCSS('border-radius', '999px');
 
   const panel = page.locator('.build-chat-panel');
   await expect(panel).toBeVisible();
@@ -412,16 +427,9 @@ async function installBuildRoutes(page: Page, options: { brokenPicker?: boolean;
       .join('\n');
     await route.fulfill({ status: 200, contentType: 'text/event-stream', body: `${body}\n` });
   });
-  await page.route('**/media.example.test/**', async (route) => {
-    if (route.request().url().includes('.mp4')) {
-      return route.fulfill({ status: 200, contentType: 'video/mp4', body: '' });
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'image/svg+xml',
-      body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="100%" height="100%" fill="#7b4f9d"/></svg>',
-    });
-  });
+  await page.route('**/media.example.test/**', async (route) =>
+    route.fulfill({ status: 200, contentType: 'video/mp4', body: '' }),
+  );
 }
 
 async function openBuildChat(page: Page) {
@@ -551,7 +559,7 @@ test('build composer keeps voice controls at the right through dictation and liv
   await expect(send).toHaveCSS('border-radius', '999px');
   await expect(send).toHaveCSS('background-color', 'rgb(116, 200, 237)');
   await expect(send).toHaveCSS('opacity', '1');
-  await composerStack.screenshot({ path: 'e2e/screenshots/1087/composer-idle.png' });
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-idle.png', animations: 'disabled' });
 
   await mic.click();
   await expect(composer).toHaveAttribute('data-recording', '');
@@ -597,7 +605,7 @@ test('build composer keeps voice controls at the right through dictation and liv
   const dictationStackBox = await composerStack.boundingBox();
   expect(inputBox!.x).toBeGreaterThanOrEqual(dictationStackBox!.x);
   expect(inputBox!.x + inputBox!.width).toBeLessThanOrEqual(dictationStackBox!.x + dictationStackBox!.width + 1);
-  await composerStack.screenshot({ path: 'e2e/screenshots/1087/composer-dictating.png', animations: 'disabled' });
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-dictating.png', animations: 'disabled' });
 
   await mic.click();
   await expect(mic).toHaveAttribute('aria-label', 'Unmute microphone');
@@ -617,7 +625,7 @@ test('build composer keeps voice controls at the right through dictation and liv
       ),
     )
     .toBeLessThanOrEqual(3);
-  await composerStack.screenshot({ path: 'e2e/screenshots/1087/composer-dictating-muted.png', animations: 'disabled' });
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-dictating-muted.png', animations: 'disabled' });
   await mic.click();
   await expect(mic).toHaveAttribute('aria-label', 'Mute microphone');
   await composer.locator('[part="voice"]').click();
@@ -673,6 +681,6 @@ test('build composer keeps voice controls at the right through dictation and liv
   expect(userBubbleBox!.x).toBeGreaterThan(agentBubbleBox!.x);
   expect(userBubbleBox!.y).toBeLessThan(agentBubbleBox!.y);
   expect(userBubbleBox!.y + userBubbleBox!.height).toBeLessThan((await voice.boundingBox())!.y);
-  await composerStack.screenshot({ path: 'e2e/screenshots/1087/composer-two-way-voice.png', animations: 'disabled' });
+  await page.screenshot({ path: 'e2e/screenshots/1087/composer-two-way-voice.png', animations: 'disabled' });
   await composer.locator('[part="voice"]').click();
 });
