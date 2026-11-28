@@ -43,3 +43,39 @@ test('display typography retains the approved fallback order', async ({ page }) 
   const family = await page.locator('p').evaluate((element) => getComputedStyle(element).fontFamily);
   expect(family).toMatch(/Fredoka.*Nunito.*system-ui.*sans-serif/i);
 });
+
+test('chat controls use one blue accent and embedded buttons have no raised edge', async ({ page }) => {
+  await page.setContent(`
+    <div class="ogm-glass-composer"><aiur-composer></aiur-composer></div>
+    <div class="ogm-glass-message ogm-message-self">Hello</div>
+    <button class="ogm-glass-button ogm-tone-glassy">Outside</button>
+    <button class="ogm-glass-button ogm-tone-glassy ogm-embedded">Inside</button>
+    <input class="ogm-glass-input" />
+    <span id="chat-accent" style="color: var(--ogm-role-chat)"></span>
+  `);
+  await page.addStyleTag({ content: `${tokens}\n${componentCss}` });
+  const result = await page.evaluate(() => {
+    const outside = getComputedStyle(document.querySelector('.ogm-glass-button:not(.ogm-embedded)')!);
+    const inside = getComputedStyle(document.querySelector('.ogm-embedded')!);
+    const field = getComputedStyle(document.querySelector('.ogm-glass-input')!);
+    const chat = getComputedStyle(document.querySelector('.ogm-glass-composer')!);
+    const bubble = getComputedStyle(document.querySelector('.ogm-message-self')!);
+    return {
+      outside: [outside.borderTopColor, outside.borderLeftColor, outside.boxShadow, outside.borderTopWidth],
+      inside: [inside.borderTopWidth, inside.boxShadow],
+      field: [field.borderTopColor, field.borderLeftColor, field.boxShadow],
+      chat: chat.getPropertyValue('--aiur-composer-accent').trim(),
+      bubble: bubble.backgroundColor,
+      blue: chat.getPropertyValue('--ogm-role-working').trim(),
+      blueRgb: getComputedStyle(document.querySelector('#chat-accent')!).color,
+    };
+  });
+  expect(result.outside[0]).not.toBe(result.outside[1]);
+  expect(result.outside[2]).not.toBe('none');
+  expect(result.outside[3]).toBe('1px');
+  expect(result.inside).toEqual(['0px', 'none']);
+  expect(result.field[0]).not.toBe(result.field[1]);
+  expect(result.field[2]).not.toBe('none');
+  expect(result.chat).toBe(result.blue);
+  expect(result.bubble).toBe(result.blueRgb);
+});

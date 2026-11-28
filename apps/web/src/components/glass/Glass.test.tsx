@@ -12,6 +12,11 @@ import {
 } from './GlassChrome';
 
 describe('glass controls', () => {
+  it('keeps embedded buttons native and marks their material variant', () => {
+    render(<GlassButton embedded>Attach</GlassButton>);
+    expect(screen.getByRole('button', { name: 'Attach' })).toHaveClass('ogm-embedded');
+    expect(screen.getByRole('button', { name: 'Attach' })).not.toHaveAttribute('embedded');
+  }, 30_000);
   it('keeps native button and input semantics and labels icon-only actions', () => {
     render(
       <>

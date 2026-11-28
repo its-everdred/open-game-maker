@@ -17,12 +17,14 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   tone?: Tone;
   size?: Size;
   block?: boolean;
+  embedded?: boolean;
   accent?: 'go' | 'create' | 'warn' | 'info' | 'danger' | 'live';
 };
 export function GlassButton({
   tone = 'glass',
   size = 'md',
   block,
+  embedded,
   accent,
   className,
   type = 'button',
@@ -39,6 +41,7 @@ export function GlassButton({
         `ogm-tone-${tone}`,
         `ogm-size-${size}`,
         block && 'ogm-block',
+        embedded && 'ogm-embedded',
         tone === 'glassy' && accent && `ogm-accent-${accent}`,
         className,
       )}

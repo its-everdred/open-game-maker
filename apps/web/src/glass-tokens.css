@@ -12,6 +12,7 @@
   --ogm-role-create: #ffbf32;
   --ogm-role-needs-you: #ff9133;
   --ogm-role-working: #74c8ed;
+  --ogm-role-chat: var(--ogm-role-working);
   --ogm-role-agents: #d795e4;
   --ogm-role-danger: #f76d67;
   --ogm-role-danger-ink: #ff9b8f;
@@ -45,6 +46,9 @@
     rgba(255, 255, 255, 0.04) 50%,
     rgba(255, 255, 255, 0) 51%
   );
+  --ogm-component-border-light-tb: rgba(255, 255, 255, 0.38);
+  --ogm-component-border-dark-lr: rgba(0, 0, 0, 0.28);
+  --ogm-component-shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.16);
   --ogm-component-orb-fill: rgba(55, 51, 64, 0.5);
   --ogm-component-orb-edge: rgba(255, 255, 255, 0.38);
   --ogm-component-orb-blur: blur(14px) saturate(1.35);

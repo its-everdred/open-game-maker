@@ -9,7 +9,7 @@ The app-wide design system for the Monday 2026-11-30 redesign (core #1428, desig
 
 ## Look
 
-Night ground with four slow drifting glows (the shipped `GlowBackdrop`). Glossy glass orbs and pills with a hard top-half highlight, translucent panes whose 1 px edge brightens toward the bottom. Colour is subtle in panes and full only on actions and status, one meaning per colour (green go, yellow create, orange needs you, blue working, purple agents, red danger). Fredoka display over Nunito body, the Oct 31 prototype palette (Gruvbox stays retired). It extends `apps/web/src/tokens.css`; nothing there is renamed.
+Night ground with four slow drifting glows (the shipped `GlowBackdrop`). Glossy glass orbs and pills with a hard top-half highlight and translucent panes. Each context uses one accent for its interactive elements; chat uses blue. Fredoka display over Nunito body, the Oct 31 prototype palette (Gruvbox stays retired). It extends `apps/web/src/tokens.css`; nothing there is renamed.
 
 This is OGM's chrome only. Dusk Helm's pixel UI and any game's own art are separate scopes.
 
@@ -23,6 +23,8 @@ This is OGM's chrome only. Dusk Helm's pixel UI and any game's own art are separ
 
 ## Rules carried from Kevin
 
+- Chat uses one blue accent. Within any context, interactive elements share one accent; distinguish states with shape, icon or opacity.
+- Standalone buttons and form surfaces have thin glass borders, lighter at the top and bottom and darker at the sides, with a soft shadow. Buttons inside a form have no border or shadow.
 - Icon buttons carry no visible label; words go in `aria-label`. On-screen game controls are OGM's host layer and always icons (core #1394).
 - No taglines, captions or helper sentences. The only explanatory sentence in the design is the limit-reached sheet, which must say when agents return and that play and hand edits stay free.
 - Never stretch images: covers use `object-fit: cover` at a fixed aspect, frames are 9-slice.

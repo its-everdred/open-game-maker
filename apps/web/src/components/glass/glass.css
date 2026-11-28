@@ -170,6 +170,13 @@
   border-color: var(--ogm-ink-rule);
   box-shadow: none;
 }
+.ogm-glass-button.ogm-embedded {
+  border: 0;
+  box-shadow: none;
+}
+.ogm-glass-button.ogm-embedded::before {
+  content: none;
+}
 .ogm-glass-button:disabled,
 .ogm-glass-button[aria-disabled='true'],
 .ogm-glass-orb:disabled,
@@ -321,6 +328,8 @@
   height: var(--ogm-pill-md);
   padding: 0 16px;
   border: 1px solid var(--ogm-ink-rule);
+  border-color: var(--ogm-component-border-light-tb) var(--ogm-component-border-dark-lr);
+  box-shadow: var(--ogm-component-shadow-soft);
   border-radius: var(--ogm-radius-md);
   color: var(--ogm-ink-ink);
   background: var(--ogm-component-field-fill);
@@ -540,7 +549,7 @@
   align-self: flex-end;
   border-bottom-right-radius: var(--ogm-component-message-tail-radius);
   color: var(--ogm-ink-dark);
-  background: var(--ogm-glass-gloss), var(--ogm-role-go);
+  background: var(--ogm-glass-gloss), var(--ogm-role-chat);
 }
 .ogm-message-system {
   align-self: center;
@@ -554,14 +563,34 @@
   --aiur-composer-bg: var(--ogm-glass-fill-strong);
   --aiur-composer-fg: var(--ogm-ink-ink);
   --aiur-composer-muted: var(--ogm-component-composer-placeholder);
-  --aiur-composer-line: var(--ogm-ink-rule);
+  --aiur-composer-line: var(--ogm-component-border-light-tb);
   --aiur-composer-button-bg: var(--ogm-component-orb-fill);
-  --aiur-composer-accent: var(--ogm-role-go);
+  --aiur-composer-accent: var(--ogm-role-chat);
   --aiur-composer-on-accent: var(--ogm-ink-dark);
-  --aiur-composer-focus: var(--ogm-role-focus);
+  --aiur-composer-focus: var(--ogm-role-chat);
   --aiur-composer-radius: var(--ogm-radius-xl);
   --aiur-composer-font: var(--ogm-font-body);
-  --aiur-composer-shadow: var(--ogm-component-pane-shadow);
+  --aiur-composer-shadow: var(--ogm-component-shadow-soft);
+}
+.ogm-glass-composer aiur-composer::part(card) {
+  border-color: var(--ogm-component-border-light-tb) var(--ogm-component-border-dark-lr);
+}
+.ogm-glass-composer aiur-composer::part(attach),
+.ogm-glass-composer aiur-composer::part(mic),
+.ogm-glass-composer aiur-composer::part(voice),
+.ogm-glass-composer aiur-composer::part(send) {
+  border: 0;
+  box-shadow: none;
+  animation: none;
+}
+.ogm-glass-button:not(.ogm-embedded),
+.ogm-glass-orb {
+  border: 1px solid;
+  border-color: var(--ogm-component-border-light-tb) var(--ogm-component-border-dark-lr);
+  box-shadow: var(--ogm-component-shadow-soft);
+}
+.ogm-glass-button.ogm-tone-glassy:not(.ogm-embedded)::before {
+  content: none;
 }
 .ogm-glass-scrim {
   position: fixed;
