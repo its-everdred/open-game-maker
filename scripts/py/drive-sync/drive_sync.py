@@ -65,6 +65,7 @@ DEFAULTS = {
     "log": "~/.local/state/ogm/drive-sync/drive-sync.log",
     "notify": ["log", "desktop"],                        # any of: log, desktop, command
     "notify_command": [],                                # argv; title and body are appended
+    "intake_repo": "its-everdred/open-game-maker",       # GitHub repository for intake tickets
 }
 CONFIG_PATH = "~/.config/ogm/drive-sync.toml"
 
@@ -106,6 +107,8 @@ def validate_config(cfg: dict, need_folder: bool = True) -> dict:
         sys.exit("config: poll_seconds must be between 10 and 3600 (30-60 recommended)")
     if cfg["quiet_seconds"] < 0:
         sys.exit("config: quiet_seconds must be >= 0")
+    if not isinstance(cfg["intake_repo"], str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", cfg["intake_repo"]):
+        sys.exit("config: intake_repo must be owner/repository")
     bad = set(cfg["notify"]) - set(NOTIFIERS)
     if bad:
         sys.exit(f"config: unknown notify kinds {sorted(bad)}; use {sorted(NOTIFIERS)}")
@@ -480,6 +483,143 @@ class _HashWriter:
         return self.out.write(b)
 
 
+# ---------------------------------------------------------------- intake ticket outbox
+
+def verify_intake_repo(cfg) -> None:
+    """Fail closed unless the checkout and its Aiur tracker name the same repo."""
+    result = subprocess.run(["gh", "repo", "view", "--json", "nameWithOwner"], cwd=REPO,
+                            capture_output=True, text=True, timeout=120, check=True,
+                            stdin=subprocess.DEVNULL)
+    actual = json.loads(result.stdout)["nameWithOwner"]
+    # Accept only the explicit, unambiguous mapping in the local Aiur config.
+    # Unsupported YAML forms fail closed rather than guessing a daemon target.
+    config_path = REPO / ".aiur/config"
+    if not config_path.exists():
+        config_path = Path.home() / ".aiur/config"
+    config = config_path.read_text()
+    trackers = list(re.finditer(r"(?m)^tracker\s*:[^\n]*$", config))
+    if len(trackers) != 1 or not re.fullmatch(r"tracker:\s*(?:#.*)?", trackers[0].group()):
+        raise ValueError("cannot determine Aiur tracker repository")
+    remainder = config[trackers[0].end():]
+    end = re.search(r"(?m)^[^\s#]", remainder)
+    tracker = remainder[:end.start()] if end else remainder
+    # Merges, anchors and differently indented identity keys can change the
+    # effective tracker without appearing in the narrow mapping below.
+    for line in tracker.splitlines():
+        data = line.split("#", 1)[0]
+        if (re.search(r"(?:^|\s)(?:<<\s*:|[&*][A-Za-z0-9_-]+)", data)
+                or re.match(r"^\s*[\"'?{\[!]", data)):
+            raise ValueError("cannot determine Aiur tracker repository")
+        if re.match(r"^\s+github\s*:", data) and not data.startswith("  github:"):
+            raise ValueError("cannot determine Aiur tracker repository")
+    kinds = re.findall(r"(?m)^  kind:\s*([^\s#]+)", tracker)
+    if len(kinds) > 1 or (kinds and kinds[0].strip("\"'") != "github"):
+        raise ValueError("Aiur tracker is not GitHub")
+    githubs = list(re.finditer(r"(?m)^  github\s*:[^\n]*$", tracker))
+    if len(githubs) > 1:
+        raise ValueError("cannot determine Aiur tracker repository")
+    tracker_repo = actual  # Aiur defaults an omitted repository to the checkout origin.
+    if githubs:
+        if not re.fullmatch(r"  github:\s*(?:#.*)?", githubs[0].group()):
+            raise ValueError("cannot determine Aiur tracker repository")
+        remainder = tracker[githubs[0].end():]
+        end = re.search(r"(?m)^  [^\s#]", remainder)
+        github = remainder[:end.start()] if end else remainder
+        for line in github.splitlines():
+            data = line.split("#", 1)[0]
+            if re.match(r"^\s+repo\s*:", data) and not data.startswith("    repo:"):
+                raise ValueError("cannot determine Aiur tracker repository")
+        repo_lines = re.findall(r"(?m)^    repo\s*:[^\n]*$", github)
+        if len(repo_lines) > 1:
+            raise ValueError("cannot determine Aiur tracker repository")
+        if repo_lines:
+            value = repo_lines[0].split(":", 1)[1].strip().split(" #", 1)[0].strip()
+            if len(value) >= 2 and value[0] in "\"'" and value[-1] == value[0]:
+                value = value[1:-1]
+            if value and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", value):
+                raise ValueError("cannot determine Aiur tracker repository")
+            tracker_repo = value or actual
+    if tracker_repo.casefold() != cfg["intake_repo"].casefold() or actual.casefold() != cfg["intake_repo"].casefold():
+        raise ValueError("intake_repo does not match the checkout and Aiur tracker")
+
+
+def file_intake_ticket(cfg, qdir: Path) -> None:
+    """Persist each step so failed dispatches can resume without recreating an issue."""
+    record_path = qdir / "ticket.json"
+    record = json.loads(record_path.read_text())
+    if record.get("dispatched"):
+        return
+    verify_intake_repo(cfg)
+    marker = "ogm-drive-intake-" + hashlib.sha256(record["manifest"].encode()).hexdigest()
+    if not record.get("number"):
+        # A failed or interrupted create may have succeeded. Recover the issue by
+        # its unique marker; an absent search result is not proof of failure.
+        if record.get("creating"):
+            found = subprocess.run(["gh", "issue", "list", "--repo", cfg["intake_repo"],
+                                    "--state", "all", "--search", marker, "--limit", "100",
+                                    "--json", "number,body"], cwd=REPO, capture_output=True,
+                                   text=True, timeout=120, check=True, stdin=subprocess.DEVNULL)
+            matches = [issue for issue in json.loads(found.stdout)
+                       if f"<!-- {marker} -->" in (issue.get("body") or "")]
+            if len(matches) != 1:
+                log.error("intake ticket creation needs reconciliation for %s (%s)",
+                          record["manifest"], marker)
+                return
+            record["number"] = matches[0]["number"]
+            record["creating"] = False
+            save_state(record_path, record)
+        else:
+            create_intake_ticket(cfg, record_path, record, marker)
+    # A previous dispatch may have succeeded before the process was interrupted.
+    # Do not requeue a ticket that has already reached todo or a later state.
+    issue = subprocess.run(["gh", "issue", "view", str(record["number"]), "--repo", cfg["intake_repo"],
+                            "--json", "labels,state"], cwd=REPO, capture_output=True,
+                           text=True, timeout=120, check=True, stdin=subprocess.DEVNULL)
+    details = json.loads(issue.stdout)
+    labels = {label["name"] for label in details["labels"]}
+    if details["state"] != "OPEN" or any(label.startswith("agent:") and label != "agent:queued" for label in labels):
+        record["dispatched"] = True
+        save_state(record_path, record)
+        return
+    aiur = Path.home() / ".local/bin/aiur"
+    subprocess.run([str(aiur), "--todo", str(record["number"])], cwd=REPO,
+                   capture_output=True, text=True, timeout=120, check=True, stdin=subprocess.DEVNULL)
+    record["dispatched"] = True
+    save_state(record_path, record)
+
+
+def create_intake_ticket(cfg, record_path, record, marker):
+    record["creating"] = True
+    save_state(record_path, record)
+    body = ("Run gm-asset-intake on the queued Drive drop below, including its license and integrity gates. "
+            "Record the outcome and complete the applicable catalog and preprocessing steps.\n\n"
+            f"Manifest: `assets-local/inbox/{record['manifest']}`\n\n<!-- {marker} -->\n")
+    try:
+        result = subprocess.run(["gh", "issue", "create", "--repo", cfg["intake_repo"],
+                                 "--title", "Intake new Drive asset drop", "--body", body,
+                                 "--label", "build-lane:assets", "--label", "agent:queued"],
+                                cwd=REPO, capture_output=True,
+                                text=True, timeout=120, check=True, stdin=subprocess.DEVNULL)
+    except FileNotFoundError:
+        # The executable did not start, so no request could have been sent.
+        record["creating"] = False
+        save_state(record_path, record)
+        raise
+    except subprocess.CalledProcessError as exc:
+        # These gh preflight failures happen before its create mutation.
+        error = (exc.stderr or "").lower()
+        if (any(reason in error for reason in ("not logged into any github hosts", "could not resolve to a label"))
+                or ("401" in error and "bad credentials" in error)):
+            record["creating"] = False
+            save_state(record_path, record)
+        raise
+    match = re.search(r"/issues/(\d+)\s*$", result.stdout)
+    if not match:
+        raise ValueError("issue creation returned no issue number")
+    record["number"] = int(match.group(1))
+    record["creating"] = False
+    save_state(record_path, record)
+
 # ---------------------------------------------------------------- the syncer
 
 class Syncer:
@@ -490,9 +630,10 @@ class Syncer:
     A drop is the top-level item under the watch folder (a file, or a subfolder and everything in it).
     """
 
-    def __init__(self, client, cfg, st, notify, now=time.time, dry_run=False, save=lambda: None):
+    def __init__(self, client, cfg, st, notify, now=time.time, dry_run=False, save=lambda: None,
+                 ticket_filer=None):
         self.c, self.cfg, self.st, self.notify, self.now = client, cfg, st, notify, now
-        self.dry, self.save = dry_run, save
+        self.dry, self.save, self.ticket_filer = dry_run, save, ticket_filer
         self.root = cfg["folder_id"]
         if st.get("root_id") not in (None, self.root):
             sys.exit(f"state file belongs to folder {st['root_id']}, config says {self.root}; "
@@ -668,6 +809,22 @@ class Syncer:
         for did in [d for d, v in self.drops.items() if v["status"] == "ready"]:
             self.process(did)
         self.save()
+        if not self.dry and self.ticket_filer:
+            self.file_pending_tickets()
+
+    def file_pending_tickets(self) -> None:
+        queue = self.cfg["inbox"] / "queue.jsonl"
+        if not queue.exists():
+            return
+        for line in queue.read_text().splitlines():
+            entry = json.loads(line)
+            qdir = self.cfg["inbox"] / Path(entry["manifest"]).parent
+            if not (qdir / "ticket.json").exists():
+                continue  # entries predating ticket filing
+            try:
+                self.ticket_filer(self.cfg, qdir)
+            except (OSError, ValueError, subprocess.SubprocessError):
+                log.exception("could not file intake ticket for %s", entry["manifest"])
 
     def verify(self, did: str) -> bool:
         """Second look straight from Drive. True if anything differs from what we recorded."""
@@ -759,6 +916,7 @@ class Syncer:
                  "revision": manifest["revision"], "manifest": f"quarantine/{qname}/manifest.json",
                  "files": len(manifest["files"]), "bytes": manifest["totals"]["bytes"],
                  "integrity_ok": manifest["integrity_ok"], "problems": manifest["problems"]}
+        save_state(qdir / "ticket.json", {"manifest": entry["manifest"]})
         with open(self.cfg["inbox"] / "queue.jsonl", "a") as q:
             q.write(json.dumps(entry) + "\n")
         self.save()
@@ -870,7 +1028,7 @@ def cmd_run(args) -> None:
     save = (lambda: None) if args.dry_run else (lambda: save_state(cfg["state"], st))
     syncer = Syncer(client, cfg, st, make_notifier(cfg) if not args.dry_run else
                     (lambda t, b: log.info("[dry-run] would notify %s: %s", t, b)),
-                    dry_run=args.dry_run, save=save)
+                    dry_run=args.dry_run, save=save, ticket_filer=file_intake_ticket)
     while True:
         try:
             syncer.poll()

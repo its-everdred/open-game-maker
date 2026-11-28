@@ -7,6 +7,9 @@ folder_id = "PASTE_FOLDER_ID_HERE"
 # Service-account key (JSON). The env var OGM_DRIVE_SA_KEY overrides this.
 credentials = "~/.config/ogm/drive-sa.json"
 
+# Override the repository receiving automatically filed intake issues if needed.
+# intake_repo = "<owner>/<repository>"
+
 poll_seconds = 45        # 30-60 recommended
 quiet_seconds = 180      # a drop is settled after 3 minutes with no changes
 
