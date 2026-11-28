@@ -742,6 +742,13 @@
    "source": "Wizard sprite (SmallScaleInt)",
    "width": 160,
    "height": 160
+  },
+  {
+   "artboard": "AccessEntry.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
   }
  ]
 }

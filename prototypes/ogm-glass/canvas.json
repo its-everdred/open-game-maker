@@ -49,6 +49,10 @@
 {
 "id": "devconsole",
 "name": "Developer console"
+},
+{
+"id": "access",
+"name": "Game access"
 }
 ],
 "boards": {
@@ -522,6 +526,60 @@
 "title": "Choice: panel as side drawer",
 "page": "devconsole",
 "radius": 38
+},
+"AccessEntry.dc.html": {
+"x": 0,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Game sheet: Editors entry \u00b7 new",
+"page": "access",
+"radius": 38
+},
+"Access.dc.html": {
+"x": 470,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Editors list \u00b7 new",
+"page": "access",
+"radius": 38
+},
+"AccessAdd.dc.html": {
+"x": 940,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Add editor \u00b7 new",
+"page": "access",
+"radius": 38
+},
+"AccessEmpty.dc.html": {
+"x": 1410,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Editors empty \u00b7 new",
+"page": "access",
+"radius": 38
+},
+"AccessRemove.dc.html": {
+"x": 1880,
+"y": 0,
+"w": 390,
+"h": 844,
+"title": "Remove editor confirm \u00b7 new",
+"page": "access",
+"radius": 38
+},
+"AccessLandscape.dc.html": {
+"x": 0,
+"y": 964,
+"w": 844,
+"h": 390,
+"title": "Editors \u00b7 phone landscape",
+"page": "access",
+"radius": 30
 }
 },
 "order": [
@@ -577,7 +635,13 @@
 "EditorPicks.dc.html",
 "DevPanelKit.dc.html",
 "PicksTabs.dc.html",
-"PanelDrawer.dc.html"
+"PanelDrawer.dc.html",
+"AccessEntry.dc.html",
+"Access.dc.html",
+"AccessAdd.dc.html",
+"AccessEmpty.dc.html",
+"AccessRemove.dc.html",
+"AccessLandscape.dc.html"
 ],
 "notes": {},
 "designSystems": []

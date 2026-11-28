@@ -1,6 +1,6 @@
 # OGM Glass prototype
 
-The approved OGM app design as plain HTML: all 53 artboards of the Claude Design canvas
+The approved OGM app design as plain HTML: all 59 artboards of the Claude Design canvas
 <https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM>, exported 2026-11-27 so workers can open them without the Claude
 Design runtime. Unlike the archived prototypes beside it, this one is the live UI reference.
 
