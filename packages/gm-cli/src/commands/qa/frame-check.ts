@@ -45,7 +45,12 @@ export const command: GmCommand = {
       await browser.close();
     }
     const failed = results.some((result) => result.failures.length);
-    if (ctx.json) printJson(ctx, { verdict: failed ? 'fail' : 'pass', frame: frameUrl, results });
+    if (ctx.json)
+      printJson(ctx, {
+        verdict: failed ? 'fail' : 'pass',
+        frame: frameUrl.replace(/(\/d\/[^/]+\/[^/]+\/)[^/]+/u, '$1<redacted>'),
+        results,
+      });
     else
       for (const { app, landed, failures } of results) {
         const via = landed && landed !== new URL(app).origin ? ` (via ${landed})` : '';

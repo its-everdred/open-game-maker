@@ -235,6 +235,7 @@ const routes = new Hono<ApiBindings>()
       return c.json({
         releaseId: release.id,
         version: release.version,
+        buildId: release.buildId,
         buildUrl: `${runtime(c).gamesOrigin.replace(/\/$/, '')}/g/${release.gameId}/${release.buildId}/`,
         changelog: release.changelog,
       });

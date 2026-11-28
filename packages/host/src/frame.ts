@@ -29,6 +29,8 @@ export interface GameFrameOptions {
   buildId: string;
   /** A scoped preview capability, served outside the published-build service worker scope. */
   preview?: boolean;
+  /** Revocable owner access to a draft build. */
+  draftGrant?: string;
   build: 'draft' | 'test' | 'published';
   /** Extra query parameters the game reads at boot, such as a review deck's scenario (`speed=slow`). */
   params?: Readonly<Record<string, string>>;
@@ -98,12 +100,16 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   iframe.title = 'Game';
   iframe.setAttribute(
     'sandbox',
-    options.preview ? 'allow-scripts allow-pointer-lock' : 'allow-scripts allow-same-origin allow-pointer-lock',
+    options.preview || options.draftGrant
+      ? 'allow-scripts allow-pointer-lock'
+      : 'allow-scripts allow-same-origin allow-pointer-lock',
   );
   iframe.setAttribute('allow', 'autoplay; fullscreen; gamepad');
   iframe.setAttribute('referrerpolicy', 'origin');
   Object.assign(iframe.style, { border: '0', width: '100%', height: '100%', display: 'block' });
-  const path = `/${options.preview ? 'p' : 'g'}/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/index.html`;
+  const path = options.draftGrant
+    ? `/d/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/${encodeURIComponent(options.draftGrant)}/index.html`
+    : `/${options.preview ? 'p' : 'g'}/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/index.html`;
   const source = new URL(path, gamesOrigin.origin);
   /* The host's own parameters are set after, so a scenario can never change the build or the protocol. */
   for (const [key, value] of Object.entries(options.params ?? {})) source.searchParams.set(key, value);
@@ -121,7 +127,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     if (
       !iframe.contentWindow ||
       event.source !== iframe.contentWindow ||
-      event.origin !== (options.preview ? 'null' : gamesOrigin.origin)
+      event.origin !== (options.preview || options.draftGrant ? 'null' : gamesOrigin.origin)
     )
       return;
     if (typeof event.data !== 'object' || event.data === null || event.data.type !== 'ogm.frame.ready.v2') return;
@@ -150,7 +156,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
   const bridge = new HostBridge({
     iframe,
     origin: gamesOrigin.origin,
-    ...(options.preview ? { opaqueOrigin: true } : {}),
+    ...(options.preview || options.draftGrant ? { opaqueOrigin: true } : {}),
     role: options.role,
     readyTimeoutMs: options.readyTimeoutMs,
     onFatal: dispose,
@@ -164,7 +170,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
       tier: options.tier,
     },
   });
-  if (options.preview) {
+  if (options.preview || options.draftGrant) {
     let loaded = false;
     iframe.addEventListener('load', () => {
       if (!loaded) {

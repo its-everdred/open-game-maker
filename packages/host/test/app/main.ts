@@ -46,6 +46,7 @@ const frame = createGameFrame({
   gamesOrigin: 'http://127.0.0.1:4174',
   gameId: game.gameId,
   buildId: game.buildId,
+  ...(template === 'secure-draft' ? { draftGrant: 'draft-token' } : {}),
   build: game.build,
   mode: game.mode,
   playerIndex: 0,

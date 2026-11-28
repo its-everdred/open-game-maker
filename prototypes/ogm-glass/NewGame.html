@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New Game</title>
+<link rel="stylesheet" href="./glass.css">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&amp;family=Nunito:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0f0e16}a{color:#74c8ed}a:hover{color:#f2ead6}
+.dots{display:flex;gap:8px;justify-content:center}.dots i{width:10px;height:10px;border-radius:50%;border:1.5px solid rgba(242,234,214,.5)}.dots i.on{background:#ffbf32;border-color:#ffbf32;width:26px;border-radius:5px}</style>
+</head>
+<body>
+<div class="g phone">
+<div class="glows" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<div class="top">
+<a class="orb sm" href="Home.html" aria-label="Back"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+<div class="sp" style="display:flex;flex-direction:column;align-items:center;gap:8px"><h1 class="h1" style="font-size:26px">Genre</h1><div class="dots" aria-label="Step 1 of 6"><i class="on"></i><i></i><i></i><i></i><i></i><i></i></div></div>
+<span style="width:40px"></span>
+</div>
+<div style="position:absolute;inset:104px 14px 104px;display:flex;flex-direction:column;gap:14px">
+<p class="sub" style="margin:0;text-align:center">Pick up to 3</p>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+<button class="opt" aria-pressed="false" style="--k:hsl(0 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(0 72% 66%)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg>Shooter</button>
+<button class="opt" aria-pressed="true" style="--k:hsl(24 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(24 72% 66%)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M15.5 8.5 13.5 13.5 8.5 15.5 10.5 10.5z"></path></svg>Adventure</button>
+<button class="opt" aria-pressed="true" style="--k:hsl(47 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(47 72% 66%)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4 20 9.5 9.5 20H4v-5.5z"></path><path d="M12 7l5 5"></path></svg>RPG</button>
+<button class="opt" aria-pressed="false" style="--k:hsl(71 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(71 72% 66%)" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 3v18M3 12h18"></path></svg>Sports</button>
+<button class="opt" aria-pressed="false" style="--k:hsl(94 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(94 72% 66%)" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4h12l-2 4 2 4H5"></path></svg>Racing</button>
+<button class="opt" aria-pressed="false" style="--k:hsl(118 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(118 72% 66%)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="18" r="2"></circle><path d="M4 4l4 4M8 4 4 8M15 15l5 5M20 15l-5 5M8 18h4a4 4 0 0 0 4-4V8"></path></svg>Strategy</button>
+<button class="opt" aria-pressed="false" style="--k:hsl(141 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(141 72% 66%)" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6v4h4v6h-4v6H9v-6H5V8h4z"></path></svg>Puzzle</button>
+<button class="opt" aria-pressed="false" style="--k:hsl(165 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(165 72% 66%)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 19 19 5M5 5l14 14"></path></svg>Battle</button>
+<button class="opt" aria-pressed="false" style="--k:hsl(189 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(189 72% 66%)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="14" cy="5" r="2"></circle><path d="M5 20l4-6 3 2 2-5 5 3M9 14l-2-3 5-3"></path></svg>Platformer</button>
+<button class="opt" aria-pressed="false" style="--k:hsl(212 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(212 72% 66%)" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 11 12 4l8 7v9H4z"></path><path d="M10 20v-5h4v5"></path></svg>Sim</button>
+<button class="opt" aria-pressed="false" style="--k:hsl(236 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(236 72% 66%)" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"></rect><path d="M9 9h.01M15 15h.01M15 9h.01M9 15h.01"></path></svg>Roguelike</button>
+<button class="opt" aria-pressed="false" style="--k:hsl(259 72% 66%)"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="hsl(259 72% 66%)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4l6 6-3 3-6-6zM11 7 4 20M14 13l-2 2"></path></svg>Craft</button>
+</div>
+</div>
+<div style="position:absolute;left:16px;right:16px;bottom:28px;display:flex;gap:10px">
+<button class="btn ghost" style="flex:1">Skip</button>
+<a class="btn new" href="NewGameChat.html" style="flex:2">Next</a>
+</div>
+</div>
+</body>
+</html>

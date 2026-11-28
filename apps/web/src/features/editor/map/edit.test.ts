@@ -74,6 +74,25 @@ describe('map edits', () => {
     expect(copy.doc.layers.decor!.tiles!['0,0']).toEqual({ asset: 'chest', facing: 'E' });
   });
 
+  it('duplicates a scaled post with its metadata but without the creator lock', () => {
+    const doc = scene();
+    doc.layers.decor!.tiles!['1,1'] = {
+      asset: 'pillar',
+      facing: 'E',
+      elevation: 1,
+      props: { scale: 0.4, role: 'post' },
+      lockedBy: 'creator',
+    };
+    const copy = duplicate(doc, adapter, { layer: 'decor', cell: '1,1' });
+    expect(copy.doc.layers.decor!.tiles!['0,0']).toEqual({
+      asset: 'pillar',
+      facing: 'E',
+      elevation: 1,
+      props: { scale: 0.4, role: 'post' },
+    });
+    expect(doc.layers.decor!.tiles!['1,1']!.lockedBy).toBe('creator');
+  });
+
   it('lets the pack re-pick joined pieces around every changed cell, and keeps its picks', () => {
     const calls: string[][] = [];
     // A fence pack turns the piece beside a changed cell to join it, as the autotile rules will.

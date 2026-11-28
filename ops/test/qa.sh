@@ -40,8 +40,10 @@ const facts = (slug, latestBuildId, path = `games/${slug}`) => ({
 });
 const server = createServer((request, response) => {
   const ok = request.headers['x-ogm-internal'] === 'internal-token-for-qa-tests';
+  const access = /^\/internal\/operator\/games\/([^/]+)\/builds\/([^/]+)\/access$/.exec(request.url ?? '');
   const body =
-    request.url === '/internal/operator/games/blobs' ? facts('blobs', 'build_new')
+    access ? { url: `https://games.example:10000/d/g_${access[1]}/${access[2]}/grant/` }
+    : request.url === '/internal/operator/games/blobs' ? facts('blobs', 'build_new')
     : request.url === '/internal/operator/games/empty' ? facts('empty', null)
     : request.url === '/internal/operator/games/rooted' ? facts('rooted', 'build_root', '')
     : null;
@@ -71,7 +73,7 @@ export GM_LOG=$scratch/gm.log
 
 "$qa" blobs --api "$api" --clients 3 > "$scratch/out.txt" 2> "$scratch/err.txt" ||
   fail "ogm-qa failed: $(cat "$scratch/err.txt")"
-url=https://games.example:10000/g/g_blobs/build_new/
+url=https://games.example:10000/d/g_blobs/build_new/grant/
 run=$HOME/.local/state/ogm/qa/blobs/build_new
 game=$checkout/games/blobs
 expected="$game | qa open --url $url --out $run
@@ -83,19 +85,20 @@ $game | qa look --report --out $run"
 assert_eq "$expected" "$(cat "$GM_LOG")" 'open, one command per journey by kind, every mode played, look, then the report, from the game folder'
 assert_grep "report $run/qa-report.md" "$scratch/out.txt"
 assert_not_grep 'internal-token-for-qa-tests' "$scratch/out.txt"
+assert_not_grep '/grant/' "$scratch/out.txt"
 
 # A failed step still runs the rest, so the report covers everything, and the run exits 1.
 : > "$GM_LOG"
 GM_FAIL_DRIVE=1 "$qa" blobs --api "$api" --build build_old --out "$scratch/run" > /dev/null 2>&1 &&
   fail "a failed drive should fail the run" || assert_eq 1 "$?" 'failed step exit'
 assert_eq 6 "$(wc -l < "$GM_LOG" | tr -d ' ')" 'every step ran after the failure'
-assert_grep "qa open --url https://games.example:10000/g/g_blobs/build_old/ --out $scratch/run" "$GM_LOG"
+assert_grep "qa open --url https://games.example:10000/d/g_blobs/build_old/grant/ --out $scratch/run" "$GM_LOG"
 
 # An empty repo path keeps the fields after it in place: the run plays rooted's build from the checkout root.
 : > "$GM_LOG"
 "$qa" rooted --api "$api" --out "$scratch/rooted" > /dev/null 2> "$scratch/err.txt" ||
   fail "a game at its repository's root should run: $(cat "$scratch/err.txt")"
-assert_eq "$checkout | qa open --url https://games.example:10000/g/g_rooted/build_root/ --out $scratch/rooted" \
+assert_eq "$checkout | qa open --url https://games.example:10000/d/g_rooted/build_root/grant/ --out $scratch/rooted" \
   "$(head -n 1 "$GM_LOG")" 'rooted game runs from the checkout root'
 
 # Refusals: bad usage, a game with no build, an unknown game, no token, no origin.

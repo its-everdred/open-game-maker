@@ -1,9 +1,9 @@
-import type { AiurClient } from '@ogm/aiur-client';
 import { homedir } from 'node:os';
 
-import { isRegisteredDaemon, type FeedFleet } from '@ogm/builder';
+import type { AiurClient } from '@ogm/aiur-client';
+import { daemonPaths, isRegisteredDaemon, type FeedFleet } from '@ogm/builder';
 import { schema, type Db } from '@ogm/db';
-import { eq, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 
 import { HttpError } from '../app/errors.js';
 import { gameSlugFor } from '../games/games.js';
@@ -39,6 +39,21 @@ export function daemonRowForGame(db: Db, gameId: string): typeof schema.gameDaem
     .where(sql`lower(${schema.gameDaemons.repo}) = ${repo}`)
     .all();
   const registered = shared.filter((row) => isRegisteredDaemon(homedir(), row));
+  return registered.length === 1 ? registered[0] : undefined;
+}
+
+// Drafts have no game yet; use an operator-registered daemon, which the fleet will not stop when idle.
+export function daemonRowForRepo(db: Db, repo: string): typeof schema.gameDaemons.$inferSelect | undefined {
+  const matches = db
+    .select()
+    .from(schema.gameDaemons)
+    .where(sql`lower(${schema.gameDaemons.repo}) = ${repo.toLowerCase()}`)
+    .orderBy(asc(schema.gameDaemons.createdAt), asc(schema.gameDaemons.slug))
+    .all();
+  // `core` is reserved by the chat client resolver for the platform daemon.
+  const registered = matches.filter(
+    (row) => row.slug !== 'core' && row.checkoutPath !== daemonPaths(homedir(), row.slug).dir,
+  );
   return registered.length === 1 ? registered[0] : undefined;
 }
 

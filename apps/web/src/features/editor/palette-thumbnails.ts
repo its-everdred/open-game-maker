@@ -7,9 +7,12 @@ export function resolvePaletteThumbnails(
   gameId: string,
   buildId: string,
   preview: boolean,
+  draftGrant?: string,
 ): GameManifest {
   const base = new URL(
-    `/${preview ? 'p' : 'g'}/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/index.html`,
+    draftGrant && !preview
+      ? `/d/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${encodeURIComponent(draftGrant)}/index.html`
+      : `/${preview ? 'p' : 'g'}/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/index.html`,
     gamesOrigin,
   );
   return {
@@ -19,7 +22,11 @@ export function resolvePaletteThumbnails(
       items: manifest.palette.items.map((item) => {
         if (!item.thumbnail) return item;
         try {
-          return { ...item, thumbnail: new URL(item.thumbnail, base).href };
+          const thumbnail =
+            draftGrant && !preview && /^\/a\/[0a-f]{64}\.[a-z0-9]{1,12}$/u.test(item.thumbnail)
+              ? `a/${item.thumbnail.slice(3)}`
+              : item.thumbnail;
+          return { ...item, thumbnail: new URL(thumbnail, base).href };
         } catch {
           return item;
         }

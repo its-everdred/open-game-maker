@@ -186,7 +186,7 @@ test('opening the menu in a room does not pause the game', async ({ page }, test
 async function openReadyGame(page: Page): Promise<void> {
   await page.goto('/g/game?test');
   await expect.poll(() => gameState(page).then((state) => state?.bridgeState), { timeout: 30_000 }).toBe('ready');
-  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`));
   if (!frame) throw new Error('Bridge fixture frame is missing');
   await frame.evaluate(() => (window as Window & { __fixture: FixtureHook }).__fixture.send('load.frame', {}));
 }
@@ -196,7 +196,7 @@ function gameState(page: Page): Promise<GameHook | undefined> {
 }
 
 async function fixtureMessages(page: Page): Promise<string[]> {
-  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/g/`));
+  const frame = page.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`));
   if (!frame || frame.isDetached()) return [];
   try {
     return await frame.evaluate(() =>

@@ -16,6 +16,35 @@ const fixture = JSON.parse(
 ) as CacheRun;
 
 describe('gm qa games-cache report', () => {
+  it('compares restricted builds by content and omits grant URLs', () => {
+    const report = buildAfterPublishReport({
+      game: 'blobs',
+      buildId: 'new',
+      previousBuildId: 'old',
+      previous: [{ sourcePath: 'sprites/a.png', url: '/d/g/old/secret/a.png', identity: 'same', bytes: 10 }],
+      current: [{ sourcePath: 'sprites/a.png', url: '/d/g/new/secret/a.png', identity: 'same', bytes: 10 }],
+      samples: [{ url: '/d/g/new/secret/a.png', transferSize: 10 }],
+      expectCache: false,
+    });
+    expect(report.ok).toBe(true);
+    expect(report.unexpectedTransfers).toEqual([]);
+    expect(JSON.stringify(report)).not.toContain('secret');
+  });
+
+  it('accepts no-store images and redacts scoped access URLs', () => {
+    const scoped = 'https://games.example.test/d/g/build/secret/logo.png';
+    const sample = {
+      url: scoped,
+      status: 200,
+      transferSize: 100,
+      duration: 1,
+      cacheControl: 'no-store',
+      cache: 'network' as const,
+    };
+    const report = buildGamesCacheReport({ ...fixture, logoUrl: scoped, thumbnailUrl: scoped, resources: [sample] });
+    expect(report.ok).toBe(true);
+    expect(JSON.stringify(report)).not.toContain('secret');
+  });
   it('counts only bytes for changed files after a no-op publish', () => {
     const previous = [
       { sourcePath: 'index.html', url: '/a/index-old.html', bytes: 120 },

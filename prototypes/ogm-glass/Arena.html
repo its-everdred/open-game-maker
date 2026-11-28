@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dusk Helm arena</title>
+<link rel="stylesheet" href="./glass.css">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&amp;family=Nunito:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0f0e16}a{color:#74c8ed}a:hover{color:#f2ead6}
+.cls{width:48px;height:48px;border-radius:14px;padding:0;border:1px solid var(--rule);background:rgba(15,14,22,.45);display:grid;place-items:center}
+.cls img{width:40px;height:40px;object-fit:contain;image-rendering:pixelated}
+.cls[aria-pressed="true"]{border-color:#f2ead6;box-shadow:0 0 0 2px #f2ead6}</style>
+</head>
+<body>
+<div class="g phone">
+<img src="../../assets-local/review/design-ogm-glass/img/land-bg.jpg" alt="Dusk Helm arena, hero in the centre" style="position:absolute;left:0;top:0;width:100%;height:430px;object-fit:cover;object-position:52% 60%">
+<div style="position:absolute;left:10px;top:10px;display:flex;gap:8px;z-index:3">
+<a class="orb sm" href="Editor.html" aria-label="Back to the editor"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+</div>
+<a class="orb" href="EditMenu.html" aria-label="Menu" style="position:absolute;right:10px;top:10px;z-index:3"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></a>
+<nav class="picks pane" aria-label="Editor" style="position:absolute;left:10px;top:66px;z-index:3">
+<button class="pick" aria-label="Map" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"></path><path d="M9 4v14M15 6v14"></path></svg></button>
+<button class="pick" aria-label="Arena" aria-pressed="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l11 11M4 4h4M4 4v4M20 4 9 15M20 4h-4M20 4v4M6 18l-2 2M18 18l2 2M7 13l4 4M17 13l-4 4"></path></svg></button>
+<a class="pick" href="Visuals.html" aria-label="Visuals" aria-pressed="false" style="color:#f2ead6"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg></a>
+<button class="pick" aria-label="Characters" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg></button>
+<button class="pick" aria-label="Tuning" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"></path><circle cx="16" cy="6" r="2"></circle><circle cx="10" cy="12" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg></button>
+<button class="pick" aria-label="Audio" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="17" cy="16" r="3"></circle></svg></button>
+<a class="pick" href="AgentChat.html" aria-label="Chat" aria-pressed="false" style="color:#f2ead6"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-5 4v-4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"></path></svg></a>
+</nav>
+<section class="pane strong dp" aria-label="Arena" style="position:absolute;left:0;right:0;bottom:0;top:410px;border-radius:26px 26px 0 0">
+<div class="dp-hd" style="padding-left:16px"><span class="h3">Arena</span><span class="chg-n" aria-label="2 changed">2</span><button class="orb sm" aria-label="Collapse panel"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button></div>
+<div class="dp-body">
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+<button class="spawn" aria-label="Spawn goblin, 3 placed"><img src="../../assets-local/review/design-ogm-glass/img/spr-goblin.png" alt="">Goblin<span class="dot">3</span></button>
+<button class="spawn" aria-label="Spawn skeleton"><img src="../../assets-local/review/design-ogm-glass/img/spr-skeleton.png" alt="">Skeleton</button>
+<button class="spawn" aria-label="Spawn cave goblin, 2 placed"><img src="../../assets-local/review/design-ogm-glass/img/spr-cave-goblin.png" alt="">Cave<span class="dot">2</span></button>
+<button class="spawn" aria-label="Spawn boss"><img src="../../assets-local/review/design-ogm-glass/img/spr-boss.png" alt="">Boss</button>
+</div>
+<div style="display:flex;gap:6px;align-items:center">
+<div class="seg" role="group" aria-label="Count" style="flex:1;padding:3px"><button aria-pressed="true" style="height:34px">1</button><button aria-pressed="false" style="height:34px">3</button><button aria-pressed="false" style="height:34px">5</button></div>
+<div class="seg" role="group" aria-label="Placement" style="flex:1.3;padding:3px"><button aria-pressed="true" style="height:34px;font-size:13px">Near</button><button aria-pressed="false" style="height:34px;font-size:13px">Ring</button></div>
+</div>
+<div style="display:flex;gap:6px">
+<button class="act danger" style="flex:1"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg>Clear 5</button>
+<div class="ctl" style="flex:1;min-height:44px"><span class="n" style="width:auto;flex:1">Enemy AI</span><button class="switch" role="switch" aria-checked="true" aria-label="Enemy AI"></button></div>
+</div>
+<div class="grp-hd"><span class="cap">Hero</span></div>
+<div style="display:flex;gap:6px;align-items:center">
+<button class="cls" aria-label="Knight" aria-pressed="true"><img src="../../assets-local/review/design-ogm-glass/img/spr-hero.png" alt=""></button>
+<button class="cls" aria-label="Archer" aria-pressed="false"><img src="../../assets-local/review/design-ogm-glass/img/spr-archer.png" alt=""></button>
+<button class="cls" aria-label="Wizard" aria-pressed="false"><img src="../../assets-local/review/design-ogm-glass/img/spr-wizard.png" alt=""></button>
+<div class="seg" role="group" aria-label="Weapon" style="flex:1;padding:3px"><button aria-pressed="true" style="height:38px;font-size:13px">Sword</button><button aria-pressed="false" style="height:38px;font-size:13px">Axe</button><button aria-pressed="false" style="height:38px;font-size:13px">Spear</button></div>
+</div>
+<div class="grp-hd"><span class="cap">Combat</span></div>
+<div class="ctl chg"><span class="n">Damage</span><div class="slider"><div class="track" role="slider" aria-label="Damage, changed from 1.0" aria-valuenow="1.4" tabindex="0"><b style="width:56%;background:#ffbf32"></b><i style="left:56%"></i></div></div><span class="v">1.4×</span></div>
+<div class="ctl chg"><span class="n">Hit-stop</span><div class="slider"><div class="track" role="slider" aria-label="Hit-stop, changed from 60 ms" aria-valuenow="90" tabindex="0"><b style="width:45%;background:#ffbf32"></b><i style="left:45%"></i></div></div><span class="v">90ms</span></div>
+<div class="ctl"><span class="n">Knockback</span><div class="slider"><div class="track" role="slider" aria-label="Knockback" aria-valuenow="1" tabindex="0"><b style="width:40%"></b><i style="left:40%"></i></div></div><span class="v">1.0</span></div>
+</div>
+<div class="dp-ft"><button class="btn ghost sm" style="flex:1">Revert</button><button class="btn go sm" style="flex:2">Save as default</button></div>
+</section>
+</div>
+<script src="fallback.js"></script>
+</body>
+</html>

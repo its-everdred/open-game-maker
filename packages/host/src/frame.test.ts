@@ -6,6 +6,24 @@ import { createGameFrame, HostError } from './frame.js';
 afterEach(() => document.body.replaceChildren());
 
 describe('createGameFrame', () => {
+  it('places a draft grant in a scoped URL outside the game cache worker', () => {
+    const container = document.createElement('div');
+    const frame = createGameFrame({
+      container,
+      gamesOrigin: 'https://games.test',
+      gameId: 'g1',
+      buildId: 'b1',
+      draftGrant: 'secret',
+      build: 'draft',
+      mode: 'play',
+      playerIndex: 0,
+      capabilities: [],
+      role: () => 'owner',
+    });
+    expect(new URL(frame.iframe.src).pathname).toBe('/d/g1/b1/secret/index.html');
+    expect(frame.iframe.getAttribute('sandbox')).toBe('allow-scripts allow-pointer-lock');
+    frame.dispose();
+  });
   it('keeps preview frames outside the published-build service worker scope', () => {
     const container = document.createElement('div');
     const onError = vi.fn();

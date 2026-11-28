@@ -42,6 +42,18 @@ export interface OpenShell {
 const GAMES_ORIGIN = 'http://127.0.0.1:10000';
 const SHARED_FILE = /^\/a\/[0-9a-f]{64}\.[a-z0-9]{1,12}$/u;
 
+function isGameEntry(value: string): boolean {
+  const url = new URL(value);
+  const segments = url.pathname.split('/');
+  return (
+    url.origin === GAMES_ORIGIN &&
+    ['g', 'd', 'p'].includes(segments[1] ?? '') &&
+    segments[2] === 'game' &&
+    segments[3] === buildId &&
+    segments.slice(segments[1] === 'd' ? 5 : 4).join('/') === 'index.html'
+  );
+}
+
 /** The build's own files and the shared files a cache-plan build loads from the games origin. */
 function isGameFile(url: string): boolean {
   if (!url.startsWith(`${GAMES_ORIGIN}/`)) return false;
@@ -78,8 +90,14 @@ export async function openShell(browser: Browser, options: ShellOptions): Promis
     await page.route(`${GAMES_ORIGIN}/**`, async (route) => {
       const request = new URL(route.request().url());
       const path = request.pathname;
-      const suffix = path.includes(`/${buildId}/`) ? path.split(`/${buildId}/`)[1]! : path.slice(1);
-      const headers = gameHeaders(new URL(options.server.url).origin);
+      const segments = path.split('/');
+      const buildPath =
+        ['g', 'd', 'p'].includes(segments[1] ?? '') && segments[2] === 'game' && segments[3] === buildId;
+      const suffix = buildPath ? segments.slice(segments[1] === 'd' ? 5 : 4).join('/') : path.slice(1);
+      const headers = {
+        ...gameHeaders(new URL(options.server.url).origin),
+        ...(buildPath && (segments[1] === 'd' || segments[1] === 'p') ? { 'Access-Control-Allow-Origin': '*' } : {}),
+      };
       if ('url' in options.game) {
         // A cache-plan build names its files by shared address at the games origin's root, not under the build.
         const shared = SHARED_FILE.test(path);
@@ -104,7 +122,7 @@ export async function openShell(browser: Browser, options: ShellOptions): Promis
     await page.route(`${options.server.url}g/game**`, (route) =>
       route.fulfill({ path: resolve(options.web, 'index.html'), contentType: 'text/html' }),
     );
-    const entry = page.waitForResponse((response) => response.url().includes(`/${buildId}/index.html`), {
+    const entry = page.waitForResponse((response) => isGameEntry(response.url()), {
       timeout: 30_000,
     });
     const entryUrl = new URL('g/game?test=1', options.server.url);
@@ -145,5 +163,5 @@ export async function openShell(browser: Browser, options: ShellOptions): Promis
 
 /** The game's own frame inside the shell. */
 export function gameFrame(page: Page): Frame | undefined {
-  return page.frames().find((item) => item.url().includes(`/${buildId}/index.html`));
+  return page.frames().find((item) => isGameEntry(item.url()));
 }

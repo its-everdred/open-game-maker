@@ -3,7 +3,7 @@ import { open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises
 import { basename, dirname, extname, join, relative, sep } from 'node:path';
 
 import { cachePlanSchema, type CachePlan, type CachePlanEntry, type LoadPhase, type Tier } from '@ogm/contracts';
-import { buildDir, putBlob } from '@ogm/games-host/layout';
+import { buildDir, putBlob, rewriteRootReferences } from '@ogm/games-host/layout';
 import type { DisplayImage } from './display-images.js';
 
 const CODE_EXTENSIONS = new Set(['.css', '.html', '.js', '.mjs']);
@@ -101,7 +101,12 @@ export async function completeBuildCache(input: {
     gameId: input.gameId,
     buildId: input.buildId,
     sdkVersion: input.sdkVersion,
-    entries: input.privateAssets ? entries.map((entry) => ({ ...entry, url: privateUrl(entry.url) })) : entries,
+    entries: input.privateAssets
+      ? entries.map((entry) => ({
+          ...entry,
+          url: entry.sourcePath && entry.url.startsWith('/g/') ? entry.url : privateUrl(entry.url),
+        }))
+      : entries,
     totals: totalsFor(plan.tiers, entries),
   };
   if (input.previousBuildId) {
@@ -246,6 +251,23 @@ async function codeFiles(
     if (!/^[a-z0-9]{1,12}$/u.test(extension)) throw new BuildCacheError('build_file_extension_invalid');
     const original = await readFile(source);
     let bytes = original;
+    let privateAbsoluteAssets = false;
+    if (privateAssets && (CODE_EXTENSIONS.has(extname(source)) || extname(source) === '.svg')) {
+      const text = rewriteRootReferences(
+        original.toString('utf8'),
+        (value) =>
+          value.replace(/^\/a\/([0-9a-f]{64}\.[a-z0-9]{1,12})(?=$|[?#])/u, (_match, name: string) => {
+            privateAbsoluteAssets = true;
+            return buildPath(`a/${name}`);
+          }),
+        extname(source) === '.css',
+        ['.html', '.svg'].includes(extname(source)),
+      );
+      if (privateAbsoluteAssets) {
+        bytes = Buffer.from(text);
+        await writeFile(source, bytes);
+      }
+    }
     if (!privateAssets && (CODE_EXTENSIONS.has(extname(source)) || extname(source) === '.svg')) {
       if (visiting.has(relativePath)) throw new BuildCacheError('build_reference_cycle');
       visiting.add(relativePath);
@@ -287,7 +309,13 @@ async function codeFiles(
     const file = `${sha256}.${extension}`;
     const entry: CachePlanEntry = {
       sha256,
-      url: privateAssets ? relativePath : cyclic.has(relativePath) ? buildPath(relativePath) : `/a/${file}`,
+      url: privateAssets
+        ? privateAbsoluteAssets
+          ? buildPath(relativePath)
+          : relativePath
+        : cyclic.has(relativePath)
+          ? buildPath(relativePath)
+          : `/a/${file}`,
       sourcePath: relativePath,
       bytes: bytes.length,
       kind: CODE_EXTENSIONS.has(extname(source)) ? 'code' : fileKind(extension),

@@ -1,6 +1,8 @@
 import type { CommitOp, CommitResult, DesignDoc } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { vi } from 'vitest';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { MemoryBaseDocSource } from '../src/design/base-doc.js';
 import { ensureMainBranch } from '../src/design/store.js';
@@ -95,6 +97,10 @@ export function insertBuild(
 ) {
   const id = input.id ?? ids.build;
   const branchId = input.branchId ?? ids.main;
+  const artifactPath = join(deps.config.gamesRoot, ids.game, id);
+  mkdirSync(artifactPath, { recursive: true });
+  writeFileSync(join(artifactPath, '.complete'), 'complete');
+  writeFileSync(join(artifactPath, 'index.html'), '<h1>fixture</h1>');
   deps.db
     .insert(schema.builds)
     .values({
@@ -107,7 +113,7 @@ export function insertBuild(
       achievementCatalogHash: hash,
       status: input.status ?? 'tested',
       artifact: 'present',
-      artifactPath: `/artifacts/${id}`,
+      artifactPath,
       createdAt: input.createdAt ?? now,
     })
     .run();

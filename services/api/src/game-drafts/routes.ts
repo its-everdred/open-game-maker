@@ -101,9 +101,12 @@ const routes = new Hono<ApiBindings>()
     const principal = requirePrincipal(c, ['user']);
     const deps = c.get('deps');
     const draft = requireOwner(gameDrafts.get(deps.db, c.req.param('id')), principal);
-    if (draft.status === 'open' && draft.ticketNumber !== null) {
+    if (draft.status === 'open' && draft.ticketRepo !== null && draft.ticketNumber !== null) {
       try {
-        const transcript = await deps.registry.draftScopeAssistant?.transcript({ ticket: String(draft.ticketNumber) });
+        const transcript = await deps.registry.draftScopeAssistant?.transcript({
+          repo: draft.ticketRepo,
+          ticket: String(draft.ticketNumber),
+        });
         for (const [index, event] of (transcript ?? []).entries()) {
           const id = `m_${createHash('sha256')
             .update(`${draft.id}\0${event.turn_id ?? index}\0${event.body}`)

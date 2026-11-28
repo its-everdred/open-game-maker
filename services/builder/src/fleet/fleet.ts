@@ -1,5 +1,4 @@
 import { createServer } from 'node:net';
-import { join } from 'node:path';
 import { createAiurClient, type AiurClient } from '@ogm/aiur-client';
 
 import { preflight } from '../policy/preflight.js';

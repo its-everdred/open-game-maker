@@ -1,0 +1,747 @@
+{
+ "note_local_root": "paths are relative to the repo root; assets-local/ is gitignored and lives on the host",
+ "images": [
+  {
+   "artboard": "Components.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "Components.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "Components.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "Components.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-16.jpg",
+   "source": "Dusk Helm village thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "Title.html",
+   "path": "assets-local/review/design-ogm-glass/img/town-phone.jpg",
+   "source": "Title town render (pack art; provenance unconfirmed)",
+   "width": 780,
+   "height": 1688
+  },
+  {
+   "artboard": "SignIn.html",
+   "path": "assets-local/review/design-ogm-glass/img/town-phone.jpg",
+   "source": "Title town render (pack art; provenance unconfirmed)",
+   "width": 780,
+   "height": 1688
+  },
+  {
+   "artboard": "Join.html",
+   "path": "assets-local/review/design-ogm-glass/img/town-phone.jpg",
+   "source": "Title town render (pack art; provenance unconfirmed)",
+   "width": 780,
+   "height": 1688
+  },
+  {
+   "artboard": "Home.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "Home.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "Home.html",
+   "path": "assets-local/review/design-ogm-glass/img/goblin.jpg",
+   "source": "Goblin Cellar screenshot (KayKit dungeon)",
+   "width": 960,
+   "height": 463
+  },
+  {
+   "artboard": "GameSheet.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "PlayView.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "PauseMenu.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "PauseMenu.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-16.jpg",
+   "source": "Dusk Helm village thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "Editor.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "Editor.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "Editor.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "Editor.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-16.jpg",
+   "source": "Dusk Helm village thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "Editor.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-41.jpg",
+   "source": "Dusk Helm field thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "EditMenu.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "EditMenu.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-16.jpg",
+   "source": "Dusk Helm village thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "AgentChat.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "VoiceLive.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "BugReport.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "Review.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "TicketChat.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "LimitReached.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "Publish.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "AdminInvite.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "Versions.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "Versions.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "Versions.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "Saves.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "Saves.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "Saves.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "Forks.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "MapBrowse.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "MapBrowse.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "MapBrowse.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "MapBrowse.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "MapBrowse.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-16.jpg",
+   "source": "Dusk Helm village thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "MapBrowse.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-41.jpg",
+   "source": "Dusk Helm field thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "ModelSettings.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "HomeDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "HomeDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "HomeDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/goblin.jpg",
+   "source": "Goblin Cellar screenshot (KayKit dungeon)",
+   "width": 960,
+   "height": 463
+  },
+  {
+   "artboard": "EditorDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "EditorDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "EditorDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "EditorDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-16.jpg",
+   "source": "Dusk Helm village thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "EditorDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-41.jpg",
+   "source": "Dusk Helm field thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "BuildOrderDesktop.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "EditorLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "PauseLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "PauseLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-16.jpg",
+   "source": "Dusk Helm village thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "HomeLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "HomeLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "HomeLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/goblin.jpg",
+   "source": "Goblin Cellar screenshot (KayKit dungeon)",
+   "width": 960,
+   "height": 463
+  },
+  {
+   "artboard": "BannerA.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "BannerA.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "BannerA.html",
+   "path": "assets-local/review/design-ogm-glass/img/goblin.jpg",
+   "source": "Goblin Cellar screenshot (KayKit dungeon)",
+   "width": 960,
+   "height": 463
+  },
+  {
+   "artboard": "BannerB.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "BannerB.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "BannerB.html",
+   "path": "assets-local/review/design-ogm-glass/img/goblin.jpg",
+   "source": "Goblin Cellar screenshot (KayKit dungeon)",
+   "width": 960,
+   "height": 463
+  },
+  {
+   "artboard": "BannerC.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "BannerC.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "BannerC.html",
+   "path": "assets-local/review/design-ogm-glass/img/goblin.jpg",
+   "source": "Goblin Cellar screenshot (KayKit dungeon)",
+   "width": 960,
+   "height": 463
+  },
+  {
+   "artboard": "ChatA.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "ChatB.html",
+   "path": "assets-local/review/design-ogm-glass/img/play-bg.jpg",
+   "source": "Dusk Helm play still (SmallScaleInt)",
+   "width": 390,
+   "height": 780
+  },
+  {
+   "artboard": "StartA.html",
+   "path": "assets-local/review/design-ogm-glass/img/town-phone.jpg",
+   "source": "Title town render (pack art; provenance unconfirmed)",
+   "width": 780,
+   "height": 1688
+  },
+  {
+   "artboard": "StartB.html",
+   "path": "assets-local/review/design-ogm-glass/img/town-phone.jpg",
+   "source": "Title town render (pack art; provenance unconfirmed)",
+   "width": 780,
+   "height": 1688
+  },
+  {
+   "artboard": "Arena.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "Arena.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-archer.png",
+   "source": "Archer sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "Arena.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-boss.png",
+   "source": "Boss sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "Arena.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-cave-goblin.png",
+   "source": "Cave goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "Arena.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-goblin.png",
+   "source": "Goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "Arena.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
+   "source": "Knight hero sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "Arena.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-skeleton.png",
+   "source": "Skeleton sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "Arena.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-wizard.png",
+   "source": "Wizard sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "ArenaLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "ArenaLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-boss.png",
+   "source": "Boss sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "ArenaLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-cave-goblin.png",
+   "source": "Cave goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "ArenaLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-goblin.png",
+   "source": "Goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "ArenaLandscape.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-skeleton.png",
+   "source": "Skeleton sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "Visuals.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "EditorPicks.html",
+   "path": "assets-local/review/design-ogm-glass/img/blobs.jpg",
+   "source": "Blobs VS Blocks cover (game art; provenance unconfirmed, treated as pack art)",
+   "width": 800,
+   "height": 450
+  },
+  {
+   "artboard": "EditorPicks.html",
+   "path": "assets-local/review/design-ogm-glass/img/dusk.jpg",
+   "source": "Dusk Helm cover (SmallScaleInt)",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "artboard": "EditorPicks.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "EditorPicks.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-16.jpg",
+   "source": "Dusk Helm village thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "EditorPicks.html",
+   "path": "assets-local/review/design-ogm-glass/img/thumb-41.jpg",
+   "source": "Dusk Helm field thumbnail (SmallScaleInt)",
+   "width": 240,
+   "height": 240
+  },
+  {
+   "artboard": "PicksTabs.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "PicksTabs.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-archer.png",
+   "source": "Archer sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PicksTabs.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-boss.png",
+   "source": "Boss sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PicksTabs.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-cave-goblin.png",
+   "source": "Cave goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PicksTabs.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-goblin.png",
+   "source": "Goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PicksTabs.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
+   "source": "Knight hero sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PicksTabs.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-skeleton.png",
+   "source": "Skeleton sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PicksTabs.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-wizard.png",
+   "source": "Wizard sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PanelDrawer.html",
+   "path": "assets-local/review/design-ogm-glass/img/land-bg.jpg",
+   "source": "Dusk Helm arena still (SmallScaleInt)",
+   "width": 1280,
+   "height": 720
+  },
+  {
+   "artboard": "PanelDrawer.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-archer.png",
+   "source": "Archer sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PanelDrawer.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-boss.png",
+   "source": "Boss sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PanelDrawer.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-cave-goblin.png",
+   "source": "Cave goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PanelDrawer.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-goblin.png",
+   "source": "Goblin sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PanelDrawer.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-hero.png",
+   "source": "Knight hero sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PanelDrawer.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-skeleton.png",
+   "source": "Skeleton sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  },
+  {
+   "artboard": "PanelDrawer.html",
+   "path": "assets-local/review/design-ogm-glass/img/spr-wizard.png",
+   "source": "Wizard sprite (SmallScaleInt)",
+   "width": 160,
+   "height": 160
+  }
+ ]
+}

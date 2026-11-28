@@ -3,6 +3,7 @@ import type { SceneDoc } from '@ogm/contracts/browser';
 
 import { parseCell, tileLayersFrontToBack, type Cell, type TileRef } from './edit';
 import type { MapPack, Point, SceneDrawPiece, Sprites } from './pack';
+import { spriteBounds, spritePixelAt } from './sprite-geometry';
 
 /** Map pixel → screen pixel: `screen = map * scale + offset`. */
 type View = { scale: number; x: number; y: number };
@@ -167,11 +168,20 @@ export function MapCanvas({
     const reload = () => setLoaded((count) => count + 1);
     const style = getComputedStyle(element);
     const color = (name: string) => style.getPropertyValue(name).trim();
-    const drawPiece = (piece: Pick<SceneDrawPiece, 'asset' | 'facing' | 'center' | 'anchorY' | 'x' | 'y'>) => {
+    const drawPiece = (
+      piece: Pick<SceneDrawPiece, 'asset' | 'facing' | 'center' | 'anchorY' | 'x' | 'y'> & { scale?: number },
+    ) => {
       const url = urlOf(sprites, piece);
       const img = url ? image(url, reload) : undefined;
       if (img) {
-        context.drawImage(img, piece.center.x - img.naturalWidth / 2, piece.center.y - piece.anchorY);
+        const scale = piece.scale ?? 1;
+        const bounds = spriteBounds(
+          piece.center,
+          piece.anchorY,
+          { width: img.naturalWidth, height: img.naturalHeight },
+          scale,
+        );
+        context.drawImage(img, bounds.x, bounds.y, bounds.width, bounds.height);
       } else {
         cellShape(context, pack, doc, piece);
         context.fillStyle = color('--map-empty');
@@ -240,8 +250,14 @@ export function MapCanvas({
       const url = urlOf(sprites, piece);
       const img = url ? images.get(url) : undefined;
       if (!url || !img?.naturalWidth) continue;
-      const x = point.x - (piece.center.x - img.naturalWidth / 2);
-      const y = point.y - (piece.center.y - piece.anchorY);
+      const scale = piece.scale ?? 1;
+      const bounds = spriteBounds(
+        piece.center,
+        piece.anchorY,
+        { width: img.naturalWidth, height: img.naturalHeight },
+        scale,
+      );
+      const { x, y } = spritePixelAt(point, bounds, scale);
       if (solidAt(url, img, x, y)) return { pick: { layer: piece.layer, cell: piece.cell } };
     }
     if (!cell) return {};
@@ -269,13 +285,15 @@ export function MapCanvas({
   const selectedCenter =
     selected && view
       ? (() => {
-          const center = pack.cellCenter(doc, parseCell(selected.cell));
           const piece = pieces.find((candidate) => candidate.unit === `tile:${selected.layer}:${selected.cell}`);
+          const center = piece?.center ?? pack.cellCenter(doc, parseCell(selected.cell));
           const url = piece ? urlOf(sprites, piece) : undefined;
           const img = url ? images.get(url) : undefined;
           /* Just above the piece's visible top, or the cell's diamond when its picture has not loaded. */
           const top =
-            url && img?.naturalWidth ? center.y - (piece?.anchorY ?? 0) + solidTop(url, img) - 8 : center.y - 40;
+            url && img?.naturalWidth
+              ? center.y + (solidTop(url, img) - (piece?.anchorY ?? 0)) * (piece?.scale ?? 1) - 8
+              : center.y - 40;
           return { x: center.x * view.scale + view.x, y: top * view.scale + view.y };
         })()
       : undefined;

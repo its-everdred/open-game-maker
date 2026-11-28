@@ -2,6 +2,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { env as processEnv } from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
@@ -12,8 +13,8 @@ it('checks out a registered child checkpoint and writes answers through the scop
   const seed = join(root, 'seed');
   const workspace = join(root, 'workspace');
   const env = {
-    ...process.env,
-    PATH: (process.env.PATH ?? '')
+    ...processEnv,
+    PATH: (processEnv.PATH ?? '')
       .split(':')
       .filter((dir) => !dir.includes('/.aiur-runtime/'))
       .join(':'),
