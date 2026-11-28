@@ -16,6 +16,20 @@ export type SchedulerDeps = {
 
 type Started = { jobId: string; gameId: string; familyId: string; creatorId: string };
 
+function hasPlannerBase(plan: string): boolean {
+  try {
+    const base = (JSON.parse(plan) as { _plannerBase?: { branch?: unknown; sha?: unknown } })._plannerBase;
+    return (
+      typeof base?.branch === 'string' &&
+      base.branch.length > 0 &&
+      typeof base.sha === 'string' &&
+      /^[a-f0-9]{40}$/.test(base.sha)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function tick(deps: SchedulerDeps, now = (deps.now ?? (() => new Date()))()): string[] {
   const outcome = deps.sqlite
     .transaction((): Started[] => {
@@ -41,7 +55,14 @@ export function tick(deps: SchedulerDeps, now = (deps.now ?? (() => new Date()))
             .from(schema.jobs)
             .where(eq(schema.jobs.id, parentMatch[1]!))
             .get();
-          if (!parent || parent.state !== 'done' || row.aiurIssueNumber === null) continue;
+          if (
+            !parent ||
+            parent.state === 'failed' ||
+            parent.state === 'cancelled' ||
+            row.aiurIssueNumber === null ||
+            !hasPlannerBase(row.plan)
+          )
+            continue;
         }
         const settings = settingsByFamily.get(row.familyId) ?? getBudgetSettings(deps.db, row.familyId, deps.defaults);
         settingsByFamily.set(row.familyId, settings);

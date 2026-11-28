@@ -139,6 +139,12 @@ function harness(kind: 'new_game' | 'feature' = 'new_game', plannerShipped = tru
       calls.push(`label:${number}:${label}`);
     }),
     removeLabel: vi.fn(async () => undefined),
+    blockBy: vi.fn(async (_repo, number, parent) => {
+      calls.push(`block:${number}:${parent}`);
+    }),
+    unblockBy: vi.fn(async (_repo, number, parent) => {
+      calls.push(`unblock:${number}:${parent}`);
+    }),
     close: vi.fn(async () => undefined),
     setStateLabel: vi.fn(async () => undefined),
   };
@@ -490,10 +496,24 @@ describe('New Game parent issue', () => {
       state: 'queued',
       aiurIssueNumber: 1,
     });
-    expect(input.calls).not.toContain('label:1:lantern-bay:todo');
+    expect(input.calls).toContain('label:1:lantern-bay:todo');
+    expect(input.calls.indexOf('cap:1:9.000001')).toBeLessThan(input.calls.indexOf('block:1:42'));
+    expect(input.calls.indexOf('block:1:42')).toBeLessThan(input.calls.indexOf('label:1:lantern-bay:todo'));
     expect(input.calls).not.toContain('nudge:1');
     input.db.update(schema.games).set({ githubRepo: 'new-game' }).where(eq(schema.games.id, 'g_1')).run();
-    input.db.update(schema.jobs).set({ state: 'failed' }).where(eq(schema.jobs.id, 'j_parent')).run();
+    // A cancellation projection can survive a restart before the parent job row is updated.
+    input.db
+      .insert(schema.jobProjections)
+      .values({
+        jobId: 'j_parent',
+        daemonSlug: 'lantern-bay',
+        ticket: '42',
+        stage: 'working',
+        stageText: 'Working',
+        lifecycle: 'cancelled',
+        updatedAt: NOW.toISOString(),
+      })
+      .run();
     vi.mocked(input.issues.close!).mockRejectedValueOnce(new Error('temporary GitHub failure'));
     await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'github' });
     expect(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()?.state).toBe('queued');
@@ -542,10 +562,16 @@ describe('New Game parent issue', () => {
     expect(input.created[0]?.body).toContain('games/lantern-bay/docs/decisions.json');
     expect(input.created[0]?.body).toContain('## Creator decisions\n- D-01');
     expect(input.calls.indexOf('cap:1:9.000001')).toBeLessThan(input.calls.indexOf('label:1:lantern-bay:todo'));
+    expect(input.calls).toContain('unblock:1:42');
     close(input);
   });
   it('keeps an admitted child recoverable when dispatch preflight fails', async () => {
     const input = harness('feature');
+    const job = input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!;
+    input.db
+      .insert(schema.jobs)
+      .values({ ...job, id: 'j_parent', kind: 'new_game', idempotencyKey: null })
+      .run();
     input.db
       .insert(schema.jobTickets)
       .values({ jobId: 'j_1', key: 'T1', issueNumber: 7, repo: 'old/game', sig: 'child' })
@@ -559,6 +585,28 @@ describe('New Game parent issue', () => {
     await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'aiur' });
     expect(input.issues.close).not.toHaveBeenCalled();
     expect(input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()?.state).toBe('admitted');
+    close(input);
+  });
+
+  it('closes an admitted child when its parent fails before dispatch', async () => {
+    const input = harness('feature');
+    const job = input.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_1')).get()!;
+    input.db
+      .insert(schema.jobs)
+      .values({ ...job, id: 'j_parent', kind: 'new_game', state: 'failed', idempotencyKey: null })
+      .run();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_1', key: 'T1', issueNumber: 7, repo: 'owner/game', sig: 'child' })
+      .run();
+    input.db
+      .update(schema.jobs)
+      .set({ idempotencyKey: 'planner:j_parent:starter', aiurIssueNumber: 7 })
+      .where(eq(schema.jobs.id, 'j_1'))
+      .run();
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ skipped: 'parent_terminal' });
+    expect(input.issues.close).toHaveBeenCalledWith('owner/game', 7);
+    expect(input.calls).not.toContain('label:7:lantern-bay:todo');
     close(input);
   });
 

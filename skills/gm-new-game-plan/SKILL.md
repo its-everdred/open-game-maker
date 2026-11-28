@@ -34,15 +34,19 @@ the planner stays within its game workspace. Preserve existing IDs and answers w
 Run `gm decisions` commands from `games/<slug>/` so they select this inventory.
 Create the game epic and aiur feature. Submit each child through the host admission relay below; never create or queue
 child issues directly. The relay reserves budget and enforces the per-game limit atomically, then the normal intake
-sets the spend cap before dispatch. Children stay queued until the planning PR merges and an edit slot opens,
-so their workspace contains the committed decision inventory. If the ticket cannot obtain its private context, stop rather than publishing it.
+sets the spend cap before dispatch. Before submitting children, commit the inventory and plan on the planner branch
+and any existing `games/<slug>/design/decisions.json` ledger, and push that branch. Assign each decision ID to at most
+one child. After the checkpoint, leave new creator questions to their assigned child and do not ask them again on the
+planner ticket. The relay verifies the pushed checkpoint and each child starts from that exact commit when an
+edit slot opens, so its workspace contains the decisions without waiting for the planning PR to merge. Child PRs
+target main; if main later changes the same inventory, reconcile the decisions when resolving the conflict. If the ticket cannot obtain its private context, stop rather than publishing it.
 Exclude the parent and the planner ticket itself when counting children.
 For this mode, the scoped limit takes precedence over the full-game inventory, mandatory media tickets and per-ticket
 deep dives below. Keep decisions outside the first playable recorded for later; do not file extra work for them now.
 Write a private child JSON file containing `{ "key": "stable-key", "role": "role:gameplay", "decisions": [],
 "complexity": 2, "plan": { "title": "...", "summary": "...", "scope": { "included": [], "excluded": [] },
 "tickets": [{ "key": "build", "skills": [], "dependsOn": [], "acceptanceCriteria": ["..."] }] } }`.
-Use only privacy-safe summaries. Run `node .claude/skills/gm-new-game-plan/scripts/child.mjs <planner-ticket> <game-slug>
+Use only privacy-safe summaries. Commit and push the planner checkpoint before submitting the first child. Run `node .claude/skills/gm-new-game-plan/scripts/child.mjs <planner-ticket> <game-slug>
 <child.json>` for each child; retry with the same key after an uncertain result. It reports the filed issue number.
 Add each issue to the game feature and parent Build Order. Use
 `gm plan check --tickets <file> --game <slug> --first-playable --max-tickets <limit>` after filing, so later

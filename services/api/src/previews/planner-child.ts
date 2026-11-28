@@ -5,6 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { AppDeps } from '../app/types.js';
+import type { PlannerBase } from './planner-base.js';
 import { HttpError } from '../app/errors.js';
 import { admit } from '../jobs/admission.js';
 
@@ -19,7 +20,7 @@ const Child = z
   .strict();
 
 /** Submit one child through normal job admission and budget accounting, with an atomic per-game limit. */
-export async function admitPlannerChild(deps: AppDeps, parentId: string, raw: unknown) {
+export async function admitPlannerChild(deps: AppDeps, parentId: string, raw: unknown, base: PlannerBase) {
   const parsed = Child.safeParse(raw);
   if (!parsed.success) throw new HttpError(400, 'invalid_planner_child');
   const input = parsed.data;
@@ -46,6 +47,7 @@ export async function admitPlannerChild(deps: AppDeps, parentId: string, raw: un
   const ticket = input.plan.tickets[0]!;
   const plan = {
     ...input.plan,
+    _plannerBase: base,
     tickets: [
       {
         ...ticket,
@@ -97,5 +99,10 @@ export function plannerChildStatus(deps: AppDeps, parentId: string, key: string)
     )
     .get();
   if (!child) throw new HttpError(404, 'planner_child_not_found');
-  return { jobId: child.id, state: child.state, issueNumber: child.aiurIssueNumber };
+  const ticket = deps.db
+    .select({ todoAt: schema.jobTickets.todoAt })
+    .from(schema.jobTickets)
+    .where(eq(schema.jobTickets.jobId, child.id))
+    .get();
+  return { jobId: child.id, state: child.state, issueNumber: child.aiurIssueNumber, todoAt: ticket?.todoAt ?? null };
 }

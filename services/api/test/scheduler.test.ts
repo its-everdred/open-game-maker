@@ -64,7 +64,7 @@ function queued(deps: ReturnType<typeof makeDeps>, id: string, createdAt: string
 }
 
 describe('job scheduler', () => {
-  it('waits for the planner to merge before starting its child', () => {
+  it('starts a staged child while the planner is still running', () => {
     const { deps } = setup();
     queued(deps, 'j_parent', BEFORE.toISOString());
     deps.db
@@ -80,11 +80,15 @@ describe('job scheduler', () => {
       .run();
     const input = { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults };
     expect(tick(input, RESET)).toEqual([]);
-    deps.db.update(schema.jobs).set({ state: 'done' }).where(eq(schema.jobs.id, 'j_parent')).run();
-    expect(tick(input, RESET)).toEqual([]);
     deps.db
       .update(schema.jobs)
       .set({ aiurIssueNumber: 42, aiurRepo: 'owner/game' })
+      .where(eq(schema.jobs.id, 'j_child'))
+      .run();
+    expect(tick(input, RESET)).toEqual([]);
+    deps.db
+      .update(schema.jobs)
+      .set({ plan: JSON.stringify({ _plannerBase: { branch: 'aiur/42', sha: 'a'.repeat(40) } }) })
       .where(eq(schema.jobs.id, 'j_child'))
       .run();
     expect(tick(input, RESET)).toEqual(['j_child']);

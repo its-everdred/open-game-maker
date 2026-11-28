@@ -250,6 +250,7 @@ describe('command poller', () => {
     deps.registry.aiurClientFor = () => client;
     const publish = vi.fn();
     const poller = createCommandPoller({
+      db: deps.db,
       sqlite: deps.sqlite,
       jobs: () => deps.registry.chatJobs,
       clientFor: () => deps.registry.aiurClientFor,
@@ -310,6 +311,7 @@ describe('command poller', () => {
       }) as unknown as AiurClient;
     const supervisorTokenStatus = vi.fn();
     const poller = createCommandPoller({
+      db: deps.db,
       sqlite: deps.sqlite,
       jobs: () => deps.registry.chatJobs,
       clientFor: () => deps.registry.aiurClientFor,
@@ -334,6 +336,7 @@ describe('command poller', () => {
     deps.registry.aiurClientFor = () => ({ decisions: vi.fn().mockResolvedValue([terminal]) }) as unknown as AiurClient;
     const write = vi.fn().mockRejectedValueOnce(new Error('disk full')).mockResolvedValueOnce(true);
     const poller = createCommandPoller({
+      db: deps.db,
       sqlite: deps.sqlite,
       jobs: () => deps.registry.chatJobs,
       clientFor: () => deps.registry.aiurClientFor,

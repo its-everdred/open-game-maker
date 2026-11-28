@@ -26,6 +26,9 @@ import { getAttachment, readBlob } from '../build-chat/attachments.js';
 import { admitPlannerChild, plannerChildStatus } from './planner-child.js';
 import { HttpError } from '../app/errors.js';
 import { AdmissionRefused } from '../jobs/admission.js';
+import { plannerAnswers } from '../job-commands/planner-answers.js';
+import { plannerCheckpointBranch } from './planner-base.js';
+import { and, eq, sql } from 'drizzle-orm';
 import type { PreviewTicketVerifier } from './ticket.js';
 
 const requestName = /^[0-9a-f-]{36}\.json$/u;
@@ -47,6 +50,7 @@ type Request = {
   attachment?: string;
   child?: unknown;
   childKey?: string;
+  plannerBranch?: string;
 };
 type RepoGrant = { repo: string; ticket: string; game: string; grant: string; secret: string; workspace: string };
 
@@ -152,6 +156,48 @@ async function processRequest(
         !(await verifyTicket(`${game.githubOwner}/${game.githubRepo}`, data.ticket, data.slug, !!repoGrant))
       )
         throw new Error('unauthorized');
+      if (data.kind === 'planner-worker-context') {
+        const repo = `${game.githubOwner}/${game.githubRepo}`.toLowerCase();
+        const job = deps.db
+          .select({
+            id: schema.jobs.id,
+            plan: schema.jobs.plan,
+            key: schema.jobs.idempotencyKey,
+            state: schema.jobs.state,
+          })
+          .from(schema.jobTickets)
+          .innerJoin(schema.jobs, eq(schema.jobs.id, schema.jobTickets.jobId))
+          .where(
+            and(
+              eq(schema.jobTickets.issueNumber, Number(data.ticket)),
+              sql`lower(${schema.jobTickets.repo}) = ${repo}`,
+              eq(schema.jobs.gameId, game.id),
+            ),
+          )
+          .get();
+        if (!job?.key?.startsWith('planner:')) {
+          await response.writeFile(Buffer.from(JSON.stringify({ state: 'done', result: { plannerChild: false } })));
+          return;
+        }
+        if (!['admitted', 'filed', 'running', 'paused_budget'].includes(job.state))
+          throw new HttpError(409, 'planner_child_not_admitted');
+        const base = (JSON.parse(job.plan) as { _plannerBase?: unknown })._plannerBase;
+        if (
+          !base ||
+          typeof base !== 'object' ||
+          !('branch' in base) ||
+          !('sha' in base) ||
+          typeof base.branch !== 'string' ||
+          typeof base.sha !== 'string' ||
+          !SHA.test(base.sha)
+        )
+          throw new Error('invalid_planner_base');
+        const answers = plannerAnswers(deps.db, deps.sqlite, { jobId: job.id, gameId: game.id });
+        await response.writeFile(
+          Buffer.from(JSON.stringify({ state: 'done', result: { plannerChild: true, base, answers } })),
+        );
+        return;
+      }
       if (
         ['new-game-context', 'new-game-attachment', 'new-game-child', 'new-game-child-status'].includes(data.kind ?? '')
       ) {
@@ -159,10 +205,27 @@ async function processRequest(
         const requestId = plannerRequest(deps.db, repo, Number(data.ticket), game.id);
         if (!requestId) throw new Error('unauthorized');
         if (data.kind === 'new-game-child' || data.kind === 'new-game-child-status') {
-          const childResult =
-            data.kind === 'new-game-child'
-              ? await admitPlannerChild(deps, requestId, data.child)
-              : plannerChildStatus(deps, requestId, data.childKey ?? '');
+          let childResult;
+          if (data.kind === 'new-game-child') {
+            const base = { branch: data.plannerBranch ?? '', sha: data.sha };
+            if (
+              !deps.registry.plannerBaseVerifier ||
+              !(await deps.registry.plannerBaseVerifier(
+                repo,
+                workspace,
+                data.slug,
+                base,
+                typeof data.child === 'object' && data.child !== null && 'decisions' in data.child
+                  ? data.child.decisions
+                  : undefined,
+              ))
+            )
+              throw new HttpError(409, 'invalid_planner_base');
+            childResult = await admitPlannerChild(deps, requestId, data.child, {
+              ...base,
+              branch: plannerCheckpointBranch(base.sha),
+            });
+          } else childResult = plannerChildStatus(deps, requestId, data.childKey ?? '');
           await response.writeFile(Buffer.from(JSON.stringify({ state: 'done', result: childResult })));
           return;
         }
@@ -336,7 +399,13 @@ async function processRequest(
       deps.log({ event: 'preview_relay_failed', reason: error instanceof Error ? error.name : 'Error' });
       const code =
         error instanceof HttpError &&
-        ['planner_ticket_limit', 'planner_child_conflict', 'invalid_planner_child'].includes(error.code)
+        [
+          'planner_ticket_limit',
+          'planner_child_conflict',
+          'planner_decision_conflict',
+          'invalid_planner_child',
+          'invalid_planner_base',
+        ].includes(error.code)
           ? error.code
           : error instanceof AdmissionRefused
             ? error.body.error

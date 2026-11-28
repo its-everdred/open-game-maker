@@ -36,7 +36,9 @@ API needs a scoped token or the internal credential, and the parent issue carrie
   "brief": "A cozy island platformer about relighting harbour lanterns.",
   "spec": { "session_id": "s_...", "revision": 1 },
   "revisions": [{ "revision": 1, "agreedAt": "2026-11-04T18:00:00.000Z" }],
-  "messages": [{ "id": "m_...", "at": "…", "actor": "creator", "kind": "text", "text": "Keep it calm at dusk.", "media": false }],
+  "messages": [
+    { "id": "m_...", "at": "…", "actor": "creator", "kind": "text", "text": "Keep it calm at dusk.", "media": false }
+  ],
   "designDecisions": [],
   "attachments": [{ "id": "att_...", "kind": "text", "name": "mood-board.md", "mime": "text/markdown", "bytes": 7 }],
   "parent": { "repo": "owner/game", "number": 12 }
@@ -75,14 +77,18 @@ Intake creates one planner ticket linked to the parent, records it durably, sets
 game's daemon. Its worker uses `gm-new-game-plan` and the configured first-playable ticket limit. The workspace relay
 grants only the recorded, active planner ticket access to that request's private context. The planner submits each
 child through the same relay: normal admission reserves its budget, enforces the per-game ticket limit atomically,
-and files the child with its own spend cap. It dispatches after the planner PR merges and an edit slot opens, so the
-child starts with the committed decision inventory. Reusing a child key returns the same job.
+and files the child with its own spend cap. The child gets its todo label behind a dependency on the parent; when an
+edit slot opens, intake removes that gate and dispatches it using the planner's verified checkpoint. Reusing a child key
+returns the same job. The intake GitHub credential needs permission to manage issue dependencies and to create and read
+Git refs in the game repository. The API retains a checkpoint ref so a delayed child can start after the planner's
+branch is removed.
 
 A registered daemon uses its own trusted workspace hooks. Before using it for New Game planning, install the current
 `gm-new-game-plan` skill and its scripts in every worker workspace, call
-`node <ogm-core>/scripts/preview/repository-hook.ts create` from `after_create` after cloning, and call the same script
-with `remove` from `before_remove`. The create hook verifies the issue and binds the grant to that workspace; the
-remove hook revokes it. The worker cannot retrieve context or submit children until this host setup is in place.
+`node <ogm-core>/scripts/preview/repository-hook.ts create` from `after_create` after cloning and from `before_run`,
+and call the same script with `remove` from `before_remove`. The create hook verifies the issue, binds the grant to
+that workspace, and prepares a planner child's checkpoint and current answers before it runs; the remove hook revokes
+the grant. The worker cannot retrieve context or submit children until this host setup is in place.
 
 Two invariants keep a worker off the parent:
 

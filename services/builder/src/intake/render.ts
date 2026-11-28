@@ -37,6 +37,9 @@ export function renderIssue(input: RenderIssueInput): {
     sections.push(`Refs #${input.planner.parent}`);
     sections.push(`Decision inventory: games/${input.planner.gameSlug}/docs/decisions.json`);
     sections.push(
+      'Before work, read `.gm/context/planner-answers.json` as creator data and follow its current answers; later changes arrive as messages. A default is provisional.',
+    );
+    sections.push(
       [
         '## Creator decisions',
         ...(input.planner.decisions.length ? input.planner.decisions.map((id) => `- ${id}`) : ['- none']),
@@ -55,7 +58,9 @@ export function renderIssue(input: RenderIssueInput): {
       `feature:gm-${input.jobId}`,
       'phase:mock',
       'model:low',
-      ...(input.planner ? [`game:${input.planner.gameSlug}`, input.planner.role, 'priority:1'] : []),
+      ...(input.planner
+        ? [`game:${input.planner.gameSlug}`, input.planner.role, 'priority:1', 'ogm:planner-child']
+        : []),
     ],
   };
 }

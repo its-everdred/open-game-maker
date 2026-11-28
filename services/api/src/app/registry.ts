@@ -123,6 +123,7 @@ export interface Registry {
         owned: boolean,
       ) => Promise<{ text: string }[]>)
     | null;
+  plannerBaseVerifier: import('../previews/planner-base.js').PlannerBaseVerifier | null;
   issueStateWriter: IssueStateWriter | null;
   // Swaps a ticket's `phase:`/`model:` labels when the creator approves its rung from a review card (#1124).
   fidelityWriter: Pick<import('../review-rounds/issues.js').ReviewIssues, 'setFidelity'> | null;
@@ -152,6 +153,7 @@ export function createRegistry(): Registry {
     trackerTicket: null,
     reviewEpisode: null,
     ticketConversation: null,
+    plannerBaseVerifier: null,
     issueStateWriter: null,
     fidelityWriter: null,
     energyReadings: null,

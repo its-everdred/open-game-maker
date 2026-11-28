@@ -58,6 +58,12 @@ export function sizeFor(kind: JobKind, complexity: number): SizeClass {
   return size;
 }
 
+function plannerContent(plan: unknown): string {
+  const copy = { ...(plan as Record<string, unknown>) };
+  delete copy._plannerBase;
+  return JSON.stringify(copy);
+}
+
 function reservationFor(db: Db, kind: JobKind, complexity: number): Reservation {
   const sizeClass = sizeFor(kind, complexity);
   const lookupKind = kind === 'scope' ? 'feature' : kind;
@@ -132,7 +138,12 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
           .from(schema.jobs)
           .where(and(eq(schema.jobs.creatorId, actor.userId), eq(schema.jobs.idempotencyKey, request.idempotencyKey)))
           .get();
-        if (existing && deps.plannerChild && JSON.stringify(JSON.parse(existing.plan)) !== JSON.stringify(request.plan))
+        if (
+          existing &&
+          deps.plannerChild &&
+          (existing.complexity !== request.complexity ||
+            plannerContent(JSON.parse(existing.plan)) !== plannerContent(request.plan))
+        )
           throw new HttpError(409, 'planner_child_conflict');
         if (existing)
           return {
@@ -145,13 +156,22 @@ export async function admit(deps: AdmissionDeps, request: CreateJobRequest, acto
       if (deps.plannerChild) {
         const child = deps.plannerChild;
         const existing = deps.db
-          .select({ id: schema.jobs.id })
+          .select({ id: schema.jobs.id, plan: schema.jobs.plan })
           .from(schema.jobs)
           .where(
             and(eq(schema.jobs.gameId, request.gameId), sql`substr(${schema.jobs.idempotencyKey}, 1, 8) = 'planner:'`),
           )
           .all();
         if (existing.length >= child.limit) throw new HttpError(409, 'planner_ticket_limit');
+        const requested = request.plan.tickets.flatMap((ticket) =>
+          ticket.skills.filter((skill) => skill.startsWith('decision:')),
+        );
+        if (new Set(requested).size !== requested.length) throw new HttpError(409, 'planner_decision_conflict');
+        for (const previous of existing) {
+          const plan = JSON.parse(previous.plan) as { tickets?: { skills?: string[] }[] };
+          if (plan.tickets?.some((ticket) => ticket.skills?.some((skill) => requested.includes(skill))))
+            throw new HttpError(409, 'planner_decision_conflict');
+        }
       }
 
       const settings = getBudgetSettings(deps.db, game.familyId, deps.defaults);

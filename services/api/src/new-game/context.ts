@@ -180,6 +180,15 @@ function latestAgreedSession(db: Db, job: RequestRow): FoundSession | null {
   };
 }
 
+/** The original creation conversation whose answers belong to this request. */
+export function scopeChatJobForRequest(db: Db, job: RequestRow): string | null {
+  return latestAgreedSession(db, job)?.chatJobId ?? null;
+}
+
+export function scopeChoicesForRequest(db: Db, job: RequestRow): ScopeChoices | null {
+  return latestAgreedSession(db, job)?.choices ?? null;
+}
+
 function revisionsFor(db: Db, sessionId: string): NewGameContext['revisions'] {
   return db
     .select({ revision: schema.scopeSessionRevisions.revision, agreedAt: schema.scopeSessionRevisions.agreedAt })

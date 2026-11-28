@@ -374,7 +374,7 @@ export async function sweepBuilds(deps: AppDeps, graceMs: number, now = new Date
     .all();
   await mkdir(completedRoot(deps), { recursive: true });
   for (const job of completed) {
-    if (isTerminal(job.state) || publishing.has(job.jobId)) continue;
+    if (isTerminal(job.state) || publishing.has(job.jobId) || !awaitsBuild(deps, job.jobId)) continue;
     try {
       if (existsSync(stagedDir(deps, job.jobId))) {
         await publishStaged(deps, job.jobId);

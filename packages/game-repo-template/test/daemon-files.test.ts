@@ -138,6 +138,144 @@ describe('after_create hook', () => {
     return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   }
 
+  // Match the existing hook harness: fixture repositories use the same plain Git as the hook.
+  const fixtureGit = (args: string[]) => execFileSync('git', args, { env: { ...process.env, PATH: HOOK_PATH } });
+
+  it('starts a planner child at its committed inventory and preserves resumed work', async () => {
+    const repo = gameRepo();
+    fixtureGit(['-C', repo, 'checkout', '-qb', 'aiur/99']);
+    mkdirSync(join(repo, 'games/castle-run/docs'), { recursive: true });
+    writeFileSync(join(repo, 'games/castle-run/docs/decisions.json'), '[]\n');
+    execFileSync('git', ['-C', repo, 'add', 'games/castle-run/docs/decisions.json']);
+    execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'planner']);
+    const sha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    fixtureGit(['-C', repo, 'checkout', '-q', 'main']);
+    const base = await api((req, res) => {
+      if (req.url === '/internal/jobs/by-ticket/12/bundle') {
+        res.setHeader('content-type', 'application/json');
+        res.end(
+          JSON.stringify({
+            kind: 'scope',
+            skillPackVersion: '0.0.0-placeholder',
+            plannerBase: { branch: 'aiur/99', sha },
+          }),
+        );
+      } else if (req.url === '/internal/jobs/by-ticket/12/planner-answers') {
+        res.end(JSON.stringify({ answers: [{ question: 'Door?', answer: 'Wood' }] }));
+      } else {
+        res.statusCode = 404;
+        res.end();
+      }
+    });
+    const { dir, secretFile, result } = await runHook({ THIS_REPOSITORY_URL: repo, OGM_INTERNAL_URL: base });
+    expect(result.status, result.stderr).toBe(0);
+    expect(execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()).toBe(sha);
+    expect(readFileSync(join(dir, 'games/castle-run/docs/decisions.json'), 'utf8')).toBe('[]\n');
+    expect(readFileSync(join(dir, '.gm/context/planner-base.applied'), 'utf8').trim()).toBe(sha);
+    writeFileSync(join(dir, 'games/castle-run/child.txt'), 'work');
+    execFileSync('git', ['-C', dir, 'add', 'games/castle-run/child.txt']);
+    execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'child']);
+    const childSha = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const victim = join(mkdtempSync(join(tmpdir(), 'ogm-hook-victim-')), 'answers.json');
+    writeFileSync(victim, 'keep');
+    rmSync(join(dir, '.gm/context/planner-answers.json'));
+    execFileSync('ln', ['-s', victim, join(dir, '.gm/context/planner-answers.json')]);
+    const resumed = spawn('bash', ['-c', parse(renderDaemonFiles().hooks).before_run as string], {
+      cwd: dir,
+      env: {
+        PATH: HOOK_PATH,
+        HOME: dir,
+        THIS_BASE_BRANCH: 'main',
+        AIUR_HOOK_TICKET_IDENTIFIER: '12',
+        OGM_INTERNAL_URL: base,
+        OGM_HOOK_SECRET_FILE: secretFile,
+      },
+    });
+    const status = await new Promise<number | null>((resolve) => resumed.on('close', resolve));
+    expect(status).toBe(0);
+    expect(readFileSync(victim, 'utf8')).toBe('keep');
+    expect(JSON.parse(readFileSync(join(dir, '.gm/context/planner-answers.json'), 'utf8'))).toMatchObject({
+      answers: [{ answer: 'Wood' }],
+    });
+    expect(execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()).toBe(childSha);
+  });
+
+  it('applies a recovered planner base before a warm workspace starts', async () => {
+    const repo = gameRepo();
+    fixtureGit(['-C', repo, 'checkout', '-qb', 'aiur/99']);
+    mkdirSync(join(repo, 'games/castle-run/docs'), { recursive: true });
+    writeFileSync(join(repo, 'games/castle-run/docs/decisions.json'), '[]\n');
+    execFileSync('git', ['-C', repo, 'add', 'games/castle-run/docs/decisions.json']);
+    execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'planner']);
+    const sha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    fixtureGit(['-C', repo, 'checkout', '-q', 'main']);
+    const { dir, secretFile, result } = await runHook({ THIS_REPOSITORY_URL: repo, OGM_INTERNAL_URL: '' });
+    expect(result.status, result.stderr).toBe(0);
+    const base = await api((req, res) => {
+      if (req.url === '/internal/jobs/by-ticket/12/bundle') {
+        res.end(JSON.stringify({ kind: 'scope', plannerBase: { branch: 'aiur/99', sha } }));
+      } else if (req.url === '/internal/jobs/by-ticket/12/planner-answers') {
+        res.end(JSON.stringify({ answers: [] }));
+      } else {
+        res.statusCode = 404;
+        res.end();
+      }
+    });
+    const child = spawn('bash', ['-c', parse(renderDaemonFiles().hooks).before_run as string], {
+      cwd: dir,
+      env: {
+        PATH: HOOK_PATH,
+        HOME: dir,
+        THIS_BASE_BRANCH: 'main',
+        AIUR_HOOK_TICKET_IDENTIFIER: '12',
+        OGM_INTERNAL_URL: base,
+        OGM_HOOK_SECRET_FILE: secretFile,
+      },
+    });
+    let stderr = '';
+    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+    const status = await new Promise<number | null>((resolve) => child.on('close', resolve));
+    expect(status, stderr).toBe(0);
+    expect(execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()).toBe(sha);
+  });
+
+  it('does not mark a missing planner ref as applied', async () => {
+    const { dir, result } = await runHook({ OGM_INTERNAL_URL: '' });
+    expect(result.status, result.stderr).toBe(0);
+    writeFileSync(
+      join(dir, '.gm/context/bundle.json'),
+      JSON.stringify({
+        kind: 'scope',
+        plannerBase: { branch: 'aiur/missing', sha: 'a'.repeat(40) },
+      }),
+    );
+    expect(() =>
+      execFileSync('bash', ['-c', parse(renderDaemonFiles().hooks).before_run as string], {
+        cwd: dir,
+        env: { PATH: HOOK_PATH, HOME: dir, THIS_BASE_BRANCH: 'main', AIUR_HOOK_TICKET_IDENTIFIER: '12' },
+        stdio: 'pipe',
+      }),
+    ).toThrow();
+    expect(existsSync(join(dir, '.gm/context/planner-base.applied'))).toBe(false);
+  }, 30000);
+
+  it('rejects a symlinked context before touching its destination', async () => {
+    const { dir, result } = await runHook({ OGM_INTERNAL_URL: '' });
+    expect(result.status, result.stderr).toBe(0);
+    const outside = mkdtempSync(join(tmpdir(), 'ogm-hook-other-'));
+    writeFileSync(join(outside, 'planner-answers.json'), 'keep');
+    rmSync(join(dir, '.gm/context'), { recursive: true, force: true });
+    execFileSync('ln', ['-s', outside, join(dir, '.gm/context')]);
+    expect(() =>
+      execFileSync('bash', ['-c', parse(renderDaemonFiles().hooks).before_run as string], {
+        cwd: dir,
+        env: { PATH: HOOK_PATH, HOME: dir, THIS_BASE_BRANCH: 'main', AIUR_HOOK_TICKET_IDENTIFIER: '12' },
+        stdio: 'pipe',
+      }),
+    ).toThrow();
+    expect(readFileSync(join(outside, 'planner-answers.json'), 'utf8')).toBe('keep');
+  }, 30000);
+
   it('keeps the clone and marks the bundle missing when the API is down', async () => {
     const { dir, result } = await runHook({ OGM_INTERNAL_URL: 'http://127.0.0.1:9' });
     expect(result.status).not.toBe(0);
@@ -145,6 +283,53 @@ describe('after_create hook', () => {
     expect(readFileSync(join(dir, '.gm/context/bundle.missing'), 'utf8')).toBe('bundle unavailable\n');
     expect(existsSync(join(dir, '.gm/context/bundle.json'))).toBe(false);
   });
+
+  it('recovers a protected bundle with the new workspace grant before work', async () => {
+    const seen: { token?: string; workspace?: string }[] = [];
+    const base = await api((req, res) => {
+      if (req.url === '/internal/jobs/by-ticket/12/bundle') {
+        const token = req.headers['x-ogm-preview-token'];
+        const workspace = req.headers['x-ogm-workspace'];
+        seen.push({
+          token: typeof token === 'string' ? token : undefined,
+          workspace: typeof workspace === 'string' ? workspace : undefined,
+        });
+        if (!token || !workspace) {
+          res.statusCode = 404;
+          res.end();
+          return;
+        }
+        res.end(JSON.stringify({ kind: 'scope', skillPackVersion: '0.0.0-placeholder' }));
+      } else {
+        res.statusCode = 404;
+        res.end();
+      }
+    });
+    const { dir, result } = await runHook({ OGM_INTERNAL_URL: base });
+    expect(result.status, result.stderr).toBe(0);
+    expect(seen).toHaveLength(2);
+    expect(seen[0]?.token).toBeUndefined();
+    expect(seen[1]?.token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    expect(seen[1]?.workspace).toBe(createHash('sha256').update(dir).digest('hex'));
+    expect(existsSync(join(dir, '.gm/context/bundle.json'))).toBe(true);
+  }, 60000);
+
+  it('refuses a missing planner bundle while allowing unrelated tickets without one', async () => {
+    let plannerChild = true;
+    const base = await api((req, res) => {
+      if (req.url === '/internal/jobs/by-ticket/12/planner-guard') res.end(JSON.stringify({ plannerChild }));
+      else {
+        res.statusCode = 404;
+        res.end();
+      }
+    });
+    const child = await runHook({ OGM_INTERNAL_URL: base });
+    expect(child.result.status).not.toBe(0);
+    expect(child.result.stderr).toContain('planner bundle unavailable');
+    plannerChild = false;
+    const unrelated = await runHook({ OGM_INTERNAL_URL: base });
+    expect(unrelated.result.status, unrelated.result.stderr).toBe(0);
+  }, 30000);
 
   it('provisions a scoped credential without an API URL', async () => {
     const { dir, secretFile, result } = await runHook({ OGM_INTERNAL_URL: '' });
@@ -261,7 +446,7 @@ describe('after_create hook', () => {
         res.end(
           JSON.stringify({ v: 1, kind: 'feature', skillPackVersion: '0.0.0', skillPackUrl: `${base}/skills.tgz` }),
         );
-      else if (req.url === '/skills.tgz') res.end(tgz);
+      else if (req.url === '/internal/skills/0.0.0.tgz') res.end(tgz);
       else {
         res.statusCode = 404;
         res.end();
@@ -287,7 +472,7 @@ describe('after_create hook', () => {
         res.end(
           JSON.stringify({ v: 1, kind: 'new_game', skillPackVersion: '0.0.0', skillPackUrl: `${base}/skills.tgz` }),
         );
-      else if (req.url === '/skills.tgz') res.end(tgz);
+      else if (req.url === '/internal/skills/0.0.0.tgz') res.end(tgz);
       else {
         res.statusCode = 404;
         res.end();
@@ -310,7 +495,7 @@ describe('after_create hook', () => {
         res.end(
           JSON.stringify({ v: 1, kind: 'feature', skillPackVersion: '0.0.0', skillPackUrl: `${base}/missing.tgz` }),
         );
-      else if (req.url === '/missing.tgz' && ready) res.end(tgz);
+      else if (req.url === '/internal/skills/0.0.0.tgz' && ready) res.end(tgz);
       else if (req.url === '/internal/jobs/by-ticket/12/design')
         res.end(JSON.stringify({ rev: 0, buildId: null, doc: { schemaVersion: 1, globals: {}, entities: {} } }));
       else {
@@ -353,7 +538,7 @@ describe('after_create hook', () => {
         res.end(
           JSON.stringify({ v: 1, kind: 'feature', skillPackVersion: '0.0.0', skillPackUrl: `${base}/skills.tgz` }),
         );
-      else if (req.url === '/skills.tgz') res.end(tgz);
+      else if (req.url === '/internal/skills/0.0.0.tgz') res.end(tgz);
       else {
         res.statusCode = 404;
         res.end();
@@ -382,7 +567,7 @@ describe('after_create hook', () => {
             attachments: [{ blob, path: `.gm/inbox/attachments/${blob}-notes.md` }],
           }),
         );
-      else if (ready && req.url === '/skills.tgz') res.end(tgz);
+      else if (ready && req.url === '/internal/skills/0.0.0.tgz') res.end(tgz);
       else if (ready && req.url === '/internal/jobs/by-ticket/12/design')
         res.end(JSON.stringify({ rev: 0, buildId: null, doc: { schemaVersion: 1, globals: {}, entities: {} } }));
       else if (ready && req.url === `/internal/jobs/by-ticket/12/attachments/${blob}`) res.end('creator input');
@@ -393,6 +578,11 @@ describe('after_create hook', () => {
     });
     const { dir, secretFile } = await runHook({ OGM_INTERNAL_URL: base }, true);
     expect(existsSync(join(dir, '.gm/context/bundle.json'))).toBe(false);
+    const victim = join(mkdtempSync(join(tmpdir(), 'ogm-hook-recovery-victim-')), 'victim');
+    writeFileSync(victim, 'unchanged');
+    execFileSync('ln', ['-s', victim, join(dir, '.gm/context/attachments.retry')]);
+    mkdirSync(join(dir, '.gm/inbox/attachments'), { recursive: true });
+    execFileSync('ln', ['-s', victim, join(dir, `.gm/inbox/attachments/${blob}-notes.md`)]);
     ready = true;
     const hook = (parse(renderDaemonFiles().hooks) as { before_run: string }).before_run;
     const child = spawn('bash', ['-c', hook], {
@@ -407,6 +597,7 @@ describe('after_create hook', () => {
     expect(await new Promise<number | null>((resolve) => child.on('close', resolve))).toBe(0);
     expect(readFileSync(join(dir, '.agents/skills/gm-prototype/SKILL.md'), 'utf8')).toBe('prototype\n');
     expect(readFileSync(join(dir, `.gm/inbox/attachments/${blob}-notes.md`), 'utf8')).toBe('creator input');
+    expect(readFileSync(victim, 'utf8')).toBe('unchanged');
     expect(existsSync(join(dir, '.gm/context/design.json'))).toBe(true);
   });
 

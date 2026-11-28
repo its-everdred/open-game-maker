@@ -6,7 +6,7 @@ import { Hono, type Context } from 'hono';
 
 import { JobBundle } from '@ogm/contracts';
 import { schema } from '@ogm/db';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { getAttachment, jobAttachments, readBlob, workspacePath } from '../build-chat/attachments.js';
@@ -17,12 +17,21 @@ import { paidApisDuringGameplay } from '../gameplay/policy.js';
 import { scopeSessions } from '../scope/store.js';
 import { LEAKY } from './leaky.js';
 import { verifyPreviewToken } from '../builds/preview-token.js';
+import { plannerAnswers } from '../job-commands/planner-answers.js';
+import { ticketJobResolver } from './ticket-job.js';
 
 // Resolves an after_create hook's bearer to the one game repo whose daemon holds that secret, or null.
 export type HookDaemonResolver = (secret: string, deps: AppDeps) => Promise<string | null>;
 export type HookGameResolver = (secret: string, deps: AppDeps) => Promise<{ repo: string; slug: string } | null>;
 export type HookIdentityResolver = HookGameResolver;
 export type SkillTarball = { version: string; tgz: Buffer };
+type TicketAccess = (
+  token: string,
+  workspaceHash: string,
+  repo: string,
+  ticket: string,
+  deps: AppDeps,
+) => Promise<string | null>;
 
 // OGM-034 writes each daemon's secret to `~/.config/ogm/daemons/<slug>/hook-secret` (0600) and its env file names
 // only that path; the secret itself never sits in the daemon's environment.
@@ -69,7 +78,39 @@ export function hookPreviewToken(home: string) {
 
 export const hookIdentityFiles = hookSecretGame;
 
-export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills: () => SkillTarball }) {
+/** A daemon secret alone cannot read another ticket's private data. */
+export function managedTicketAccess(home: string): TicketAccess {
+  const verify = hookPreviewToken(home);
+  return async (token, workspaceHash, repo, ticket, deps) => {
+    if (!/^[a-f0-9]{64}$/.test(workspaceHash)) return null;
+    const identity = await verify(token, deps);
+    if (!identity || identity.repo.toLowerCase() !== repo.toLowerCase() || identity.ticket !== ticket) return null;
+    const file = join(home, '.config/ogm/daemons', identity.slug, 'preview-grants', `${workspaceHash}.json`);
+    try {
+      const grant = JSON.parse(await readFile(file, 'utf8')) as {
+        ticket?: unknown;
+        grant?: unknown;
+        game?: unknown;
+        expires?: unknown;
+      };
+      return grant.ticket === ticket &&
+        grant.grant === identity.grant &&
+        grant.game === identity.game &&
+        typeof grant.expires === 'number' &&
+        grant.expires > Date.now()
+        ? identity.game
+        : null;
+    } catch {
+      return null;
+    }
+  };
+}
+
+export function bundleRoutes(opts: {
+  daemonForSecret: HookDaemonResolver;
+  skills: () => SkillTarball;
+  ticketAccess?: TicketAccess;
+}) {
   async function daemonRepo(c: Context<ApiBindings>): Promise<string | null> {
     const match = /^Bearer\s+(\S+)$/i.exec(c.req.header('authorization') ?? '');
     return match ? opts.daemonForSecret(match[1], c.get('deps')) : null;
@@ -77,13 +118,66 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
 
   // The job a daemon's ticket belongs to, only when that daemon's repo owns it.
   async function ticketJob(c: Context<ApiBindings>, repo: string) {
-    const resolver = c.get('deps').registry.ticketJobResolver;
-    const job = resolver ? await resolver(repo, c.req.param('identifier') ?? '') : null;
-    return job && job.repo.toLowerCase() === repo.toLowerCase() ? job : null;
+    const deps = c.get('deps');
+    const identifier = c.req.param('identifier') ?? '';
+    const game = opts.ticketAccess
+      ? await opts.ticketAccess(
+          c.req.header('x-ogm-preview-token') ?? '',
+          c.req.header('x-ogm-workspace') ?? '',
+          repo,
+          identifier,
+          deps,
+        )
+      : null;
+    if (opts.ticketAccess && !game) return null;
+    const resolver = deps.registry.ticketJobResolver ?? (opts.ticketAccess ? ticketJobResolver(deps.db) : null);
+    const job = resolver ? await resolver(repo, identifier) : null;
+    if (!job || job.repo.toLowerCase() !== repo.toLowerCase()) return null;
+    if (game) {
+      const row = deps.db
+        .select({ slug: schema.games.slug })
+        .from(schema.games)
+        .where(eq(schema.games.id, job.gameId))
+        .get();
+      if (row?.slug !== game) return null;
+    }
+    return job;
   }
 
   return (
     new Hono<ApiBindings>()
+      .get('/jobs/by-ticket/:identifier/planner-guard', async (c) => {
+        const repo = await daemonRepo(c);
+        if (!repo) return c.json({ error: { code: 'unauthenticated' } }, 401);
+        const identifier = c.req.param('identifier');
+        if (!/^[1-9][0-9]{0,15}$/.test(identifier) || !Number.isSafeInteger(Number(identifier)))
+          return c.json({ plannerChild: false });
+        const db = c.get('deps').db;
+        const row = db
+          .select({ key: schema.jobs.idempotencyKey })
+          .from(schema.jobTickets)
+          .innerJoin(schema.jobs, eq(schema.jobs.id, schema.jobTickets.jobId))
+          .where(
+            and(
+              sql`lower(${schema.jobTickets.repo}) = lower(${repo})`,
+              eq(schema.jobTickets.issueNumber, Number(identifier)),
+            ),
+          )
+          .get();
+        const direct =
+          row ??
+          db
+            .select({ key: schema.jobs.idempotencyKey })
+            .from(schema.jobs)
+            .where(
+              and(
+                sql`lower(${schema.jobs.aiurRepo}) = lower(${repo})`,
+                eq(schema.jobs.aiurIssueNumber, Number(identifier)),
+              ),
+            )
+            .get();
+        return c.json({ plannerChild: direct?.key?.startsWith('planner:') ?? false });
+      })
       .get('/jobs/by-ticket/:identifier/bundle', async (c) => {
         const repo = await daemonRepo(c);
         if (!repo) return c.json({ error: { code: 'unauthenticated' } }, 401);
@@ -91,6 +185,18 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
         const job = await ticketJob(c, repo);
         if (!job) return c.json({ error: { code: 'not_found' } }, 404);
 
+        const stored = deps.db
+          .select({ plan: schema.jobs.plan, key: schema.jobs.idempotencyKey, state: schema.jobs.state })
+          .from(schema.jobs)
+          .where(eq(schema.jobs.id, job.jobId))
+          .get();
+        const isPlannerChild = (stored?.key ?? '').startsWith('planner:');
+        if (isPlannerChild && !['admitted', 'filed', 'running', 'paused_budget'].includes(stored!.state))
+          return c.json({ error: { code: 'planner_child_not_admitted' } }, 409);
+        const plannerBase = isPlannerChild
+          ? (JSON.parse(stored!.plan) as { _plannerBase?: unknown })._plannerBase
+          : undefined;
+        if (isPlannerChild && !plannerBase) return c.json({ error: { code: 'planner_base_missing' } }, 409);
         const { version } = opts.skills();
         const attachments = jobAttachments(deps.sqlite, job.jobId).map((row) => ({
           kind: row.kind,
@@ -143,6 +249,7 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
           },
           ...(job.kind === 'repair' && job.diagnostics ? { diagnostics: job.diagnostics } : {}),
           ...(attachments.length === 0 ? {} : { attachments }),
+          ...(plannerBase === undefined ? {} : { plannerBase }),
           energy,
         });
         if (LEAKY.test(JSON.stringify(bundle))) {
@@ -150,6 +257,21 @@ export function bundleRoutes(opts: { daemonForSecret: HookDaemonResolver; skills
           return c.json({ error: { code: 'internal' } }, 500);
         }
         return c.json(bundle);
+      })
+      // Current answers are private to the authenticated game daemon and refreshed before a child runs.
+      .get('/jobs/by-ticket/:identifier/planner-answers', async (c) => {
+        const repo = await daemonRepo(c);
+        if (!repo) return c.json({ error: { code: 'unauthenticated' } }, 401);
+        const deps = c.get('deps');
+        const job = await ticketJob(c, repo);
+        if (!job) return c.json({ error: { code: 'not_found' } }, 404);
+        const row = deps.db
+          .select({ key: schema.jobs.idempotencyKey })
+          .from(schema.jobs)
+          .where(eq(schema.jobs.id, job.jobId))
+          .get();
+        if (!row?.key?.startsWith('planner:')) return c.json({ error: { code: 'not_found' } }, 404);
+        return c.json({ answers: plannerAnswers(deps.db, deps.sqlite, job) });
       })
       // A file the creator attached to this job's chat, for the after_create hook to place in the workspace.
       .get('/jobs/by-ticket/:identifier/attachments/:id', async (c) => {

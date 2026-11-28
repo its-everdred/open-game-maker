@@ -192,6 +192,26 @@ describe('gm plan check', () => {
       { cwd: base },
     );
     expect(local.code).toBe(0);
+    writeFileSync(
+      join(base, 'games', 'blobs', 'docs', 'decisions.json'),
+      JSON.stringify([
+        inventory[0],
+        {
+          ...inventory[0],
+          id: 'duplicate',
+          area: inventory[0]!.area.toUpperCase(),
+          question: inventory[0]!.question.toUpperCase(),
+        },
+      ]),
+    );
+    const duplicate = await gm(
+      ['plan', 'check', '--tickets', 'issues.json', '--game', 'blobs', '--first-playable', '--json'],
+      { cwd: base },
+    );
+    expect(duplicate.code).toBe(1);
+    expect(JSON.parse(duplicate.out[0]!).inventoryProblems).toContain(
+      'decisions enemy-style and duplicate ask the same question in the same area',
+    );
   });
 
   it('reads the roles from the platform pack the builder uses, never a game repo’s older installed copy', async () => {

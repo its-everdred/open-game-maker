@@ -25,7 +25,7 @@ export async function correctAnswer(
     `The creator changed their answer to "${command.question}": "${label(optionId)}" now stands instead of "${label(standing)}". Follow the new answer.`,
     `ogm:correction:${commandId}:${command.version ?? 1}:${corrections}`,
   );
-  updateCommand(deps.sqlite, row.id, { corrected_option_id: optionId, corrections });
+  updateCommand(deps.sqlite, row.id, { corrected_option_id: optionId, corrections, answer_origin: 'player' });
   getChatRuntime(deps).hub.publish(job.jobId);
   return true;
 }

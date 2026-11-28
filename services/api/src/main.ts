@@ -1,3 +1,4 @@
+import { createPlannerTerminals } from './jobs/planner-terminals.js';
 import { startPreviewRelay } from './previews/relay.js';
 import { previewTicketVerifier } from './previews/ticket.js';
 import { homedir } from 'node:os';
@@ -31,11 +32,13 @@ import { createChatJobDirectory } from './build-chat/job-directory.js';
 import { createDraftScopeTicket } from './new-game/draft-assistant.js';
 import { startDraftCleanup } from './game-drafts/cleanup.js';
 import { finishRun, startBuildSweep } from './builds/publish.js';
+import { plannerBaseVerifier } from './previews/planner-base.js';
 import { createDaemonDirectory, daemonRowForGame } from './jobs/daemons.js';
 import { recordDaemonReadTokenStatus } from './job-commands/health.js';
 import { activeJobs, activeJobsForSlug, byTicket } from './jobs/repo.js';
 import { applyAiurEvent, applyIssueSnapshot, applyProgress } from './jobs/projection.js';
 import { startScheduler } from './jobs/scheduler.js';
+import { ticketJobResolver } from './internal/ticket-job.js';
 import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
 import { createDecisionWaitPoller } from './decision-waits/poller.js';
 import { createReviewSync } from './review-rounds/runner.js';
@@ -197,6 +200,8 @@ deps.registry.reviewEpisode = createReviewEpisodeReader(env.OGM_INTAKE_GITHUB_TO
 deps.registry.ticketConversation = createTicketConversationReader(env.OGM_INTAKE_GITHUB_TOKEN);
 deps.registry.issueStateWriter = issues;
 deps.registry.fidelityWriter = createReviewIssues(env.OGM_INTAKE_GITHUB_TOKEN);
+deps.registry.plannerBaseVerifier = plannerBaseVerifier(env.OGM_INTAKE_GITHUB_TOKEN);
+deps.registry.ticketJobResolver = ticketJobResolver(db);
 startPreviewRelay(deps, previewTicketVerifier(env.OGM_INTAKE_GITHUB_TOKEN));
 
 const budgetDefaults = {
@@ -205,6 +210,12 @@ const budgetDefaults = {
   resetZone: deps.config.resetZoneDefault,
 };
 const lifecycleDeps = { db, sqlite, events: deps.events, defaults: budgetDefaults };
+const plannerTerminals = createPlannerTerminals(
+  db,
+  (jobId, state) => finishRun(deps, jobId, state),
+  (error) => log({ event: 'planner_terminal_error', error: error instanceof Error ? error.name : 'unknown' }),
+);
+
 const projectionDeps = {
   db,
   events: deps.events,
@@ -213,7 +224,7 @@ const projectionDeps = {
     markRunning: (jobId: string) => void markRunning(lifecycleDeps, jobId),
     markPaused: (jobId: string, reason: 'over_reservation' | 'budget_exhausted' | 'admin') =>
       void markPaused(lifecycleDeps, jobId, reason),
-    markTerminal: (jobId: string, state: 'done' | 'failed' | 'cancelled') => finishRun(deps, jobId, state),
+    markTerminal: (jobId: string, state: 'done' | 'failed' | 'cancelled') => void plannerTerminals.apply(jobId, state),
   },
 };
 
@@ -246,9 +257,11 @@ const stopAnalyticsRetention = startAnalyticsRetention({
   retentionDays: deps.config.analyticsRetentionDays,
   log,
 });
+await plannerTerminals.reconcile();
 intake.start();
 const stopDraftCleanup = startDraftCleanup(deps);
 const stopScheduler = startScheduler({ ...lifecycleDeps, log });
+const stopPlannerTerminals = plannerTerminals.start();
 const stopEstimateRefinement = startEstimateRefinement({ db, events: deps.events, log });
 const stopBuildSweep = startBuildSweep(deps, { graceMs: 30 * 60_000, intervalMs: 60_000 });
 // Tickets parked on a decision start as soon as it is answered, with no Executor step (#680).
@@ -355,6 +368,7 @@ process.once('SIGTERM', () => {
   stopDraftCleanup();
   stopAnalyticsRetention();
   stopScheduler();
+  stopPlannerTerminals();
   stopEstimateRefinement();
   stopBuildSweep();
   decisionWaits.stop();

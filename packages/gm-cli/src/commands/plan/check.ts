@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { EXIT, UsageError, type GmCommand } from '../../command.js';
 import { checkRoles, describeProblem } from '../../plan/roles.js';
 import { rolesFor } from '../../skills/catalog.js';
-import { DecisionInventory } from '@ogm/contracts';
+import { DecisionInventory, duplicateDecisionQuestions } from '@ogm/contracts';
 import { inventoryFile, ticketDecisionIds } from '../../decision-inventory.js';
 import { workspaceRoot } from '../../outbox.js';
 
@@ -87,6 +87,9 @@ export const command: GmCommand = {
         inventoryProblems.push(`game ${game} has no valid docs/${game}/decisions.json`);
       }
       if (inventory) {
+        if (flags['first-playable'])
+          for (const { first, second } of duplicateDecisionQuestions(inventory))
+            inventoryProblems.push(`decisions ${first} and ${second} ask the same question in the same area`);
         const listed = new Set<string>();
         for (const ticket of tickets.filter((item) => item.labels.some((label) => label === `game:${game}`))) {
           if (!ticket.body) {

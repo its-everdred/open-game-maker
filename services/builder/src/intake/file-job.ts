@@ -39,7 +39,16 @@ export function createIntake(deps: IntakeDeps) {
           .get();
         return job?.state === 'admitted' ? fileJob(jobId) : result;
       });
-    const pending = withJobDispatchLock(jobId, () => performFileJob(jobId)).finally(() => inFlight.delete(jobId));
+    const key = deps.db
+      .select({ key: schema.jobs.idempotencyKey })
+      .from(schema.jobs)
+      .where(eq(schema.jobs.id, jobId))
+      .get()?.key;
+    const parent = /^planner:(j_[A-Za-z0-9-]+):[A-Za-z0-9_-]{1,60}$/.exec(key ?? '')?.[1];
+    const dispatch = () => withJobDispatchLock(jobId, () => performFileJob(jobId));
+    const pending = (parent && parent !== jobId ? withJobDispatchLock(parent, dispatch) : dispatch()).finally(() =>
+      inFlight.delete(jobId),
+    );
     inFlight.set(jobId, pending);
     return pending;
   }
@@ -52,7 +61,8 @@ export function createIntake(deps: IntakeDeps) {
       .where(eq(schema.jobs.id, jobId))
       .get();
     if (!found) return { skipped: 'missing' };
-    const queuedPlannerChild = found.job.state === 'queued' && (found.job.idempotencyKey ?? '').startsWith('planner:');
+    const plannerChild = (found.job.idempotencyKey ?? '').startsWith('planner:');
+    const queuedPlannerChild = found.job.state === 'queued' && plannerChild;
     if (found.job.state !== 'admitted' && !queuedPlannerChild) {
       const pendingPlanner =
         found.job.kind === 'new_game' && found.job.state === 'filed'
@@ -67,12 +77,24 @@ export function createIntake(deps: IntakeDeps) {
     const repairTriage = found.job.kind === 'repair' ? triageForRepair(deps.db, jobId) : undefined;
     if (found.job.kind === 'repair' && !repairTriage?.ticket) return { deferred: 'triage' };
 
-    if (queuedPlannerChild) {
+    if (plannerChild) {
       const parentMatch = /^planner:(j_[A-Za-z0-9-]+):[A-Za-z0-9_-]{1,60}$/.exec(found.job.idempotencyKey ?? '');
       const parent = parentMatch
         ? deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, parentMatch[1]!)).get()
         : undefined;
-      if (!parent || parent.state === 'failed' || parent.state === 'cancelled') {
+      const projection = parentMatch
+        ? deps.db
+            .select({ lifecycle: schema.jobProjections.lifecycle })
+            .from(schema.jobProjections)
+            .where(eq(schema.jobProjections.jobId, parentMatch[1]!))
+            .get()
+        : undefined;
+      if (
+        !parent ||
+        parent.state === 'failed' ||
+        parent.state === 'cancelled' ||
+        projection?.lifecycle === 'cancelled'
+      ) {
         const plan = JobPlan.parse(JSON.parse(found.job.plan));
         const ticket = plan.tickets[0];
         if (!ticket) return failPreflight(found.job, ['planner child has no ticket']);
@@ -108,11 +130,19 @@ export function createIntake(deps: IntakeDeps) {
           await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
           return { deferred: 'github' };
         }
-        if (parent?.state === 'cancelled' && deps.cancelJob) deps.cancelJob(jobId);
+        if ((parent?.state === 'cancelled' || projection?.lifecycle === 'cancelled') && deps.cancelJob)
+          deps.cancelJob(jobId);
         else deps.failJob(jobId);
         return { skipped: 'parent_terminal' };
       }
-      if (found.job.aiurIssueNumber !== null) return { skipped: 'staged' };
+      if (queuedPlannerChild && found.job.aiurIssueNumber !== null) {
+        const staged = deps.db
+          .select({ todoAt: schema.jobTickets.todoAt })
+          .from(schema.jobTickets)
+          .where(eq(schema.jobTickets.jobId, jobId))
+          .get();
+        if (staged?.todoAt) return { skipped: 'staged' };
+      }
     }
 
     const repo =
@@ -212,7 +242,7 @@ export function createIntake(deps: IntakeDeps) {
         await deps.issues.ensureLabel(repo, 'model:low', 'ededed', 'low reasoning effort');
       }
       if (planner)
-        for (const label of [`game:${gameSlug}`, planner.role, 'priority:1'])
+        for (const label of [`game:${gameSlug}`, planner.role, 'priority:1', 'ogm:planner-child'])
           await deps.issues.ensureLabel(repo, label);
     } catch (error) {
       await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
@@ -334,6 +364,26 @@ export function createIntake(deps: IntakeDeps) {
       }
 
       if (queuedPlannerChild) {
+        try {
+          if (!parentRow || !deps.issues.blockBy) throw new Error('planner gate unavailable');
+          await deps.issues.blockBy(repo, row.issueNumber, parentRow.issueNumber);
+          if (row.todoAt === null) {
+            const labels = await deps.issues.labels(repo, row.issueNumber);
+            const statePrefix = todo.slice(0, -'todo'.length);
+            if (labels.some((label) => label.startsWith(statePrefix) && label !== todo))
+              throw new Error('planner child state changed before queueing');
+            if (!labels.includes(todo)) await deps.issues.addLabel(repo, row.issueNumber, todo);
+            const todoAt = now().toISOString();
+            deps.db
+              .update(schema.jobTickets)
+              .set({ todoAt, filedAt: todoAt })
+              .where(and(eq(schema.jobTickets.jobId, jobId), eq(schema.jobTickets.key, ticket.key)))
+              .run();
+          }
+        } catch (error) {
+          await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
+          return { deferred: 'github' };
+        }
         const updatedAt = now().toISOString();
         deps.db
           .update(schema.jobs)
@@ -346,6 +396,16 @@ export function createIntake(deps: IntakeDeps) {
           .where(and(eq(schema.jobs.id, jobId), inArray(schema.jobs.state, ['queued', 'admitted'])))
           .run();
         return { filed: true, issues: [row.issueNumber] };
+      }
+
+      if (planner) {
+        try {
+          if (!deps.issues.unblockBy) throw new Error('planner gate unavailable');
+          await deps.issues.unblockBy(repo, row.issueNumber, planner.parent);
+        } catch (error) {
+          await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
+          return { deferred: 'github' };
+        }
       }
 
       if (row.todoAt === null) {

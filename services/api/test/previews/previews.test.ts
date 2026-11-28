@@ -784,6 +784,7 @@ describe('preview builds', () => {
         state: 'done',
         result: expect.objectContaining({ request: 'j_planner' }),
       });
+      deps.registry.plannerBaseVerifier = vi.fn().mockResolvedValue(true);
       const submitChild = async (key: string) => {
         const requestId = randomUUID();
         writeFileSync(
@@ -796,6 +797,7 @@ describe('preview builds', () => {
             sha: SHA,
             branch: 'main',
             kind: 'new-game-child',
+            plannerBranch: 'aiur/12',
             child: {
               key,
               role: 'role:gameplay',
@@ -813,8 +815,58 @@ describe('preview builds', () => {
         await scanPreviewRelay(deps, home, async () => true);
         return JSON.parse(readFileSync(join(dir, `${requestId}.response`), 'utf8'));
       };
-      expect(await submitChild('starter')).toMatchObject({ state: 'done', result: { jobId: expect.any(String) } });
+      const submitted = await submitChild('starter');
+      expect(submitted).toMatchObject({ state: 'done', result: { jobId: expect.any(String) } });
       expect(await submitChild('extra')).toMatchObject({ state: 'failed', error: 'planner_ticket_limit' });
+      deps.db
+        .insert(schema.jobTickets)
+        .values({ jobId: submitted.result.jobId, key: 'build', issueNumber: 13, repo: REPO, sig: 'child' })
+        .run();
+      const childWorkspace = join(home, 'workspaces', '13');
+      mkdirSync(childWorkspace, { recursive: true });
+      execFileSync('git', ['init', '-q', childWorkspace]);
+      execFileSync(process.execPath, [hook, 'create'], {
+        ...hookOptions,
+        cwd: childWorkspace,
+        env: { ...hookOptions.env, AIUR_HOOK_TICKET_IDENTIFIER: '13' },
+      });
+      const childToken = JSON.parse(readFileSync(join(childWorkspace, '.gm/context/preview.json'), 'utf8')).token;
+      const childDir = join(childWorkspace, '.gm/preview');
+      mkdirSync(childDir);
+      const notAdmitted = randomUUID();
+      writeFileSync(
+        join(childDir, `${notAdmitted}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token: childToken,
+          ticket: '13',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+          kind: 'planner-worker-context',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(childDir, `${notAdmitted}.response`), 'utf8')).state).toBe('failed');
+      deps.db.update(schema.jobs).set({ state: 'admitted' }).where(eq(schema.jobs.id, submitted.result.jobId)).run();
+      const childRequest = randomUUID();
+      writeFileSync(
+        join(childDir, `${childRequest}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token: childToken,
+          ticket: '13',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+          kind: 'planner-worker-context',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(childDir, `${childRequest}.response`), 'utf8'))).toMatchObject({
+        state: 'done',
+        result: { plannerChild: true, base: { branch: `ogm/planner-checkpoints/${SHA}`, sha: SHA }, answers: [] },
+      });
       const wrongTicket = randomUUID();
       writeFileSync(
         join(dir, `${wrongTicket}.json`),
@@ -830,6 +882,21 @@ describe('preview builds', () => {
       );
       await scanPreviewRelay(deps, home, async () => true);
       expect(JSON.parse(readFileSync(join(dir, `${wrongTicket}.response`), 'utf8')).state).toBe('failed');
+      const wrongChild = randomUUID();
+      writeFileSync(
+        join(dir, `${wrongChild}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token,
+          ticket: '13',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+          kind: 'planner-worker-context',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${wrongChild}.response`), 'utf8')).state).toBe('failed');
       const id = randomUUID();
       writeFileSync(join(dir, `${id}.tgz`), archive());
       writeFileSync(

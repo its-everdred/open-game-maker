@@ -4,7 +4,7 @@ import type { CommandReview, DesignDecision } from '@ogm/contracts';
 import type { ChatJob } from '../app/registry.js';
 import type { AppDeps } from '../app/types.js';
 import { getChatRuntime } from '../build-chat/routes.js';
-import { parseCommand, updateCommand, type ChatRow, type StoredCommand } from '../build-chat/store.js';
+import { getChatRow, parseCommand, updateCommand, type ChatRow, type StoredCommand } from '../build-chat/store.js';
 import { notifyExecutor } from '../design-decisions/notify.js';
 import { isDesignJob, latestForCommand, tryRecordDesignDecision } from '../design-decisions/store.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
@@ -152,7 +152,27 @@ function recordReviewOf(input: AnswerInput, command: StoredCommand, optionId: st
 // that aiur already answered keeps that answer: for a design decision a later answer is recorded as a new decision
 // that supersedes the earlier one and the Executor re-plans, because an answered aiur decision cannot be re-answered.
 // Any other job's ticket is told of the change (correction.ts).
+const answerLocks = new Map<string, Promise<void>>();
+
 export async function answerCommand(input: AnswerInput): Promise<AnswerOutcome> {
+  const key = input.row.id;
+  const previous = answerLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  answerLocks.set(key, current);
+  await previous;
+  try {
+    const row = getChatRow(input.deps.sqlite, key);
+    return row ? await answerCommandLocked({ ...input, row }) : { kind: 'not_linked' };
+  } finally {
+    release();
+    if (answerLocks.get(key) === current) answerLocks.delete(key);
+  }
+}
+
+async function answerCommandLocked(input: AnswerInput): Promise<AnswerOutcome> {
   const { deps, job, row, optionId } = input;
   const command = parseCommand(row);
   if (command === null || command.decision_id === '' || command.version === undefined || job.aiur === null) {
@@ -182,6 +202,12 @@ export async function answerCommand(input: AnswerInput): Promise<AnswerOutcome> 
       return { kind: 'superseded', decisionId: command.decision_id, optionId, supersedes: null };
     }
     await recordAnswer(input, command, optionId, previous, true);
+    updateCommand(deps.sqlite, row.id, {
+      corrected_option_id: optionId,
+      corrections: (command.corrections ?? 0) + 1,
+      answer_origin: 'player',
+    });
+    getChatRuntime(deps).hub.publish(job.jobId);
     recordReviewOf(input, command, optionId);
     const latest = latestForCommand(deps.db, job.gameId, command.command_id ?? row.id);
     return {
@@ -217,6 +243,7 @@ export async function answerCommand(input: AnswerInput): Promise<AnswerOutcome> 
       ...winnerPatch(decided),
       status: 'answered' as const,
       option_id: optionId,
+      answer_origin: input.source,
       ...(review === undefined ? {} : { review }),
     };
     await writeInbox(deps, job, command, row, optionId);
@@ -242,6 +269,12 @@ export async function answerCommand(input: AnswerInput): Promise<AnswerOutcome> 
     const winnerOption = patch.option_id;
     if (design && input.source !== 'default' && winnerOption !== undefined && winnerOption !== optionId) {
       await recordAnswer(input, { ...command, status: 'answered', option_id: winnerOption }, optionId, previous, true);
+      updateCommand(deps.sqlite, row.id, {
+        corrected_option_id: optionId,
+        corrections: (command.corrections ?? 0) + 1,
+        answer_origin: 'player',
+      });
+      getChatRuntime(deps).hub.publish(job.jobId);
       recordReviewOf(input, command, optionId);
       const latest = latestForCommand(deps.db, job.gameId, commandId);
       return {

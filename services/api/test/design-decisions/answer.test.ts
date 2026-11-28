@@ -99,11 +99,47 @@ describe('design decisions recorded from the build chat', () => {
     expect(client.messages[0]!.text).toContain('supersedes D-01');
     expect(client.messages[0]!.text).toContain('"Wooden"');
     expect(client.messages[0]!.text).toContain('instead of "Iron"');
-    // The aiur Command keeps the answer it was given; the history is what carries the later choice.
+    // Keep aiur's original answer while persisting the creator's current choice for other workers.
     expect(parseCommand(listCommands(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
       status: 'answered',
       option_id: 'iron',
+      corrected_option_id: 'wood',
+      corrections: 1,
     });
+  });
+
+  it('keeps concurrent corrections in the order the creator sent them', async () => {
+    const { app, deps, client } = await setup();
+    insertOpenDesignCommand(deps);
+    expect((await answer(app, 'iron')).status).toBe(200);
+    const original = client.message.bind(client);
+    let release!: () => void;
+    let started!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let calls = 0;
+    client.message = async (...args: Parameters<typeof client.message>) => {
+      if (++calls === 1) {
+        started();
+        await waiting;
+      }
+      return original(...args);
+    };
+    const first = answer(app, 'wood');
+    await entered;
+    const second = answer(app, 'iron');
+    release();
+    expect((await first).status).toBe(200);
+    expect((await second).status).toBe(200);
+    expect(parseCommand(listCommands(deps.sqlite, SCOPE_JOB).at(-1)!)).toMatchObject({
+      corrected_option_id: 'iron',
+      corrections: 2,
+    });
+    expect(listDesignDecisions(deps.db, GAME).map((decision) => decision.chosen)).toEqual(['iron', 'wood', 'iron']);
   });
 
   it('tells the Executor about a later answer whose earlier one never reached the history', async () => {

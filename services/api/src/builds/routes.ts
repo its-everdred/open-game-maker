@@ -12,6 +12,7 @@ import { bodyLimit } from 'hono/body-limit';
 
 import type { ApiBindings } from '../app/types.js';
 import { hookSecretFiles, hookSecretGame, type HookDaemonResolver, type HookGameResolver } from '../internal/bundle.js';
+import { ticketJobResolver } from '../internal/ticket-job.js';
 import { findGameBySlugOrId } from '../games/slug.js';
 import { createPreview, listEditorPreviews, submitReviewRound } from '../previews/store.js';
 import { getRound } from '../review-rounds/store.js';
@@ -50,9 +51,15 @@ export function buildRoutes(opts: {
     const bearer = /^Bearer\s+(\S+)$/i.exec(c.req.header('authorization') ?? '');
     const repo = bearer ? await opts.daemonForSecret(bearer[1]!, deps) : null;
     if (!repo) return c.json({ error: { code: 'unauthenticated' } }, 401);
-    const resolver = deps.registry.ticketJobResolver;
+    const resolver = deps.registry.ticketJobResolver ?? (opts.gameForSecret ? ticketJobResolver(deps.db) : null);
     const job = resolver ? await resolver(repo, c.req.param('identifier') ?? '') : null;
     if (!job || job.repo.toLowerCase() !== repo.toLowerCase()) return c.json({ error: { code: 'not_found' } }, 404);
+    if (opts.gameForSecret) {
+      const identity = await opts.gameForSecret(bearer![1]!, deps);
+      const game = identity ? findGameBySlugOrId(deps.db, identity.slug) : null;
+      if (!identity || identity.repo.toLowerCase() !== repo.toLowerCase() || game?.id !== job.gameId)
+        return c.json({ error: { code: 'not_found' } }, 404);
+    }
     if (!awaitsBuild(deps, job.jobId) || isPublishing(job.jobId)) {
       return c.json({ error: { code: 'job_not_awaiting_build' } }, 409);
     }
