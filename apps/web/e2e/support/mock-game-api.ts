@@ -39,6 +39,7 @@ export async function installGameApi(
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname.slice('/api/v1'.length);
+    if (path === '/me') return json(route, { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' });
     if (path === '/artifacts/grant' && request.method() === 'POST') return json(route, { grant: 'fixture-grant' });
     if (path === '/notifications/stream') return eventStream(route);
     if (path === '/notifications' && request.method() === 'GET') return json(route, []);
@@ -46,7 +47,7 @@ export async function installGameApi(
       return json(route, {
         id: 'game',
         familyId: 'family',
-        ownerId: 'user',
+        ownerId: 'u1',
         title,
         visibility: 'private',
         repoVisibility: 'private',

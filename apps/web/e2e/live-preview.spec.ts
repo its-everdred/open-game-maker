@@ -5,7 +5,7 @@ test('opens the signed-in ticket workspace in an isolated frame at the requested
   await installAuthRoutes(page, { signedIn: true });
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === '/api/v1/games/resolve/demo')
+    if (path === '/api/v1/games/live-resolve/demo/12')
       return route.fulfill({ json: { game: { id: 'g_demo', slug: 'demo', title: 'Demo' } } });
     if (path === '/api/v1/games/g_demo/live/12')
       return route.fulfill({

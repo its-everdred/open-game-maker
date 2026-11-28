@@ -470,7 +470,8 @@ async function installReviewApi(page: Page, options: ReviewApiOptions = {}) {
       });
     }
     if (path === `/api/v1/games/${gameId}/commands`) return json(route, { commands });
-    if (options.voice && path === '/api/v1/games') return json(route, { games: [{ id: gameId, title: 'Blobs' }] });
+    if (options.voice && path === '/api/v1/games')
+      return json(route, { games: [{ id: gameId, title: 'Blobs', ownerId: 'u1' }] });
     if (options.voice && path === '/api/v1/jobs') return json(route, { jobs: [job] });
     if (options.voice && path === '/api/v1/voice/token') {
       voiceTokenTargets.push(
