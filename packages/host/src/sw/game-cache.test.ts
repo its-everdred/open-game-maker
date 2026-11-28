@@ -8,14 +8,14 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('classifyGameRequest', () => {
   it.each([
-    [`/a/${hash}.glb`, 'cache-first', 'gm-blobs-v1'],
-    ['/g/a/b/index.html', 'cache-first', 'gm-builds-v1'],
-    ['/g/a/b/main.js', 'cache-first', 'gm-builds-v1'],
-    ['/g/a/b/assets/manifest.json', 'cache-first', 'gm-builds-v1'],
-  ] as const)('classifies %s as %s', (path, strategy, cacheName) => {
+    `/a/${hash}.glb`,
+    '/g/a/b/index.html',
+    '/g/a/b/main.js',
+    '/g/a/b/assets/manifest.json',
+    '/d/a/b/token/main.js',
+  ] as const)('passes revocable artifact %s to the host', (path) => {
     expect(classifyGameRequest(new Request(`https://games.test${path}`), 'https://games.test')).toEqual({
-      strategy,
-      cacheName,
+      strategy: 'pass',
     });
   });
 
@@ -59,7 +59,7 @@ describe('cache lifecycle', () => {
 
     await retireCaches(cacheStorage);
 
-    expect(deleted).toEqual(['gm-assets', 'gm-pages']);
+    expect(deleted).toEqual(['gm-assets', 'gm-pages', 'gm-blobs-v1', 'gm-builds-v1']);
   });
 
   it('stores only successful responses', async () => {

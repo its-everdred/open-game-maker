@@ -19,6 +19,7 @@ import {
   getPreviewDesign,
   getScenerySource,
   postAnalyticsEvent,
+  requestDraftGrant,
   NO_BUILD_ID,
   submitReapply,
   type DesignSnapshot,
@@ -272,6 +273,29 @@ export function GameScreen() {
   );
   const previewSource = noBuild && !activePreview && !activeStage ? scenerySource.data : undefined;
   const previewSourceError = noBuild && !activePreview && !activeStage && scenerySource.isError;
+  const build = publishedBuildId !== undefined && publishedBuildId === runningBuildId ? 'published' : 'draft';
+  const needsGrant = build === 'draft' || game.data?.visibility === 'private';
+  const draftGrant = useQuery({
+    queryKey: ['draft-grant', gameId, runningBuildId],
+    queryFn: () => requestDraftGrant(gameId, runningBuildId!),
+    enabled:
+      !!gameId &&
+      !!runningBuildId &&
+      runningBuildId !== NO_BUILD_ID &&
+      needsGrant &&
+      (!activePreview || !!linkedSnapshot) &&
+      (!activeStage || !!linkedSnapshot),
+    retry: false,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: true,
+  });
+  const grantKey = `${gameId}:${runningBuildId ?? ''}:${frameAttempt}:${needsGrant}`;
+  const mountedGrant = useRef<{ key: string; token?: string }>({ key: grantKey });
+  if (mountedGrant.current.key !== grantKey) mountedGrant.current = { key: grantKey };
+  if (draftGrant.data?.grant) mountedGrant.current.token = draftGrant.data.grant;
+  const frameGrant = mountedGrant.current.token;
+  const grantError = draftGrant.isError && !frameRef.current;
   const nativePalette = frameState.manifest?.palette;
   const nativePaletteEmpty = nativePalette !== undefined && nativePalette.items.length === 0;
   const fallback = useQuery({
@@ -302,7 +326,14 @@ export function GameScreen() {
         : native;
     const buildId = activePreview?.accessId ?? runningBuildId;
     if (mode !== 'edit' || fallbackActive || !buildId || (noBuild && !activePreview)) return manifest;
-    return resolvePaletteThumbnails(manifest, gamesOrigin, gameId, buildId, !!activePreview);
+    return resolvePaletteThumbnails(
+      manifest,
+      gamesOrigin,
+      gameId,
+      buildId,
+      !!activePreview,
+      needsGrant ? frameGrant : undefined,
+    );
   }, [
     frameState.manifest,
     fallbackActive,
@@ -310,6 +341,9 @@ export function GameScreen() {
     fallback.data,
     activePreview,
     runningBuildId,
+    build,
+    needsGrant,
+    frameGrant,
     noBuild,
     gamesOrigin,
     gameId,
@@ -428,7 +462,6 @@ export function GameScreen() {
     },
     [activeStage, fallbackPalette, fallbackActive, frameState.manifest, gameId, jobBranch, submitEditRequest],
   );
-  const build = publishedBuildId !== undefined && publishedBuildId === runningBuildId ? 'published' : 'draft';
   const room = useRoomRuntime({ frame: frameController, roomId, testMode: searchParams.has('test') });
   const wasMatchPaused = useRef(false);
   useEffect(() => {
@@ -463,6 +496,10 @@ export function GameScreen() {
     /* A linked build plays as it was built: no request-only preview, stage or scenery stands in for it. */
     const framePreview = linkedSnapshot ? undefined : activePreview;
     const frameStage = linkedSnapshot ? undefined : activeStage;
+    if (needsGrant && !framePreview && !frameStage && snapshot.buildId !== NO_BUILD_ID) {
+      if (grantError) setFrameState({ bridgeState: 'error', dropped: 0 });
+      if (!frameGrant) return;
+    }
     if (!linkedSnapshot) {
       if (waitingForPreview) return;
       if (waitingForStage) return;
@@ -493,6 +530,7 @@ export function GameScreen() {
               gameId,
               buildId: framePreview?.accessId ?? snapshot.buildId,
               ...(framePreview ? { preview: true } : {}),
+              ...(needsGrant && !framePreview && frameGrant ? { draftGrant: frameGrant } : {}),
               mode: mode === 'edit' ? 'play' : mode,
               ...(scenario === null ? {} : { params: { scenario } }),
               ...(restoreOnStart
@@ -523,6 +561,7 @@ export function GameScreen() {
     activeSnapshot,
     branch,
     build,
+    needsGrant,
     frameAttempt,
     gameId,
     gamesOrigin,
@@ -541,6 +580,8 @@ export function GameScreen() {
     otherBuild,
     linkedDesign.isError,
     linkedSnapshot,
+    frameGrant,
+    grantError,
   ]);
 
   useEffect(() => {
@@ -810,7 +851,10 @@ export function GameScreen() {
   /** The lighting panel edits the running game, so it hides while the map covers it. */
   const [mapOpen, setMapOpen] = useState(false);
   const playFailed =
-    ((frameState.bridgeState === 'error' && !autoRetrying) || designLoadFailed) && !(mode === 'edit' && mapOpen);
+    ((frameState.bridgeState === 'error' && !autoRetrying) ||
+      designLoadFailed ||
+      (otherBuild && linkedDesign.isError)) &&
+    !(mode === 'edit' && mapOpen);
   const { reportFault, reportRestoreError } = usePlayTelemetry({
     gameId,
     buildId: runningBuildId,
@@ -840,6 +884,7 @@ export function GameScreen() {
           />
         ) : null}
         {!designLoadFailed &&
+        !(otherBuild && linkedDesign.isError) &&
         (!noBuild || activePreview !== undefined || linkedSnapshot !== undefined) &&
         frameState.bridgeState !== 'error' ? (
           <LoadingLayer
@@ -1102,6 +1147,7 @@ export function GameScreen() {
               if (designLoadFailed) void design.refetch();
               if (activeSnapshot?.buildId === NO_BUILD_ID) void scenerySource.refetch();
               if (linkedDesign.isError) void linkedDesign.refetch();
+              if (draftGrant.isError) void draftGrant.refetch();
               setFrameAttempt((attempt) => attempt + 1);
             }}
           >

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
 import { HttpError } from '../app/errors.js';
@@ -9,6 +9,7 @@ import { parseBody } from '../app/validate.js';
 import type { ApiBindings } from '../app/types.js';
 import { authorizedGame } from '../games/authorize.js';
 import { requirePrincipal } from '../app/principal.js';
+import { bindPreview, hasCreatorMembership } from '../artifacts/grants.js';
 import { latestRoundForTicket, roundForBuild } from '../review-rounds/store.js';
 import {
   beginReviewAnswer,
@@ -35,14 +36,35 @@ const Verdict = z
   })
   .strict();
 
+function bindPreviews<T extends { accessId: string }>(
+  c: Context<ApiBindings>,
+  game: { id: string; ownerId: string; familyId: string },
+  previews: T[],
+): T[] {
+  c.header('Cache-Control', 'no-store');
+  const principal = requirePrincipal(c, ['user']);
+  if (
+    principal.userId !== game.ownerId ||
+    principal.capability !== 'creator' ||
+    !hasCreatorMembership(c.get('deps'), game.familyId, principal.userId)
+  )
+    return [];
+  return previews.map((preview) => ({
+    ...preview,
+    accessId: bindPreview(c.get('deps'), game.id, preview.accessId, principal.userId, c.req.raw.headers),
+  }));
+}
+
 export default new Hono<ApiBindings>()
   .get('/games/:gameId/editor/preview-history', async (c) => {
     const game = authorizedGame(c, 'game.edit');
-    return c.json({ previews: await listPreviewHistory(c.get('deps'), game.id) });
+    const previews = await listPreviewHistory(c.get('deps'), game.id);
+    return c.json({ previews: bindPreviews(c, game, previews) });
   })
   .get('/games/:gameId/editor/previews', async (c) => {
     const game = authorizedGame(c, 'game.edit');
-    return c.json({ previews: await listEditorPreviews(c.get('deps'), game.id) });
+    const previews = await listEditorPreviews(c.get('deps'), game.id);
+    return c.json({ previews: bindPreviews(c, game, previews) });
   })
   .get('/games/:gameId/previews', async (c) => {
     const game = authorizedGame(c, 'game.edit');
@@ -50,7 +72,7 @@ export default new Hono<ApiBindings>()
     const previews = (await listPreviews(deps, game.id)).filter((preview) => currentPreview(deps, preview));
     const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
     const named = await Promise.all(
-      previews.map(async (preview) => {
+      bindPreviews(c, game, previews).map(async (preview) => {
         const title = await deps.registry.workerTitle?.(preview.ticket, repo).catch(() => '');
         const round = roundForBuild(deps.db, game.id, preview.ticket, preview.buildId);
         return { ...preview, ...(title ? { title } : {}), ...(round?.question ? { question: round.question } : {}) };

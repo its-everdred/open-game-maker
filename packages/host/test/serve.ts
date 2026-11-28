@@ -57,6 +57,23 @@ const game = createServer(async (request, response) => {
     requestCounts.set(path, (requestCounts.get(path) ?? 0) + 1);
   }
   if (path === '/game.js') return file(response, `${root}/dist/test/stub-game/main.js`);
+  if (path === '/d/fixture/draft-1/draft-token/index.html') {
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    return html(
+      response,
+      '<!doctype html><div id="canvas">game canvas</div><script type="module" src="./game.js"></script><script>fetch("./asset.txt").then(r => r.text()).then(t => document.body.dataset.asset = t)</script>',
+    );
+  }
+  if (path === '/d/fixture/draft-1/draft-token/game.js') {
+    return file(response, `${root}/dist/test/stub-game/main.js`, {
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-store',
+    });
+  }
+  if (path === '/d/fixture/draft-1/draft-token/asset.txt') {
+    response.writeHead(200, { 'access-control-allow-origin': '*', 'content-type': 'text/plain' });
+    return response.end('scoped asset');
+  }
   if (path === '/g/menu-game/draft-1/game.js') return file(response, `${root}/dist/test/menu-game/main.js`);
   if (path === '/g/menu-game/draft-1/index.html') {
     return html(

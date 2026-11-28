@@ -1,6 +1,8 @@
 import type { BoundaryVerdict, CommitOp, CommitResult } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { eq } from 'drizzle-orm';
+import { unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { signJobToken } from '../src/app/job-token.js';
@@ -19,6 +21,17 @@ import { insertBranch } from '../src/design/store.js';
 import { asUser, JOB_SECRET, makeApp } from './helpers.js';
 
 describe('release routes', () => {
+  it('refuses to publish a tested record whose build files are missing', async () => {
+    const { deps, source, operations } = setup();
+    insertBuild(deps, source);
+    unlinkSync(join(deps.config.gamesRoot, ids.game, ids.build, 'index.html'));
+    const { app } = await makeApp(deps);
+    const response = await publish(app);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: 'artifact_missing' });
+    expect(deps.db.select().from(schema.releases).all()).toEqual([]);
+    expect(operations).toEqual([]);
+  });
   it('registers builds for the builder and advances main when testing completes', async () => {
     const { deps, runtime } = setup();
     const { app } = await makeApp(deps);
@@ -395,6 +408,7 @@ describe('release routes', () => {
     expect(await current.json()).toMatchObject({
       releaseId: release.id,
       version: '1.0.0',
+      buildId: ids.build,
       buildUrl: `https://games.example.test/g/${ids.game}/${ids.build}/`,
     });
     const unchanged = await app.request(`/api/v1/games/${ids.game}/published`, {

@@ -26,14 +26,18 @@ export default new Hono<ApiBindings>()
     const game = authorizedGame(c, 'game.edit');
     const deps = c.get('deps');
     const includeGameplay = c.req.query('includeGameplay') === '1';
+    const historyTicket = c.req.query('historyTicket');
+    if (historyTicket !== undefined && !/^[1-9]\d*$/u.test(historyTicket)) throw new HttpError(400, 'invalid_ticket');
     const rounds = deps.db
       .select()
       .from(schema.reviewRounds)
       .where(
         and(
           eq(schema.reviewRounds.gameId, game.id),
-          isNull(schema.reviewRounds.verdict),
-          sql`NOT EXISTS (
+          historyTicket ? eq(schema.reviewRounds.ticket, historyTicket) : isNull(schema.reviewRounds.verdict),
+          historyTicket
+            ? undefined
+            : sql`NOT EXISTS (
             SELECT 1 FROM review_rounds AS newer
             WHERE newer.game_id = ${schema.reviewRounds.gameId}
               AND (
@@ -98,6 +102,7 @@ export default new Hono<ApiBindings>()
             : null,
           media: items,
           postedAt: round.postedAt,
+          ...(historyTicket ? { verdict: round.verdict, verdictAt: round.verdictAt } : {}),
         };
       }),
     );

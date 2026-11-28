@@ -194,7 +194,7 @@ function roomFake(page: Page, method: keyof FakeRoomHook, value: unknown): Promi
 function gameFrame(page: Page): Frame {
   const frame = page.frames().find((candidate) => {
     if (candidate === page.mainFrame()) return false;
-    return new URL(candidate.url()).pathname.startsWith('/g/');
+    return new URL(candidate.url()).pathname.startsWith('/d/');
   });
   if (!frame) throw new Error('cross-origin game frame was not mounted');
   return frame;

@@ -1,3 +1,29 @@
+.conversation-tabs {
+  display: flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--night-2) 78%, transparent);
+}
+
+.conversation-tabs [role='tab'] {
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: 700 15px/1 var(--body);
+}
+
+.conversation-tabs [role='tab'][aria-selected='true'] {
+  background: var(--blue-b);
+  color: var(--night);
+}
+
 .build-chat-messages {
   min-height: 180px;
   max-height: min(58svh, 620px);
@@ -13,27 +39,27 @@
 }
 
 .build-chat-row.text {
-  max-width: 88%;
-  padding: 9px 12px;
-  border-radius: 14px 14px 14px 4px;
-  background: var(--surface-raised);
+  max-width: 84%;
+  padding: 10px 14px;
+  border-radius: 18px 18px 18px 6px;
+  background: color-mix(in srgb, var(--blue-b) 22%, transparent);
+  font:
+    600 15px/1.38 Nunito,
+    system-ui,
+    sans-serif;
 }
 
 .build-chat-row.text.creator {
   align-self: flex-end;
-  border-radius: 14px 14px 4px;
-  background: color-mix(in srgb, var(--blue-b) 22%, transparent);
+  border-radius: 18px 18px 6px;
+}
+
+.build-chat-row.text.agent {
+  align-self: flex-start;
 }
 
 .build-chat-row.text p {
   margin: 0;
-}
-
-.build-chat-read {
-  min-height: var(--tap-secondary);
-  margin-top: 6px;
-  padding-inline: 10px;
-  font-size: 12px;
 }
 
 .build-chat-row.progress {
@@ -242,41 +268,24 @@
 }
 
 .build-chat-voice {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.build-chat-voice-side {
-  min-width: 0;
-}
-
-.build-chat-voice-side header {
-  font: 700 16px var(--display);
-}
-
-.build-chat-seismograph,
-.build-chat-orb {
-  height: 88px;
-  margin-block: 7px;
-  border-radius: 10px;
-  background: var(--aqua-b);
-}
-
-.build-chat-orb {
-  background: var(--purple-b);
-}
-
-.build-chat-captions {
-  height: 110px;
-  padding: 8px;
+  width: 100%;
+  min-height: 0;
+  max-height: min(34svh, 280px);
+  padding: 4px 0 8px;
   overflow-y: auto;
-  border-radius: 10px;
-  background: var(--night-2);
 }
 
-.build-chat-captions p {
-  margin: 0 0 5px;
+.build-chat-composer-stack {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+}
+
+.build-chat-voice .build-chat-row {
+  flex: none;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .build-chat-type {

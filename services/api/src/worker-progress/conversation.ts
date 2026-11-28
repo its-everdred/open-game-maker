@@ -1,6 +1,6 @@
 type Repository = { owner: string; name: string };
 
-// A ticket without a job, open or closed, has no creator-facing chat projection. Only explicitly marked comments may leave the operator discussion.
+// Include the worker's issue comments as well as explicitly shared creator comments.
 export function createTicketConversationReader(token: string, fetcher: typeof fetch = globalThis.fetch) {
   return async (repo: Repository, ticket: string, slugs: string[], owned: boolean) => {
     if (!/^[1-9]\d*$/.test(ticket)) throw new Error('invalid_ticket');
@@ -20,7 +20,7 @@ export function createTicketConversationReader(token: string, fetcher: typeof fe
     );
     if (!(games.length === 1 ? slugs.includes(games[0]!) : games.length === 0 && owned))
       throw new Error('ticket_not_found');
-    const messages: { text: string }[] = [];
+    const messages: { text: string; at?: string }[] = [];
     for (let page = 1; ; page += 1) {
       const response = await fetcher(`${path}/comments?per_page=100&page=${page}`, {
         headers,
@@ -31,9 +31,17 @@ export function createTicketConversationReader(token: string, fetcher: typeof fe
       if (!Array.isArray(rows)) throw new Error('Invalid ticket conversation response');
       for (const row of rows) {
         if (typeof row?.body !== 'string' || !row.body.trim()) continue;
-        if (!/<!--\s*gm:creator-visible\s*-->/.test(row.body)) continue;
-        if (/^## Agent Workpad\s*$/m.test(row.body) || /<!--\s*aiur:agent-authored\s*-->/i.test(row.body)) continue;
-        messages.push({ text: row.body.replace(/<!--\s*gm:creator-visible\s*-->/g, '').trim() });
+        const shared = /<!--\s*gm:creator-visible\s*-->/i.test(row.body);
+        const agent = /<!--\s*aiur:agent-authored\s*-->/i.test(row.body) || /^## Agent Workpad\s*$/m.test(row.body);
+        if (!shared && !(agent && ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(row.author_association))) continue;
+        messages.push({
+          text: row.body.replace(/<!--\s*(?:gm:creator-visible|aiur:agent-authored)\s*-->/gi, '').trim(),
+          ...(typeof row.updated_at === 'string'
+            ? { at: row.updated_at }
+            : typeof row.created_at === 'string'
+              ? { at: row.created_at }
+              : {}),
+        });
       }
       if (rows.length < 100) break;
     }
