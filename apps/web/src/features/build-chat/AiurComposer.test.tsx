@@ -255,7 +255,7 @@ it('keeps the microphone as a mute control and shows both live voice transcripts
   await waitFor(() => expect(composer.adapters.dictation).toBeDefined());
   const mic = composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="mic"]')!;
   const twoWay = composer.shadowRoot!.querySelector<HTMLButtonElement>('[part="voice"]')!;
-  expect(twoWay.innerHTML).toContain('fill="#74c8ed"');
+  expect(twoWay.innerHTML).toContain('fill="var(--blue-b)"');
   mic.click();
   await waitFor(() => expect(composer.hasAttribute('data-recording')).toBe(true));
   await waitFor(() => expect(mic.getAttribute('aria-label')).toBe('Mute microphone'));

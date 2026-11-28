@@ -126,7 +126,7 @@ export function AiurComposer({
       :host([data-recording]) .voice, :host([data-voice-live]) .voice { grid-column:3; grid-row:2; }
       :host([data-recording]) .mic, :host([data-voice-live]) .mic { grid-column:4; grid-row:2; }
       :host([data-recording]) .send, :host([data-voice-live]) .send { grid-column:5; grid-row:2; }
-      .wave i { background:#74c8ed; }
+      .wave i { background:var(--blue-b); }
       .stop { display:none !important; }
       .wave { order:2; }
       :host([data-voice-live]) .wave { display:flex !important; }
@@ -151,30 +151,30 @@ export function AiurComposer({
     element.shadowRoot?.append(style);
     element.classList.add('build-chat-aiur-composer');
     const composerProperties: Record<string, string> = {
-      '--aiur-composer-bg': 'rgba(24, 22, 32, .88)',
-      '--aiur-composer-fg': '#f2ead6',
-      '--aiur-composer-muted': 'rgba(242, 234, 214, .6)',
-      '--aiur-composer-line': 'rgba(242, 234, 214, .22)',
-      '--aiur-composer-button-bg': 'rgba(55, 51, 64, .78)',
-      '--aiur-composer-accent': '#74c8ed',
-      '--aiur-composer-on-accent': '#f2ead6',
-      '--aiur-composer-focus': '#74c8ed',
+      '--aiur-composer-bg': 'var(--glass-fill)',
+      '--aiur-composer-fg': 'var(--ink)',
+      '--aiur-composer-muted': 'var(--muted)',
+      '--aiur-composer-line': 'var(--rule)',
+      '--aiur-composer-button-bg': 'var(--paper-2)',
+      '--aiur-composer-accent': 'var(--blue-b)',
+      '--aiur-composer-on-accent': 'var(--ink)',
+      '--aiur-composer-focus': 'var(--blue-b)',
       '--aiur-composer-radius': '28px',
       '--aiur-composer-font': 'Nunito, system-ui, sans-serif',
-      '--aiur-composer-shadow': '0 18px 44px rgba(0, 0, 0, .32)',
+      '--aiur-composer-shadow': 'var(--pop)',
       '--aiur-composer-button-size': '40px',
     };
     for (const [property, value] of Object.entries(composerProperties)) element.style.setProperty(property, value);
     const cardStyle = document.createElement('style');
     cardStyle.textContent = `
-      aiur-composer.build-chat-aiur-composer::part(card) { gap:0; padding:5px; border-top:1px solid rgba(255,255,255,.42); border-right:1px solid rgba(0,0,0,.38); border-bottom:1px solid rgba(255,255,255,.32); border-left:1px solid rgba(0,0,0,.38); background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.02) 48%,rgba(0,0,0,.06)),rgba(24,22,32,.82); box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 18px 44px rgba(0,0,0,.32); -webkit-backdrop-filter:blur(22px) saturate(1.4); backdrop-filter:blur(22px) saturate(1.4); }
+      aiur-composer.build-chat-aiur-composer::part(card) { gap:0; padding:5px; border-top:1px solid var(--glass-edge); border-right:1px solid var(--shadow-color-strong); border-bottom:1px solid var(--glass-edge); border-left:1px solid var(--shadow-color-strong); background:var(--glass-fill); box-shadow:var(--pop); -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass); }
       aiur-composer.build-chat-aiur-composer::part(actions) { flex-wrap:nowrap; gap:8px; align-items:center; }
-      aiur-composer.build-chat-aiur-composer::part(attach), aiur-composer.build-chat-aiur-composer::part(mic), aiur-composer.build-chat-aiur-composer::part(voice), aiur-composer.build-chat-aiur-composer::part(cancel) { color:#f2ead6; border:0; background:rgba(116,200,237,.13); box-shadow:none; }
-      aiur-composer.build-chat-aiur-composer::part(input) { color:#f2ead6; }
-      aiur-composer.build-chat-aiur-composer::part(input)::placeholder { color:rgba(242,234,214,.6); }
-      aiur-composer.build-chat-aiur-composer::part(send) { color:#f2ead6; background:#74c8ed; }
-      aiur-composer.build-chat-aiur-composer[data-recording]::part(mic), aiur-composer.build-chat-aiur-composer[data-voice-live]::part(mic) { color:#f2ead6; background:#74c8ed; }
-      aiur-composer.build-chat-aiur-composer::part(voice)[aria-pressed='true'] { color:#f2ead6; background:#74c8ed; }
+      aiur-composer.build-chat-aiur-composer::part(attach), aiur-composer.build-chat-aiur-composer::part(mic), aiur-composer.build-chat-aiur-composer::part(voice), aiur-composer.build-chat-aiur-composer::part(cancel) { color:var(--ink); border:0; background:var(--paper-2); box-shadow:none; }
+      aiur-composer.build-chat-aiur-composer::part(input) { color:var(--ink); }
+      aiur-composer.build-chat-aiur-composer::part(input)::placeholder { color:var(--muted); }
+      aiur-composer.build-chat-aiur-composer::part(send) { color:var(--ink); background:var(--blue-b); }
+      aiur-composer.build-chat-aiur-composer[data-recording]::part(mic), aiur-composer.build-chat-aiur-composer[data-voice-live]::part(mic) { color:var(--ink); background:var(--blue-b); }
+      aiur-composer.build-chat-aiur-composer::part(voice)[aria-pressed='true'] { color:var(--ink); background:var(--blue-b); }
     `;
     element.after(cardStyle);
     const input = element.shadowRoot?.querySelector('textarea');
@@ -192,7 +192,7 @@ export function AiurComposer({
         ? new Dictation({ connection: () => connectDictation(transcriptionTarget) })
         : undefined;
     if (twoWay)
-      twoWay.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5h9a2 2 0 0 1 2 2V15a2 2 0 0 1-2 2h-5l-4 3v-4a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2Z" fill="#74c8ed" stroke="#74c8ed" stroke-width="1.5"/><path d="M12 3.5h7.5A2 2 0 0 1 21.5 5.5V11a2 2 0 0 1-2 2H18v4l-4-4h-2a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z" fill="none" stroke="#f2ead6" stroke-width="2"/></svg>`;
+      twoWay.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5h9a2 2 0 0 1 2 2V15a2 2 0 0 1-2 2h-5l-4 3v-4a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2Z" fill="var(--blue-b)" stroke="var(--blue-b)" stroke-width="1.5"/><path d="M12 3.5h7.5A2 2 0 0 1 21.5 5.5V11a2 2 0 0 1-2 2H18v4l-4-4h-2a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z" fill="none" stroke="var(--ink)" stroke-width="2"/></svg>`;
     const isVoiceActive = () => element.hasAttribute('data-recording') || element.hasAttribute('data-voice-live');
     const syncMicrophone = () => {
       if (!microphone) return;
