@@ -144,7 +144,9 @@ function build(config: Config): void {
   if (config.playLinks && !existsSync(config.playLinks)) throw new Error('Missing play-links file');
   const playLinks = config.playLinks ? readJson<Record<string, string>>(config.playLinks, {}) : {};
   for (const card of open) {
-    if (!playLinks[card.key]) continue;
+    const explicitPreview = card.playSource === 'preview';
+    delete card.playSource;
+    if (explicitPreview || !playLinks[card.key]) continue;
     const url = new URL(playLinks[card.key]!);
     if (url.protocol !== 'https:') throw new Error(`Invalid play link for ${card.key}`);
     card.play = url.href;

@@ -22,6 +22,8 @@ prototype needs the creator's approved mock, a build needs the approved prototyp
 | `phase:polish` | high | Rounds on the live build until the creator approves | Re-asking for a build he already judged |
 
 ## Every turn
+For a playable prototype round, run `gm live-build` in the game folder after each change. In `gm review post`, use a build item with `"ref": "live"` and its scenario; for a review-page feed put `https://<app-host>/live/<slug>/<ticket>?scenario=<name>` in `preview_url`. Review does not wait for CI or a merge.
+
 1. **Read your rung** from the `phase:*` label and the review ledger. Build only what that rung delivers. Your
    effort is set by the `model:<effort>` label. Never change it, never ask for more, and never pretend to have more.
    On the first turn, raise the ticket's `open` inventory decisions (the ids under `## Creator decisions`; when the
@@ -37,13 +39,11 @@ prototype needs the creator's approved mock, a build needs the approved prototyp
    matters. Each must be a visible step toward the concept, never a near-copy of the current screen. For a look
    he dislikes, give five rendered options (A–E), starting from other games' screens. A round that mocks several
    screens gives each screen its own option set; never one option that bundles screens together. At `phase:prototype`, deliver exactly three in-engine variations (A/B/C) of the approved mock in one round. Vary a meaningful visual axis such as palette, frame weight, or density; show each phone-first still or clip beside the approved mock and caption the decision it represents. For UI, use the web-design skills mapped to the visual lane (Impeccable) together with the game's art direction. Put all three media-backed options in one non-blocking Command; keep building and ship your recommendation as provisional while the creator decides.
-5. **Verify in the real game before posting:** app-shell stills of a fresh production build at all four sizes
+5. **Show the real game:** use app-shell stills of a fresh build at all four sizes
    (390x844, 844x390, 820x1180 and 1180x820). Every in-game still must show the board filling the screen. For
    motion or sound, a `gm run` scenario clip. Never post estimates, fixture tests or a still that stopped short of
-   the screen. From `phase:prototype` on (not `phase:mock`), `gm qa playtest <game> --all-modes` must pass before you
-   post (gm-verify step 8): the ticket's mode is not the only one the creator plays (#866). A scene prototype also
-   passes `gm verify scene` (gm-verify step 9) before it raises a review: no failing high finding, and any high
-   finding left for a later round listed with `--allow` and named in the round's known limitations.
+   the screen. Post the live round as soon as the build is ready. Run `gm qa playtest <game> --all-modes` and, for
+   scenes, `gm verify scene` in the background; fix failures and report any unchecked findings before shipping.
 6. **Post one round and one question per screen, then end the turn** in human-review. Raise picks non-blocking,
    with media on every option (one Command per screen, or one Command with a question per screen), and build your recommendation meanwhile. Never re-polish and re-ask before his verdict, and
    never ask the same question twice.

@@ -50,6 +50,47 @@ it('refuses a playable build that names no scenario', async () => {
   expect(named.err.join(' ')).not.toContain('names no scenario');
 });
 
+it('posts a live build reference without uploading a preview', async () => {
+  const root = tempDir('gm-review-live-');
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  const game = join(root, 'games', 'demo');
+  const context = join(root, '.gm', 'context');
+  const relay = join(root, '.gm', 'preview');
+  mkdirSync(game, { recursive: true });
+  mkdirSync(context, { recursive: true });
+  mkdirSync(relay, { recursive: true });
+  writeFileSync(join(game, 'gm.manifest.json'), '{}');
+  writeFileSync(join(context, 'preview.json'), JSON.stringify({ token: 'scoped-token' }));
+  const id = 'd9428888-122b-4b0e-b1c8-9f7900000002';
+  const file = join(root, 'round.json');
+  writeFileSync(
+    file,
+    JSON.stringify({
+      id,
+      track: 'gameplay',
+      phase: 'prototype',
+      category: 'gameplay',
+      ticket: '42',
+      sha: 'a'.repeat(40),
+      question: 'How does it feel?',
+      media: [{ kind: 'build', ref: 'live', scenario: 'yard' }],
+    }),
+  );
+  let handled = false;
+  const watcher = watch(relay, (_event, name) => {
+    if (handled || !name?.endsWith('.json')) return;
+    handled = true;
+    const request = JSON.parse(readFileSync(join(relay, name), 'utf8'));
+    expect(request.submission.media[0]).toEqual({ kind: 'build', ref: `live-${id}`, scenario: 'yard' });
+    writeFileSync(join(relay, name.replace(/\.json$/u, '.response')), JSON.stringify({ state: 'done', id, round: 1 }));
+  });
+  try {
+    expect((await gm(['review', 'post', file], { cwd: game })).code).toBe(0);
+  } finally {
+    watcher.close();
+  }
+});
+
 it.each([
   { category: 'art', phase: 'concept', kind: 'still', filename: 'still.png', mime: 'image/png' },
   { category: 'sound', phase: 'mock', kind: 'audio', filename: 'cue.wav', mime: 'audio/wav' },

@@ -41,6 +41,13 @@ export const command: GmCommand = {
       ctx.out(`decision ${entry.id} was already asked; synchronized inventory status`);
       return EXIT.ok;
     }
+    if (entry.options.length < 2)
+      throw new UsageError(`decision ${entry.id} needs at least two options before it can be raised`, 'add options');
+    if (!recommendedOption)
+      throw new UsageError(
+        `decision ${entry.id} needs a recommendation in "option: reason" form before it can be raised`,
+        'update the recommendation to name an option and its rationale',
+      );
     const ids = entry.options.map((option, index) => optionId(option.label, index));
     if (new Set(ids).size !== ids.length)
       throw new UsageError(

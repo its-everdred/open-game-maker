@@ -92,6 +92,15 @@ describe('ReleasesScreen', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Releases unavailable');
     expect(screen.queryByText('Nothing published yet.')).not.toBeInTheDocument();
   });
+
+  it('shows the checks and source build for a publish attempt', async () => {
+    stubReleaseApi([main], [tested]);
+    renderScreen('/g/game/releases?v=branch_main');
+    expect(await screen.findByRole('heading', { name: 'Publish checks' })).toBeVisible();
+    expect(screen.getByText(/pnpm run test: passed/)).toBeVisible();
+    expect(screen.getByText(/Build build_main/)).toBeVisible();
+    expect(screen.getByText(/390x844/)).toBeVisible();
+  });
 });
 
 function renderScreen(entry: string) {
@@ -118,6 +127,24 @@ function stubReleaseApi(
       const path = input.toString();
       if (path.endsWith('/branches')) return Promise.resolve(json({ branches }));
       if (path.endsWith('/builds')) return Promise.resolve(json({ builds }));
+      if (path.endsWith('/publish-checks'))
+        return Promise.resolve(
+          json({
+            records: [
+              {
+                id: 'pc_1',
+                gitSha: 'a'.repeat(40),
+                buildId: 'build_main',
+                surface: 'game',
+                sizes: ['390x844'],
+                checks: [{ name: 'pnpm run test', result: 'passed' }],
+                result: 'passed',
+                publishResult: 'published',
+                createdAt: '2026-11-01T00:00:00Z',
+              },
+            ],
+          }),
+        );
       if (path.endsWith('/releases')) {
         const status = options.releaseStatus ?? 200;
         return Promise.resolve(status === 200 ? json({ releases: [] }) : json({ error: 'unavailable' }, status));

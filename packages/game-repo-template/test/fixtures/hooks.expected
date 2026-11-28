@@ -194,10 +194,41 @@ before_run: |
   # The game's approved work this ticket should build on, inlined with gm-core in the first prompt (#1311).
   case "$ticket" in ''|*[!0-9]*) ;; *) [ ! -x node_modules/.bin/gm ] || timeout 300 node_modules/.bin/gm context "$ticket" --limit 5 --inject .claude/skills >&2 || true ;; esac
 before_remove: |
+  publish_helper="${OGM_PUBLISH_STAGER:-}"
+  publish_assets="${OGM_PUBLISH_ASSETS:-}"
+  publish_blobs="${OGM_PUBLISH_BLOBS:-}"
+  set -o pipefail
   git status --short
   ticket="${AIUR_HOOK_TICKET_IDENTIFIER:-}"
   secret="$(cat "${OGM_HOOK_SECRET_FILE:-/nonexistent}" 2>/dev/null || true)"
   root="$(pwd -P)"
+  workspace_root="$root"
+  source_clean() {
+    [ "$(git -C "$workspace_root" rev-parse HEAD)" = "$sha" ] &&
+      git -C "$workspace_root" diff --quiet HEAD -- &&
+      [ -z "$(git -C "$workspace_root" status --porcelain --untracked-files=all -- . \
+        ':(exclude).claude/skills/gm-*' ':(exclude).codex/skills/gm-*' ':(exclude).agents/skills/gm-*')" ]
+  }
+  skill_fingerprint() {
+    node -e '
+      const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+      const hash = crypto.createHash("sha256");
+      function visit(file) {
+        const stat = fs.lstatSync(file);
+        hash.update(JSON.stringify([file, stat.mode, stat.size]));
+        if (stat.isSymbolicLink()) hash.update(fs.readlinkSync(file));
+        else if (stat.isDirectory()) for (const name of fs.readdirSync(file).sort()) visit(path.join(file, name));
+        else if (stat.isFile()) hash.update(fs.readFileSync(file));
+        else throw new Error("unsupported skill file");
+      }
+      for (const dir of [".claude/skills", ".codex/skills", ".agents/skills"]) {
+        if (!fs.existsSync(dir)) continue;
+        if (!fs.lstatSync(dir).isDirectory() || fs.lstatSync(path.dirname(dir)).isSymbolicLink()) throw new Error("unsafe skill directory");
+        for (const name of fs.readdirSync(dir).filter((n) => n.startsWith("gm-")).sort()) visit(path.join(dir, name));
+      }
+      process.stdout.write(hash.digest("hex"));
+    '
+  }
   if [ -n "${OGM_HOOK_SECRET_FILE:-}" ]; then
     OGM_PREVIEW_GRANTS="$(dirname "$OGM_HOOK_SECRET_FILE")/preview-grants" node -e '
       const fs = require("node:fs"), crypto = require("node:crypto");
@@ -205,25 +236,164 @@ before_remove: |
       fs.rmSync(process.env.OGM_PREVIEW_GRANTS + "/" + workspace + ".json", { force: true });
     ' || true
   fi
+  # Only the host wrapper sees daemon credentials; game commands run with the fleet's network-off profile.
+  game_pnpm() {
+    local runtime result denied
+    local -a sandbox_args=()
+    if [ -n "${stage:-}" ]; then
+      denied="$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$stage")"
+      sandbox_args=(-c "permissions.gamebuilder.filesystem.${denied}=\"deny\"")
+    fi
+    runtime="$(mktemp -d "$root/.gm-publish-tmp.XXXXXXXX")" || return 1
+    result=0
+    env -i PATH="$PATH" HOME="$HOME" CODEX_HOME="${CODEX_HOME:-}" \
+      TMPDIR="$runtime" XDG_RUNTIME_DIR="$runtime" COREPACK_HOME="${COREPACK_HOME:-}" \
+      OGM_ASSETS_ROOT="${asset_stage:-}" OGM_BLOB_ROOT="${asset_stage:-}/blob-store" \
+      GM_ASSET_CACHE_DIR="${cache_stage:-}" GM_VERIFY_SOFTWARE_GL="${GM_VERIFY_SOFTWARE_GL:-}" \
+      codex sandbox "${sandbox_args[@]}" -P gamebuilder --sandbox-state-disable-network -C "$root" -- pnpm "$@" || result=$?
+    rm -rf "$runtime"
+    return "$result"
+  }
   # Build what the workspace holds now; a stale dist/ from an earlier run never leaves it.
   if [ -n "$ticket" ] && [ -n "$secret" ]; then
-    rm -rf dist
-    pnpm run build >&2 || { rm -rf dist; echo "build failed: nothing uploaded" >&2; }
-  fi
-  # Only paths that resolve inside the workspace leave it; links inside dist/ are kept as links and refused upstream.
-  if [ -n "$ticket" ] && [ -n "$secret" ] && [ -d dist ] && [ "$(realpath dist)" = "$root/dist" ]; then
-    stage="$(mktemp -d)"
-    cp -PR dist/. "$stage/"
-    for file in manifest.json design/design.json achievements.json; do
-      if [ -f "$file" ] && [ "$(realpath "$file")" = "$root/$file" ]; then
-        mkdir -p "$stage/$(dirname "$file")" && cp "$file" "$stage/$file"
+    sha="$(git rev-parse HEAD)"
+    context="$(curl -fsS --max-time 20 -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $sha" \
+      "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/publish-context")" || context=''
+    game_path="$(printf '%s' "$context" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const p=JSON.parse(s).path;if(p===null || p==="")return;if(typeof p==="string" && !p.startsWith("/") && !p.split("/").includes("..")){process.stdout.write(p);return}}catch{}process.stdout.write("__INVALID__")})')"
+    visibility="$(printf '%s' "$context" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const v=JSON.parse(s).visibility;if(v==="public" || v==="private")process.stdout.write(v)}catch{}})')"
+    game_root="$root"
+    if [ -n "$game_path" ]; then
+      game_root=''
+      if [ "$game_path" != '__INVALID__' ] && [ -f "$root/$game_path/package.json" ]; then
+        candidate="$(realpath "$root/$game_path")"
+        case "$candidate" in "$root"|"$root"/*) game_root="$candidate" ;; esac
       fi
-    done
-    if tar --format=ustar -czf "$stage.tgz" -C "$stage" .; then
+    elif [ ! -f "$root/manifest.json" ] && [ ! -f "$root/gm.manifest.json" ]; then
+      game_root=''
+    fi
+    if [ -z "$game_root" ] || [ -z "$visibility" ]; then
+      echo "game publish context unavailable: nothing uploaded" >&2
+      exit 0
+    fi
+    cd "$game_root"
+    root="$game_root"
+    source_result=passed
+    if ! source_clean; then
+      source_result=failed
+      echo "game source is not clean at the recorded commit: nothing uploaded" >&2
+    fi
+    skill_hash="$(cd "$workspace_root" && skill_fingerprint)" || source_result=failed
+    rm -rf dist
+    mkdir -p "$root/.gm"
+    if [ "$(realpath "$root/.gm")" != "$root/.gm" ]; then
+      echo "game scratch directory is not contained: nothing uploaded" >&2
+      exit 0
+    fi
+    asset_stage="$(mktemp -d "$root/.gm/publish-assets.XXXXXXXX")"
+    cache_stage="$(mktemp -d "$root/.gm/publish-cache.XXXXXXXX")"
+    assets_ready=0
+    asset_stage_result=not-run
+    if [ "$source_result" = passed ]; then asset_stage_result=failed; fi
+    if [ "$source_result" = passed ] && [ -n "$publish_helper" ] && [ -f "$publish_helper" ] &&
+      node "$publish_helper" "$root" "$asset_stage" "$publish_assets" "$publish_blobs" "$visibility" >&2; then
+      assets_ready=1
+      asset_stage_result=passed
+    elif [ "$source_result" = passed ]; then
+      echo "game asset staging failed: nothing uploaded" >&2
+    fi
+    test_result=not-run
+    test_mode_result=not-run
+    test_config_result=not-run
+    test_artifact_hash=''
+    test_build_hash=''
+    stage=''
+    snapshot_result=not-run
+    integrity_result=not-run
+    production_hash=''
+    build_result=not-run
+    if [ "$assets_ready" = 1 ]; then build_result=failed; fi
+    if [ "$assets_ready" = 1 ] && game_pnpm run build >&2; then
+      build_result=passed
+      snapshot_result=failed
+      if [ -d dist ] && [ "$(realpath dist)" = "$root/dist" ]; then
+        stage="$(mktemp -d)"
+        if cp -PR dist/. "$stage/"; then
+          snapshot_result=passed
+          for file in manifest.json design/design.json achievements.json; do
+            if [ -f "$file" ] && [ "$(realpath "$file")" = "$root/$file" ]; then
+              mkdir -p "$stage/$(dirname "$file")" && cp -P "$file" "$stage/$file" || snapshot_result=failed
+            fi
+          done
+        fi
+      fi
+      if [ "$snapshot_result" = passed ]; then
+        if ! production_hash="$(tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C dist . | sha256sum | cut -d ' ' -f 1)"; then snapshot_result=failed; fi
+      fi
+      test_script="$(node -e 'try{process.stdout.write(require("./package.json").scripts?.test || "")}catch{}')"
+      needs_test_build="$(node -e 'process.stdout.write(/^\s*gm\s+test(?:\s|$)/u.test(process.argv[1]) ? "1" : "0")' "$test_script")"
+      if [ "$needs_test_build" = 1 ]; then
+        if node -e 'const words=process.argv[1].trim().split(/\s+/); if(words.shift()!=="gm" || words.shift()!=="test")process.exit(1); while(words.length){const word=words.shift();if(word==="--json")continue;const m=/^--(inputs|ticks|deadline|out)(?:=([A-Za-z0-9_./:-]+))?$/.exec(word);if(!m)process.exit(1);const value=m[2] ?? words.shift();if(!value || value.startsWith("-") || !/^[A-Za-z0-9_./:-]+$/.test(value))process.exit(1)}' "$test_script"; then
+          test_config_result=passed
+        else
+          test_config_result=failed
+          echo "gm test must use the default dist directory and simple arguments" >&2
+        fi
+      fi
+      if [ "$snapshot_result" = passed ] && [ "$needs_test_build" = 1 ] && [ "$test_config_result" = passed ]; then
+        test_mode_result=failed
+        if game_pnpm exec vite build --mode test --base=./ >&2; then
+          test_archive="$(mktemp)"
+          if tar --format=ustar -czf "$test_archive" -C dist .; then
+            test_artifact_hash="$(sha256sum "$test_archive" | cut -d ' ' -f 1)"
+            test_build_hash="$(tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C dist . | sha256sum | cut -d ' ' -f 1)"
+            test_mode_result=passed
+          fi
+          rm -f "$test_archive"
+        fi
+      fi
+      if [ "$snapshot_result" = passed ] && [ "$test_mode_result" != failed ] && [ "$test_config_result" != failed ]; then
+        test_result=failed
+        if game_pnpm run test >&2; then test_result=passed; fi
+      fi
+      if [ "$test_result" = passed ]; then
+        integrity_result=passed
+        if [ "$needs_test_build" = 1 ]; then
+          after_hash="$(tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C dist . | sha256sum | cut -d ' ' -f 1)" || integrity_result=failed
+          if [ -z "$test_build_hash" ] || [ "$after_hash" != "$test_build_hash" ]; then integrity_result=failed; fi
+        else
+          if ! after_hash="$(tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C dist . | sha256sum | cut -d ' ' -f 1)"; then integrity_result=failed; fi
+          if [ -z "$production_hash" ] || [ "$after_hash" != "$production_hash" ]; then integrity_result=failed; fi
+        fi
+      fi
+      if [ "$test_result" != passed ] || [ "$snapshot_result" != passed ] || [ "$integrity_result" = failed ]; then
+        rm -rf dist
+        echo "game checks failed: nothing uploaded" >&2
+      fi
+    else
+      rm -rf dist
+      if [ "$build_result" = failed ]; then echo "build failed: nothing uploaded" >&2; fi
+    fi
+    if [ "$source_result" = passed ] && { ! source_clean || [ "$(cd "$workspace_root" && skill_fingerprint)" != "$skill_hash" ]; }; then
+      source_result=failed
+      echo "game source changed during checks: nothing uploaded" >&2
+    fi
+    artifact_hash=''
+    if [ "$source_result" = passed ] && [ "$test_result" = passed ] && [ "$snapshot_result" = passed ] && [ "$integrity_result" = passed ]; then
+      if tar --format=ustar -czf "$stage.tgz" -C "$stage" .; then
+        artifact_hash="$(sha256sum "$stage.tgz" | cut -d ' ' -f 1)"
+      fi
+    fi
+    checks="$(node -e 'const [gitSha,build,mode,test,snapshot,integrity,hash,testHash,needsTestBuild,config,assets,source]=process.argv.slice(1);const checks=[];for(const [name,result] of [["source integrity",source],["asset staging",assets],["pnpm run build",build],["production snapshot",snapshot],["test configuration",config],["test-mode build",mode],["pnpm run test",test],["production build integrity",integrity]])if(result!=="not-run")checks.push({name,result});console.log(JSON.stringify({gitSha,surface:"game",sizes:test==="passed" && needsTestBuild==="1"?["390x844","1180x820"]:[],checks,...(hash?{artifactSha256:hash}:{}),...(testHash?{testArtifactSha256:testHash}:{})}))' "$sha" "$build_result" "$test_mode_result" "$test_result" "$snapshot_result" "$integrity_result" "$artifact_hash" "$test_artifact_hash" "${needs_test_build:-0}" "$test_config_result" "$asset_stage_result" "$source_result")"
+    answer="$(curl -fsS --max-time 20 -X POST -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $sha" -H "content-type: application/json" --data-binary "$checks" "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/publish-checks")" || answer=''
+    check_id="$(printf '%s' "$answer" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const r=JSON.parse(s);if(r.result==="passed" && typeof r.id==="string")process.stdout.write(r.id)}catch{}})')"
+    if [ -n "$check_id" ] && [ -n "$artifact_hash" ]; then
       status="$(curl -sS --max-time 120 --retry 3 --retry-connrefused -o /dev/null -w '%{http_code}' -X POST \
-        -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $(git rev-parse HEAD)" -H "content-type: application/gzip" \
+        -H "Authorization: Bearer ${secret}" -H "x-gm-sha: $sha" -H "x-gm-check-id: $check_id" -H "content-type: application/gzip" \
         --data-binary @"$stage.tgz" "${OGM_INTERNAL_URL:-http://127.0.0.1:0}/internal/jobs/by-ticket/${ticket}/build")"
       echo "build upload: HTTP ${status:-000}" >&2
+    else
+      echo "game checks not recorded: nothing uploaded" >&2
     fi
-    rm -rf "$stage" "$stage.tgz"
+    if [ -n "$stage" ]; then rm -rf "$stage" "$stage.tgz"; fi
+    rm -rf "$asset_stage" "$cache_stage"
   fi

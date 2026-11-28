@@ -1,5 +1,6 @@
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { renderDaemonFiles } from '@ogm/game-repo-template';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -56,7 +57,16 @@ describe('provisionGameRepo', () => {
     const row = await store.bySlug('castle-game');
     expect(row).toMatchObject({ repo: 'everdred-games/instance', status: 'stopped' });
     const dir = join(home, '.local/share/ogm/daemons', 'castle-game');
-    expect(await readFile(join(dir, '.aiur/hooks'), 'utf8')).toBe(renderDaemonFiles({ gameSlug: 'castle-game' }).hooks);
+    expect(await readFile(join(dir, '.aiur/hooks'), 'utf8')).toBe(
+      renderDaemonFiles({
+        gameSlug: 'castle-game',
+        publishHost: {
+          helper: fileURLToPath(new URL('../../../packages/gm-cli/dist/publish-assets-helper.js', import.meta.url)),
+          assetsRoot: join(home, 'games/open-game-maker-2000/assets-local'),
+          blobRoot: join(home, '.local/share/ogm/blobs'),
+        },
+      }).hooks,
+    );
     expect(await readFile(join(dir, '.aiur/prompt.md'), 'utf8')).toBe(
       renderDaemonFiles({ gameSlug: 'castle-game' }).prompt,
     );

@@ -7,10 +7,20 @@ import { parse } from 'yaml';
 import { renderDaemonFiles } from '@ogm/game-repo-template';
 
 import { IDLE_STOP_MS } from '../../src/fleet/fleet.js';
+import { gameRepoDaemonFiles } from '../../src/fleet/daemon-dir.js';
 import { READY_TIMEOUT_MS, START_POLL_MS } from '../../src/fleet/health.js';
 import { daemonPaths, writeAtomic } from '../../src/fleet/secrets.js';
 import { preflight as realPreflight } from '../../src/policy/preflight.js';
-import { buildFleet, cleanupHomes, fakeFetch, liveRow, memoryStore, systemctlCalls, tempHome } from './helpers.js';
+import {
+  buildFleet,
+  cleanupHomes,
+  fakeFetch,
+  fleetEnv,
+  liveRow,
+  memoryStore,
+  systemctlCalls,
+  tempHome,
+} from './helpers.js';
 
 afterEach(cleanupHomes);
 
@@ -24,6 +34,24 @@ async function mode(path: string): Promise<number> {
 }
 
 describe('ensureDaemon', () => {
+  it('refreshes live managed hooks while leaving registered daemon hooks untouched', async () => {
+    const home = await tempHome();
+    const { fleet, store } = buildFleet(home, { preflight: okPreflight });
+    await fleet.ensureDaemon({ slug, repo }, 'feature');
+    const managed = join(home, '.local/share/ogm/daemons', slug, '.aiur/hooks');
+    await writeFile(managed, 'old hooks');
+    const checkout = join(home, 'external');
+    await mkdir(join(checkout, '.aiur'), { recursive: true });
+    await writeFile(join(checkout, '.aiur/hooks'), 'custom hooks');
+    await store.insert(liveRow(2, 'running', { slug: 'external', checkoutPath: checkout }));
+
+    await fleet.refreshManagedHooks();
+
+    expect(await readFile(managed, 'utf8')).toBe(
+      (await gameRepoDaemonFiles(fleetEnv(home))(store.rows.get(slug)!)).hooks,
+    );
+    expect(await readFile(join(checkout, '.aiur/hooks'), 'utf8')).toBe('custom hooks');
+  });
   it('renders the directory, writes 0600 secrets, mints two tokens, starts the unit and polls health to running', async () => {
     const home = await tempHome();
     const preflight = vi.fn(async () => ({ ok: true as const }));
@@ -38,7 +66,9 @@ describe('ensureDaemon', () => {
     expect(config.tracker.github.label_prefix).toBe(slug);
     expect(config.server).toMatchObject({ host: '127.0.0.1', port: 4101 });
     expect(config.instance.id).toBe(slug);
-    expect(await readFile(join(dir, '.aiur/hooks'), 'utf8')).toBe(renderDaemonFiles({ gameSlug: slug }).hooks);
+    expect(await readFile(join(dir, '.aiur/hooks'), 'utf8')).toBe(
+      (await gameRepoDaemonFiles(fleetEnv(home))(store.rows.get(slug)!)).hooks,
+    );
     expect(await readFile(join(dir, '.aiur/prompt.md'), 'utf8')).toBe(renderDaemonFiles({ gameSlug: slug }).prompt);
     expect((await stat(join(dir, 'workspaces'))).isDirectory()).toBe(true);
 

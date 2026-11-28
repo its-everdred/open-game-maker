@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 
 import { schema } from '@ogm/db';
 import { ReviewSubmission } from '@ogm/contracts';
+import { liveWorkspaceReady } from './live-workspace.js';
 
 import type { AppDeps } from '../app/types.js';
 import { ARCHIVE_LIMITS } from '../builds/untar.js';
@@ -155,10 +156,25 @@ async function processRequest(
         const submission = ReviewSubmission.safeParse(data.submission);
         const attachments = data.attachments ?? [];
         if (!submission.success || !Array.isArray(attachments)) throw new Error('invalid_request');
+        const liveBuilds = submission.data.media.filter(
+          (item) => item.kind === 'build' && item.ref.startsWith('live-'),
+        );
+        let authorizedLive = false;
+        if (liveBuilds.length) {
+          if (
+            !repoGrant ||
+            liveBuilds.length !== 1 ||
+            liveBuilds[0]!.ref !== `live-${submission.data.id}` ||
+            !game.githubPath
+          )
+            throw new Error('invalid_request');
+          if (!(await liveWorkspaceReady(workspace, game.githubPath))) throw new Error('invalid_request');
+          authorizedLive = true;
+        }
         const daemon = reviewDaemonForGame(deps.db, game.id);
-        if (!daemon || !game.githubPath) throw new Error('invalid_request');
+        if (!game.githubPath || (!daemon && !authorizedLive)) throw new Error('invalid_request');
         const track = await readTrack(
-          await reviewCheckout(daemon.checkoutPath, submission.data.ticket, daemon.repo),
+          authorizedLive ? workspace : await reviewCheckout(daemon!.checkoutPath, submission.data.ticket, daemon!.repo),
           game.githubPath,
           data.sha,
           submission.data.track,
@@ -210,9 +226,18 @@ async function processRequest(
         }
         let round;
         if (staged.length === 0) {
-          round = await submitRelayedReview(deps, data.slug, `${game.githubOwner}/${game.githubRepo}`, data.submission);
+          round = await submitRelayedReview(
+            deps,
+            data.slug,
+            `${game.githubOwner}/${game.githubRepo}`,
+            data.submission,
+            undefined,
+            undefined,
+            authorizedLive,
+            track,
+          );
         } else {
-          if (submission.data.category === 'gameplay' && submission.data.phase !== 'mock')
+          if (submission.data.category === 'gameplay' && submission.data.phase !== 'mock' && !authorizedLive)
             throw new Error('invalid_request');
           round = await withArtifactMutation(async () => {
             const overlay = {
@@ -259,6 +284,8 @@ async function processRequest(
                 }
                 throw new Error('review_preflight_failed');
               },
+              authorizedLive,
+              track,
             );
             for (const attachment of staged) await deps.blobStore.put(attachment.bytes, attachment.mime);
             return submitRelayedReview(
@@ -269,6 +296,8 @@ async function processRequest(
               new Set(staged.filter((item) => item.mime.startsWith('audio/')).map((item) => item.hash)),
               async (_deps, gameId, value, effort, audioVerified) =>
                 submitRound(deps.db, gameId, value, effort, audioVerified),
+              authorizedLive,
+              track,
             );
           });
         }

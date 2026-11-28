@@ -11,6 +11,7 @@ import { authorizedGame } from '../games/authorize.js';
 import { requirePrincipal } from '../app/principal.js';
 import { bindPreview, canAccessDraft } from '../artifacts/grants.js';
 import type { GameRow } from '../games/games.js';
+import { issueLiveAccess } from './live.js';
 import { latestRoundForTicket, roundForBuild } from '../review-rounds/store.js';
 import {
   beginReviewAnswer,
@@ -48,6 +49,15 @@ function bindPreviews<T extends { accessId: string }>(c: Context<ApiBindings>, g
 }
 
 export default new Hono<ApiBindings>()
+  .get('/games/:gameId/live/:ticket', async (c) => {
+    const game = authorizedGame(c, 'game.edit');
+    c.header('Cache-Control', 'no-store');
+    const principal = requirePrincipal(c, ['user']);
+    if (!canAccessDraft(c.get('deps'), game, principal)) throw new HttpError(404, 'live_preview_not_found');
+    const live = await issueLiveAccess(c.get('deps'), game, c.req.param('ticket'));
+    const accessId = bindPreview(c.get('deps'), game.id, live.accessId, principal.userId, c.req.raw.headers);
+    return c.json({ gameId: game.id, ...live, accessId });
+  })
   .get('/games/:gameId/editor/preview-history', async (c) => {
     const game = authorizedGame(c, 'game.edit');
     const previews = await listPreviewHistory(c.get('deps'), game.id);

@@ -130,7 +130,7 @@ describe('Netlify static configuration', () => {
     expect(deploy).toContain(`grep ' msg town-ready$' "$load_log"`);
     expect(deploy).toContain('if [[ -z "$town_ready" ]]; then');
     expect(deploy).toContain('deploy: load check failed; refusing to deploy');
-    expect(deploy).toContain('timed load-check load_check || report_attention');
+    expect(deploy).toContain("report_attention 'the load check on the uploaded payload failed");
   });
 
   // An app domain the games host would not frame showed Try again in every game on an iPhone (#1297).
@@ -139,11 +139,11 @@ describe('Netlify static configuration', () => {
 
     const upload = deploy.indexOf('timed upload netlify deploy');
     const frames = deploy.indexOf(
-      'timed frame-check env OGM_QA_ATTENTION= "$ROOT/ops/bin/ogm-qa-game-play" --frames-only --repo "$ROOT" ||',
+      'timed frame-check env OGM_QA_ATTENTION= "$ROOT/ops/bin/ogm-qa-game-play" --frames-only --repo "$ROOT"; then',
     );
     expect(upload).toBeGreaterThan(-1);
     expect(frames).toBeGreaterThan(upload);
-    expect(deploy.slice(frames)).toMatch(/^[^\n]*\|\|\n\s+report_attention/u);
+    expect(deploy.slice(frames)).toContain("report_attention 'the frame check on the app domains failed");
   });
 
   it('gives the load check a configurable 240-second readiness window', () => {

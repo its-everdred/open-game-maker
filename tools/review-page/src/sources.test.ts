@@ -36,6 +36,23 @@ it('requires engine media for pack feeds and keeps round options', () => {
   expect(cards[0]?.options.map((option) => option.id)).toEqual(['a', 'b']);
 });
 
+it('uses the live preview URL for a round, including its scenario', () => {
+  const line = JSON.stringify({
+    key: 'round',
+    image: '/render.png',
+    play: 'https://example.test/old',
+    preview_url: 'https://example.test/live/demo/12/?scenario=yard',
+  });
+  const cards = feedCards('rounds', line, (path) => ({ kind: 'img', src: path }));
+  expect(cards[0]?.play).toBe('https://example.test/live/demo/12/?scenario=yard');
+  const playableOnly = feedCards(
+    'rounds',
+    JSON.stringify({ key: 'live', preview_url: 'https://example.test/live/demo/12' }),
+    () => undefined,
+  );
+  expect(playableOnly[0]?.play).toBe('https://example.test/live/demo/12');
+});
+
 it('uses workpad and relevant PR media for human-review tickets', () => {
   const run: Run = (_program, args) => {
     if (args[0] === 'issue' && args[1] === 'list') return JSON.stringify([{ number: 12, title: 'Review', body: '' }]);

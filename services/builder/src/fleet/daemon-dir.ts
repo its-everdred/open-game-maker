@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readlink, realpath, rename, stat, symlink, unlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import { renderDaemonFiles } from '@ogm/game-repo-template';
 
@@ -15,7 +17,26 @@ export type DaemonFilesProvider = (row: DaemonRow) => Promise<DaemonFiles>;
 
 // Each daemon renders its own game's hook and prompt: the hook checks the instance repo out sparsely (this game's
 // folder plus `packages/` and the root config) and the prompt carries the game-scope rules.
-export const gameRepoDaemonFiles: DaemonFilesProvider = async (row) => renderDaemonFiles({ gameSlug: row.slug });
+export function gameRepoDaemonFiles(env: FleetEnv): DaemonFilesProvider {
+  const helper = fileURLToPath(new URL('../../../../packages/gm-cli/dist/publish-assets-helper.js', import.meta.url));
+  return async (row) =>
+    renderDaemonFiles({
+      gameSlug: row.slug,
+      publishHost: {
+        helper,
+        assetsRoot: env.assetsLocalDir,
+        blobRoot: env.blobRoot ?? join(env.home, '.local/share/ogm/blobs'),
+      },
+    });
+}
+
+function physicalPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
 
 export function aiurRoot(env: FleetEnv): string {
   return env.aiurRoot ?? join(env.home, 'github/aiur');
@@ -36,6 +57,18 @@ export function renderInputFor(
   kind: JobKind,
   rows: DaemonRow[],
 ): RenderInput {
+  const stores = [env.assetsLocalDir, env.blobRoot ?? join(env.home, '.local/share/ogm/blobs')];
+  const workspaceRoots = [resolve(paths.workspaces), resolve(physicalPath(paths.workspaces))];
+  for (const store of stores.flatMap((path) => [resolve(path), resolve(physicalPath(path))])) {
+    if (
+      workspaceRoots.some(
+        (workspace) =>
+          store === workspace || store.startsWith(`${workspace}${sep}`) || workspace.startsWith(`${store}${sep}`),
+      )
+    ) {
+      throw new Error('configured asset or blob store overlaps a daemon workspace');
+    }
+  }
   return {
     repo: row.repo,
     // A game daemon's label prefix is its game slug, so aiur only reads and transitions this game's labels.
@@ -48,6 +81,9 @@ export function renderInputFor(
     maxConcurrentAgents: row.maxConcurrentAgents,
     denyReadRoots: [
       env.assetsLocalDir,
+      physicalPath(env.assetsLocalDir),
+      env.blobRoot ?? join(env.home, '.local/share/ogm/blobs'),
+      physicalPath(env.blobRoot ?? join(env.home, '.local/share/ogm/blobs')),
       ...rows.filter((other) => other.slug !== row.slug).map((other) => daemonPaths(env.home, other.slug).workspaces),
     ],
     instanceId: row.slug,

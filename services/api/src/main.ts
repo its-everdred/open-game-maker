@@ -52,6 +52,7 @@ import { createTicketLookup } from './worker-progress/lookup.js';
 import { createReviewEpisodeReader } from './worker-progress/review-episode.js';
 import { createTicketConversationReader } from './worker-progress/conversation.js';
 import { startBriefingPush } from './voice/briefing-push.js';
+import { startAppCheckQueue } from './builds/app-check-queue.js';
 import { questionSession } from './voice/question-session.js';
 import { createQaAiurClient, withQaAiur } from './qa/aiur.js';
 
@@ -70,6 +71,7 @@ const fleet = createFleet({
     builderBotLogin: env.OGM_BUILDER_BOT_LOGIN,
     intakeLogin: env.OGM_INTAKE_BOT_LOGIN,
     assetsLocalDir: join(home, 'games', 'open-game-maker-2000', 'assets-local'),
+    blobRoot: env.OGM_BLOB_ROOT,
     apiPort: env.OGM_API_PORT,
   },
   alert: (message) => log({ event: 'daemon_alert', message }),
@@ -230,6 +232,7 @@ intake.start();
 const stopDraftCleanup = startDraftCleanup(deps);
 const stopScheduler = startScheduler({ ...lifecycleDeps, log });
 const stopEstimateRefinement = startEstimateRefinement({ db, events: deps.events, log });
+const stopAppCheckQueue = startAppCheckQueue(deps);
 const stopBuildSweep = startBuildSweep(deps, { graceMs: 30 * 60_000, intervalMs: 60_000 });
 // Tickets parked on a decision start as soon as it is answered, with no Executor step (#680).
 const decisionWaits = createDecisionWaitPoller({
@@ -331,6 +334,11 @@ setInterval(() => {
 recordReconcileHeartbeat(db, Date.now());
 decisionWaits.start(env.OGM_COMMAND_POLL_MS);
 
+await fleet
+  .refreshManagedHooks()
+  .catch((error: unknown) =>
+    log({ event: 'daemon_hooks_refresh_failed', reason: error instanceof Error ? error.name : 'unknown_error' }),
+  );
 const server = serve({ fetch: app.fetch, hostname: API_HOST, port: env.OGM_API_PORT });
 server.once('listening', () => log({ event: 'listening', host: API_HOST, port: env.OGM_API_PORT }));
 process.once('SIGTERM', () => {
@@ -341,11 +349,16 @@ process.once('SIGTERM', () => {
   stopScheduler();
   stopEstimateRefinement();
   stopBuildSweep();
+  const appCheckQueueDone = stopAppCheckQueue();
   decisionWaits.stop();
   reviewNotifications.stop();
   stopBriefingPush();
   usageReconciler.stop();
-  void Promise.all([feed.stop(), usageReconciler.idle(), reviewNotifications.idle(), resourceMailPending]).finally(() =>
-    server.close(() => sqlite.close()),
-  );
+  void Promise.all([
+    feed.stop(),
+    usageReconciler.idle(),
+    reviewNotifications.idle(),
+    appCheckQueueDone,
+    resourceMailPending,
+  ]).finally(() => server.close(() => sqlite.close()));
 });
