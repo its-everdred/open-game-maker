@@ -52,7 +52,9 @@ async function openEditChat(page: Page): Promise<unknown[]> {
   // Registered after installGameApi, so these win over its catch-all.
   await page.route('**/api/v1/me/commands**', (route) => json(route, { commands: [], sessions: [] }));
   await page.route('**/api/v1/me/core-commands', (route) => json(route, { commands: [], targets: [] }));
-  await page.route('**/api/v1/me', (route) => json(route, { platformRole: 'none' }));
+  await page.route('**/api/v1/me', (route) =>
+    json(route, { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' }),
+  );
   await page.route('**/api/v1/me/executor/thread', (route) => json(route, {}, 403));
   await page.route('**/api/v1/energy', (route) =>
     json(route, { level: 'limited', preference: 'balanced', windows: [], services: [] }),

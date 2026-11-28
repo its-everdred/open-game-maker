@@ -499,7 +499,9 @@ test('keeps the phone menu row clear of style media', async ({ page, isMobile },
   test.skip(!isMobile, 'phone layout acceptance path');
   await installAuthRoutes(page, { signedIn: true });
   await installNewRoutes(page);
-  await page.route('**/api/v1/me', (route) => json(route, { platformRole: 'none' }));
+  await page.route('**/api/v1/me', (route) =>
+    json(route, { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' }),
+  );
   await page.goto('/new?test&step=family');
   await page.waitForFunction(() => window.__ogmHost?.get('new') !== undefined);
   await page.getByRole('button', { name: 'Isometric' }).dispatchEvent('click');
@@ -562,7 +564,8 @@ async function installGamesMenuApi(page: Page, decisions: ReturnType<typeof blob
     if (url.pathname.endsWith('/chat/messages')) return json(route, { messages: [], last_seq: 0 });
     if (url.pathname.endsWith('/chat')) return route.fulfill({ contentType: 'text/event-stream', body: ': open\n\n' });
     if (url.pathname.endsWith('/commands/budget')) return json(route, { used: 0, max: 3 });
-    if (url.pathname === '/api/v1/me') return json(route, { platformRole: 'none' });
+    if (url.pathname === '/api/v1/me')
+      return json(route, { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' });
     if (url.pathname === '/api/v1/energy') return json(route, energyView);
     return json(route, { error: 'not_mocked', path: url.pathname }, 404);
   });

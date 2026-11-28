@@ -57,7 +57,7 @@ test('plays a preview, sends a verdict and shows a newer push', async ({ page },
     const json = (body: unknown) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
     if (path === '/api/v1/notifications/stream')
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
-    if (path === '/api/v1/me') return json({ platformRole: 'none' });
+    if (path === '/api/v1/me') return json({ user: { id: 'u1' }, platformRole: 'none', capability: 'creator' });
     if (path === '/api/v1/games/resolve/blobs')
       return json({
         game: {
@@ -65,7 +65,7 @@ test('plays a preview, sends a verdict and shows a newer push', async ({ page },
           title: 'Blobs',
           slug: 'blobs',
           familyId: 'f_1',
-          ownerId: 'u_1',
+          ownerId: 'u1',
           repo: null,
           createdAt: '2026-11-07T17:00:00.000Z',
         },

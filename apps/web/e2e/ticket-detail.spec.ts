@@ -103,7 +103,7 @@ async function installApi(page: Page) {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/v1/notifications/stream')
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
-    if (path === '/api/v1/me') return json(route, { platformRole: 'none' });
+    if (path === '/api/v1/me') return json(route, { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' });
     if (path === '/api/v1/games')
       return json(route, {
         games: [{ id: gameId, familyId: 'f_1', ownerId: 'u1', title: 'Blobs', repo: null, createdAt: '2026-11-01' }],

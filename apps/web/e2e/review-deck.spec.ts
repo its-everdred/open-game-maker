@@ -455,13 +455,13 @@ async function installReviewApi(page: Page, options: ReviewApiOptions = {}) {
     if (path === '/api/v1/notifications/stream') {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
     }
-    if (path === '/api/v1/me') return json(route, { platformRole: 'none' });
+    if (path === '/api/v1/me') return json(route, { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' });
     if (path === '/api/v1/games/resolve/blobs') {
       return json(route, {
         game: {
           id: gameId,
           familyId: 'f_1',
-          ownerId: 'u_1',
+          ownerId: 'u1',
           title: 'Blobs',
           slug: 'blobs',
           repo: null,

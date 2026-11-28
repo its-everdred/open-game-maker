@@ -585,7 +585,7 @@ async function install(page: Page): Promise<Api> {
     if (/^\/api\/v1\/games\/[^/]+\/commands$/.test(path)) return json(route, { commands: [] });
     if (/^\/api\/v1\/games\/[^/]+\/workers$/.test(path)) return json(route, { workers: [] });
     if (path.endsWith('/branches')) return json(route, { branches: [] });
-    if (path === '/api/v1/me') return json(route, { platformRole: 'none' });
+    if (path === '/api/v1/me') return json(route, { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' });
     return json(route, { error: 'not_mocked', path }, 404);
   });
   await page.goto('/all');
