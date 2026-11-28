@@ -29,6 +29,53 @@ it('rejects literal design values and accepts generated token references', async
   ).toBe(false);
 }, 30_000);
 
+it('rejects multiple explicit accent hues in a screen stylesheet', async () => {
+  const mixed = await stylelint.lint({
+    code: '.send { color: var(--ogm-role-chat) } .stop { color: var(--ogm-role-danger) }',
+    config: glassStylelintConfig,
+  });
+  expect(mixed.results[0]!.warnings.some((warning) => warning.rule === 'ogm/one-accent')).toBe(true);
+  const blue = await stylelint.lint({
+    code: '.send { color: var(--ogm-role-chat) } .progress { color: var(--ogm-role-working) }',
+    config: glassStylelintConfig,
+  });
+  expect(blue.results[0]!.warnings.some((warning) => warning.rule === 'ogm/one-accent')).toBe(false);
+  const kit = await stylelint.lint({
+    code: '.go { color: var(--ogm-role-go) } .info { color: var(--ogm-role-working) }',
+    codeFilename: 'src/components/glass/glass.css',
+    config: glassStylelintConfig,
+  });
+  expect(kit.results[0]!.warnings.some((warning) => warning.rule === 'ogm/one-accent')).toBe(false);
+}, 30_000);
+
+it('rejects multiple explicit Glass control accents, including conditional tones', async () => {
+  const eslint = new ESLint({
+    overrideConfig: [
+      { plugins: { glass: { rules: { components: glassComponentsRule } } }, rules: { 'glass/components': 'error' } },
+    ],
+  });
+  const [mixed] = await eslint.lintText(
+    'const Screen = ({ active }) => <><GlassButton tone="info" /><GlassOrb tone={active ? "go" : "glass"} /></>;',
+    { filePath: 'src/Screen.tsx' },
+  );
+  expect(mixed!.messages.some((message) => message.messageId === 'accents')).toBe(true);
+  const [blue] = await eslint.lintText(
+    'const Screen = () => <><GlassButton tone="info" /><GlassOption accent="info" /></>;',
+    { filePath: 'src/Screen.tsx' },
+  );
+  expect(blue!.messages.some((message) => message.messageId === 'accents')).toBe(false);
+  const [defaultGreen] = await eslint.lintText(
+    'const Screen = () => <><GlassButton tone="glassy" /><GlassButton tone="info" /></>;',
+    { filePath: 'src/Screen.tsx' },
+  );
+  expect(defaultGreen!.messages.some((message) => message.messageId === 'accents')).toBe(true);
+  const [unusedAccent] = await eslint.lintText(
+    'const Screen = () => <><GlassButton tone="glass" accent="go" /><GlassButton tone="info" /></>;',
+    { filePath: 'src/Screen.tsx' },
+  );
+  expect(unusedAccent!.messages.some((message) => message.messageId === 'accents')).toBe(false);
+}, 30_000);
+
 it('rejects ad-hoc native controls in screens', async () => {
   const eslint = new ESLint({
     overrideConfig: [

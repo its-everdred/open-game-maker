@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { accentForName } from './glass-accents.mjs';
 const intrinsicControls = new Set(['button', 'input', 'select', 'textarea', 'dialog', 'menu']);
 const controlRoles = new Set(['button', 'switch', 'slider', 'menu', 'menuitem', 'dialog']);
 const controlClasses = /(?:^|[\s_-])(?:panel|sheet|menu|chip|toggle|slider)(?:$|[\s_-])/i;
@@ -48,9 +49,26 @@ export const glassComponentsRule = {
       style: 'Use a generated design token for {{name}}.',
       dynamicStyle: 'Inline style properties must be statically inspectable.',
       dynamicProps: 'Spread props must be statically inspectable.',
+      accents: 'Use one interactive accent per screen; found {{hues}}.',
     },
   },
   create(context) {
+    const hues = new Set();
+    let firstAccent;
+    function collectAccent(node) {
+      if (node.type === 'Literal' && typeof node.value === 'string') {
+        const accent = accentForName(node.value);
+        if (accent) {
+          hues.add(accent);
+          firstAccent ??= node;
+        }
+      } else if (node.type === 'ConditionalExpression') {
+        collectAccent(node.consequent);
+        collectAccent(node.alternate);
+      } else if (node.type === 'LogicalExpression') {
+        collectAccent(node.right);
+      }
+    }
     function checkStyleObject(expression) {
       if (expression.type === 'ConditionalExpression') {
         checkStyleObject(expression.consequent);
@@ -116,6 +134,26 @@ export const glassComponentsRule = {
     }
     return {
       JSXOpeningElement(node) {
+        if (node.name.type === 'JSXIdentifier' && /^(?:GlassButton|GlassOrb|GlassOption)$/.test(node.name.name)) {
+          const tone = node.attributes.find((attr) => attr.type === 'JSXAttribute' && attr.name.name === 'tone');
+          const accent = node.attributes.find((attr) => attr.type === 'JSXAttribute' && attr.name.name === 'accent');
+          const toneValue = tone?.value?.type === 'Literal' ? tone.value.value : undefined;
+          if (node.name.name === 'GlassButton' && toneValue === 'glassy' && !accent) {
+            hues.add('green');
+            firstAccent ??= tone;
+          }
+          for (const attr of node.attributes) {
+            if (attr.type !== 'JSXAttribute' || !['tone', 'accent'].includes(attr.name.name) || !attr.value) continue;
+            // GlassButton only consumes its accent prop with the glassy tone.
+            if (
+              node.name.name === 'GlassButton' &&
+              attr.name.name === 'accent' &&
+              (!tone || (toneValue && toneValue !== 'glassy'))
+            )
+              continue;
+            collectAccent(attr.value.type === 'JSXExpressionContainer' ? attr.value.expression : attr.value);
+          }
+        }
         if (node.name.type === 'JSXIdentifier' && intrinsicControls.has(node.name.name))
           context.report({ node, messageId: 'control', data: { name: node.name.name } });
         const intrinsic = node.name.type === 'JSXIdentifier' && /^[a-z]/.test(node.name.name);
@@ -153,6 +191,10 @@ export const glassComponentsRule = {
             continue;
           checkStyleObject(attr.value.expression);
         }
+      },
+      'Program:exit'() {
+        if (hues.size > 1)
+          context.report({ node: firstAccent, messageId: 'accents', data: { hues: [...hues].sort().join(', ') } });
       },
     };
   },
