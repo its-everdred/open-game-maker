@@ -26,13 +26,7 @@ import { submitRound } from '../review-rounds/store.js';
 import { logReviewPublish } from '../review-rounds/feed-log.js';
 import { isReviewStill } from '../review-rounds/still.js';
 import { issueGrant } from '../artifacts/grants.js';
-import { buildDir, isComplete, resolveFile } from '@ogm/games-host/layout';
-import { stat } from 'node:fs/promises';
-import { currentPublishedBuild } from '../artifacts/published.js';
-import { releaseRuntimeFor } from '../releases/routes.js';
-import { publish, ReleaseError } from '../releases/service.js';
-import { withArtifactMutation } from '../builds/artifact-lock.js';
-import { withReleaseSource } from './release-source.js';
+import { buildDir, isComplete } from '@ogm/games-host/layout';
 
 // An operator's route to publish a build for a game the app registered against a repository whose own tickets are
 // not Game Maker jobs — the daemon's `before_remove` hook never runs for them, so nothing ever uploads a build.
@@ -322,69 +316,6 @@ const routes = new Hono<ApiBindings>()
     if (game.slug === null) throw new HttpError(409, 'game_slug_missing');
     const number = reviewNumber(deps.db, game.id, c.req.param('decisionId'));
     return c.json({ number, path: reviewPath(game.slug, number) });
-  })
-  .post('/games/:ref/builds/:buildId/release', async (c) => {
-    requireOperator(c);
-    const deps = c.get('deps');
-    const game = gameFor(deps, c.req.param('ref'));
-    const buildId = c.req.param('buildId');
-    if (game.delistedAt !== null) throw new HttpError(409, 'game_delisted');
-    const branch = deps.db
-      .select()
-      .from(schema.branches)
-      .where(and(eq(schema.branches.gameId, game.id), eq(schema.branches.name, 'main')))
-      .get();
-    if (branch?.latestBuildId !== buildId) throw new HttpError(409, 'not_current_build');
-    if (currentPublishedBuild(deps, game.id) === buildId) {
-      const directory = buildDir(deps.config.gamesRoot, game.id, buildId);
-      const entry = await resolveFile(directory, 'index.html');
-      if (
-        !(await isComplete(directory)) ||
-        !entry ||
-        !(await stat(entry)
-          .then((value) => value.isFile())
-          .catch(() => false))
-      )
-        throw new HttpError(409, 'artifact_missing');
-      const current = deps.db
-        .select({ buildId: schema.branches.latestBuildId })
-        .from(schema.branches)
-        .where(eq(schema.branches.id, branch.id))
-        .get();
-      if (current?.buildId !== buildId) throw new HttpError(409, 'not_current_build');
-      return c.json({ state: 'published', buildId });
-    }
-    try {
-      const release = await withReleaseSource(deps, game, buildId, async (source) =>
-        withArtifactMutation(async () => {
-          const current = deps.db
-            .select({ buildId: schema.branches.latestBuildId })
-            .from(schema.branches)
-            .where(eq(schema.branches.id, branch.id))
-            .get();
-          if (current?.buildId !== buildId) throw new HttpError(409, 'not_current_build');
-          const runtime = releaseRuntimeFor(deps);
-          return publish(
-            deps,
-            { ...runtime, checkRights: (_artifact, visibility) => runtime.checkRights(source, visibility) },
-            {
-              gameId: game.id,
-              buildId,
-              actor: PUBLISH_ACTOR,
-              requireCurrentMain: true,
-              expectedRights: {
-                allowAiGeneratedAssets: game.allowAiGeneratedAssets,
-                repoVisibility: game.repoVisibility,
-              },
-            },
-          );
-        }),
-      );
-      return c.json({ state: 'published', buildId: release.buildId });
-    } catch (error) {
-      if (error instanceof ReleaseError) throw new HttpError(error.status, error.code, undefined, error.payload);
-      throw error;
-    }
   })
   .post('/games/:ref/builds/:buildId/access', async (c) => {
     requireOperator(c);

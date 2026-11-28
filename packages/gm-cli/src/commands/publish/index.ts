@@ -417,13 +417,6 @@ export const command: GmCommand = {
 
       if (upload.status === 201) {
         const buildId = String(answer.buildId ?? '');
-        const release = await request(`${uploadUrl}/${encodeURIComponent(buildId)}/release`, {
-          method: 'POST',
-          headers: { 'x-ogm-internal': token },
-          signal: AbortSignal.timeout(300_000),
-        });
-        if (release.status !== 200)
-          throw new CommandError(`build ${buildId} uploaded but release failed (${release.status}): ${release.body}`);
         const play = `${env.OGM_APP_ORIGIN?.replace(/\/+$/, '') ?? ''}/g/${encodeURIComponent(facts.gameId)}?build=${encodeURIComponent(buildId)}`;
         let reviewState: 'posted' | 'existing' | 'failed' | 'skipped' = 'skipped';
         let reviewRoundId: string | undefined;
