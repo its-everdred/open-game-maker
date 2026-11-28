@@ -69,4 +69,23 @@ describe('worker reviews', () => {
     unmount();
     client.clear();
   });
+  it('shows a live round without waiting for the preview query', async () => {
+    api.mockImplementation((path: string) =>
+      path.includes('/review-rounds?')
+        ? Promise.resolve({
+            rounds: [{ id: 'r', ticket: '12', category: 'gameplay', buildId: 'live-r', question: null, media: [] }],
+          })
+        : new Promise(() => {}),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(() => useWorkerReviews([{ id: 'game' }], 'owner'), { wrapper });
+    await waitFor(() =>
+      expect(result.current.reviews[0]).toMatchObject({ kind: 'round', round: { buildId: 'live-r' } }),
+    );
+    unmount();
+    client.clear();
+  });
 });

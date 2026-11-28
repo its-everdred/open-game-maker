@@ -5,6 +5,7 @@ The app-wide design system for the Monday 2026-11-30 redesign (core #1428, desig
 - **Design canvas:** https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM (Claude Design, current Design type). Pages: System, Entry & account, Home & New Game, Make & play, Review & activity, Settings, resources & Admin, Future, Landscape & desktop, Choices for Kevin. Each artboard title carries its status: existing, Monday or future.
 - **Tokens:** [tokens.json](tokens.json). **Reference CSS:** [glass.css](glass.css), the stylesheet every artboard uses; port its classes to shared React components in `apps/web/src/components/` (core #1449).
 - **Components:** [components.md](components.md). **Screens and tickets:** [screens.md](screens.md).
+- **Runnable prototype:** [`prototypes/ogm-glass/`](../../../prototypes/ogm-glass/), every artboard as standalone HTML (open `index.html`).
 - **Renders:** every artboard as a still in `assets-local/review/design-ogm-glass/` (host only, not committed).
 
 ## Look

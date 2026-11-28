@@ -37,6 +37,25 @@ function game() {
 
 describe('gm decisions', () => {
   afterEach(() => vi.unstubAllGlobals());
+  it('warns with invalid entry ids and renders the valid entries', async () => {
+    const root = game();
+    const file = join(root, 'docs', basename(root), 'decisions.json');
+    writeFileSync(
+      file,
+      JSON.stringify([
+        { ...data[0], why: 'A | B' },
+        { ...data[0], id: 'broken', options: [] },
+      ]),
+    );
+    const result = await gm(['decisions', 'render'], { cwd: root });
+    expect(result.code).toBe(0);
+    expect(result.err.join('\n')).toContain('warning: invalid decision broken');
+    const markdown = readFileSync(join(root, 'docs', basename(root), 'decisions.md'), 'utf8');
+    expect(markdown).toContain('enemy-style');
+    expect(markdown).toContain('A \\| B');
+    expect(markdown).toContain('brief.md');
+    expect(markdown).not.toContain('broken');
+  });
   it('renders by area, then rejects stale markdown', async () => {
     const root = game();
     expect(await gm(['decisions', 'render'], { cwd: root })).toMatchObject({ code: 0 });
@@ -79,6 +98,27 @@ describe('gm decisions', () => {
     const result = await gm(['decisions', 'raise', 'enemy-style'], { cwd: game() });
     expect(result.code).toBe(2);
     expect(result.err.join('\n')).toContain('Golems');
+  });
+
+  it('requires a structured recommendation before raising a legacy decision', async () => {
+    const root = game();
+    const file = join(root, 'docs', basename(root), 'decisions.json');
+    writeFileSync(
+      file,
+      JSON.stringify([{ ...data[0], recommendation: 'Slimes', recommendation_reason: 'Already chosen' }]),
+    );
+    const result = await gm(['decisions', 'raise', 'enemy-style'], { cwd: root });
+    expect(result.code).toBe(2);
+    expect(result.err.join('\n')).toContain('option: reason');
+  });
+
+  it('rejects a legacy decision with too few options before posting media', async () => {
+    const root = game();
+    const file = join(root, 'docs', basename(root), 'decisions.json');
+    writeFileSync(file, JSON.stringify([{ ...data[0], mode: 'pick-one', options: [data[0]!.options[0]] }]));
+    const result = await gm(['decisions', 'raise', 'enemy-style'], { cwd: root });
+    expect(result.code).toBe(2);
+    expect(result.err.join('\n')).toContain('at least two options');
   });
 
   it('raises inventory options through gm decide as a non-blocking Command', async () => {

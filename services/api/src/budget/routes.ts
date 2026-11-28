@@ -21,6 +21,7 @@ const statusQuery = z.object({ userId: Id.optional(), unit: z.enum(['units', 'us
 function defaults(deps: AppDeps) {
   return {
     dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+    defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
     resetZone: deps.config.resetZoneDefault,
   };
 }

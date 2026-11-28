@@ -123,9 +123,19 @@ export function duplicate(doc: SceneDoc, adapter: ScenePackAdapter, ref: TileRef
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
         const cell = { x: from.x + dx, y: from.y + dy };
         if (!inBounds(doc, cell) || tileAt(doc, { layer: ref.layer, cell: cellKey(cell) })) continue;
+        const key = cellKey(cell);
+        const copy = { ...tile };
+        delete copy.lockedBy;
         return {
-          doc: paint(doc, adapter, ref.layer, cell, tile.asset, tile.facing),
-          ref: { layer: ref.layer, cell: cellKey(cell) },
+          doc: joined(
+            withTiles(doc, ref.layer, (tiles) => {
+              tiles[key] = copy;
+            }),
+            adapter,
+            ref.layer,
+            [key],
+          ),
+          ref: { layer: ref.layer, cell: key },
         };
       }
     }

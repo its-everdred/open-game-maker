@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { Id } from './api.js';
+import { Id, IsoTime } from './api.js';
 
 export const ReportFrame = z.object({
   file: z.string().max(300),
@@ -16,7 +16,7 @@ export const ReportError = z.object({
 export const CreateReport = z.object({
   gameId: Id,
   releaseId: Id.optional(),
-  buildHash: z.string().regex(/^[0-9a-f]{64}$/),
+  buildHash: z.string().regex(/^[A-Za-z0-9:_-]{1,200}$/),
   text: z.string().max(2000).optional(),
   error: ReportError.optional(),
   bundleKey: z.string().max(200).optional(),
@@ -27,6 +27,9 @@ export const CreateReportResponse = z.object({
   signature: z.string().length(64),
   route: ReportRoute,
   jobId: Id.optional(),
+  pendingBudget: z.literal(true).optional(),
+  budgetReason: z.literal('weekly_user').optional(),
+  resetsAt: IsoTime.optional(),
 });
 export interface IssueWriter {
   file(input: { title: string; body: string; labels: string[] }): Promise<{ ref: string }>;
@@ -97,7 +100,7 @@ export const TriageClaim = z.strictObject({
   reportId: Id,
   gameId: Id,
   releaseId: Id.optional(),
-  buildHash: z.string().regex(/^[0-9a-f]{64}$/),
+  buildHash: z.string().regex(/^[A-Za-z0-9:_-]{1,200}$/),
   route: z.enum(['game_repair', 'editor_hint']),
   jobId: Id.optional(),
   text: z.string().max(2000).optional(),

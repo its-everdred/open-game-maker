@@ -13,6 +13,7 @@ import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
 import { AdmissionRefused, admit } from './admission.js';
+import { isEnergyProbe } from '../qa/energy-probe.js';
 import { createControlsRoutes, storedDaemonFor } from './controls.js';
 import { findJob, findJobRow, listJobs } from './repo.js';
 import { raiseCap } from './spend-cap.js';
@@ -27,6 +28,7 @@ const raiseBody = z.object({ amountMicroUsd: MicroUsd }).strict();
 function defaults(deps: AppDeps) {
   return {
     dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+    defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
     resetZone: deps.config.resetZoneDefault,
   };
 }
@@ -44,6 +46,7 @@ function requireRead(deps: AppDeps, gameId: string, actor: ReturnType<typeof act
       familyId: game.familyId,
       ownerId: game.ownerId,
       visibility: game.visibility,
+      releaseState: game.releaseState,
       granted: hasGameGrant(deps.db, game.id, actor.userId),
     }),
   );
@@ -54,11 +57,18 @@ const routes = new Hono<ApiBindings>()
   .post('/jobs', async (c) => {
     const principal = requirePrincipal(c, ['user']);
     const body = await parseBody(c, CreateJobRequest);
+    if (body.kind === 'scope') throw new HttpError(403, 'scope_job_not_allowed');
     const deps = c.get('deps');
     try {
       return c.json(
         await admit(
-          { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults: defaults(deps) },
+          {
+            db: deps.db,
+            sqlite: deps.sqlite,
+            events: deps.events,
+            defaults: defaults(deps),
+            qaEnergyProbe: isEnergyProbe(c, principal.userId),
+          },
           body,
           actorFromPrincipal(principal),
         ),
@@ -80,7 +90,18 @@ const routes = new Hono<ApiBindings>()
     }
 
     requireAuthorization(authorize(actor, 'game.play', { familyId: principal.familyId, visibility: 'listed' }));
-    const visibleGameIds = listVisibleGames(deps.db, principal.familyId, principal.userId).map((game) => game.id);
+    const visibleGameIds = listVisibleGames(deps.db, principal.familyId, principal.userId)
+      .filter(
+        (game) =>
+          authorize(actor, 'game.play', {
+            familyId: game.familyId,
+            ownerId: game.ownerId,
+            visibility: game.visibility,
+            releaseState: game.releaseState,
+            granted: hasGameGrant(deps.db, game.id, principal.userId),
+          }).ok,
+      )
+      .map((game) => game.id);
     const jobs = listJobs(deps.db, visibleGameIds).filter((job) => !isTerminal(job.state));
     return c.json({ jobs });
   })

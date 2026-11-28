@@ -1,0 +1,658 @@
+{
+ "v": 3,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-11-27T03:40:00Z"
+ },
+ "title": "OGM Glass",
+ "launch": {
+  "view": "canvas",
+  "page": "system"
+ },
+ "pages": [
+  {
+   "id": "system",
+   "name": "System"
+  },
+  {
+   "id": "entry",
+   "name": "Entry & account"
+  },
+  {
+   "id": "home",
+   "name": "Home & New Game"
+  },
+  {
+   "id": "make",
+   "name": "Make & play"
+  },
+  {
+   "id": "activity",
+   "name": "Review & activity"
+  },
+  {
+   "id": "settings",
+   "name": "Settings, resources & Admin"
+  },
+  {
+   "id": "future",
+   "name": "Future"
+  },
+  {
+   "id": "layouts",
+   "name": "Landscape & desktop"
+  },
+  {
+   "id": "choices",
+   "name": "Choices for Kevin"
+  },
+  {
+   "id": "devconsole",
+   "name": "Developer console"
+  },
+  {
+   "id": "access",
+   "name": "Game access"
+  }
+ ],
+ "boards": {
+  "Main.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 1700,
+   "title": "Tokens",
+   "page": "system"
+  },
+  "Components.dc.html": {
+   "x": 1520,
+   "y": 0,
+   "w": 1440,
+   "h": 1560,
+   "title": "Components",
+   "page": "system"
+  },
+  "Title.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Title + Start · existing",
+   "page": "entry",
+   "radius": 38
+  },
+  "SignIn.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Sign in · existing",
+   "page": "entry",
+   "radius": 38
+  },
+  "Join.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Invite / join · Monday",
+   "page": "entry",
+   "radius": 38
+  },
+  "Account.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Account + role switch · Monday",
+   "page": "entry",
+   "radius": 38
+  },
+  "Home.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Home / game selection · existing",
+   "page": "home",
+   "radius": 38
+  },
+  "GameSheet.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Game sheet · existing",
+   "page": "home",
+   "radius": 38
+  },
+  "NewGame.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "New Game steps · existing",
+   "page": "home",
+   "radius": 38
+  },
+  "NewGameChat.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "New Game interview · Monday",
+   "page": "home",
+   "radius": 38
+  },
+  "PlayView.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Play view · existing",
+   "page": "make",
+   "radius": 38
+  },
+  "PauseMenu.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Pause menu (play) · existing",
+   "page": "make",
+   "radius": 38
+  },
+  "Editor.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Editor · existing",
+   "page": "make",
+   "radius": 38
+  },
+  "EditMenu.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Edit menu · existing",
+   "page": "make",
+   "radius": 38
+  },
+  "AgentChat.dc.html": {
+   "x": 1880,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Agent conversation · Monday",
+   "page": "make",
+   "radius": 38
+  },
+  "VoiceLive.dc.html": {
+   "x": 2350,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Two-way voice · Monday",
+   "page": "make",
+   "radius": 38
+  },
+  "BugReport.dc.html": {
+   "x": 2820,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Report a bug · Monday",
+   "page": "make",
+   "radius": 38
+  },
+  "Review.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Review question · existing",
+   "page": "activity",
+   "radius": 38
+  },
+  "Activity.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Activity list · Monday",
+   "page": "activity",
+   "radius": 38
+  },
+  "TicketChat.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Ticket conversation · Monday",
+   "page": "activity",
+   "radius": 38
+  },
+  "BuildOrder.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Build order (phone) · Monday",
+   "page": "activity",
+   "radius": 38
+  },
+  "Settings.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Settings · existing",
+   "page": "settings",
+   "radius": 38
+  },
+  "Resources.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Minerals + Gas · Monday",
+   "page": "settings",
+   "radius": 38
+  },
+  "LimitReached.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Limit reached · Monday",
+   "page": "settings",
+   "radius": 38
+  },
+  "Publish.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Publish + access · Monday",
+   "page": "settings",
+   "radius": 38
+  },
+  "Admin.dc.html": {
+   "x": 1880,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Admin · existing",
+   "page": "settings",
+   "radius": 38
+  },
+  "AdminInvite.dc.html": {
+   "x": 2350,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Admin invite + access · Monday",
+   "page": "settings",
+   "radius": 38
+  },
+  "Versions.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Versions + rollback · future",
+   "page": "future",
+   "radius": 38
+  },
+  "Saves.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Cloud saves + snapshots · future",
+   "page": "future",
+   "radius": 38
+  },
+  "Forks.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Forks + contributions · future",
+   "page": "future",
+   "radius": 38
+  },
+  "MapBrowse.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Map builder browse · future",
+   "page": "future",
+   "radius": 38
+  },
+  "ExternalGames.dc.html": {
+   "x": 1880,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "External games · future",
+   "page": "future",
+   "radius": 38
+  },
+  "ModelSettings.dc.html": {
+   "x": 2350,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Model + effort · future",
+   "page": "future",
+   "radius": 38
+  },
+  "HomeDesktop.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 900,
+   "title": "Home · desktop",
+   "page": "layouts"
+  },
+  "EditorDesktop.dc.html": {
+   "x": 1520,
+   "y": 0,
+   "w": 1440,
+   "h": 900,
+   "title": "Editor + chat · desktop",
+   "page": "layouts"
+  },
+  "BuildOrderDesktop.dc.html": {
+   "x": 0,
+   "y": 1020,
+   "w": 1440,
+   "h": 900,
+   "title": "Build order · desktop",
+   "page": "layouts"
+  },
+  "EditorLandscape.dc.html": {
+   "x": 1520,
+   "y": 1020,
+   "w": 844,
+   "h": 390,
+   "title": "Editor · phone landscape",
+   "page": "layouts",
+   "radius": 30
+  },
+  "PauseLandscape.dc.html": {
+   "x": 2444,
+   "y": 1020,
+   "w": 844,
+   "h": 390,
+   "title": "Pause menu · phone landscape",
+   "page": "layouts",
+   "radius": 30
+  },
+  "HomeLandscape.dc.html": {
+   "x": 0,
+   "y": 2040,
+   "w": 844,
+   "h": 390,
+   "title": "Home · phone landscape",
+   "page": "layouts",
+   "radius": 30
+  },
+  "BannerA.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Activity A: banner pill",
+   "page": "choices",
+   "radius": 38
+  },
+  "BannerB.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Activity B: ring on menu orb",
+   "page": "choices",
+   "radius": 38
+  },
+  "BannerC.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Activity C: bottom dock",
+   "page": "choices",
+   "radius": 38
+  },
+  "ChatA.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Editor chat A: half sheet",
+   "page": "choices",
+   "radius": 38
+  },
+  "ChatB.dc.html": {
+   "x": 1880,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Editor chat B: full screen",
+   "page": "choices",
+   "radius": 38
+  },
+  "StartA.dc.html": {
+   "x": 2350,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Start A: solid gloss",
+   "page": "choices",
+   "radius": 38
+  },
+  "StartB.dc.html": {
+   "x": 2820,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Start B: tinted glass",
+   "page": "choices",
+   "radius": 38
+  },
+  "Arena.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Arena (Dusk Helm) · Monday design, post-Monday build",
+   "page": "devconsole",
+   "radius": 38
+  },
+  "ArenaLandscape.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 844,
+   "h": 390,
+   "title": "Arena · phone landscape",
+   "page": "devconsole",
+   "radius": 30
+  },
+  "Visuals.dc.html": {
+   "x": 1394,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Visuals + compare · Monday design, post-Monday build",
+   "page": "devconsole",
+   "radius": 38
+  },
+  "EditorPicks.dc.html": {
+   "x": 1864,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Editor picks: Map · Monday design, post-Monday build",
+   "page": "devconsole",
+   "radius": 38
+  },
+  "DevPanelKit.dc.html": {
+   "x": 0,
+   "y": 1120,
+   "w": 1440,
+   "h": 720,
+   "title": "Dev panel kit + picks per game",
+   "page": "devconsole"
+  },
+  "PicksTabs.dc.html": {
+   "x": 1520,
+   "y": 1120,
+   "w": 390,
+   "h": 844,
+   "title": "Choice: picks as bottom tabs",
+   "page": "devconsole",
+   "radius": 38
+  },
+  "PanelDrawer.dc.html": {
+   "x": 1990,
+   "y": 1120,
+   "w": 390,
+   "h": 844,
+   "title": "Choice: panel as side drawer",
+   "page": "devconsole",
+   "radius": 38
+  },
+  "AccessEntry.dc.html": {
+   "page": "access",
+   "radius": 38,
+   "w": 390,
+   "h": 844,
+   "y": 0,
+   "x": 0,
+   "title": "Game sheet: Access entry · new"
+  },
+  "Access.dc.html": {
+   "page": "access",
+   "radius": 38,
+   "w": 390,
+   "h": 844,
+   "y": 0,
+   "x": 470,
+   "title": "Game access: Hide / Play / Edit · new"
+  },
+  "Users.dc.html": {
+   "page": "access",
+   "radius": 38,
+   "w": 390,
+   "h": 844,
+   "y": 0,
+   "x": 940,
+   "title": "Admin › Users · new"
+  },
+  "UsersInvite.dc.html": {
+   "page": "access",
+   "radius": 38,
+   "w": 390,
+   "h": 844,
+   "y": 0,
+   "x": 1410,
+   "title": "Invite user with type · new"
+  },
+  "UserType.dc.html": {
+   "page": "access",
+   "radius": 38,
+   "w": 390,
+   "h": 844,
+   "y": 0,
+   "x": 1880,
+   "title": "Change user type · new"
+  },
+  "AccessLandscape.dc.html": {
+   "page": "access",
+   "radius": 30,
+   "w": 844,
+   "h": 390,
+   "x": 0,
+   "y": 964,
+   "title": "Game access · phone landscape"
+  },
+  "UsersLandscape.dc.html": {
+   "page": "access",
+   "radius": 30,
+   "w": 844,
+   "h": 390,
+   "x": 924,
+   "y": 964,
+   "title": "Users · phone landscape"
+  }
+ },
+ "order": [
+  "Main.dc.html",
+  "Components.dc.html",
+  "Title.dc.html",
+  "SignIn.dc.html",
+  "Join.dc.html",
+  "Account.dc.html",
+  "Home.dc.html",
+  "GameSheet.dc.html",
+  "NewGame.dc.html",
+  "NewGameChat.dc.html",
+  "PlayView.dc.html",
+  "PauseMenu.dc.html",
+  "Editor.dc.html",
+  "EditMenu.dc.html",
+  "AgentChat.dc.html",
+  "VoiceLive.dc.html",
+  "BugReport.dc.html",
+  "Review.dc.html",
+  "Activity.dc.html",
+  "TicketChat.dc.html",
+  "BuildOrder.dc.html",
+  "Settings.dc.html",
+  "Resources.dc.html",
+  "LimitReached.dc.html",
+  "Publish.dc.html",
+  "Admin.dc.html",
+  "AdminInvite.dc.html",
+  "Versions.dc.html",
+  "Saves.dc.html",
+  "Forks.dc.html",
+  "MapBrowse.dc.html",
+  "ExternalGames.dc.html",
+  "ModelSettings.dc.html",
+  "HomeDesktop.dc.html",
+  "EditorDesktop.dc.html",
+  "BuildOrderDesktop.dc.html",
+  "EditorLandscape.dc.html",
+  "PauseLandscape.dc.html",
+  "HomeLandscape.dc.html",
+  "BannerA.dc.html",
+  "BannerB.dc.html",
+  "BannerC.dc.html",
+  "ChatA.dc.html",
+  "ChatB.dc.html",
+  "StartA.dc.html",
+  "StartB.dc.html",
+  "Arena.dc.html",
+  "ArenaLandscape.dc.html",
+  "Visuals.dc.html",
+  "EditorPicks.dc.html",
+  "DevPanelKit.dc.html",
+  "PicksTabs.dc.html",
+  "PanelDrawer.dc.html",
+  "AccessEntry.dc.html",
+  "Access.dc.html",
+  "Users.dc.html",
+  "UsersInvite.dc.html",
+  "UserType.dc.html",
+  "AccessLandscape.dc.html",
+  "UsersLandscape.dc.html"
+ ],
+ "notes": {},
+ "designSystems": []
+}

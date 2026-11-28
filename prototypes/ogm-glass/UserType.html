@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Change user type</title>
+<link rel="stylesheet" href="./glass.css">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&amp;family=Nunito:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0f0e16}a{color:#74c8ed}a:hover{color:#f2ead6}
+.gb{border:1px solid;border-color:rgba(242,234,214,.34) rgba(0,0,0,.42) rgba(242,234,214,.34) rgba(0,0,0,.42);box-shadow:0 6px 18px -6px rgba(0,0,0,.55)}
+.orb.gb{background:rgba(57,54,67,.55)}
+.orb.blue{background:var(--gloss),#74c8ed;color:#1d1b16}
+.card{border-radius:20px;background:rgba(36,33,46,.62);-webkit-backdrop-filter:blur(22px) saturate(1.4);backdrop-filter:blur(22px) saturate(1.4);overflow:hidden}
+.card .r{display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 10px 10px 14px;width:100%;border:0;background:transparent;color:#f2ead6;text-align:left;font:inherit}
+.card .r+.r{box-shadow:inset 0 1px 0 rgba(242,234,214,.08)}
+.r .grow{flex:1;min-width:0}
+.r .t{font:600 17px/1.2 Fredoka,Nunito,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r .s{font:700 13px/1.3 Nunito,sans-serif;color:#c4beb0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font:700 17px Fredoka;color:#f2ead6;flex:none;background:var(--gloss),rgba(116,200,237,.26)}
+.sg{display:flex;gap:2px;padding:3px;border-radius:999px;background:rgba(15,14,22,.55);flex:none}
+.sg button{height:36px;min-width:54px;padding:0 10px;border:0;border-radius:999px;background:transparent;color:#c4beb0;font:700 14px Nunito,sans-serif}
+.sg button[aria-pressed="true"]{background:var(--gloss),#74c8ed;color:#1d1b16}
+.sg button:disabled{opacity:.3;cursor:default}
+.sg.wide{display:grid;grid-template-columns:repeat(3,1fr)}
+.sg.wide button{height:44px;font-size:15px}
+.in{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 16px;min-height:56px}
+.in input{flex:1;min-width:0;height:44px;border:0;background:transparent;outline:none;padding:0;color:#f2ead6;font:600 16px Nunito,sans-serif}
+.in input::placeholder{color:rgba(242,234,214,.45)}
+.flat{width:40px;height:40px;flex:none;border:0;border-radius:50%;display:grid;place-items:center;padding:0;background:transparent;color:#c4beb0}
+.btn.blue,.g a.btn.blue{color:#1d1b16;background:var(--gloss),#74c8ed}
+.seg button[aria-pressed="true"]{background:var(--gloss),#74c8ed;color:#1d1b16}
+.chev{color:#c4beb0}</style>
+</head>
+<body>
+<div class="g phone">
+<div class="glows" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<div class="top">
+<a class="orb sm gb" href="Settings.html" aria-label="Back"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+<h1 class="h1" style="font-size:26px;line-height:40px;flex:1">Admin</h1>
+<a class="orb sm gb blue" href="UsersInvite.html" aria-label="Invite user"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></a>
+</div>
+<div style="position:absolute;inset:76px 14px 0;display:flex;flex-direction:column;gap:16px;overflow:hidden">
+<div class="seg" role="tablist" aria-label="Admin sections" style="border:0"><button aria-pressed="true">Users</button><button aria-pressed="false">Resources</button><button aria-pressed="false">Work</button><button aria-pressed="false">Intake</button></div>
+<div class="sec"><div class="cap">Users <span class="cnt">5</span></div>
+<div class="card gb">
+<a class="r" href="UserType.html"><span class="av">K</span><div class="grow"><div class="t">Kevin</div><div class="s">Admin</div></div><span class="chev"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg></span></a>
+<a class="r" href="UserType.html"><span class="av">A</span><div class="grow"><div class="t">Alexis</div><div class="s">Editor</div></div><span class="chev"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg></span></a>
+<a class="r" href="UserType.html"><span class="av">K</span><div class="grow"><div class="t">Kim</div><div class="s">Editor</div></div><span class="chev"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg></span></a>
+<a class="r" href="UserType.html"><span class="av">P</span><div class="grow"><div class="t">[Player]</div><div class="s">Player</div></div><span class="chev"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg></span></a>
+<a class="r" href="UserType.html"><span class="av">T</span><div class="grow"><div class="t">[Tester]</div><div class="s">Player</div></div><span class="chev"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg></span></a>
+</div></div>
+<div class="sec"><div class="cap">Invited <span class="cnt">1</span></div>
+<div class="card gb">
+<div class="r"><span class="av" style="background:rgba(242,234,214,.14)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></span><div class="grow"><div class="t">[tester three email]</div><div class="s">Invited · Player</div></div></div>
+</div></div>
+</div>
+<div class="scrim" style="z-index:6"></div>
+<div class="pane strong gb" role="dialog" aria-label="Kim" style="position:absolute;left:10px;right:10px;bottom:10px;z-index:7;border-radius:28px;padding:24px 16px 16px;display:flex;flex-direction:column;align-items:center;gap:16px">
+<span class="av" style="width:64px;height:64px;font-size:28px">K</span>
+<h2 class="h2" style="margin:0">Kim</h2>
+<div style="width:100%"><div class="sg wide" role="group" aria-label="Type"><button type="button" aria-pressed="false">Player</button><button type="button" aria-pressed="true">Editor</button><button type="button" aria-pressed="false">Admin</button></div></div>
+<div style="display:flex;flex-direction:column;gap:10px;width:100%">
+<a class="btn blue block gb" href="Users.html">Done</a>
+<a class="btn ghost block" href="Users.html" style="color:#ff9b8f">Remove user</a>
+</div>
+</div>
+</div>
+</body>
+</html>

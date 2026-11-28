@@ -276,14 +276,14 @@ describe('Energy with provider readings', () => {
     energyLevel(energySource({ db: worked().db, zone: ZONE, readings }).snapshot(NOW));
 
   it('lets the tightest known reading decide the ring', () => {
-    expect(level([reading('claude', 53)])).toBe('healthy');
-    expect(level([reading('claude', 53), reading('codex', 80)])).toBe('limited');
-    expect(level([reading('claude', 53), reading('codex', 100)])).toBe('critical');
+    expect(level([reading('claude:week', 53)])).toBe('healthy');
+    expect(level([reading('claude:week', 53), reading('codex:primary', 80)])).toBe('limited');
+    expect(level([reading('claude:week', 53), reading('codex:primary', 100)])).toBe('critical');
   });
 
   it('lets no unknown or stale reading decide it', () => {
-    expect(level([reading('codex', null, { stale: true, observedAt: NOW.toISOString() })])).toBe('unknown');
-    expect(level([reading('claude', 10), reading('codex', null)])).toBe('healthy');
+    expect(level([reading('codex:primary', null, { stale: true, observedAt: NOW.toISOString() })])).toBe('unknown');
+    expect(level([reading('claude:week', 10), reading('codex:primary', null)])).toBe('healthy');
   });
 
   it('fills the voice service from ElevenLabs and lists every source without money', () => {

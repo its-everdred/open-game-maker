@@ -109,7 +109,10 @@ export interface AiurClient {
   ticketTranscript(
     id: string,
     cursor?: string,
-  ): Promise<{ events: { body: string; turn_id: string | null }[]; nextCursor: string | null }>;
+  ): Promise<{
+    events: { body: string; turn_id: string | null; role?: string; timestamp?: string }[];
+    nextCursor: string | null;
+  }>;
   accounts(): Promise<UsageAccounts>;
   events(after: number, limit: number, patterns: string[]): Promise<EventPage>;
   eventsToken(): Promise<{ token: string; expires_in_seconds: number }>;
@@ -315,6 +318,8 @@ export function createAiurClient(
             {
               body: event.body,
               turn_id: 'turn_id' in event && typeof event.turn_id === 'string' ? event.turn_id : null,
+              ...('role' in event && typeof event.role === 'string' ? { role: event.role } : {}),
+              ...('timestamp' in event && typeof event.timestamp === 'string' ? { timestamp: event.timestamp } : {}),
             },
           ];
         }),

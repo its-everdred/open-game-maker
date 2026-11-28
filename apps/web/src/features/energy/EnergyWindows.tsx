@@ -11,11 +11,27 @@ export const LEVEL_LABELS: Record<EnergyLevel, string> = {
 
 const SERVICE_LABELS = { voice: 'Voice', images: 'Images' } as const;
 
-function Meter({ label, usedPercent, note }: { label: string; usedPercent: number | null; note?: string }) {
+function Meter({
+  label,
+  usedPercent,
+  note,
+  unlimited = false,
+}: {
+  label: string;
+  usedPercent: number | null;
+  note?: string;
+  unlimited?: boolean;
+}) {
   return (
     <li className="energy-meter" data-known={usedPercent !== null}>
       <span>{label}</span>
-      <span>{usedPercent === null ? 'Unknown' : `${100 - usedPercent}% left`}</span>
+      <span>
+        {unlimited
+          ? 'Unlimited'
+          : usedPercent === null
+            ? 'Unknown'
+            : `${Math.round((100 - usedPercent) * 10) / 10}% left`}
+      </span>
       <span className="energy-meter-bar" aria-hidden="true">
         <span style={{ width: `${usedPercent === null ? 0 : 100 - usedPercent}%` }} />
       </span>
@@ -46,10 +62,58 @@ export function sourceNote(source: EnergySource, now = Date.now()): string {
 // Daily, weekly and monthly windows, then one line per provider reading; per-service lines only where `services` is
 // asked for (the settings breakdown).
 export function EnergyWindows({ view, services = false }: { view: EnergyView; services?: boolean }) {
+  const sources = view.sources ?? [];
+  const coding = sources.filter((source) => /^(claude|codex):/.test(source.id));
+  const gas = sources.filter((source) => source.id === 'fal');
+  const other = sources.filter((source) => !/^(claude|codex):/.test(source.id) && source.id !== 'fal');
   return (
     <ul className="energy-windows" data-level={view.level}>
+      {view.weeklyJobs
+        ? (['newGames', 'edits'] as const).map((kind) => {
+            const bucket = view.weeklyJobs![kind];
+            const used =
+              bucket.limit === null || bucket.remaining === null
+                ? null
+                : bucket.limit === 0
+                  ? 100
+                  : Math.round(100 * (1 - bucket.remaining / bucket.limit));
+            const reset = new Date(view.weeklyJobs!.resetsAt).toLocaleString(undefined, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            });
+            return (
+              <Meter
+                key={kind}
+                label={kind === 'newGames' ? 'Interim new-game limit' : 'Interim edit limit'}
+                usedPercent={used}
+                unlimited={bucket.limit === null}
+                note={
+                  bucket.limit === null ? undefined : `${bucket.remaining} of ${bucket.limit} left · resets ${reset}`
+                }
+              />
+            );
+          })
+        : null}
+      <li>
+        <img src="/resources/minerals.svg" alt="" width={24} height={24} /> Minerals
+      </li>
+      {coding.length ? (
+        coding.map((source) => (
+          <Meter key={source.id} label={source.label} usedPercent={source.usedPercent} note={sourceNote(source)} />
+        ))
+      ) : (
+        <Meter label="Coding-agent usage" usedPercent={null} note="unknown" />
+      )}
+      <li>
+        <img src="/resources/gas.svg" alt="" width={24} height={24} /> Gas
+      </li>
+      <li>Actual paid API spend: Unknown</li>
+      {gas.map((source) => (
+        <Meter key={source.id} label={source.label} usedPercent={source.usedPercent} note={sourceNote(source)} />
+      ))}
+      <li>Estimated overall build budget (includes reservations)</li>
       {view.windows.map(({ window, usedPercent }) => (
-        <Meter key={window} label={WINDOW_LABELS[window]} usedPercent={usedPercent} />
+        <Meter key={window} label={WINDOW_LABELS[window]} usedPercent={usedPercent} note="estimate" />
       ))}
       {services
         ? view.services.map(({ service, usedPercent }) => (
@@ -57,7 +121,8 @@ export function EnergyWindows({ view, services = false }: { view: EnergyView; se
           ))
         : null}
       {/* An API from before #1217 sends no sources. */}
-      {(view.sources ?? []).map((source) => (
+      {other.length ? <li>Other provider limits</li> : null}
+      {other.map((source) => (
         <Meter key={source.id} label={source.label} usedPercent={source.usedPercent} note={sourceNote(source)} />
       ))}
     </ul>

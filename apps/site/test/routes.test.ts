@@ -21,9 +21,21 @@ describe('built routes', () => {
     expect(doc.title.trim()).not.toBe('');
   });
 
-  it('keeps both splash CTAs on marketing routes so deploy redirects own the instance origin', () => {
-    const ctas = [...page('index.html').querySelectorAll('a.s-cta')].map((a) => a.getAttribute('href'));
-    expect(ctas).toEqual(['/setup', '/signin']);
+  it('links visitors to the app and self-hosting guide', () => {
+    const links = [...page('index.html').querySelectorAll('a')].map((a) => a.getAttribute('href'));
+    expect(links).toContain('/setup');
+    expect(links).toContain('/signin');
+  });
+
+  it('ships discoverable agent introductions alongside the built homepage', () => {
+    const agentGuide = readFileSync(`${distDir}/AGENTS.md`, 'utf8');
+    const discovery = readFileSync(`${distDir}/llms.txt`, 'utf8');
+    expect(agentGuide).toBe(readFileSync(fileURLToPath(new URL('../public/AGENTS.md', import.meta.url)), 'utf8'));
+    expect(discovery).toBe(readFileSync(fileURLToPath(new URL('../public/llms.txt', import.meta.url)), 'utf8'));
+    expect(agentGuide).toContain('invite-only');
+    expect(agentGuide).toContain('[homepage](/)');
+    expect(discovery).toContain('[Agent overview](/AGENTS.md)');
+    expect(discovery).toContain('[Setup guide](/setup)');
   });
 
   it('renders the eight setup headers in order', () => {

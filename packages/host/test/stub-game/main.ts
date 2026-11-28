@@ -31,7 +31,11 @@ const manifest: GameManifest = {
 window.__frames = [];
 window.__hostMessages = [];
 window.__taps = 0;
-window.__cacheReady = 'serviceWorker' in navigator ? navigator.serviceWorker.ready : Promise.resolve(undefined);
+try {
+  window.__cacheReady = 'serviceWorker' in navigator ? navigator.serviceWorker.ready : Promise.resolve(undefined);
+} catch {
+  window.__cacheReady = Promise.resolve(undefined);
+}
 window.__cacheResult = window.__cacheReady
   .then(() => fetch(`/a/${'a'.repeat(64)}.glb`))
   .then((response) => response.text())

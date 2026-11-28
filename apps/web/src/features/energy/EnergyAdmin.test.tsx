@@ -208,21 +208,21 @@ function serve(status = 200) {
 }
 
 const rowOf = (label: string) =>
-  within(screen.getByRole('table', { name: 'Energy resources' }))
+  within(screen.getByRole('table', { name: 'Resources' }))
     .getByRole('rowheader', { name: label })
     .closest('tr')!;
 
 describe('EnergyAdmin', () => {
   it('heads the page with the pool level and what binds next', async () => {
     serve();
-    expect(await screen.findByRole('heading', { name: 'Energy: Healthy' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Minerals and Gas: Healthy' })).toBeVisible();
     expect(screen.getByText(/^Claude · 47% left · resets Nov 27$/)).toBeVisible();
   });
 
   // A stale or unread figure has no number: never "0%" or "100%", and a stale one keeps its age.
   it('shows unknown and stale rows as Unknown, never as 0 or 100', async () => {
     serve();
-    await screen.findByRole('table', { name: 'Energy resources' });
+    await screen.findByRole('table', { name: 'Resources' });
     const codex = rowOf('Codex');
     expect(codex).toHaveTextContent(/^CodexUnknownUnknownNov 25unknownstale 17 hunknown$/);
     expect(rowOf('Netlify')).toHaveTextContent(/^NetlifyUnknown300Unknown/);
@@ -238,7 +238,7 @@ describe('EnergyAdmin', () => {
 
   it('marks every estimate with its range or the word estimate, and calls nothing billed', async () => {
     serve();
-    await screen.findByRole('table', { name: 'Energy resources' });
+    await screen.findByRole('table', { name: 'Resources' });
     expect(rowOf('Today')).toHaveTextContent(/estimate/);
     expect(rowOf('fal')).toHaveTextContent(/estimate \$6\.50–\$7\.20/);
     const plans = screen.getByRole('table', { name: 'Subscription spend' });
@@ -250,7 +250,7 @@ describe('EnergyAdmin', () => {
 
   it('lets an admin edit OGM caps but shows an aiur cap read-only with its config layer', async () => {
     const calls = serve();
-    const form = await screen.findByRole('form', { name: 'Energy caps' });
+    const form = await screen.findByRole('form', { name: 'Resource caps' });
     const aiur = within(form).getByLabelText(/Claude weekly limit/);
     expect(aiur).toHaveAttribute('readonly');
     expect(within(form).getByText('machine')).toBeVisible();
@@ -265,7 +265,7 @@ describe('EnergyAdmin', () => {
 
   it('keeps the window and service limits form', async () => {
     const calls = serve();
-    const form = await screen.findByRole('form', { name: 'Energy limits' });
+    const form = await screen.findByRole('form', { name: 'Resource limits' });
     expect(within(form).getByLabelText(/Today/)).toHaveValue('4');
     fireEvent.change(within(form).getByLabelText(/This week/), { target: { value: '20' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }));

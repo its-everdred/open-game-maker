@@ -42,6 +42,7 @@ export type AdminAllowedUser = {
   addedBy: string;
   addedAt: string;
   lastSignInAt: string | null;
+  weeklyBudget?: { newGames: number | null; edits: number | null };
 };
 
 export type AdminInvitation = {
@@ -83,6 +84,7 @@ export type AdminGame = {
   ownerId: string;
   title: string;
   visibility: 'listed' | 'private';
+  releaseState?: 'released' | 'coming_soon';
   repoVisibility: 'public' | 'private';
   createdAt: string;
   delistedAt: string | null;

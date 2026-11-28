@@ -6,7 +6,8 @@ import type { AppEvents } from '../app/events.js';
 import { HttpError } from '../app/errors.js';
 import { sizeFor } from '../jobs/admission.js';
 import { allowanceRemaining } from './allowance.js';
-import type { BudgetDefaults } from './settings.js';
+import { hasExplicitAllowance, type BudgetDefaults } from './settings.js';
+import { weeklyJobs } from './weekly-jobs.js';
 
 type RowKind = Exclude<JobKind, 'scope'>;
 const SIZE_ORDER: readonly SizeClass[] = ['small', 'medium', 'large', 'huge'];
@@ -54,18 +55,24 @@ export function estimate(
   const kind = input.kind ?? 'feature';
   const sizeClass = classify(input.summary, kind, input.complexity);
   const row = sizeClassRow(deps.db, kind, sizeClass);
+  const now = (deps.now ?? (() => new Date()))();
   const { remainingMicroUsd } = allowanceRemaining({
     db: deps.db,
     familyId: input.familyId,
     userId: input.creatorId,
-    now: (deps.now ?? (() => new Date()))(),
+    now,
     defaults: deps.defaults,
   });
+  const weekly = weeklyJobs(deps.db, input.creatorId, now, deps.defaults.resetZone);
+  const remaining = kind === 'new_game' || kind === 'scope' ? weekly.remaining.newGames : weekly.remaining.edits;
   return {
     sizeClass,
     rangeMicroUsd: [row.p50MicroUsd, row.p80MicroUsd],
     confidence: confidenceFor(row.samples),
-    fits: row.p80MicroUsd <= remainingMicroUsd,
+    fits:
+      remaining !== 0 &&
+      ((!deps.defaults.defaultAllowanceConfigured && !hasExplicitAllowance(deps.db, input.familyId, input.creatorId)) ||
+        row.p80MicroUsd <= remainingMicroUsd),
   };
 }
 

@@ -9,6 +9,7 @@ import {
 } from './review-command';
 import { Dialog } from '../../components/Dialog';
 import { CommandReviewCard } from './CommandReviewCard';
+import { AnsweredReviewCard } from './AnsweredReviewCard';
 import { MissingMediaStatus, useMissingMedia } from './MissingMedia';
 import { PreviewCard } from '../../routes/review/PreviewReviews';
 import { RoundCard } from '../../routes/review/RoundReviews';
@@ -113,6 +114,7 @@ export function ReviewInbox({
     ...pendingReviews.flatMap((review) =>
       review.kind === 'round' &&
       review.round.track !== 'prototype-publish' &&
+      review.round.buildId !== `live-${review.round.id}` &&
       ((!review.round.media.some((item) => item.role !== 'target') && !review.round.buildId) ||
         Boolean(review.round.buildId))
         ? [
@@ -204,12 +206,7 @@ export function ReviewInbox({
                         sent.decision_id === entry.item.decision_id,
                     )?.review,
                   );
-        return (
-          <button type="button" className="worker-review-answered" key={entry.key} onClick={() => show(entry)}>
-            <strong>{title}</strong>
-            <span>{answer}</span>
-          </button>
-        );
+        return <AnsweredReviewCard key={entry.key} title={title} summary={answer} onClick={() => show(entry)} />;
       })}
     </section>
   ) : null;
@@ -454,6 +451,7 @@ export function ReviewInbox({
             />
             {current.round.buildId &&
               current.round.track !== 'prototype-publish' &&
+              current.round.buildId !== `live-${current.round.id}` &&
               missingStatus(
                 `/games/${encodeURIComponent(current.gameId)}/review-rounds/${encodeURIComponent(current.round.id)}/missing-media?kind=build`,
               )}

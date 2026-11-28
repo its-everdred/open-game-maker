@@ -4,12 +4,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   costLine,
+  cancelFailedDictation,
   dictationFailure,
+  endVoiceConversation,
   elevenLabsUsage,
   LABELS,
+  startVoiceFromDictation,
   tallyFrames,
   twoWayFailure,
   voiceE2e,
+  waitForDictationCommit,
 } from '../src/qa-voice-e2e.js';
 import { gm, tempDir } from './helpers.js';
 
@@ -17,27 +21,103 @@ afterEach(() => vi.unstubAllGlobals());
 
 const frame = (value: Record<string, unknown>) => JSON.stringify(value);
 
+it('waits for the final commit and rejects an error even when partial text looks complete', async () => {
+  let checks = 0;
+  await expect(
+    waitForDictationCommit(
+      async () => ++checks > 1,
+      async () => 'final transcript missing',
+      1_000,
+    ),
+  ).rejects.toThrow('dictation failed: final transcript missing');
+  expect(checks).toBe(2);
+  await expect(
+    waitForDictationCommit(
+      async () => false,
+      async () => null,
+      0,
+    ),
+  ).rejects.toThrow('dictation did not finish committing');
+});
+
 // The prod check clicks the app's composer by its button names. When the build chat moved to the aiur composer the old
 // names ('Hold to talk', 'Start voice chat') matched nothing, and the post-deploy voice check failed on every deploy
 // without ever reaching the voice host (2026-11-21).
 it('looks for the button names the vendored composer renders', () => {
-  const composer = readFileSync(
-    new URL('../../../apps/web/vendor/aiur-conversation/src/composer.mjs', import.meta.url),
-    'utf8',
-  );
+  const composer = ['composer.mjs', 'composer-view.mjs']
+    .map((file) =>
+      readFileSync(new URL(`../../../apps/web/vendor/aiur-conversation/src/${file}`, import.meta.url), 'utf8'),
+    )
+    .join('\n');
   for (const label of Object.values(LABELS)) expect(composer).toMatch(new RegExp(`['"]${label}['"]`));
+});
+
+it('opens dictation before switching to two-way voice', async () => {
+  const clicks: string[] = [];
+  const dialog = {
+    getByRole: (_role: string, { name }: { name: string }) => ({
+      click: async () => {
+        clicks.push(name);
+      },
+    }),
+  };
+  await startVoiceFromDictation(dialog as unknown as Parameters<typeof startVoiceFromDictation>[0]);
+  expect(clicks).toEqual(['Dictate', 'Switch to voice conversation']);
+});
+
+it('cancels a failed dictation before releasing the mouse', async () => {
+  const actions: string[] = [];
+  const page = {
+    mouse: {
+      up: async () => {
+        actions.push('release');
+      },
+    },
+  };
+  const dialog = {
+    getByRole: () => ({
+      isVisible: async () => true,
+      dispatchEvent: async () => {
+        actions.push('cancel');
+      },
+    }),
+  };
+  await cancelFailedDictation(
+    page as unknown as Parameters<typeof cancelFailedDictation>[0],
+    dialog as unknown as Parameters<typeof cancelFailedDictation>[1],
+  );
+  expect(actions).toEqual(['cancel', 'release']);
+});
+
+it('fails the two-way check when the end voice control is unavailable', async () => {
+  const dialog = {
+    getByRole: () => ({
+      click: async () => {
+        throw new Error('missing end control');
+      },
+    }),
+  };
+  await expect(endVoiceConversation(dialog as unknown as Parameters<typeof endVoiceConversation>[0])).rejects.toThrow(
+    'missing end control',
+  );
 });
 
 it.each([false, true])('records each voice failure even when screenshot capture fails: %s', async (captureFails) => {
   const out = tempDir();
-  const locator = { and: () => locator, isVisible: async () => false };
+  const locator = {
+    and: () => locator,
+    getByRole: () => locator,
+    isVisible: async () => true,
+    dispatchEvent: async () => {},
+  };
   const page = {
+    mouse: { up: async () => {} },
     on: () => {},
     getByRole: () => locator,
     locator: () => locator,
-    goto: async () => {
+    goto: vi.fn(async () => {
       throw new Error('locator.click: timeout\nwaiting for QA voice');
-    },
+    }),
     url: () => 'https://app.example.test/all',
     screenshot: async ({ path }: { path: string }) => {
       if (captureFails) throw new Error('capture unavailable');
@@ -64,6 +144,7 @@ it.each([false, true])('records each voice failure even when screenshot capture 
     out,
     stamp: 'run-1',
   });
+  expect(page.goto).toHaveBeenCalledTimes(2);
   expect(context.grantPermissions).toHaveBeenCalledWith(['local-network-access'], {
     origin: 'https://app.example.test',
   });
@@ -114,6 +195,8 @@ describe('verdicts', () => {
   it('passes dictation only on the clip’s words', () => {
     expect(dictationFailure('Make the sky blue.')).toBeNull();
     expect(dictationFailure('make the skies Blue')).toBeNull();
+    expect(dictationFailure('Make the sky')).toMatch(/not the clip's words/);
+    expect(dictationFailure('blue')).toMatch(/not the clip's words/);
     expect(dictationFailure('  ')).toBe('the message box stayed empty after the clip');
     expect(dictationFailure('Hello there')).toMatch(/not the clip's words/);
   });

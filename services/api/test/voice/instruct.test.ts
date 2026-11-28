@@ -139,6 +139,19 @@ describe('POST /internal/voice/instruct', () => {
       at: new Date(NOW),
     });
     gameDrafts.attachTicket(deps.db, draft.id, 'owner/instance', 42, NOW.toISOString());
+    deps.db
+      .insert(schema.gameDaemons)
+      .values({
+        slug: 'instance',
+        repo: 'owner/instance',
+        checkoutPath: '/games/instance',
+        unit: 'instance',
+        envFile: '/config/instance',
+        port: 4101,
+        status: 'running',
+        createdAt: NOW.toISOString(),
+      })
+      .run();
     const target: VoiceTarget = {
       kind: 'scope',
       game_id: draft.id,
@@ -193,7 +206,7 @@ describe('POST /internal/voice/instruct', () => {
     expect(await response.json()).toEqual({ delivery_id: expect.any(String), status: 'needs_choice' });
     const briefing = await buildBriefing({ db: deps.db, defaults, now: () => NOW }, scope);
     // The draft alone outgrows the weekly ceiling, so queueing for the reset would not help.
-    expect(briefing.waiting_on).toBe('Needs more Energy than is left this week: ask an admin');
+    expect(briefing.waiting_on).toMatch(/^Exceeds the overall build budget this week: resets .+, or ask an admin$/);
   });
 
   it('returns failed without caching it so confirmation can retry', async () => {

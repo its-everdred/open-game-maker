@@ -22,14 +22,17 @@ export const CreatorDecision = z
     area: z.string().trim().min(1).max(120),
     question: z.string().trim().min(1).max(120),
     why: z.string().trim().min(1).max(500),
-    options: z.array(DecisionOption).min(2),
+    options: z.array(DecisionOption),
     recommendation: z.string().trim().min(1),
     sources: z.array(z.string().trim().min(1)),
     phase: z.enum(['mock', 'prototype', 'build', 'polish']).optional(),
     ticket: z.number().int().positive().nullable(),
     status: z.enum(['open', 'asked', 'answered', 'defaulted']),
-    answer: z.string().trim().min(1).nullable(),
-    answered_at: z.string().datetime({ offset: true }).nullable(),
+    answer: z.string().trim().min(1).nullable().default(null),
+    answered_at: z
+      .union([z.string().datetime({ offset: true }), z.iso.date()])
+      .nullable()
+      .default(null),
     /* What an approved round left to build on (#1311): files, the generator that made them, and how to reuse them. */
     reuse: z
       .object({
@@ -40,11 +43,12 @@ export const CreatorDecision = z
       .strict()
       .optional(),
   })
-  .strict()
+  .passthrough()
   .superRefine((entry, ctx) => {
-    if (!entry.options.some((option) => entry.recommendation.startsWith(`${option.label}:`)))
-      ctx.addIssue({ code: 'custom', path: ['recommendation'], message: 'must name an option and rationale' });
-    if (entry.status === 'asked' && entry.options.some((option) => !option.media))
+    const legacy = typeof entry.mode === 'string';
+    if (!legacy && entry.options.length < (entry.status === 'answered' ? 1 : 2))
+      ctx.addIssue({ code: 'custom', path: ['options'], message: 'decision needs more options' });
+    if (!legacy && entry.status === 'asked' && entry.options.some((option) => !option.media))
       ctx.addIssue({ code: 'custom', path: ['options'], message: 'asked decisions need media on every option' });
     if (entry.status === 'answered' && (!entry.answer || !entry.answered_at))
       ctx.addIssue({ code: 'custom', path: ['answer'], message: 'answered decisions need answer and answered_at' });

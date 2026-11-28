@@ -75,6 +75,29 @@ describe('POST /api/v1/reports', () => {
     expect(deps.db.select().from(schema.jobs).all()).toHaveLength(0);
   });
 
+  it('accepts a player report with the running build id', async () => {
+    const { app, deps } = await reportsApp();
+    const response = await app.request('/api/v1/reports', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': ids.player },
+      body: JSON.stringify({ gameId: ids.game, buildHash: 'b_1f2e3d4c', text: 'the door is stuck' }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(deps.db.select().from(schema.reports).get()?.buildHash).toBe('b_1f2e3d4c');
+  });
+
+  it('rejects build ids that could escape the game build directory', async () => {
+    const { app } = await reportsApp();
+    const response = await app.request('/api/v1/reports', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-user': ids.player },
+      body: JSON.stringify({ gameId: ids.game, buildHash: '../secrets', text: 'the door is stuck' }),
+    });
+
+    expect(response.status).toBe(400);
+  });
+
   it('admits one repair on the third matching wrong-behaviour report', async () => {
     const { deps, post } = await reportsApp();
     const report = { gameId: ids.game, releaseId: ids.release, buildHash: 'b'.repeat(64), text: 'jumping feels wrong' };

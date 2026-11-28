@@ -5,12 +5,13 @@ import { adminKeys, adminRequest, invalidateAdmin, useAdminBuilds } from './api'
 import { ConfirmDialog } from './ConfirmDialog';
 import type { AdminGame } from './types';
 
-type Action = { kind: 'delist' | 'flag'; game: AdminGame };
+type Action = { kind: 'delist' | 'flag' | 'release' | 'coming_soon' | 'grant'; game: AdminGame };
 
 export function Oversight() {
   const data = useAdminBuilds();
   const [action, setAction] = useState<Action | null>(null);
   const [reason, setReason] = useState<'spam' | 'harmful' | 'other'>('harmful');
+  const [email, setEmail] = useState('');
   const delist = useMutation({
     mutationFn: (gameId: string) =>
       adminRequest(`/admin/games/${encodeURIComponent(gameId)}/delist`, { method: 'POST' }),
@@ -27,16 +28,45 @@ export function Oversight() {
       setAction(null);
     },
   });
-  const activeMutation = action?.kind === 'delist' ? delist : flag;
+  const release = useMutation({
+    mutationFn: (value: { gameId: string; releaseState: 'released' | 'coming_soon' }) =>
+      adminRequest(`/games/${encodeURIComponent(value.gameId)}`, {
+        method: 'PATCH',
+        json: { releaseState: value.releaseState },
+      }),
+    onSuccess: async () => {
+      await invalidateAdmin(adminKeys.builds());
+      setAction(null);
+    },
+  });
+  const grant = useMutation({
+    mutationFn: (gameId: string) =>
+      adminRequest(`/admin/games/${encodeURIComponent(gameId)}/early-access`, {
+        method: 'POST',
+        json: { email },
+      }),
+    onSuccess: () => {
+      setAction(null);
+      setEmail('');
+    },
+  });
+  const activeMutation =
+    action?.kind === 'delist' ? delist : action?.kind === 'flag' ? flag : action?.kind === 'grant' ? grant : release;
   const openAction = (next: Action) => {
     delist.reset();
     flag.reset();
+    release.reset();
+    grant.reset();
     setAction(next);
   };
   const confirm = () => {
     if (!action || activeMutation.isPending) return;
     if (action.kind === 'delist') delist.mutate(action.game.id);
-    else flag.mutate(action.game.id);
+    else if (action.kind === 'flag') flag.mutate(action.game.id);
+    else if (action.kind === 'grant') {
+      if (email) grant.mutate(action.game.id);
+    } else
+      release.mutate({ gameId: action.game.id, releaseState: action.kind === 'release' ? 'released' : 'coming_soon' });
   };
 
   if (data.isPending) return <p className="admin-state">Loading games…</p>;
@@ -71,6 +101,24 @@ export function Oversight() {
                 <td data-label="Last build">{latest.get(game.id)?.job.state ?? 'No builds'}</td>
                 <td data-label="Actions">
                   <div className="admin-row-actions">
+                    <button
+                      className="admin-secondary tap-secondary"
+                      type="button"
+                      onClick={() =>
+                        openAction({ kind: game.releaseState === 'coming_soon' ? 'release' : 'coming_soon', game })
+                      }
+                    >
+                      {game.releaseState === 'coming_soon' ? 'Release' : 'Coming Soon'}
+                    </button>
+                    {game.releaseState === 'coming_soon' && (
+                      <button
+                        className="admin-secondary tap-secondary"
+                        type="button"
+                        onClick={() => openAction({ kind: 'grant', game })}
+                      >
+                        Grant access
+                      </button>
+                    )}
                     {!game.delistedAt ? (
                       <button
                         className="admin-secondary tap-primary"
@@ -100,11 +148,27 @@ export function Oversight() {
         <ConfirmDialog
           busy={activeMutation.isPending}
           error={activeMutation.isError ? 'Change could not be saved. Try again.' : undefined}
-          title={action.kind === 'delist' ? 'Delist this game?' : 'Flag this game?'}
+          title={
+            action.kind === 'delist'
+              ? 'Delist this game?'
+              : action.kind === 'flag'
+                ? 'Flag this game?'
+                : action.kind === 'grant'
+                  ? 'Grant early access?'
+                  : action.kind === 'release'
+                    ? 'Release this game?'
+                    : 'Mark Coming Soon?'
+          }
           onCancel={() => setAction(null)}
           onConfirm={confirm}
         >
           <p>{action.game.title}</p>
+          {action.kind === 'grant' && (
+            <label>
+              Tester email
+              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+            </label>
+          )}
           {action.kind === 'flag' ? (
             <label>
               Reason

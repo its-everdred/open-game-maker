@@ -176,6 +176,7 @@ cp services/commit/ops/ogm-commit.env.example ~/.config/ogm/env/ogm-commit.env
 # Fill OGM_API_PORT=4300, OGM_COMMIT_PORT=4301,
 # OGM_ROOMS_PORT=4302, OGM_GAMES_PORT=<unused-loopback-port>,
 # OGM_VOICE_PORT=40400, and OGM_VOICE_INTERNAL_PORT=40401.
+# Set OGM_API_INTERNAL_URL=http://127.0.0.1:4300 in games.env.
 # Optional: OGM_ROOMS_SEAT_RECONNECT_SEC=60 in rooms.env (default 30).
 # Fill OGM_DATA_DIR=~/.local/share/ogm/data,
 # OGM_BLOB_ROOT=~/.local/share/ogm/blobs,
@@ -637,18 +638,18 @@ Check: curl --fail --silent http://127.0.0.1:40401/healthz
 
 Hand back to the human: Keep the no-spend fake voice provider, or explicitly accept ElevenLabs charges and configure live dictation, conversation, and cleanup values.
 
-### 7.7 Set the default daily allowance and reset zone, then adjust per-family budgets in the admin page after sign-in.
+### 7.7 Set the reset zone and, if needed, a daily cost cap. Adjust interim weekly job limits per user in the admin page after sign-in.
 
 Command:
 
 ```sh
-# Set OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD and OGM_RESET_ZONE_DEFAULT in api.env.
+# Set OGM_RESET_ZONE_DEFAULT in api.env. Optionally set OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD to enforce a daily cap.
 systemctl --user restart ogm-api
 ```
 
 Writes: `~/.config/ogm/env/api.env`
 
-Check: /admin/budgets shows the configured defaults after sign-in
+Check: /admin/users shows interim weekly job limits after sign-in
 
 ### 7.8 Choose a backup target with enough space, configure absolute data and blob roots, and run the backup and restore proof. (HAND)
 

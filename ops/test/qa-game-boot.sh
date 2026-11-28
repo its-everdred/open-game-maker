@@ -26,12 +26,16 @@ db=$scratch/ogm.sqlite3
 python3 - "$db" << 'PY'
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
-c.execute('create table games (id text, slug text, delisted_at text)')
-c.execute('create table builds (id text, game_id text, status text, created_at text)')
-c.executemany('insert into games values (?, ?, null)', [('g_ok', 'ok'), ('g_bad', 'bad'), ('g_qa', 'qa-review')])
-c.executemany('insert into builds values (?, ?, ?, ?)', [
+c.execute('create table games (id text, slug text, delisted_at text, visibility text, published_release_id text, release_state text default "released")')
+c.execute('create table builds (id text, game_id text, status text, created_at text, artifact text default "present")')
+c.execute('create table releases (id text, game_id text, build_id text, snapshot_id text)')
+c.execute('create table override_snapshots (id text, game_id text, build_id text)')
+c.executemany('insert into games (id, slug, delisted_at, visibility, published_release_id) values (?, ?, null, "listed", ?)', [('g_ok', 'ok', 'r_ok'), ('g_bad', 'bad', 'r_bad'), ('g_qa', 'qa-review', 'r_qa')])
+c.executemany('insert into builds (id, game_id, status, created_at) values (?, ?, ?, ?)', [
   ('build_old', 'g_ok', 'tested', '2026-11-20'), ('build_new', 'g_ok', 'tested', '2026-11-21'),
   ('build_bad', 'g_bad', 'tested', '2026-11-21'), ('build_qa', 'g_qa', 'tested', '2026-11-21')])
+c.executemany('insert into releases values (?, ?, ?, ?)', [('r_ok', 'g_ok', 'build_new', 's_ok'), ('r_bad', 'g_bad', 'build_bad', 's_bad'), ('r_qa', 'g_qa', 'build_qa', 's_qa')])
+c.executemany('insert into override_snapshots values (?, ?, ?)', [('s_ok', 'g_ok', 'build_new'), ('s_bad', 'g_bad', 'build_bad'), ('s_qa', 'g_qa', 'build_qa')])
 c.commit()
 PY
 

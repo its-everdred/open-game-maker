@@ -329,9 +329,9 @@ function EnergySection({ onClose }: { onClose(): void }) {
   const meters = energyCards(energy.data);
   if (meters.length === 0) return null;
   return (
-    <section className="game-menu-sec" style={{ gridArea: 'c' }} aria-label="Energy">
-      <h3 className="game-menu-sh">Energy</h3>
-      <Link to="/settings/energy" className="game-menu-energy" aria-label="Energy settings" onClick={onClose}>
+    <section className="game-menu-sec" style={{ gridArea: 'c' }} aria-label="Minerals and Gas">
+      <h3 className="game-menu-sh">Minerals and Gas</h3>
+      <Link to="/settings/energy" className="game-menu-energy" aria-label="Minerals and Gas settings" onClick={onClose}>
         {meters.map((meter) => (
           <span key={meter.key} className="game-menu-en" data-high={(meter.usedPercent ?? 0) >= 80}>
             <span className="game-menu-en-top">

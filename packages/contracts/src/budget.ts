@@ -12,6 +12,14 @@ export const BudgetStatus = z.object({
   resetsAt: IsoTime,
   freeSlots: z.object({ new_game: z.number().int(), edit: z.number().int() }),
   queued: z.array(Id),
+  dailyLimitActive: z.boolean().optional(),
+  weeklyJobs: z
+    .object({
+      newGames: z.number().int().nonnegative().nullable(),
+      edits: z.number().int().nonnegative().nullable(),
+      resetsAt: IsoTime,
+    })
+    .optional(),
 });
 export const EstimateRequest = z.object({ gameId: Id, summary: z.string().min(1).max(2000) });
 export const Estimate = z.object({

@@ -60,3 +60,21 @@ describe('boot menu input', () => {
     runtime.dispose();
   });
 });
+
+it('delivers the host Back action to the registered game handler', async () => {
+  const { module } = createCounterGame();
+  const mount = module.mount;
+  const action = vi.fn();
+  module.mount = async (host, design, save) => {
+    host.back?.on(action);
+    host.back?.set({ enabled: true });
+    return mount(host, design, save);
+  };
+  const pending = boot(module, { hostOrigin: 'https://app.test', headless: true });
+  await vi.waitFor(() => expect(bridge.onMessage).toBeTypeOf('function'));
+  bridge.onMessage!(message('hello', { protocol: 1, capabilities: [], mode: 'play', build: 'draft', playerIndex: 0 }));
+  const runtime = await pending;
+  bridge.onMessage!(message('navigation.back', {}));
+  expect(action).toHaveBeenCalledOnce();
+  runtime.dispose();
+});

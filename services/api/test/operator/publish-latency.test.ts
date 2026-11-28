@@ -18,7 +18,7 @@ const pass = async (index: number) => {
 import { sweepBuilds } from '../../src/builds/publish.js';
 import { gameMedia } from '../../src/games/media.js';
 import operatorRoutes, { prefix } from '../../src/operator/routes.js';
-import { builtFiles, ids, SHA, world } from '../builds/fixtures.js';
+import { allowArchive, builtFiles, CHECK_ID, ids, SHA, world } from '../builds/fixtures.js';
 import { INTERNAL_TOKEN } from '../helpers.js';
 
 it('publishes three display images within the budget while derivation is still running', async () => {
@@ -35,11 +35,12 @@ it('publishes three display images within the budget while derivation is still r
     JSON.stringify({ ...manifest, loading: { portrait: 'media/portrait.png', landscape: 'media/landscape.png' } }),
   );
   const archive = execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', files, '.']);
+  allowArchive(deps, archive);
   const start = passes.length;
   const started = performance.now();
   const response = await app.request(`${prefix}/games/castle-game/builds`, {
     method: 'POST',
-    headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'x-gm-sha': SHA },
+    headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'x-gm-sha': SHA, 'x-gm-check-id': CHECK_ID },
     body: archive,
   });
   expect(response.status).toBe(201);
@@ -50,8 +51,8 @@ it('publishes three display images within the budget while derivation is still r
   expect(metadata.images).toBeUndefined();
   expect(metadata.pending).toBe(true);
   const media = (await gameMedia(deps, [ids.game])).get(ids.game)!;
-  expect(media.coverUrl).toMatch(/^https:\/\/games\.example\.test\/a\/[a-f0-9]{64}\.png$/u);
-  expect(media.loadingUrls?.portrait).toMatch(/^https:\/\/games\.example\.test\/a\/[a-f0-9]{64}\.png$/u);
+  expect(media.coverUrl).toBe(`https://games.example.test/g/${ids.game}/${buildId}/media/thumbnail.png`);
+  expect(media.loadingUrls?.portrait).toBe(`https://games.example.test/g/${ids.game}/${buildId}/media/portrait.png`);
   expect(media.loadingImages).toBeUndefined();
   (await pass(start)).finish({});
   (await pass(start + 1)).finish({});
@@ -87,10 +88,11 @@ it('continues with other pending builds after an encoder failure', async () => {
   const { app, deps } = world();
   app.route(prefix, operatorRoutes);
   const archive = execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', builtFiles(), '.']);
+  allowArchive(deps, archive);
   const publish = () =>
     app.request(`${prefix}/games/castle-game/builds`, {
       method: 'POST',
-      headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'x-gm-sha': SHA },
+      headers: { 'x-ogm-internal': INTERNAL_TOKEN, 'x-gm-sha': SHA, 'x-gm-check-id': CHECK_ID },
       body: archive,
     });
   const start = passes.length;

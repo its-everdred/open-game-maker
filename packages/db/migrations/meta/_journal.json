@@ -344,6 +344,27 @@
       "when": 1795489393818,
       "tag": "20261124030313_client_telemetry",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1795738870790,
+      "tag": "20261127002110_fixed_roughhouse",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1795792991075,
+      "tag": "20261127152311_coming_soon",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "6",
+      "when": 1795842106729,
+      "tag": "20261128050146_publish_checks",
+      "breakpoints": true
     }
   ]
 }

@@ -20,7 +20,7 @@ vi.mock('../energy/api', () => ({
       services: [],
       sources: [
         {
-          id: 'claude',
+          id: 'claude:week',
           label: 'Claude',
           usedPercent: 62,
           resetsAt: null,
@@ -99,7 +99,7 @@ describe('edit menu (#1326)', () => {
     const order = within(dialog)
       .getAllByRole('region')
       .map((region) => region.getAttribute('aria-label'));
-    expect(order).toEqual(['Review', 'Work', 'Energy']);
+    expect(order).toEqual(['Review', 'Work', 'Minerals and Gas']);
     expect(within(dialog).getByRole('button', { name: 'More' })).toHaveAttribute('aria-expanded', 'false');
   });
 

@@ -1,9 +1,10 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { redactCapabilities } from './redact.js';
 import { join } from 'node:path';
 
 import type { Browser } from 'playwright';
 
-import { VIEWPORTS } from '../browser.js';
+import { GAME_FILE, gameFrame, routeGameToLocal, VIEWPORTS } from '../browser.js';
 import { FfmpegMissingError, hasFfmpeg } from '../capture.js';
 import { ConsoleCollector } from '../console.js';
 import type { ConsoleEntry, ViewportName } from '../report.js';
@@ -36,7 +37,13 @@ export async function driveJourney(
   browser: Browser,
   url: string,
   journey: SoloJourney,
-  options: { outDir: string; viewport?: ViewportName; ffmpegBinary?: string },
+  options: {
+    outDir: string;
+    viewport?: ViewportName;
+    ffmpegBinary?: string;
+    app?: { url: string; storageState: string };
+    readyTimeoutMs?: number;
+  },
 ): Promise<DriveResult> {
   const viewport = options.viewport ?? journey.viewport ?? 'desktop';
   const dir = join(options.outDir, journey.name);
@@ -44,21 +51,56 @@ export async function driveJourney(
   mkdirSync(videoDir, { recursive: true });
   rmSync(join(dir, DRIVE_RESULT), { force: true });
   const size = recordSize(VIEWPORTS[viewport].viewport);
-  const recordingStartedAt = Date.now();
-  const context = await browser.newContext({ ...VIEWPORTS[viewport], recordVideo: { dir: videoDir, size } });
+  let recordingStartedAt = Date.now();
+  const context = await browser.newContext({
+    ...VIEWPORTS[viewport],
+    ...(options.app ? { storageState: options.app.storageState, serviceWorkers: 'block' as const } : {}),
+    recordVideo: { dir: videoDir, size },
+  });
   const collector = new ConsoleCollector();
   let steps: StepResult[] = [];
   let webm: string | undefined;
   let firstInputAt: number | undefined;
   try {
+    if (options.app) {
+      const origin = new URL(options.app.url).origin;
+      const me = await context.request.get(new URL('/api/v1/me', origin).href, { maxRedirects: 0 });
+      if (!me.ok())
+        throw new Error(`QA session is not signed in (/api/v1/me: ${me.status()}); refresh with ops/bin/ogm-qa-signin`);
+      const identity = (await me.json().catch(() => null)) as { user?: unknown } | null;
+      if (!identity?.user)
+        throw new Error(
+          'QA session is not signed in (/api/v1/me returned no user); refresh with ops/bin/ogm-qa-signin',
+        );
+      await routeGameToLocal(context, { ...options.app, localUrl: url });
+    }
+    recordingStartedAt = Date.now();
     const page = await context.newPage();
+    let gameStatus: number | undefined;
+    page.on('response', (response) => {
+      const requestUrl = new URL(response.url());
+      if (options.app && requestUrl.origin !== new URL(options.app.url).origin && GAME_FILE.test(requestUrl.pathname)) {
+        if (response.request().isNavigationRequest()) gameStatus = response.status();
+      }
+    });
     watchConsole(page, collector);
-    const player = new Player(page, dir, { label: viewport, touch: VIEWPORTS[viewport].hasTouch === true });
     /* Not `load`: a hosted build is still loading its assets, and the journey's first expect waits for that.
        Not `commit`: an unpainted page cannot be screenshotted, and the first input step takes a frame. */
-    const opened = await gotoBuild(page, url);
+    const opened = await gotoBuild(page, options.app?.url ?? url);
     if (opened) steps = [{ index: 0, step: `open ${url}`, ok: false, ms: 0, error: opened }];
     else {
+      const game = options.app
+        ? await gameFrame(page, new URL(options.app.url).origin, options.readyTimeoutMs ?? 30_000)
+        : undefined;
+      await game?.waitForLoadState('domcontentloaded');
+      if (game && (gameStatus === undefined || gameStatus < 200 || gameStatus >= 300))
+        throw new Error(`local game frame failed to load (HTTP ${gameStatus ?? 'unknown'})`);
+      const player = new Player(page, dir, {
+        label: viewport,
+        touch: VIEWPORTS[viewport].hasTouch === true,
+        target: game,
+      });
+      if (game) await player.expect({ do: 'expect', pixels: 'nonblank', timeoutMs: options.readyTimeoutMs ?? 30_000 });
       steps = await player.runAll(journey.steps);
       firstInputAt = player.firstInputAt;
     }
@@ -101,6 +143,7 @@ export async function driveJourney(
     clip,
     unchecked,
   };
-  writeFileSync(join(dir, DRIVE_RESULT), `${JSON.stringify(result, null, 2)}\n`);
-  return result;
+  const safe = redactCapabilities(result);
+  writeFileSync(join(dir, DRIVE_RESULT), `${JSON.stringify(safe, null, 2)}\n`);
+  return safe;
 }

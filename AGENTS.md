@@ -2,6 +2,7 @@
 
 ## Commands
 
+- For a playable prototype round, run `gm live-build` in the game folder after each change and attach `https://<app-host>/live/<slug>/<ticket>?scenario=<name>` to the round.
 - Install exactly from the lockfile: `pnpm install --frozen-lockfile`.
 - Before committing, run `pnpm exec prettier --write <changed files>`; the installed pre-commit hook also formats and re-stages staged files.
 - Run the repository gates: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`.
@@ -15,6 +16,7 @@ Product code lives in `apps/*`, `packages/*`, `services/*`, `skills/*`, `templat
 (see `docs/plans/ogm-v1-build/architecture.md` §2 on the `research` branch). Package names are `@ogm/<dir>`;
 the engine-side exceptions are `@gm/sdk` and `@gm/host`.
 Setting up a host: `SETUP.md` (generated from `apps/site/content/setup.yaml`; edit the YAML).
+Approved OGM UI: `prototypes/ogm-glass/` (open `index.html`); match it exactly.
 
 ## New package
 

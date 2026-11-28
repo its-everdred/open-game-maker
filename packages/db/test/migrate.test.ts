@@ -73,6 +73,9 @@ describe('migrate', () => {
         '20261123020745_energy_admin.sql',
         '20261123185739_scene_store.sql',
         '20261124030313_client_telemetry.sql',
+        '20261127002110_fixed_roughhouse.sql',
+        '20261127152311_coming_soon.sql',
+        '20261128050146_publish_checks.sql',
       ],
     });
     expect(migrate({ sqlite })).toEqual({ applied: [] });
@@ -132,6 +135,9 @@ describe('migrate', () => {
       'migration:20261123020745_energy_admin.sql',
       'migration:20261123185739_scene_store.sql',
       'migration:20261124030313_client_telemetry.sql',
+      'migration:20261127002110_fixed_roughhouse.sql',
+      'migration:20261127152311_coming_soon.sql',
+      'migration:20261128050146_publish_checks.sql',
     ]);
     sqlite.close();
   });

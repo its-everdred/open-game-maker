@@ -14,6 +14,7 @@ export const RESERVED_GAME_SLUGS: ReadonlySet<string> = new Set([
   'connect',
   'docs',
   'docs-prototype',
+  'factory',
   'g',
   'game',
   'games',
@@ -22,6 +23,7 @@ export const RESERVED_GAME_SLUGS: ReadonlySet<string> = new Set([
   'icons',
   'internal',
   'join',
+  'live',
   'login',
   'logout',
   'new',
@@ -34,6 +36,7 @@ export const RESERVED_GAME_SLUGS: ReadonlySet<string> = new Set([
   'signout',
   'signup',
   'town',
+  'welcome',
 ]);
 
 const RESERVED_COMPACT_SLUGS = new Set([...RESERVED_GAME_SLUGS].map((slug) => slug.replaceAll('-', '')));

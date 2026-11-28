@@ -61,6 +61,33 @@ describe('repair admission', () => {
     expect(deps.db.select().from(schema.budgetLedger).all()).toHaveLength(0);
   });
 
+  it('returns the weekly reset when the owner has no edit Energy', async () => {
+    const { deps } = await reportsApp();
+    const date = new Date();
+    deps.db
+      .insert(schema.user)
+      .values({
+        id: ids.owner,
+        name: 'Owner',
+        email: 'owner@example.test',
+        emailVerified: true,
+        createdAt: date,
+        updatedAt: date,
+      })
+      .run();
+    deps.db
+      .insert(schema.allowedUsers)
+      .values({ email: 'owner@example.test', role: 'maker', addedBy: 'env', addedAt: date.toISOString() })
+      .run();
+    deps.db.insert(schema.weeklyJobBudgets).values({ email: 'owner@example.test', newGames: 2, edits: 0 }).run();
+    expect(await admitRepair({ ...deps, defaults }, input)).toEqual({
+      pendingBudget: true,
+      budgetReason: 'weekly_user',
+      resetsAt: expect.any(String),
+    });
+    expect(deps.db.select().from(schema.jobs).all()).toHaveLength(0);
+  });
+
   // The attempt bound is what stops a crash that keeps coming back from draining the owner's allowance.
   it(`refuses a repair after ${REPAIR_ATTEMPTS} attempts on one signature, spending nothing`, async () => {
     const { deps } = await reportsApp();

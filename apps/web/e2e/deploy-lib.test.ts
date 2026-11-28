@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -199,6 +199,27 @@ describe('post-upload checks', () => {
 
     expect(upload).toBeGreaterThan(0);
     expect(lastLoad).toBeGreaterThan(upload);
-    expect(source.slice(upload)).toMatch(/load_check \|\| report_attention/);
+    expect(source.slice(upload)).toMatch(
+      /if timed load-check load_check; then[\s\S]*?else[\s\S]*?report_attention[\s\S]*?fi/,
+    );
+  });
+});
+
+describe('deploy source integrity', () => {
+  it('accepts only the pinned clean commit and rejects source edits or a new head', async () => {
+    const root = await dir();
+    const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
+    git('init', '-q', '-b', 'main');
+    await writeFile(join(root, 'source.txt'), 'one');
+    git('add', 'source.txt');
+    git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'initial');
+    const sha = git('rev-parse', 'HEAD');
+    const check = () => bash('source_unchanged "$ROOT" "$SHA"', { ROOT: root, SHA: sha }).status;
+    expect(check()).toBe(0);
+    await writeFile(join(root, 'source.txt'), 'changed');
+    expect(check()).not.toBe(0);
+    git('add', 'source.txt');
+    git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'next');
+    expect(check()).not.toBe(0);
   });
 });

@@ -77,19 +77,22 @@ function serve(role: 'admin' | 'none', view: EnergyView = baseView) {
 describe('EnergyScreen', () => {
   it('shows a player status and percentages, never dollars, and keeps unknown as unknown', async () => {
     serve('none');
-    expect(await screen.findByRole('heading', { name: 'Energy: Healthy' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Minerals and Gas: Healthy' })).toBeVisible();
     const page = document.body.textContent ?? '';
     expect(page).toMatch(/Today75% left/);
     expect(page).toMatch(/Voice ?Unknown/);
     expect(page).not.toContain('$');
-    expect(screen.queryByRole('form', { name: 'Energy limits' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('form', { name: 'Resource limits' })).not.toBeInTheDocument();
   });
 
   it('lists each provider reading with its reset and basis, and a stale one as unknown with its age', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-22T22:10:00.000Z') });
     serve('none', { ...baseView, sources });
-    await screen.findByRole('heading', { name: 'Energy: Healthy' });
-    const lines = screen.getAllByRole('listitem').map((item) => item.textContent);
+    await screen.findByRole('heading', { name: 'Minerals and Gas: Healthy' });
+    const lines = screen.getAllByRole('listitem').map((item) => item.textContent?.trim());
+    expect(lines.indexOf('Minerals')).toBeLessThan(lines.findIndex((line) => line?.startsWith('Claude')));
+    expect(lines.indexOf('Gas')).toBeGreaterThan(lines.findIndex((line) => line?.startsWith('Codex')));
+    expect(lines).toContainEqual(expect.stringMatching(/^Today75% left.*estimate$/));
     expect(lines).toContainEqual(expect.stringMatching(/^Claude47% left.*resets Nov 27 · reported$/));
     // The stale 97 % is not shown as a share: it reads Unknown with its age, never 0 % or 100 % left.
     expect(lines).toContainEqual(expect.stringMatching(/^CodexUnknown.*resets Nov 25 · unknown · 17 h old$/));
@@ -101,16 +104,21 @@ describe('EnergyScreen', () => {
   it('saves the Save / Balanced / Best preference', async () => {
     const calls = serve('none');
     expect(await screen.findByRole('radio', { name: 'Balanced' })).toBeChecked();
-    fireEvent.click(screen.getByRole('radio', { name: 'Save Energy' }));
-    await waitFor(() => expect(screen.getByRole('radio', { name: 'Save Energy' })).toBeChecked());
+    fireEvent.click(screen.getByRole('radio', { name: 'Save resources' }));
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Save resources' })).toBeChecked());
     expect(calls).toContainEqual({ method: 'PUT', path: '/energy/preference', body: { preference: 'save' } });
+  });
+
+  it('renders fractional reported usage without floating-point artifacts', async () => {
+    serve('none', { ...baseView, sources: [{ ...sources[0]!, usedPercent: 94.8 }] });
+    expect(await screen.findByText('5.2% left')).toBeVisible();
   });
 
   // The limits form and costs moved to the admin dashboard (/admin/energy); settings shows an admin the player view.
   it('keeps limits and dollars off the settings screen, even for an admin', async () => {
     const calls = serve('admin');
-    await screen.findByRole('heading', { name: 'Energy: Healthy' });
-    expect(screen.queryByRole('form', { name: 'Energy limits' })).not.toBeInTheDocument();
+    await screen.findByRole('heading', { name: 'Minerals and Gas: Healthy' });
+    expect(screen.queryByRole('form', { name: 'Resource limits' })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain('$');
     expect(calls.map(({ path }) => path)).not.toContain('/energy/admin');
   });
@@ -132,7 +140,35 @@ describe('energy limits and refusals', () => {
   });
 
   it('explains an Energy refusal in terms of the build', () => {
-    expect(energyRefusalText('week')).toBe('This build needs more Energy than is left this week.');
+    expect(energyRefusalText('week')).toBe('This build exceeds the overall build budget this week.');
     expect(energyRefusalText(undefined)).toBeUndefined();
+  });
+});
+
+describe('weekly job Energy', () => {
+  it('labels game and edit counts as interim limits', async () => {
+    serve('none', {
+      ...baseView,
+      weeklyJobs: {
+        newGames: { limit: 2, remaining: 1 },
+        edits: { limit: 20, remaining: 18 },
+        resetsAt: '2026-11-30T08:00:00.000Z',
+      },
+    });
+    expect(await screen.findByText('Interim new-game limit')).toBeVisible();
+    expect(screen.getByText('Interim edit limit')).toBeVisible();
+  });
+  it('keeps interim job allowances out of the resource ring', async () => {
+    const { energyLeftPercent } = await import('./api');
+    expect(
+      energyLeftPercent({
+        ...baseView,
+        weeklyJobs: {
+          newGames: { limit: 2, remaining: 1 },
+          edits: { limit: 20, remaining: 2 },
+          resetsAt: '2026-11-09T08:00:00.000Z',
+        },
+      }),
+    ).toBeNull();
   });
 });

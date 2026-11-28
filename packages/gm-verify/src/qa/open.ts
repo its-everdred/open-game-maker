@@ -1,4 +1,5 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { redactCapabilities } from './redact.js';
 import { join } from 'node:path';
 
 import type { Browser, Page } from 'playwright';
@@ -144,6 +145,7 @@ export async function qaOpen(
     verdict: viewports.every((v) => v.failures.length === 0) ? 'pass' : 'fail',
     viewports,
   };
-  writeFileSync(join(options.outDir, 'qa-open.json'), `${JSON.stringify(result, null, 2)}\n`);
-  return result;
+  const safe = redactCapabilities(result);
+  writeFileSync(join(options.outDir, 'qa-open.json'), `${JSON.stringify(safe, null, 2)}\n`);
+  return safe;
 }

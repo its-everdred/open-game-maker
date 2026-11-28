@@ -52,3 +52,31 @@ Canvas: https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM. Each link opens that 
 - Editor panels still use the cream paper look (`--editor-panel`); the design moves them to glass.
 - No account screen or role switch exists yet (#1448).
 - Creator review-intensity setting (#1393) and energy preference (#1253) have no place yet; both belong in Settings › Voice/Agents when built.
+
+## Developer console (Kevin 2026-11-27: "AI writes the code, humans control things and make the calls")
+
+Canvas page **Developer console**. All of it is **Monday design, post-Monday build**. Generic parts → core #1472; Dusk Helm arena → Open-Games #1102.
+
+| Screen | Artboard | Status | Tickets |
+|---|---|---|---|
+| Editor picks (Map open) | [EditorPicks](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-EditorPicks) | Monday design, post-Monday build | core #1472, #1459 |
+| Arena, Dusk Helm, phone portrait | [Arena](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-Arena) | Monday design, post-Monday build | OG #1102, core #1472 |
+| Arena, phone landscape | [ArenaLandscape](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-ArenaLandscape) | Monday design, post-Monday build | OG #1102 |
+| Visuals with before/after compare | [Visuals](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-Visuals) | Monday design, post-Monday build | core #1472 |
+| Dev panel kit, picks per game | [DevPanelKit](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-DevPanelKit) | Monday design, post-Monday build | core #1472, #1449 |
+| Choice: picks as bottom tabs | [PicksTabs](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-PicksTabs) | choice | core #1472 |
+| Choice: panel as side drawer | [PanelDrawer](https://claude.ai/artifact/2R9v9J41qPrtnay5DbbUjM#artboard-PanelDrawer) | choice | core #1472 |
+
+**Top level.** The editor opens on a few big picks in fixed order: Map (map maker; browse by type, set, tags, search), Arena (combat test ground), Visuals (lighting/HD-2D, shaders and filters, pixel finish, colour grade, 2D/3D mix), Characters (classes, gear, enemies), Tuning (gameplay numbers), Audio (music, SFX, voices), Chat (the agent, always last). A game's manifest declares which picks it supports; others never show (Blobs: Visuals, Tuning, Chat). Each pick opens its panel beside the live, playable game. Picks are icon-only (names in aria-label); the open panel's header names it.
+
+**Dev panel.** Grouped controls (slider, toggle, segmented, colour swatches, action buttons: spawn, clear, reset, teleport). A control changed from its default shows a yellow dot, a yellow value and a reset arrow; the header counts changes. Footer: Revert (drop unsaved changes) and Save as default (write to the game's design). Changes apply live. Phone portrait: a bottom sheet capped at the lower half, scrolling, collapsible to its header; the game stays visible above. Landscape: a 340 px right drawer, with Arena's spawn strip floating over the game. Desktop: the 420 px right panel used by chat.
+
+**Camera.** Camera angle controls are a game-declared option, shown only when a game exposes them. Dusk Helm's camera is fixed isometric (Kevin 2026-11-27), so its Arena and Visuals have no camera controls; zoom appears only if the game declares it.
+
+**Dusk Helm Arena.** Hero in the centre at the isometric camera. Spawn palette (goblin, skeleton, cave goblin, boss; real SmallScaleInt sprites from the game's packs) with a placed-count badge, count (1/3/5) and placement (near hero / ring), Clear all, enemy AI on/off, class swap (knight, archer, wizard) and weapon, combat sliders (damage, knockback, hit-stop, attack speed, aggression), quick look (HD-2D preset; pixel filter and 2D/3D mix in Visuals).
+
+## Chat pane: Reviews tab (Kevin 2026-11-27)
+The agent chat pane has two tabs, **Chat** and **Reviews**.
+- **Reviews** shows only that conversation's or agent's review cards, using the same card component as the cross-ticket review index.
+- It orders newest at the bottom and scrolls up for history, like the chat.
+- Review decisions also stay inline in the chat log.

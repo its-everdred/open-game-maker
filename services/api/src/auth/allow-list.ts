@@ -1,7 +1,8 @@
 import { schema, type Db } from '@ogm/db';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { normalizeEmail } from './access.js';
+import { invalidateArtifactGrants } from '../artifacts/session-grants.js';
 
 // Platform roles, weakest first. A maker may create and edit games; an admin also manages the
 // instance and this list. Players only play. Every role is a signed-in user.
@@ -116,7 +117,20 @@ export function addAllowedUser(
 export function setAllowedRole(db: Db, email: string, role: AllowedRole): boolean {
   const address = normalizeEmail(email);
   if (roleForEmail(db, address) === null) return false;
-  db.update(schema.allowedUsers).set({ role }).where(eq(schema.allowedUsers.email, address)).run();
+  db.transaction((tx) => {
+    const result = tx
+      .update(schema.allowedUsers)
+      .set({ role })
+      .where(and(eq(schema.allowedUsers.email, address), ne(schema.allowedUsers.role, role)))
+      .run();
+    if (!result.changes) return;
+    for (const user of tx
+      .select({ id: schema.user.id })
+      .from(schema.user)
+      .where(sql`lower(${schema.user.email}) = ${address}`)
+      .all())
+      invalidateArtifactGrants(tx, 'user', user.id);
+  });
   return true;
 }
 
@@ -127,6 +141,17 @@ export function removeAllowedUser(db: Db, email: string): boolean {
   return db.transaction((tx) => {
     const deleted = tx.delete(schema.allowedUsers).where(eq(schema.allowedUsers.email, address)).run();
     if (deleted.changes === 0) return false;
+    tx.update(schema.invitations)
+      .set({ revokedAt: new Date().toISOString() })
+      .where(
+        and(
+          eq(schema.invitations.email, address),
+          eq(schema.invitations.kind, 'member'),
+          isNull(schema.invitations.acceptedAt),
+          isNull(schema.invitations.revokedAt),
+        ),
+      )
+      .run();
     const users = tx
       .select({ id: schema.user.id })
       .from(schema.user)

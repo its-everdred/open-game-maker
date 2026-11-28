@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { and, eq, sql } from 'drizzle-orm';
@@ -25,6 +26,9 @@ import { ensureCommit } from './ensure-commit.js';
 import { submitRound } from '../review-rounds/store.js';
 import { logReviewPublish } from '../review-rounds/feed-log.js';
 import { isReviewStill } from '../review-rounds/still.js';
+import { appCheckRecordBody, checkRecordBody, passedChecks, recordChecks } from '../builds/check-records.js';
+import { issueGrant } from '../artifacts/grants.js';
+import { buildDir, isComplete } from '@ogm/games-host/layout';
 
 // An operator's route to publish a build for a game the app registered against a repository whose own tickets are
 // not Game Maker jobs — the daemon's `before_remove` hook never runs for them, so nothing ever uploads a build.
@@ -42,6 +46,16 @@ function gameFor(deps: AppDeps, ref: string) {
   const game = findGameBySlugOrId(deps.db, ref);
   if (!game) throw new HttpError(404, 'game_not_found');
   return game;
+}
+
+function releaseOutcome(deps: AppDeps, buildId: string): 'published' | 'skipped' | 'failed' | 'pending' {
+  return (
+    deps.db
+      .select({ value: schema.publishChecks.publishResult })
+      .from(schema.publishChecks)
+      .where(eq(schema.publishChecks.buildId, buildId))
+      .get()?.value ?? 'skipped'
+  );
 }
 
 // What the host script needs to build the game at a SHA and to say what it is replacing: the game's folder in the
@@ -292,6 +306,17 @@ const routes = new Hono<ApiBindings>()
     const deps = c.get('deps');
     return c.json(facts(deps, gameFor(deps, c.req.param('ref'))));
   })
+  .post('/app/publish-checks', bodyLimit({ maxSize: 65536 }), async (c) => {
+    requireOperator(c);
+    const input = await parseBody(c, appCheckRecordBody);
+    return c.json(recordChecks(c.get('deps'), null, input), 201);
+  })
+  .post('/games/:ref/publish-checks', bodyLimit({ maxSize: 65536 }), async (c) => {
+    requireOperator(c);
+    const deps = c.get('deps');
+    const game = gameFor(deps, c.req.param('ref'));
+    return c.json(recordChecks(deps, game.id, await parseBody(c, checkRecordBody)), 201);
+  })
   .get('/games/:ref/review-sha/:sha', (c) => {
     requireOperator(c);
     const game = gameFor(c.get('deps'), c.req.param('ref'));
@@ -315,6 +340,31 @@ const routes = new Hono<ApiBindings>()
     const number = reviewNumber(deps.db, game.id, c.req.param('decisionId'));
     return c.json({ number, path: reviewPath(game.slug, number) });
   })
+  .post('/games/:ref/builds/:buildId/access', async (c) => {
+    requireOperator(c);
+    const deps = c.get('deps');
+    const game = gameFor(deps, c.req.param('ref'));
+    const build = deps.db
+      .select()
+      .from(schema.builds)
+      .where(
+        and(
+          eq(schema.builds.id, c.req.param('buildId')),
+          eq(schema.builds.gameId, game.id),
+          eq(schema.builds.status, 'tested'),
+          eq(schema.builds.artifact, 'present'),
+        ),
+      )
+      .get();
+    if (!build || !(await isComplete(buildDir(deps.config.gamesRoot, game.id, build.id))))
+      throw new HttpError(404, 'build_not_found');
+    const grant = await issueGrant(deps, game.id, build.id, 'operator', c.req.raw.headers, 'operator');
+    return c.json(
+      { grant, url: `${deps.config.gamesOrigin.replace(/\/$/u, '')}/d/${game.id}/${build.id}/${grant}/` },
+      200,
+      { 'Cache-Control': 'no-store' },
+    );
+  })
   .get('/games/:ref/builds/:jobId', (c) => {
     requireOperator(c);
     const deps = c.get('deps');
@@ -327,7 +377,11 @@ const routes = new Hono<ApiBindings>()
       .get();
     if (!job || job.creatorId !== PUBLISH_ACTOR) throw new HttpError(404, 'publish_not_found');
     const build = deps.db.select().from(schema.builds).where(eq(schema.builds.jobId, jobId)).get();
-    return c.json({ state: job.state, buildId: job.state === 'done' && build ? build.id : null });
+    return c.json({
+      state: job.state,
+      buildId: job.state === 'done' && build ? build.id : null,
+      ...(job.state === 'done' && build ? { publishResult: releaseOutcome(deps, build.id) } : {}),
+    });
   })
   // The operator's host script builds the game and posts the same archive the daemon's hook uploads, so the publisher
   // reads one artifact shape. A second run with a newer SHA stages and publishes the next build.
@@ -346,10 +400,15 @@ const routes = new Hono<ApiBindings>()
       const game = gameFor(deps, c.req.param('ref'));
       const gitSha = c.req.header('x-gm-sha') ?? '';
       if (!SHA.test(gitSha)) return c.json({ error: { code: 'invalid_sha' } }, 400);
+      const checkId = c.req.header('x-gm-check-id') ?? '';
+      const archive = Buffer.from(await c.req.arrayBuffer());
+      const hash = createHash('sha256').update(archive).digest('hex');
+      if (checkId !== '' && !passedChecks(deps, checkId, game.id, gitSha, hash))
+        return c.json({ error: { code: 'checks_required' } }, 422);
       const requestId = c.req.header('x-gm-request-id');
       if (requestId && !/^j_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(requestId))
         return c.json({ error: { code: 'invalid_request_id' } }, 400);
-      const result = await publishArchive(deps, game, gitSha, Buffer.from(await c.req.arrayBuffer()), requestId);
+      const result = await publishArchive(deps, game, gitSha, archive, requestId, checkId);
       if (result.state === 'refused') {
         deps.log({ event: 'build_upload_refused', jobId: result.jobId, gameId: game.id, reason: result.reason });
         return c.json({ error: { code: result.reason } }, 422);
@@ -360,7 +419,15 @@ const routes = new Hono<ApiBindings>()
           .set({ prototypeReviewState: 'pending' })
           .where(and(eq(schema.builds.id, result.buildId), eq(schema.builds.prototypeReviewState, 'none')))
           .run();
-        return c.json({ state: 'done', jobId: result.jobId, buildId: result.buildId }, 201);
+        return c.json(
+          {
+            state: 'done',
+            jobId: result.jobId,
+            buildId: result.buildId,
+            publishResult: releaseOutcome(deps, result.buildId),
+          },
+          201,
+        );
       }
       return c.json({ state: 'failed', jobId: result.jobId, reason: result.reason }, 422);
     },

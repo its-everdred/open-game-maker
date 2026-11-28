@@ -25,7 +25,7 @@ export type CacheRun = {
   api: GamesCacheReport['gamesListApi'];
 };
 
-export type BuildCacheEntry = { sourcePath: string; url: string; bytes: number };
+export type BuildCacheEntry = { sourcePath: string; url: string; bytes: number; identity?: string };
 export type BuildCacheSample = { url: string; transferSize: number };
 export type AfterPublishReport = {
   game: string;
@@ -64,6 +64,7 @@ export function buildGamesCacheReport(run: CacheRun): GamesCacheReport {
     return second
       ? {
           ...second,
+          url: second.url.replace(/(\/d\/[^/]+\/[^/]+\/)[^/]+/u, '$1<redacted>'),
           cache:
             second.cache === 'cache (memory/disk unknown)' &&
             second.transferSize === 0 &&
@@ -87,10 +88,11 @@ export function buildGamesCacheReport(run: CacheRun): GamesCacheReport {
       thumbnail &&
       logo.status === 200 &&
       thumbnail.status === 200 &&
-      logo.cache === 'cache (memory/disk unknown)' &&
-      thumbnail.cache === 'cache (memory/disk unknown)' &&
-      logo.transferSize === 0 &&
-      thumbnail.transferSize === 0,
+      ((logo.cacheControl?.includes('no-store') && thumbnail.cacheControl?.includes('no-store')) ||
+        (logo.cache === 'cache (memory/disk unknown)' &&
+          thumbnail.cache === 'cache (memory/disk unknown)' &&
+          logo.transferSize === 0 &&
+          thumbnail.transferSize === 0)),
     ),
   };
 }
@@ -103,27 +105,39 @@ export function buildAfterPublishReport(input: {
   previous: readonly BuildCacheEntry[];
   current: readonly BuildCacheEntry[];
   samples: readonly BuildCacheSample[];
+  expectCache?: boolean;
 }): AfterPublishReport {
   const previous = new Map(input.previous.map((entry) => [entry.sourcePath, entry]));
-  const previousUrls = new Set(input.previous.map((entry) => entry.url));
+  const display = (entry: BuildCacheEntry) =>
+    input.expectCache === false && entry.identity ? `sha256:${entry.identity}` : entry.url;
+  const previousUrls = new Set(input.previous.map((entry) => entry.identity ?? entry.url));
   const currentPaths = new Set(input.current.map((entry) => entry.sourcePath));
-  const currentUrls = new Set(input.current.map((entry) => entry.url));
+  const currentUrls = new Set(input.current.map((entry) => entry.identity ?? entry.url));
   const transferred = new Map(input.samples.map((sample) => [sample.url, sample.transferSize]));
   const addedOrChanged = input.current.flatMap((entry) => {
     const old = previous.get(entry.sourcePath);
-    return previousUrls.has(entry.url)
+    return previousUrls.has(entry.identity ?? entry.url)
       ? []
-      : [{ path: entry.sourcePath, from: old?.url ?? null, to: entry.url, bytes: transferred.get(entry.url) ?? 0 }];
+      : [
+          {
+            path: entry.sourcePath,
+            from: old ? display(old) : null,
+            to: display(entry),
+            bytes: transferred.get(entry.url) ?? 0,
+          },
+        ];
   });
   const removed = input.previous.flatMap((entry) =>
-    !currentPaths.has(entry.sourcePath) && !currentUrls.has(entry.url)
-      ? [{ path: entry.sourcePath, from: entry.url, to: null, bytes: 0 }]
+    !currentPaths.has(entry.sourcePath) && !currentUrls.has(entry.identity ?? entry.url)
+      ? [{ path: entry.sourcePath, from: display(entry), to: null, bytes: 0 }]
       : [],
   );
   const changedFiles = [...addedOrChanged, ...removed];
   const unexpectedTransfers = input.current.flatMap((entry) => {
     const bytes = transferred.get(entry.url) ?? 0;
-    return previousUrls.has(entry.url) && bytes > 0 ? [{ path: entry.sourcePath, url: entry.url, bytes }] : [];
+    return input.expectCache !== false && previousUrls.has(entry.identity ?? entry.url) && bytes > 0
+      ? [{ path: entry.sourcePath, url: entry.url, bytes }]
+      : [];
   });
   const unexpectedChanges = changedFiles.filter(
     ({ path }) => path !== 'index.html' && path !== 'manifest.json' && path !== 'assets/manifest.json',

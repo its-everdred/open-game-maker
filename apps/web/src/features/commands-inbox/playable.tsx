@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GameCommand } from '@ogm/contracts/browser';
 
 import { Icon } from '../../components/Icon';
-import { getDesignSnapshot } from '../editor/api';
+import { getDesignSnapshot, requestDraftGrant } from '../editor/api';
 import { mountGameFrame, type GameFrameState } from '../editor/frame';
 import { nextCompare, playableParams, withoutLinks } from './review';
 
@@ -86,35 +86,46 @@ function PlayableSlice({ gameId, option, onEnded }: { gameId: string; option: Op
     const element = container.current;
     if (element === null || snapshot === undefined) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const controller = mountGameFrame({
-      container: element,
-      gamesOrigin: import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000',
-      gameId,
-      buildId: snapshot.buildId,
-      mode: 'play',
-      design: snapshot,
-      params: playableParams({ scenario, seconds, ...(leadIn === undefined ? {} : { lead_in: leadIn }) }),
-      onState: (next) => {
-        setState(next.bridgeState);
-        if (next.bridgeState !== 'ready' || timer !== undefined) return;
-        // The keys go to the game while it plays, then back to the deck's arrows once it pauses. Focus moves only when
-        // the creator is in this deck (or nowhere), and never scrolls: an inbox with several decks keeps its place.
-        const deck = element.closest<HTMLElement>('.review-deck');
-        const ours = () =>
-          document.activeElement === null ||
-          document.activeElement === document.body ||
-          deck?.contains(document.activeElement) === true;
-        if (ours()) element.querySelector('iframe')?.focus({ preventScroll: true });
-        timer = setTimeout(() => {
-          controller.pause();
-          if (ours()) deck?.focus({ preventScroll: true });
-          ended.current();
-        }, seconds * 1000);
-      },
-    });
+    let cancelled = false;
+    let controller: ReturnType<typeof mountGameFrame> | undefined;
+    void requestDraftGrant(gameId, snapshot.buildId)
+      .then(({ grant }) => {
+        if (cancelled) return;
+        controller = mountGameFrame({
+          container: element,
+          gamesOrigin: import.meta.env.VITE_GAMES_ORIGIN ?? 'http://127.0.0.1:10000',
+          gameId,
+          buildId: snapshot.buildId,
+          draftGrant: grant,
+          mode: 'play',
+          design: snapshot,
+          params: playableParams({ scenario, seconds, ...(leadIn === undefined ? {} : { lead_in: leadIn }) }),
+          onState: (next) => {
+            setState(next.bridgeState);
+            if (next.bridgeState !== 'ready' || timer !== undefined) return;
+            // The keys go to the game while it plays, then back to the deck's arrows once it pauses. Focus moves only when
+            // the creator is in this deck (or nowhere), and never scrolls: an inbox with several decks keeps its place.
+            const deck = element.closest<HTMLElement>('.review-deck');
+            const ours = () =>
+              document.activeElement === null ||
+              document.activeElement === document.body ||
+              deck?.contains(document.activeElement) === true;
+            if (ours()) element.querySelector('iframe')?.focus({ preventScroll: true });
+            timer = setTimeout(() => {
+              controller?.pause();
+              if (ours()) deck?.focus({ preventScroll: true });
+              ended.current();
+            }, seconds * 1000);
+          },
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setState('error');
+      });
     return () => {
+      cancelled = true;
       if (timer !== undefined) clearTimeout(timer);
-      controller.dispose();
+      controller?.dispose();
     };
   }, [gameId, leadIn, scenario, seconds, snapshot]);
 

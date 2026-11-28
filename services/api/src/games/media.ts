@@ -3,9 +3,12 @@ import { join } from 'node:path';
 import { schema } from '@ogm/db';
 import { ImageSlots, type SlotId, type ViewportId } from '@ogm/contracts';
 import { buildDir } from '@ogm/games-host/layout';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { AppDeps } from '../app/types.js';
 import type { DisplayImage } from '../builds/display-images.js';
+import { hasCreatorMembership, issueGrant } from '../artifacts/grants.js';
+import { currentPublishedBuild } from '../artifacts/published.js';
+import type { Principal } from '@ogm/contracts';
 
 const exists = async (path: string) =>
   access(path).then(
@@ -111,11 +114,34 @@ async function manifestMedia(directory: string): Promise<{
 }
 
 /** Media belongs to the current main build; display variants have their own content address. */
-export async function gameMedia(deps: AppDeps, gameIds: string[]) {
+export async function gameMedia(
+  deps: AppDeps,
+  gameIds: string[],
+  viewer?: {
+    principal: Extract<Principal, { kind: 'user' }>;
+    headers: Headers;
+  },
+) {
   if (!gameIds.length) return new Map();
   const branches = deps.db
-    .select({ gameId: schema.branches.gameId, buildId: schema.branches.latestBuildId })
+    .select({
+      gameId: schema.branches.gameId,
+      draftBuildId: schema.branches.latestBuildId,
+      buildId: sql<
+        string | null
+      >`CASE WHEN ${schema.games.visibility} = 'listed' AND ${schema.games.publishedReleaseId} IS NOT NULL THEN ${schema.releases.buildId}
+        WHEN ${schema.games.visibility} = 'listed' THEN (
+          SELECT legacy.id FROM builds AS legacy
+          WHERE legacy.game_id = ${schema.games.id} AND legacy.branch_id = ${schema.branches.id}
+            AND legacy.status = 'tested' AND legacy.artifact = 'present'
+            AND NOT EXISTS (SELECT 1 FROM publish_checks AS checked WHERE checked.build_id = legacy.id)
+          ORDER BY legacy.created_at DESC, legacy.rowid DESC LIMIT 1
+        )
+        ELSE ${schema.branches.latestBuildId} END`,
+    })
     .from(schema.branches)
+    .innerJoin(schema.games, eq(schema.games.id, schema.branches.gameId))
+    .leftJoin(schema.releases, eq(schema.releases.id, schema.games.publishedReleaseId))
     .where(and(inArray(schema.branches.gameId, gameIds), eq(schema.branches.name, 'main')))
     .all();
   const entries: Array<
@@ -139,7 +165,17 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
   for (let index = 0; index < branches.length; index += 8) {
     entries.push(
       ...(await Promise.all(
-        branches.slice(index, index + 8).map(async ({ gameId, buildId }) => {
+        branches.slice(index, index + 8).map(async ({ gameId, buildId: visibleBuildId, draftBuildId }) => {
+          const game = deps.db.select().from(schema.games).where(eq(schema.games.id, gameId)).get();
+          const releaseBuildId = currentPublishedBuild(deps, gameId);
+          const owner =
+            !!viewer &&
+            !!game &&
+            viewer.principal.userId === game.ownerId &&
+            viewer.principal.familyId === game.familyId &&
+            viewer.principal.capability === 'creator' &&
+            hasCreatorMembership(deps, game.familyId, viewer.principal.userId);
+          const buildId = viewer ? (owner ? draftBuildId : releaseBuildId) : visibleBuildId;
           if (!buildId) return [gameId, {}] as const;
           let directory: string;
           try {
@@ -154,7 +190,27 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
             manifestMedia(directory),
           ]);
           const origin = deps.config.gamesOrigin.replace(/\/$/, '');
-          const base = `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/media`;
+          let grant: string | undefined;
+          if (viewer && (game?.visibility !== 'listed' || releaseBuildId !== buildId)) {
+            try {
+              grant = await issueGrant(
+                deps,
+                gameId,
+                buildId,
+                viewer.principal.userId,
+                viewer.headers,
+                owner ? undefined : 'player',
+              );
+            } catch {
+              return [gameId, {}] as const;
+            }
+          }
+          const prefix = grant
+            ? `${origin}/d/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${grant}/`
+            : `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/`;
+          const base = `${prefix}media`;
+          const assetUrl = (path: string) =>
+            path.startsWith('/a/') ? (grant ? `${prefix}a/${path.slice(3)}` : `${origin}${path}`) : `${prefix}${path}`;
           const image = (key: string | undefined): DisplayImage | undefined => {
             if (manifest.pending) return undefined;
             const value = key && manifest.images?.[key];
@@ -184,7 +240,6 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
               )
                 return undefined;
             }
-            const prefix = `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/`;
             return {
               ...value,
               sources: Object.fromEntries(
@@ -192,7 +247,7 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
                   format,
                   sources[format].map((entry) => ({
                     ...entry,
-                    path: entry.path.startsWith('/a/') ? `${origin}${entry.path}` : prefix + entry.path,
+                    path: assetUrl(entry.path),
                   })),
                 ]),
               ) as DisplayImage['sources'],
@@ -223,8 +278,8 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
               ...(manifest.logo
                 ? {
                     logoUrl: manifest.sharedUrls?.[manifest.logo]
-                      ? `${origin}${manifest.sharedUrls[manifest.logo]}`
-                      : `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.logo}`,
+                      ? assetUrl(manifest.sharedUrls[manifest.logo]!)
+                      : assetUrl(manifest.logo),
                   }
                 : {}),
               ...(coverImage ? { coverImage } : {}),
@@ -234,11 +289,11 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
                 ? {
                     loadingUrls: {
                       portrait: manifest.sharedUrls?.[manifest.loading.portrait]
-                        ? `${origin}${manifest.sharedUrls[manifest.loading.portrait]}`
-                        : `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.loading.portrait}`,
+                        ? assetUrl(manifest.sharedUrls[manifest.loading.portrait]!)
+                        : assetUrl(manifest.loading.portrait),
                       landscape: manifest.sharedUrls?.[manifest.loading.landscape]
-                        ? `${origin}${manifest.sharedUrls[manifest.loading.landscape]}`
-                        : `${origin}/g/${encodeURIComponent(gameId)}/${encodeURIComponent(buildId)}/${manifest.loading.landscape}`,
+                        ? assetUrl(manifest.sharedUrls[manifest.loading.landscape]!)
+                        : assetUrl(manifest.loading.landscape),
                     },
                   }
                 : {}),
@@ -251,7 +306,7 @@ export async function gameMedia(deps: AppDeps, gameIds: string[]) {
               ...(cover
                 ? {
                     coverUrl: manifest.sharedUrls?.['media/thumbnail.png']
-                      ? `${origin}${manifest.sharedUrls['media/thumbnail.png']}`
+                      ? assetUrl(manifest.sharedUrls['media/thumbnail.png']!)
                       : `${base}/thumbnail.png`,
                   }
                 : {}),

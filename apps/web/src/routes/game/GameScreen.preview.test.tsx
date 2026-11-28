@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
+import { notifyState } from '../../lib/notify/slice';
 
 type MockFrameState = {
   bridgeState: 'connecting' | 'ready' | 'error';
@@ -42,6 +43,7 @@ const editorApi = vi.hoisted(() => ({
   postAnalyticsEvent: vi.fn(),
   putSave: vi.fn(),
   releaseLease: vi.fn(),
+  requestDraftGrant: vi.fn(),
   submitReapply: vi.fn(),
 }));
 
@@ -138,6 +140,7 @@ beforeEach(() => {
   preview.mountSceneryPreview.mockReturnValue(host.controller);
   useDock.getState().reset();
   editorApi.getGame.mockResolvedValue({ id: 'game', title: 'Goblin Cellar' });
+  editorApi.requestDraftGrant.mockResolvedValue({ grant: 'test-grant' });
   editorApi.getFallbackPalette.mockResolvedValue({ mode: 'request', palette: { categories: [], items: [] } });
   editorApi.getEditorPreviews.mockResolvedValue({ previews: [] });
   editorApi.getEditorStage.mockResolvedValue({ stage: null });
@@ -180,6 +183,13 @@ afterEach(() => {
 });
 
 describe('GameScreen previews', () => {
+  it('obtains an owner grant before mounting a draft', async () => {
+    renderGame('/g/game?mode=edit');
+    await waitFor(() => expect(editorApi.requestDraftGrant).toHaveBeenCalledWith('game', 'build'));
+    await waitFor(() =>
+      expect(host.mountGameFrame).toHaveBeenCalledWith(expect.objectContaining({ draftGrant: 'test-grant' })),
+    );
+  });
   it('advances from an approved concept to a populated scenery diorama', async () => {
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,
@@ -280,7 +290,15 @@ describe('GameScreen previews', () => {
     );
     await waitFor(() => expect(preview.mountSceneryPreview).toHaveBeenCalled(), { timeout: 8_000 });
   }, 15_000);
-  it('shows a concept and sends a scope placement as a request before any build', async () => {
+  it('shows the interim limit and reset when a scope placement is refused', async () => {
+    fallbackAdmission.admitJob.mockResolvedValueOnce({
+      kind: 'refused',
+      error: 'energy_limit_reached',
+      reason: 'weekly_user',
+      window: 'week',
+      resetsAt: '2026-11-30T08:00:00.000Z',
+      offers: ['ask_admin'],
+    });
     editorApi.getDesignSnapshot.mockResolvedValue({
       rev: 0,
       buildId: editorApi.NO_BUILD_ID,
@@ -310,6 +328,13 @@ describe('GameScreen previews', () => {
     fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
     fireEvent.pointerUp(canvas, { clientX: 25, clientY: 50, pointerId: 2 });
     await waitFor(() => expect(fallbackAdmission.admitJob).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(
+        notifyState().toasts.some(({ text }) =>
+          /The interim weekly job limit is exhausted\. The limit resets/.test(text),
+        ),
+      ).toBe(true),
+    );
     expect(editorApi.postTransaction).not.toHaveBeenCalled();
   });
   it('uses an unmerged playable preview when no released build exists', async () => {

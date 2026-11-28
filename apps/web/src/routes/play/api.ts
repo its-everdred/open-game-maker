@@ -22,10 +22,19 @@ export function usePlayLink(ref: string) {
 }
 
 // 403 means the game exists but this visitor may not play it; 404 means the link points at nothing at all.
-export type PlayLinkDenial = 'denied' | 'missing' | 'unavailable';
+export type PlayLinkDenial = 'coming_soon' | 'denied' | 'missing' | 'unavailable';
 
 export function playLinkDenial(error: unknown): PlayLinkDenial {
-  if (error instanceof ApiError && error.status === 403) return 'denied';
+  if (error instanceof ApiError && error.status === 403) {
+    if (
+      typeof error.body === 'object' &&
+      error.body !== null &&
+      'error' in error.body &&
+      error.body.error === 'coming_soon'
+    )
+      return 'coming_soon';
+    return 'denied';
+  }
   if (error instanceof ApiError && error.status === 404) return 'missing';
   return 'unavailable';
 }
