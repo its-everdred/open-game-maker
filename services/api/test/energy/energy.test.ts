@@ -213,7 +213,7 @@ describe('admission against Energy', () => {
         sqlite: deps.sqlite,
         events: deps.events,
         now: () => NOW,
-        defaults: { dailyAllowanceMicroUsd: 1e9, resetZone: ZONE },
+        defaults: { dailyAllowanceMicroUsd: 1e9, resetZone: ZONE, creatorJobLimit: 0 },
       },
       request(overrides),
       actor,
