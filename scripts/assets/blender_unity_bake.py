@@ -215,7 +215,7 @@ def expression_material(surface, uv_names, color_name=None):
             amount = adjustment['amount']
             if adjustment['op'] == 'power' and amount > 0:
                 channels[:3] = [math_node('POWER', component, constant(amount)) for component in channels[:3]]
-            elif adjustment['op'] == 'saturation' and 0 <= amount <= 1:
+            elif adjustment['op'] == 'saturation' and amount >= 0:
                 weights = [0.2126729, 0.7151522, 0.0721750]
                 weighted = [math_node('MULTIPLY', component, constant(factor)) for component, factor in zip(channels, weights)]
                 luma = math_node('ADD', math_node('ADD', weighted[0], weighted[1]), weighted[2])

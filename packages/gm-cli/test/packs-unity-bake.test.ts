@@ -95,7 +95,7 @@ for loop in mesh.loops:
  for i,expected in [(0,max(0,(.8*vx+.1)*.5*factor)),(1,max(0,green*blend*factor)),(2,max(0,.5*factor))]:
   expected=expected*12.92 if expected<=.0031308 else 1.055*expected**(1/2.4)-.055
   assert abs(pixels[ix+i]-expected)<.12, (loop.vertex_index,i,pixels[ix+i],expected)
-adjustedSource={'path':'test.mat','textures':surface['textures'],'texturePaths':paths,'textureSrgb':[False,False],'color':[1,1,1,1],'adjustment':{'op':'saturation','amount':.5}}
+adjustedSource={'path':'test.mat','textures':surface['textures'],'texturePaths':paths,'textureSrgb':[False,False],'color':[1,1,1,1],'adjustment':{'op':'saturation','amount':1.1}}
 contrasted={'path':'test.mat','textures':[],'texturePaths':[],'textureSrgb':[],'color':[1,1,1,1],'products':[adjustedSource],'adjustment':{'op':'contrast','amount':.5}}
 adjusted={'path':'test.mat','textures':[],'texturePaths':[],'textureSrgb':[],'color':[1.1,1.1,1.1,1],'products':[contrasted],'adjustment':{'op':'power','amount':2}}
 bake_mesh(obj2,[adjusted]); mesh2=obj2.data
@@ -105,7 +105,7 @@ for loop in mesh2.loops:
  ix=(min(size2-1,int(v*size2))*size2+min(size2-1,int(u*size2)))*4
  x=.8*mesh2.vertices[loop.vertex_index].co.x+.1; luma=x*(.2126729+.7151522)+.0721750
  for i,component in enumerate([x,x,1]):
-  adjusted_color=(luma+.5*(component-luma)-.5**2.2)*.5+.5**2.2
+  adjusted_color=(luma+1.1*(component-luma)-.5**2.2)*.5+.5**2.2
   expected=min(1,(1.1*adjusted_color)**2)
   expected=expected*12.92 if expected<=.0031308 else 1.055*expected**(1/2.4)-.055
   assert abs(pixels2[ix+i]-expected)<.12, (loop.vertex_index,i,pixels2[ix+i],expected)

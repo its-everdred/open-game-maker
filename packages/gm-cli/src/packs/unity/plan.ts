@@ -15,6 +15,7 @@ import {
 import { shaderGraphBase } from './shadergraph.js';
 import { shaderGraphAlpha, shaderGraphClipThreshold } from './shader-alpha.js';
 import { shaderGraphEmission } from './shader-emission.js';
+import { fresnelFrontAlpha } from './fresnel-alpha.js';
 import { mapWeightExpression, type WeightExpression } from './weight-expression.js';
 import { inlineUnitySubgraphs } from './subgraphs.js';
 import { selectUnityBuilding, selectUnityPieces } from './select.js';
@@ -83,6 +84,7 @@ export async function planUnityAssembly(
   const byId = new Map(selected.map((node) => [node.transformId, node]));
   const warnedClip = new Set<string>();
   const warnedEmission = new Set<string>();
+  const warnedFresnel = new Set<string>();
   const visible = (node: UnityMeshNode): boolean => {
     let current: UnityMeshNode | undefined = node;
     while (current) {
@@ -131,13 +133,20 @@ export async function planUnityAssembly(
             Number(floats.get('_BlendMode')) === 1 &&
             Number(floats.get('_SrcBlend')) === 1 &&
             Number(floats.get('_DstBlend')) === 1;
+          const approximateAlpha = materialIsTransparent(contents)
+            ? fresnelFrontAlpha(shaderSource, floats)
+            : undefined;
+          if (approximateAlpha && !warnedFresnel.has(path)) {
+            warnedFresnel.add(path);
+            onWarning?.(`view-dependent opacity approximated by the front-facing value: ${path}`);
+          }
           surface = parseUnitySurface(
             contents,
             additive
               ? shaderGraphEmission(shaderSource, loadSubgraph, floats, colors, textures)
               : shaderGraphBase(inlineUnitySubgraphs(shaderSource, loadSubgraph), floats, colors, textures),
             materialIsTransparent(contents)
-              ? shaderGraphAlpha(shaderSource, loadSubgraph, floats, colors, textures)
+              ? (approximateAlpha ?? shaderGraphAlpha(shaderSource, loadSubgraph, floats, colors, textures))
               : undefined,
             Number(floats.get('_AlphaClip') ?? floats.get('_BUILTIN_AlphaClip') ?? 0) === 1
               ? shaderGraphClipThreshold(shaderSource)
@@ -182,26 +191,36 @@ export async function planUnityAssembly(
       };
       if (surface.opacity) {
         const mask = surface.opacity.scalarMask;
+        const constantOpacity =
+          !mask &&
+          !surface.opacity.textures.length &&
+          !surface.opacity.products &&
+          !surface.opacity.blends &&
+          !surface.opacity.adjustment &&
+          surface.opacity.color.every((value) => value === surface.opacity!.color[0] && value >= 0 && value <= 1);
         if (
-          !mask ||
-          typeof mask === 'number' ||
-          'normal' in mask ||
-          'vertexColor' in mask ||
-          'noise' in mask ||
-          'op' in mask ||
-          ![0, 3].includes(mask.channel as number) ||
-          mask.term.textures.length !== 1
+          !constantOpacity &&
+          (!mask ||
+            typeof mask === 'number' ||
+            'normal' in mask ||
+            'vertexColor' in mask ||
+            'noise' in mask ||
+            'op' in mask ||
+            ![0, 3].includes(mask.channel as number) ||
+            mask.term.textures.length !== 1)
         )
           throw new Error(`material ${path}: unsupported Unity opacity graph`);
-        const texturePath = file({ fileId: '0', guid: mask.term.textures[0]!.guid }, [
-          '.png',
-          '.tga',
-          '.tif',
-          '.tiff',
-          '.bmp',
-        ]);
-        if (mask.channel === 3 && !textureHasSourceAlpha(readFileSync(`${texturePath}.meta`, 'utf8')))
-          throw new Error(`material ${path}: unsupported Unity opacity texture alpha`);
+        if (!constantOpacity && mask && typeof mask !== 'number' && 'term' in mask) {
+          const texturePath = file({ fileId: '0', guid: mask.term.textures[0]!.guid }, [
+            '.png',
+            '.tga',
+            '.tif',
+            '.tiff',
+            '.bmp',
+          ]);
+          if (mask.channel === 3 && !textureHasSourceAlpha(readFileSync(`${texturePath}.meta`, 'utf8')))
+            throw new Error(`material ${path}: unsupported Unity opacity texture alpha`);
+        }
       }
       if (surface.alphaCutoff !== undefined && !warnedClip.has(path)) {
         warnedClip.add(path);

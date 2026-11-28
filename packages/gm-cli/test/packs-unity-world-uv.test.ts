@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { shaderGraphBase } from '../src/packs/unity/shadergraph.js';
 import { parseUnitySurface } from '../src/packs/unity/material.js';
+import { compileWorldUv } from '../src/packs/unity/world-uv.js';
 
 it('resolves absolute-world planar projection and rejects nonlinear or non-world inputs', () => {
   const edge = (from: string, to: string, input: number, output = 0) => ({
@@ -57,4 +58,34 @@ it('resolves absolute-world planar projection and rejects nonlinear or non-world
   docs[6]!.m_Space = 4;
   graph.m_Edges[6]!.m_OutputSlot = { m_Node: { m_Id: 'position' }, m_SlotId: 0 };
   expect(parse).toThrow('nonlinear Unity world UV graph');
+});
+
+it('uses Vector3 input slot defaults for world projection scale', () => {
+  const byId = new Map<string, Record<string, unknown>>([
+    ['position', { m_Type: 'UnityEditor.ShaderGraph.PositionNode', m_Space: 4 }],
+    ['divide', { m_Type: 'UnityEditor.ShaderGraph.DivideNode' }],
+    [
+      'vector',
+      {
+        m_Type: 'UnityEditor.ShaderGraph.Vector3Node',
+        m_Value: { x: 0, y: 0, z: 0 },
+        m_Slots: [{ m_Id: 'x' }, { m_Id: 'y' }, { m_Id: 'z' }],
+      },
+    ],
+    ['x', { m_Id: 1, m_SlotType: 0, m_Value: 2 }],
+    ['y', { m_Id: 2, m_SlotType: 0, m_Value: 4 }],
+    ['z', { m_Id: 3, m_SlotType: 0, m_Value: 8 }],
+  ]);
+  const incoming = new Map([
+    [
+      'divide',
+      [
+        { node: 'position', inputSlot: 0, outputSlot: 0 },
+        { node: 'vector', inputSlot: 1, outputSlot: 0 },
+      ],
+    ],
+  ]);
+  expect(
+    compileWorldUv({ node: 'divide', inputSlot: 0, outputSlot: 2 }, byId, incoming, new Map(), new Map(), new Set()),
+  ).toEqual([0.5, 0, 0, 0, 0, 0.25, 0, 0]);
 });

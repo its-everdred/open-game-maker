@@ -529,8 +529,29 @@ export function shaderGraphBase(
           ...(worldTransform ? { textureWorldTransforms: [worldTransform] } : {}),
         };
       const textureNode = byId.get(texture.node);
+      if (textureNode?.m_Type === 'UnityEditor.ShaderGraph.Texture2DAssetNode' && texture.outputSlot === 0) {
+        const asset = textureNode.m_Texture as { m_SerializedTexture?: unknown } | undefined;
+        let guid: unknown;
+        try {
+          const reference = JSON.parse(String(asset?.m_SerializedTexture)) as {
+            texture?: { guid?: unknown; fileID?: unknown };
+          };
+          if (reference.texture?.fileID === 2800000) guid = reference.texture.guid;
+        } catch {
+          throw new Error('invalid Unity texture asset reference');
+        }
+        if (typeof guid !== 'string' || !/^[a-f0-9]{32}$/i.test(guid))
+          throw new Error('invalid Unity texture asset reference');
+        return {
+          textures: [`unity-guid:${guid.toLowerCase()}`],
+          factors: [],
+          ...(uvChannel ? { textureChannels: [uvChannel] } : {}),
+          ...(uvTransform ? { textureUvTransforms: [uvTransform] } : {}),
+          ...(worldTransform ? { textureWorldTransforms: [worldTransform] } : {}),
+        };
+      }
       if (textureNode?.m_Type !== 'UnityEditor.ShaderGraph.PropertyNode')
-        throw new Error('unsupported Unity texture property');
+        throw new Error(`unsupported Unity texture property: ${String(textureNode?.m_Type)}`);
       const property = byId.get(nodeId(textureNode.m_Property));
       const key = property?.m_OverrideReferenceName || property?.m_DefaultReferenceName;
       if (

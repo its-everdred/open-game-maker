@@ -172,7 +172,8 @@ export function parseUnitySurface(
     )
       throw new Error('invalid Unity texture world UV transforms');
     const textures = keys.map((key, index) => {
-      const env = object(environments.get(key));
+      const direct = /^unity-guid:([a-f0-9]{32})$/.exec(key);
+      const env = direct ? { m_Texture: { guid: direct[1] } } : object(environments.get(key));
       const reference = object(env.m_Texture);
       if (typeof reference.guid !== 'string') throw new Error(`missing Unity texture for ${key}`);
       const scale = vector(env.m_Scale, ['x', 'y'], [1, 1]) as [number, number];
@@ -229,8 +230,7 @@ export function parseUnitySurface(
       (typeof adjustment.amount !== 'number' ||
         !Number.isFinite(adjustment.amount) ||
         adjustment.amount < 0 ||
-        (adjustment.op === 'power' && adjustment.amount === 0) ||
-        (adjustment.op === 'saturation' && adjustment.amount > 1))
+        (adjustment.op === 'power' && adjustment.amount === 0))
     )
       throw new Error(`unsupported Unity color adjustment amount: ${adjustment.op}=${String(adjustment.amount)}`);
     const unsafeMask = (mask: WeightExpression<UnitySurface>): boolean => {

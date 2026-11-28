@@ -191,7 +191,7 @@ def build_blended_material(material, surface, uv_names):
         amount = adjustment["amount"]
         if adjustment["op"] == "power" and amount > 0:
             result[..., :3] = np.power(rgb, amount)
-        elif adjustment["op"] == "saturation" and 0 <= amount <= 1:
+        elif adjustment["op"] == "saturation" and amount >= 0:
             luma = np.sum(rgb * np.asarray([0.2126729, 0.7151522, 0.0721750]), axis=-1, keepdims=True)
             result[..., :3] = luma + amount * (rgb - luma)
         elif adjustment["op"] == "contrast" and amount >= 0:

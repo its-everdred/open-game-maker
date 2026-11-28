@@ -64,6 +64,15 @@ export function compileWorldUv(
     if (type === 'UnityEditor.ShaderGraph.BranchNode' && edge.outputSlot === 3)
       return input(selectUvBranch(linked, byId, incoming, floats));
     if (
+      type === 'UnityEditor.ShaderGraph.Vector3Node' &&
+      edge.outputSlot === 0 &&
+      linked.every((item) => [1, 2, 3].includes(item.inputSlot))
+    ) {
+      const values = [input(1), input(2), input(3)];
+      if (values.some((value) => value.components.length !== 1)) throw new Error('invalid Unity world UV vector width');
+      return { components: values.map((value) => value.components[0]!), world: values.some((value) => value.world) };
+    }
+    if (
       type === 'UnityEditor.ShaderGraph.PositionNode' &&
       node.m_Space === 4 &&
       edge.outputSlot === 0 &&

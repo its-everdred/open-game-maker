@@ -611,7 +611,7 @@ it.skipIf(!available)(
                 texturePaths: [rgbMask],
                 textureSrgb: [false],
                 color: [1, 1, 1, 1],
-                adjustment: { op: 'saturation', amount: 0.5 },
+                adjustment: { op: 'saturation', amount: 1.1 },
               },
             ],
           },
@@ -632,7 +632,7 @@ it.skipIf(!available)(
       const components = [0, 128 / 255, 1];
       const luma = components[0]! * 0.2126729 + components[1]! * 0.7151522 + components[2]! * 0.072175;
       for (let index = 0; index < 3; index++) {
-        const saturation = luma + 0.5 * (components[index]! - luma);
+        const saturation = luma + 1.1 * (components[index]! - luma);
         const contrasted = (saturation - 0.5 ** 2.2) * 0.5 + 0.5 ** 2.2;
         const linear = Math.min(1, (1.1 * contrasted) ** 2);
         const encoded = 255 * (linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055);

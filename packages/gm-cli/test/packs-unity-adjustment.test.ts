@@ -63,9 +63,9 @@ Material:
   });
   const bright = parseUnitySurface(material.replace('g: 0.25', 'g: 1.1'), graph);
   expect(bright.products?.[0]?.products?.[1]?.color).toEqual([1.1, 1.1, 1.1, 1.1]);
-  expect(() => parseUnitySurface(material.replace('r: 0.5', 'r: 1.5'), graph)).toThrow(
-    'unsupported Unity color adjustment amount',
-  );
+  expect(
+    parseUnitySurface(material.replace('r: 0.5', 'r: 1.5'), graph).products?.[0]?.products?.[0]?.adjustment,
+  ).toEqual({ op: 'saturation', amount: 1.5 });
   expect(() => parseUnitySurface(material.replace('b: 2', 'b: -1'), graph)).toThrow(
     'unsupported Unity color adjustment amount',
   );

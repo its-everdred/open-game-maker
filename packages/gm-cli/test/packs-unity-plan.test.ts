@@ -48,6 +48,62 @@ MeshRenderer:
         surfaces: [{ path: join(root, 'roof.mat'), color: [1, 1, 1, 1] }],
       },
     ]);
+    const shaderGuid = 'c'.repeat(32);
+    const edge = (from: string, to: string, slot: number, output: number) => ({
+      m_InputSlot: { m_Node: { m_Id: to }, m_SlotId: slot },
+      m_OutputSlot: { m_Node: { m_Id: from }, m_SlotId: output },
+    });
+    const graph = [
+      {
+        m_Type: 'UnityEditor.ShaderGraph.GraphData',
+        m_Edges: [
+          edge('lerp', 'alpha', 0, 3),
+          edge('front', 'lerp', 0, 0),
+          edge('side', 'lerp', 1, 0),
+          edge('fresnel', 'lerp', 2, 3),
+          edge('power', 'fresnel', 2, 0),
+        ],
+      },
+      { m_ObjectId: 'alpha', m_SerializedDescriptor: 'SurfaceDescription.Alpha' },
+      {
+        m_ObjectId: 'base',
+        m_Type: 'UnityEditor.ShaderGraph.BlockNode',
+        m_SerializedDescriptor: 'SurfaceDescription.BaseColor',
+        m_Slots: [{ m_Id: 'baseSlot' }],
+      },
+      {
+        m_ObjectId: 'baseSlot',
+        m_Type: 'UnityEditor.ShaderGraph.ColorRGBMaterialSlot',
+        m_ColorMode: 0,
+        m_Id: 0,
+        m_SlotType: 0,
+        m_Value: { x: 1, y: 1, z: 1 },
+      },
+      { m_ObjectId: 'lerp', m_Type: 'UnityEditor.ShaderGraph.LerpNode' },
+      { m_ObjectId: 'fresnel', m_Type: 'UnityEditor.ShaderGraph.FresnelNode' },
+      { m_ObjectId: 'power', m_Type: 'UnityEditor.ShaderGraph.Vector1Node', m_Slots: [{ m_Id: 'slot' }] },
+      { m_ObjectId: 'slot', m_Id: 1, m_SlotType: 0, m_Value: 1 },
+      ...['front', 'side'].flatMap((name) => [
+        { m_ObjectId: name, m_Type: 'UnityEditor.ShaderGraph.PropertyNode', m_Property: { m_Id: `${name}Prop` } },
+        {
+          m_ObjectId: `${name}Prop`,
+          m_Type: 'UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty',
+          m_DefaultReferenceName: `_${name}`,
+          m_Value: name === 'front' ? 0.4 : 0.9,
+        },
+      ]),
+    ];
+    await writeFile(join(root, 'glass.shadergraph'), graph.map((doc) => JSON.stringify(doc)).join('\n'));
+    await writeFile(join(root, 'glass.shadergraph.meta'), `guid: ${shaderGuid}\n`);
+    await writeFile(
+      join(root, 'roof.mat'),
+      `--- !u!21 &2100000\nMaterial:\n  m_Shader: {guid: ${shaderGuid}}\n  stringTagMap: {RenderType: Transparent}\n  m_SavedProperties:\n    m_Floats:\n    - _SurfaceType: 1\n    - _BlendMode: 0\n    - _SrcBlend: 1\n    - _DstBlend: 10\n    - _DoubleSidedEnable: 0\n`,
+    );
+    const warnings: string[] = [];
+    expect(await planUnityAssembly(root, prefab, (warning) => warnings.push(warning))).toMatchObject([
+      { surfaces: [{ opacity: { color: [0.4, 0.4, 0.4, 0.4] } }] },
+    ]);
+    expect(warnings).toEqual([expect.stringContaining('view-dependent opacity approximated')]);
     await writeFile(join(root, 'model.fbx.meta'), `guid: ${meshGuid}\nModelImporter: {}\n`);
     await expect(planUnityAssembly(root, prefab)).rejects.toThrow('missing Unity mesh name');
     const contents = await readFile(prefab, 'utf8');
