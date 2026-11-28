@@ -28,6 +28,7 @@ export type EnvName = {
 
 export const OGM_ENV_NAMES: readonly EnvName[] = [
   { name: 'OGM_API_PORT', unit: 'api', kind: 'port', doc: 'loopback port of the API' },
+  { name: 'OGM_CREATOR_JOB_LIMIT', unit: 'api', kind: 'int', doc: 'maximum in-flight jobs per creator (default 1)' },
   {
     name: 'OGM_TESTER_NEW_GAMES_PER_DAY',
     unit: 'api',

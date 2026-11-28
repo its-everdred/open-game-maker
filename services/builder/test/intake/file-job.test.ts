@@ -178,6 +178,88 @@ function close(input: Harness) {
 }
 
 describe('fileJob', () => {
+  it('does not finalize filing if cancellation arrives during the nudge', async () => {
+    const input = harness();
+    vi.mocked(input.aiur.nudgeTodo).mockImplementation(async () => {
+      input.db
+        .update(schema.jobTickets)
+        .set({ cancelRequestedAt: NOW.toISOString() })
+        .where(eq(schema.jobTickets.jobId, 'j_1'))
+        .run();
+    });
+    await input.intake.fileJob('j_1');
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('admitted');
+    close(input);
+  });
+  it('does not pause a job when cancellation arrives before an exhausted-cap response', async () => {
+    const input = harness();
+    vi.mocked(input.aiur.setSpendCap).mockImplementation(async () => {
+      input.db
+        .update(schema.jobTickets)
+        .set({ cancelRequestedAt: NOW.toISOString() })
+        .where(eq(schema.jobTickets.jobId, 'j_1'))
+        .run();
+      throw new AiurHttpError(409, 'spend_cap_exhausted', 'spent', 'http://127.0.0.1');
+    });
+    await input.intake.fileJob('j_1');
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('admitted');
+    close(input);
+  });
+  it('does not finish filing after cancellation is requested during the runnable-label write', async () => {
+    const input = harness();
+    vi.mocked(input.issues.addLabel).mockImplementation(async (_repo, _number, label) => {
+      if (label === 'castle-run:todo') {
+        input.db
+          .update(schema.jobTickets)
+          .set({ cancelRequestedAt: NOW.toISOString() })
+          .where(eq(schema.jobTickets.jobId, 'j_1'))
+          .run();
+      }
+    });
+
+    await input.intake.fileJob('j_1');
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('admitted');
+    expect(input.aiur.nudgeTodo).not.toHaveBeenCalled();
+    close(input);
+  });
+  it('does not make a ticket runnable if cancellation arrives while reading its labels', async () => {
+    const input = harness();
+    vi.mocked(input.issues.labels).mockImplementation(async () => {
+      input.db.update(schema.jobs).set({ state: 'cancelled' }).where(eq(schema.jobs.id, 'j_1')).run();
+      return [];
+    });
+
+    await input.intake.fileJob('j_1');
+    expect(input.calls).not.toContain('label:1:castle-run:todo');
+    close(input);
+  });
+
+  it('does not make a ticket runnable if cancellation arrives while setting its spend cap', async () => {
+    const input = harness();
+    vi.mocked(input.aiur.setSpendCap).mockImplementation(async (_id, amount) => {
+      input.db.update(schema.jobs).set({ state: 'cancelled' }).where(eq(schema.jobs.id, 'j_1')).run();
+      return { amount, currency: 'USD' };
+    });
+
+    await input.intake.fileJob('j_1');
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+    expect(input.calls).not.toContain('label:1:castle-run:todo');
+    close(input);
+  });
+
+  it('does not make a ticket runnable if the job was cancelled during issue creation', async () => {
+    const input = harness();
+    vi.mocked(input.issues.create).mockImplementation(async () => {
+      input.db.update(schema.jobs).set({ state: 'cancelled' }).where(eq(schema.jobs.id, 'j_1')).run();
+      return { number: 1, url: 'https://github.com/owner/game/issues/1' };
+    });
+
+    await input.intake.fileJob('j_1');
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+    expect(input.db.select().from(schema.jobTickets).get()?.terminalState).toBe('cancelled');
+    expect(input.calls).not.toContain('label:1:castle-run:todo');
+    close(input);
+  });
   it('waits when the deployed skill pack has not been updated', async () => {
     const input = harness(false, 'feature', false);
     expect(await input.intake.fileJob('j_1')).toEqual({ deferred: 'aiur' });
@@ -280,8 +362,12 @@ describe('fileJob', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:castle-run:todo',
+      'ensure:slot:creator',
+      'ensure:priority:1',
       'create:1',
       'cap:1:9.000001',
+      'label:1:slot:creator',
+      'label:1:priority:1',
       'label:1:castle-run:todo',
       'nudge:1',
     ]);
@@ -299,13 +385,19 @@ describe('fileJob', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:castle-run:todo',
+      'ensure:slot:creator',
+      'ensure:priority:1',
       'ensure:phase:mock',
       'ensure:model:low',
       'create:1',
       'create:2',
       'cap:1:9.000001',
+      'label:1:slot:creator',
+      'label:1:priority:1',
       'label:1:castle-run:todo',
       'cap:2:9.000001',
+      'label:2:slot:creator',
+      'label:2:priority:1',
       'label:2:castle-run:todo',
       'nudge:1,2',
     ]);
@@ -356,9 +448,13 @@ describe('fileJob', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:castle-run:todo',
+      'ensure:slot:creator',
+      'ensure:priority:1',
       'ensure:phase:mock',
       'ensure:model:low',
       'cap:7:9.000001',
+      'label:7:slot:creator',
+      'label:7:priority:1',
       'label:7:castle-run:todo',
       'nudge:7',
     ]);
@@ -368,6 +464,22 @@ describe('fileJob', () => {
       todoAt: NOW.toISOString(),
       filedAt: NOW.toISOString(),
     });
+    close(input);
+  });
+
+  it('labels recovered creator tickets for the reserved lane before making them runnable', async () => {
+    const input = harness();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_1', key: 'T1', issueNumber: 7, repo: 'owner/game', sig: 'sig' })
+      .run();
+    await input.intake.fileJob('j_1');
+    expect(input.calls).toContain('ensure:slot:creator');
+    expect(input.calls).toContain('ensure:priority:1');
+    expect(input.calls.indexOf('label:7:slot:creator')).toBeLessThan(input.calls.indexOf('label:7:castle-run:todo'));
+    expect(input.calls.indexOf('label:7:priority:1')).toBeLessThan(input.calls.indexOf('label:7:castle-run:todo'));
+    expect(input.calls).toContain('label:7:slot:creator');
+    expect(input.calls).toContain('label:7:priority:1');
     close(input);
   });
 
@@ -382,9 +494,13 @@ describe('fileJob', () => {
     expect(input.calls).toEqual([
       'ensure:feature:gm-j_1',
       'ensure:castle-run:todo',
+      'ensure:slot:creator',
+      'ensure:priority:1',
       'ensure:phase:mock',
       'ensure:model:low',
       'cap:12:9.000001',
+      'label:12:slot:creator',
+      'label:12:priority:1',
       'label:12:castle-run:todo',
       'nudge:12',
     ]);
@@ -460,6 +576,20 @@ describe('fileJob', () => {
     expect(input.alerts).toEqual([
       expect.objectContaining({ code: 'preflight_failed', reasons: ['config drift: tracker.github.allowed_users'] }),
     ]);
+    close(input);
+  });
+
+  it('retains the slot when preflight fails after a ticket was recorded', async () => {
+    const input = harness();
+    input.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_1', key: 'T1', issueNumber: 1, repo: 'owner/game', sig: 'sig' })
+      .run();
+    input.fleet.ensureDaemon.mockResolvedValueOnce({ status: 'stopped', reasons: ['daemon unavailable'] });
+
+    await expect(input.intake.fileJob('j_1')).resolves.toEqual({ deferred: 'aiur' });
+    expect(input.failJob).not.toHaveBeenCalled();
+    expect(input.db.select().from(schema.jobs).get()?.state).toBe('admitted');
     close(input);
   });
 

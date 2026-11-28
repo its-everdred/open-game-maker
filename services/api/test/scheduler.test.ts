@@ -64,6 +64,99 @@ function queued(deps: ReturnType<typeof makeDeps>, id: string, createdAt: string
 }
 
 describe('job scheduler', () => {
+  it('keeps the creator slot for a cancelled job with an outstanding ticket', () => {
+    const { deps } = setup();
+    queued(deps, 'j_cancelled', '2026-11-01T00:00:00.000Z');
+    deps.db
+      .update(schema.jobs)
+      .set({ state: 'cancelled', releasedAt: RESET.toISOString() })
+      .where(eq(schema.jobs.id, 'j_cancelled'))
+      .run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_cancelled', key: 'T1', issueNumber: 42, repo: 'owner/game', sig: 'ticket' })
+      .run();
+    queued(deps, 'j_waiting', '2026-11-01T01:00:00.000Z');
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual([]);
+    deps.db
+      .update(schema.jobTickets)
+      .set({ terminalState: 'cancelled' })
+      .where(eq(schema.jobTickets.jobId, 'j_cancelled'))
+      .run();
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual(['j_waiting']);
+  });
+  it('retains the creator limit while a released job still has a nonterminal ticket', () => {
+    const { deps } = setup();
+    queued(deps, 'j_running', '2026-11-01T00:00:00.000Z');
+    deps.db
+      .update(schema.jobs)
+      .set({ state: 'paused_budget', releasedAt: RESET.toISOString() })
+      .where(eq(schema.jobs.id, 'j_running'))
+      .run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_running', key: 'T1', issueNumber: 42, repo: 'owner/game', sig: 'ticket' })
+      .run();
+    queued(deps, 'j_waiting', '2026-11-01T01:00:00.000Z');
+
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual([]);
+    deps.db
+      .update(schema.jobTickets)
+      .set({ terminalState: 'done' })
+      .where(eq(schema.jobTickets.jobId, 'j_running'))
+      .run();
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual(['j_waiting']);
+  });
+  it('honors a creator limit above one', () => {
+    const { deps } = setup();
+    queued(deps, 'j_first', '2026-11-01T00:00:00.000Z');
+    queued(deps, 'j_second', '2026-11-01T01:00:00.000Z');
+    expect(
+      tick(
+        { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults: { ...defaults, creatorJobLimit: 2 } },
+        RESET,
+      ),
+    ).toEqual(['j_first', 'j_second']);
+  });
+  it('allows the creator limit to be disabled', () => {
+    const { deps } = setup();
+    queued(deps, 'j_first', '2026-11-01T00:00:00.000Z');
+    queued(deps, 'j_second', '2026-11-01T01:00:00.000Z');
+    expect(
+      tick(
+        { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults: { ...defaults, creatorJobLimit: 0 } },
+        RESET,
+      ),
+    ).toEqual(['j_first', 'j_second']);
+  });
+  it('starts at most one job per creator while allowing another creator to start', () => {
+    const { deps } = setup();
+    deps.db
+      .insert(schema.familyBudgetSettings)
+      .values({
+        familyId: 'f_1',
+        resetZone: defaults.resetZone,
+        unitLabel: 'energy',
+        microUsdPerUnit: 100_000,
+        platformCapMicroUsd: 50_000_000,
+        slotsNewGame: 3,
+        slotsEdit: 3,
+        hardCapMultiplier: 1,
+      })
+      .run();
+    queued(deps, 'j_first', '2026-11-01T00:00:00.000Z');
+    queued(deps, 'j_second', '2026-11-01T01:00:00.000Z');
+    queued(deps, 'j_other', '2026-11-01T02:00:00.000Z');
+    deps.db.update(schema.jobs).set({ creatorId: 'u_2' }).where(eq(schema.jobs.id, 'j_other')).run();
+
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual([
+      'j_first',
+      'j_other',
+    ]);
+    deps.db.update(schema.jobs).set({ state: 'done' }).where(eq(schema.jobs.id, 'j_first')).run();
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual(['j_second']);
+  });
+
   it('starts a staged child while the planner is still running', () => {
     const { deps } = setup();
     queued(deps, 'j_parent', BEFORE.toISOString());

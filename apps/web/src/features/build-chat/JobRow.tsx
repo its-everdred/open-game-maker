@@ -26,7 +26,10 @@ export function JobRow({
 }) {
   const progress = job.state === 'done' ? 100 : (job.progressPercent ?? 0);
   const queuedAtReset = job.state === 'queued' && job.start === 'at_reset';
-  const phase = job.stageText ?? (job.state === 'done' ? 'Ready to try' : 'Waiting to start');
+  const phase =
+    job.state === 'queued' && job.start === 'now' && job.position !== undefined
+      ? `Waiting for a build slot: #${job.position}`
+      : (job.stageText ?? (job.state === 'done' ? 'Ready to try' : 'Waiting to start'));
 
   return (
     <li className={`build-chat-job ${job.state}`}>

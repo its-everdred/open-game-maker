@@ -1,8 +1,11 @@
-import { AiurEventFeedError, subscribeEvents } from '@ogm/aiur-client';
+import { randomUUID } from 'node:crypto';
+
+import { AiurEventFeedError, AiurHttpError, subscribeEvents } from '@ogm/aiur-client';
 import { schema, type Db } from '@ogm/db';
 import { eq } from 'drizzle-orm';
 
 import { FEED_PATTERNS, type FeedDeps, type RunningDaemon } from './types.js';
+import { terminalSnapshot } from './terminal-snapshot.js';
 
 type Consumer = { controller: AbortController; done: Promise<void> };
 
@@ -31,8 +34,23 @@ export function createConsumers(deps: FeedDeps) {
   async function resync(daemon: RunningDaemon): Promise<void> {
     for (const job of await deps.activeJobs(daemon.slug)) {
       try {
-        deps.apply.issue(daemon.slug, job.ticket, await daemon.client.issue(job.ticket));
+        const issue = await daemon.client.issue(job.ticket);
+        deps.apply.issue(daemon.slug, job.ticket, issue);
+        if (terminalSnapshot(issue)) await deps.onMissingIssue?.(daemon.slug, job.ticket);
       } catch (error) {
+        if (error instanceof AiurHttpError && error.status === 404 && deps.onMissingIssue) {
+          try {
+            await deps.onMissingIssue(daemon.slug, job.ticket);
+          } catch (recoveryError) {
+            log({
+              event: 'aiur-issue-recovery-failed',
+              daemon: daemon.slug,
+              ticket: job.ticket,
+              error: String(recoveryError),
+            });
+          }
+          continue;
+        }
         log({ event: 'aiur-issue-read-failed', daemon: daemon.slug, ticket: job.ticket, error: String(error) });
       }
     }
@@ -53,8 +71,11 @@ export function createConsumers(deps: FeedDeps) {
         }
       },
       onReset: (reset) => {
-        const epoch = typeof reset.epoch === 'string' ? reset.epoch : null;
-        writeCursor(deps.db, daemon.slug, Number(reset.head_seq), epoch, now());
+        const epoch = typeof reset.epoch === 'string' ? reset.epoch : `local-reset:${randomUUID()}`;
+        deps.db.transaction(() => {
+          writeCursor(deps.db, daemon.slug, Number(reset.head_seq), epoch, now());
+          deps.onFeedReset?.(daemon.slug);
+        });
         void resync(daemon);
       },
       onError: (error) => {

@@ -30,3 +30,32 @@ describe('worker completion events', () => {
     });
   });
 });
+
+describe('recent worker completions', () => {
+  it('uses the most recently ingested ticket event across feed epochs', () => {
+    const { db } = makeDeps();
+    db.insert(schema.aiurEvents)
+      .values([
+        {
+          daemonSlug: 'game',
+          epoch: 'old',
+          seq: 100,
+          ticket: '12',
+          topic: 'ticket.12.lifecycle.changed',
+          payload: JSON.stringify({ lifecycle: 'running' }),
+          observedAt: '2026-11-01T00:00:00Z',
+        },
+        {
+          daemonSlug: 'game',
+          epoch: 'new',
+          seq: 1,
+          ticket: '12',
+          topic: 'ticket.12.lifecycle.changed',
+          payload: JSON.stringify({ lifecycle: 'completed', lifecycle_source: 'tracker' }),
+          observedAt: '2026-11-01T00:00:01Z',
+        },
+      ])
+      .run();
+    expect(recentCompletions(db, 'game').completed).toEqual([{ ticket: '12', seq: 1, at: '2026-11-01T00:00:01Z' }]);
+  });
+});

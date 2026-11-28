@@ -61,10 +61,14 @@ function setup(platformRole: 'admin' | 'none' = 'none') {
   return deps;
 }
 
-async function createJob(app: Awaited<ReturnType<typeof makeApp>>['app'], overrides: Record<string, unknown> = {}) {
+async function createJob(
+  app: Awaited<ReturnType<typeof makeApp>>['app'],
+  overrides: Record<string, unknown> = {},
+  userId = ids.user,
+) {
   return app.request('/api/v1/jobs', {
     method: 'POST',
-    headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+    headers: { ...asUser(userId), 'content-type': 'application/json' },
     body: JSON.stringify({
       gameId: ids.game,
       branchId: 'main',
@@ -100,6 +104,97 @@ describe('jobs routes', () => {
     expect(await refused.json()).toMatchObject({ error: 'energy_limit_reached', window: 'day' });
   });
 
+  it('limits each creator independently while allowing a second creator to start', async () => {
+    const deps = setup();
+    const secondUser = 'u_50000000-0000-4000-8000-000000000002';
+    deps.db
+      .insert(schema.familyMembers)
+      .values({
+        familyId: ids.family,
+        userId: secondUser,
+        role: 'member',
+        capability: 'creator',
+        joinedAt: '2026-11-01T16:00:00.000Z',
+      })
+      .run();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: ids.otherGame,
+        familyId: ids.family,
+        ownerId: secondUser,
+        title: 'Other game',
+        visibility: 'private',
+        repoVisibility: 'private',
+        createdAt: '2026-11-01T16:00:00.000Z',
+      })
+      .run();
+    deps.db
+      .insert(schema.allowances)
+      .values([
+        { familyId: ids.family, userId: ids.user, dailyMicroUsd: 100_000_000 },
+        { familyId: ids.family, userId: secondUser, dailyMicroUsd: 100_000_000 },
+      ])
+      .run();
+    installUsers(deps, [
+      {
+        kind: 'user',
+        userId: secondUser,
+        familyId: ids.family,
+        platformRole: 'none',
+        capability: 'creator',
+        email: 'second@example.test',
+      },
+    ]);
+    const { app } = await makeApp(deps);
+
+    expect(await (await createJob(app)).json()).toMatchObject({ state: 'admitted' });
+    expect(await (await createJob(app, { gameId: ids.otherGame }, secondUser)).json()).toMatchObject({
+      state: 'admitted',
+    });
+    expect(await (await createJob(app)).json()).toMatchObject({ state: 'queued' });
+  });
+  it('does not admit a later request ahead of the creator’s ready queued job', async () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.allowances)
+      .values({ familyId: ids.family, userId: ids.user, dailyMicroUsd: 100_000_000 })
+      .run();
+    const { app } = await makeApp(deps);
+    const first = (await (await createJob(app)).json()) as { jobId: string };
+    const older = (await (await createJob(app)).json()) as { state: string };
+    expect(older.state).toBe('queued');
+    deps.db.update(schema.jobs).set({ state: 'done' }).where(eq(schema.jobs.id, first.jobId)).run();
+    const later = (await (await createJob(app)).json()) as { state: string };
+    expect(later.state).toBe('queued');
+  });
+  it('honors a configured creator limit for direct admission', async () => {
+    const deps = setup();
+    deps.config.creatorJobLimit = 2;
+    deps.db
+      .insert(schema.allowances)
+      .values({ familyId: ids.family, userId: ids.user, dailyMicroUsd: 100_000_000 })
+      .run();
+    const { app } = await makeApp(deps);
+    expect(await (await createJob(app)).json()).toMatchObject({ state: 'admitted' });
+    expect(await (await createJob(app, { kind: 'new_game' })).json()).toMatchObject({ state: 'admitted' });
+    expect(await (await createJob(app)).json()).toMatchObject({ state: 'queued' });
+  });
+  it('queues a second job from the same creator even in a different slot', async () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.allowances)
+      .values({ familyId: ids.family, userId: ids.user, dailyMicroUsd: 100_000_000 })
+      .run();
+    const { app } = await makeApp(deps);
+    const first = await createJob(app);
+    expect(await first.json()).toMatchObject({ state: 'admitted' });
+    const second = await createJob(app, { kind: 'new_game' });
+    const queued = (await second.json()) as { jobId: string };
+    expect(queued).toMatchObject({ state: 'queued', position: 1 });
+    const read = await app.request(`/api/v1/jobs/${queued.jobId}`, { headers: asUser(ids.user) });
+    expect(await read.json()).toMatchObject({ state: 'queued', position: 1 });
+  });
   it('rejects arbitrary scope jobs on the public job route', async () => {
     const { app } = await makeApp(setup());
     const response = await createJob(app, { kind: 'scope' });

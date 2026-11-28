@@ -47,6 +47,8 @@ export type FeedDeps = {
   fleet: FeedFleet;
   db: Db;
   activeJobs: ActiveJobsFor;
+  onMissingIssue?: (daemonSlug: string, ticket: string) => Promise<void>;
+  onFeedReset?: (daemonSlug: string) => void;
   apply: FeedApply;
   subscribe?: typeof subscribeEvents;
   alert?: (message: string) => void;

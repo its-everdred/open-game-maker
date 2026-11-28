@@ -1,7 +1,9 @@
 import { schema } from '@ogm/db';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
-import { activeJobs, activeJobsForSlug, byTicket } from '../src/jobs/repo.js';
+import { acceptedFor, activeJobs, activeJobsForSlug, byTicket, findJob, findJobRow } from '../src/jobs/repo.js';
+import { creatorHoldsSlot } from '../src/jobs/creator-slot.js';
 import { makeDeps } from './helpers.js';
 
 function setup() {
@@ -47,7 +49,7 @@ function insertJob(
   deps: ReturnType<typeof makeDeps>,
   id: string,
   issueNumber: number,
-  state: 'queued' | 'admitted' | 'running' | 'done',
+  state: 'queued' | 'admitted' | 'running' | 'paused_budget' | 'cancelled' | 'done',
   releasedAt: string | null = null,
   gameId = 'g_1',
 ) {
@@ -83,6 +85,90 @@ function insertJob(
 }
 
 describe('job projection directory', () => {
+  it('does not keep a completed New Game parent in the active directory', () => {
+    const deps = setup();
+    insertJob(deps, 'j_parent', 143, 'done', '2026-11-01T01:00:00.000Z');
+    deps.db.update(schema.jobs).set({ kind: 'new_game' }).where(eq(schema.jobs.id, 'j_parent')).run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_parent', key: 'new-game', issueNumber: 143, repo: 'owner/game', sig: 'sig' })
+      .run();
+    expect(activeJobs(deps.db, 'owner-game')).toEqual([]);
+    expect(activeJobsForSlug(deps.db, 'owner-game')).toEqual([]);
+    expect(creatorHoldsSlot(deps.db, 'u_1', 1)).toBe(false);
+  });
+  it('continues tracking a cancelled job until its ticket is terminal', () => {
+    const deps = setup();
+    insertJob(deps, 'j_cancelled', 144, 'cancelled', '2026-11-01T01:00:00.000Z');
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_cancelled', key: 'T1', issueNumber: 144, repo: 'owner/game', sig: 'sig' })
+      .run();
+    expect(activeJobs(deps.db, 'owner-game')).toEqual([{ jobId: 'j_cancelled', ticket: '144' }]);
+    expect(activeJobsForSlug(deps.db, 'owner-game')).toEqual([{ kind: 'feature' }]);
+  });
+  it('continues tracking a released job while a ticket is nonterminal', () => {
+    const deps = setup();
+    insertJob(deps, 'j_released_live', 144, 'paused_budget', '2026-11-01T01:00:00.000Z');
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: 'j_released_live', key: 'T1', issueNumber: 144, repo: 'owner/game', sig: 'sig' })
+      .run();
+    expect(activeJobs(deps.db, 'owner-game')).toEqual([{ jobId: 'j_released_live', ticket: '144' }]);
+    expect(activeJobsForSlug(deps.db, 'owner-game')).toEqual([{ kind: 'feature' }]);
+  });
+  it('lists every ticket of a live job for resynchronization', () => {
+    const deps = setup();
+    insertJob(deps, 'j_multi', 141, 'running');
+    deps.db
+      .insert(schema.jobTickets)
+      .values([
+        { jobId: 'j_multi', key: 'first', issueNumber: 141, repo: 'owner/game', sig: 'one' },
+        { jobId: 'j_multi', key: 'second', issueNumber: 142, repo: 'owner/game', sig: 'two' },
+      ])
+      .run();
+
+    expect(activeJobs(deps.db, 'owner-game')).toEqual([
+      { jobId: 'j_multi', ticket: '141' },
+      { jobId: 'j_multi', ticket: '142' },
+    ]);
+  });
+  it('counts overdue reset jobs ahead of an immediate job but excludes future reset jobs', () => {
+    const deps = setup();
+    insertJob(deps, 'j_due', 1, 'queued');
+    insertJob(deps, 'j_future', 2, 'queued');
+    insertJob(deps, 'j_now', 3, 'queued');
+    deps.db
+      .update(schema.jobs)
+      .set({ start: 'at_reset', startAt: '2000-01-01T00:00:00.000Z' })
+      .where(eq(schema.jobs.id, 'j_due'))
+      .run();
+    deps.db
+      .update(schema.jobs)
+      .set({ start: 'at_reset', startAt: '2099-01-01T00:00:00.000Z' })
+      .where(eq(schema.jobs.id, 'j_future'))
+      .run();
+
+    expect(findJob(deps.db, 'j_due').position).toBe(1);
+    expect(findJob(deps.db, 'j_now').position).toBe(2);
+    expect(acceptedFor(deps.db, findJobRow(deps.db, 'j_now'), new Date('1999-01-01T00:00:00.000Z')).position).toBe(1);
+  });
+  it('counts ready jobs across the creator’s families and slots', () => {
+    const deps = setup();
+    insertJob(deps, 'j_first', 1, 'queued');
+    insertJob(deps, 'j_second', 2, 'queued');
+    deps.db
+      .insert(schema.families)
+      .values({ id: 'f_2', name: 'Another Family', ownerUserId: 'u_2', createdAt: '2026-11-01T00:00:00.000Z' })
+      .run();
+    deps.db
+      .update(schema.jobs)
+      .set({ familyId: 'f_2', slot: 'new_game', createdAt: '2026-11-01T00:01:00.000Z' })
+      .where(eq(schema.jobs.id, 'j_second'))
+      .run();
+
+    expect(findJob(deps.db, 'j_second').position).toBe(2);
+  });
   it('resolves daemon tickets and lists only non-terminal jobs', () => {
     const deps = setup();
     insertJob(deps, 'j_queued', 141, 'queued');

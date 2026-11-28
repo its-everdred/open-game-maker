@@ -3,6 +3,26 @@ import { describe, expect, it } from 'vitest';
 import { useWorkerFinishes } from './useWorkerFinishes';
 
 describe('worker finishing state', () => {
+  it('announces a confirmed completion after the feed sequence resets', () => {
+    const worker = {
+      ticket: 'game:12',
+      title: 'Build',
+      percent: 50,
+      etaSeconds: null,
+      startedAt: '2026-11-01T00:00:00Z',
+    };
+    const { result, rerender } = renderHook(({ workers, feeds }) => useWorkerFinishes(workers, feeds), {
+      initialProps: {
+        workers: [worker],
+        feeds: [{ gameId: 'game', cursor: 100, completed: [] as Array<{ ticket: string; seq: number; at: string }> }],
+      },
+    });
+    rerender({
+      workers: [],
+      feeds: [{ gameId: 'game', cursor: 1, completed: [{ ticket: '12', seq: 1, at: '2026-11-01T00:00:01Z' }] }],
+    });
+    expect(result.current.finished).toEqual([{ ticket: 'game:12', title: 'Build' }]);
+  });
   it('announces only a newly confirmed completion of a worker seen in this session', () => {
     const worker = {
       ticket: 'game:12',

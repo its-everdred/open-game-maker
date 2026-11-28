@@ -1,7 +1,7 @@
 import { AiurHttpError } from '@ogm/aiur-client';
 import { CompleteTriage, JobPlan, Reservation, type TriageResult } from '@ogm/contracts';
 import { schema } from '@ogm/db';
-import { and, eq, exists, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, eq, exists, inArray, isNotNull, isNull, lte, notExists, or, sql } from 'drizzle-orm';
 
 import { isDaemonLabel } from '@ogm/game-repo-template';
 
@@ -15,6 +15,7 @@ import type { FileResult, IntakeAlert, IntakeDeps } from './types.js';
 
 const DEFAULT_SWEEP_MS = 60_000;
 const SPEND_CAP_RETRY_MS = 5_000;
+const CREATOR_LANE_LABELS = ['slot:creator', 'priority:1'] as const;
 
 export function createIntake(deps: IntakeDeps) {
   const now = deps.now ?? (() => new Date());
@@ -26,6 +27,16 @@ export function createIntake(deps: IntakeDeps) {
 
   async function notify(event: IntakeAlert): Promise<void> {
     await deps.alert?.(event);
+  }
+
+  function cancellationRequested(jobId: string): boolean {
+    return Boolean(
+      deps.db
+        .select({ key: schema.jobTickets.key })
+        .from(schema.jobTickets)
+        .where(and(eq(schema.jobTickets.jobId, jobId), isNotNull(schema.jobTickets.cancelRequestedAt)))
+        .get(),
+    );
   }
 
   function fileJob(jobId: string): Promise<FileResult> {
@@ -63,17 +74,20 @@ export function createIntake(deps: IntakeDeps) {
     if (!found) return { skipped: 'missing' };
     const plannerChild = (found.job.idempotencyKey ?? '').startsWith('planner:');
     const queuedPlannerChild = found.job.state === 'queued' && plannerChild;
+    const pendingPlanner =
+      found.job.kind === 'new_game' && found.job.state === 'filed'
+        ? deps.db
+            .select()
+            .from(schema.jobTickets)
+            .where(and(eq(schema.jobTickets.jobId, jobId), eq(schema.jobTickets.key, PLANNER_TICKET_KEY)))
+            .get()
+        : undefined;
     if (found.job.state !== 'admitted' && !queuedPlannerChild) {
-      const pendingPlanner =
-        found.job.kind === 'new_game' && found.job.state === 'filed'
-          ? deps.db
-              .select()
-              .from(schema.jobTickets)
-              .where(and(eq(schema.jobTickets.jobId, jobId), eq(schema.jobTickets.key, PLANNER_TICKET_KEY)))
-              .get()
-          : undefined;
       if (!pendingPlanner || pendingPlanner.todoAt !== null) return { skipped: `state:${found.job.state}` };
     }
+    if (!queuedPlannerChild && !pendingPlanner && found.job.state !== 'admitted')
+      return { skipped: `state:${found.job.state}` };
+    if (cancellationRequested(jobId)) return { skipped: 'cancellation_requested' };
     const repairTriage = found.job.kind === 'repair' ? triageForRepair(deps.db, jobId) : undefined;
     if (found.job.kind === 'repair' && !repairTriage?.ticket) return { deferred: 'triage' };
 
@@ -237,6 +251,7 @@ export function createIntake(deps: IntakeDeps) {
     try {
       await deps.issues.ensureLabel(repo, `feature:gm-${jobId}`, '0e8a16', 'OGM job');
       await deps.issues.ensureLabel(repo, todo, '6f42c1', 'ready to be worked');
+      for (const label of CREATOR_LANE_LABELS) await deps.issues.ensureLabel(repo, label, 'ededed', 'creator job');
       if (found.job.kind === 'feature') {
         await deps.issues.ensureLabel(repo, 'phase:mock', 'bfd4f2', 'creator review mock phase');
         await deps.issues.ensureLabel(repo, 'model:low', 'ededed', 'low reasoning effort');
@@ -314,7 +329,14 @@ export function createIntake(deps: IntakeDeps) {
         }
         deps.db
           .insert(schema.jobTickets)
-          .values({ jobId, key: ticket.key, issueNumber: issue.number, repo, sig: rendered.sig })
+          .values({
+            jobId,
+            key: ticket.key,
+            issueNumber: issue.number,
+            repo,
+            sig: rendered.sig,
+            terminalState: sql`(SELECT CASE WHEN ${schema.jobs.state} = 'cancelled' THEN 'cancelled' ELSE NULL END FROM ${schema.jobs} WHERE ${schema.jobs.id} = ${jobId})`,
+          })
           .run();
         row = deps.db
           .select()
@@ -323,25 +345,61 @@ export function createIntake(deps: IntakeDeps) {
           .get()!;
         rows.set(ticket.key, row);
       }
+      const state = deps.db
+        .select({ state: schema.jobs.state })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.id, jobId))
+        .get()?.state;
+      if (state !== 'admitted' && !queuedPlannerChild) return { skipped: `state:${state ?? 'missing'}` };
+      if (cancellationRequested(jobId)) return { skipped: 'cancellation_requested' };
     }
 
     for (const ticket of tickets) {
       let row = rows.get(ticket.key)!;
+      const state = deps.db
+        .select({ state: schema.jobs.state })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.id, jobId))
+        .get()?.state;
+      if (state !== 'admitted' && !queuedPlannerChild) return { skipped: `state:${state ?? 'missing'}` };
+      if (cancellationRequested(jobId)) return { skipped: 'cancellation_requested' };
       if (row.capSetAt === null) {
         try {
           await setSpendCap(aiur, row.issueNumber, spendCap, sleep);
         } catch (error) {
+          const current = deps.db
+            .select({ state: schema.jobs.state })
+            .from(schema.jobs)
+            .where(eq(schema.jobs.id, jobId))
+            .get();
+          if (
+            (current?.state !== 'admitted' && !(queuedPlannerChild && current?.state === 'queued')) ||
+            cancellationRequested(jobId)
+          )
+            return { skipped: 'cancellation_requested' };
           if (error instanceof AiurHttpError && error.status === 409 && error.code === 'spend_cap_exhausted') {
             if (queuedPlannerChild) {
               await notify({ code: 'spend_cap_failed', jobId, reasons: [message(error)] });
               return { deferred: 'aiur' };
             }
             const at = now().toISOString();
-            deps.db
+            const paused = deps.db
               .update(schema.jobs)
               .set({ state: 'paused_budget', pausedReason: 'budget_exhausted', updatedAt: at })
-              .where(eq(schema.jobs.id, jobId))
+              .where(
+                and(
+                  eq(schema.jobs.id, jobId),
+                  eq(schema.jobs.state, 'admitted'),
+                  notExists(
+                    deps.db
+                      .select({ key: schema.jobTickets.key })
+                      .from(schema.jobTickets)
+                      .where(and(eq(schema.jobTickets.jobId, jobId), isNotNull(schema.jobTickets.cancelRequestedAt))),
+                  ),
+                ),
+              )
               .run();
+            if (!paused.changes) return { skipped: 'cancellation_requested' };
             deps.onJobChanged?.({
               jobId,
               gameId: found.job.gameId,
@@ -369,6 +427,16 @@ export function createIntake(deps: IntakeDeps) {
           await deps.issues.blockBy(repo, row.issueNumber, parentRow.issueNumber);
           if (row.todoAt === null) {
             const labels = await deps.issues.labels(repo, row.issueNumber);
+            const stateAfterLabels = deps.db
+              .select({ state: schema.jobs.state })
+              .from(schema.jobs)
+              .where(eq(schema.jobs.id, jobId))
+              .get()?.state;
+            if (stateAfterLabels !== 'queued' || cancellationRequested(jobId))
+              return { skipped: 'cancellation_requested' };
+            for (const label of CREATOR_LANE_LABELS) {
+              if (!labels.includes(label)) await deps.issues.addLabel(repo, row.issueNumber, label);
+            }
             const statePrefix = todo.slice(0, -'todo'.length);
             if (labels.some((label) => label.startsWith(statePrefix) && label !== todo))
               throw new Error('planner child state changed before queueing');
@@ -408,14 +476,37 @@ export function createIntake(deps: IntakeDeps) {
         }
       }
 
+      const currentState = deps.db
+        .select({ state: schema.jobs.state })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.id, jobId))
+        .get()?.state;
+      if (currentState !== 'admitted') return { skipped: `state:${currentState ?? 'missing'}` };
+      if (cancellationRequested(jobId)) return { skipped: 'cancellation_requested' };
+
       if (row.todoAt === null) {
         try {
           const labels = await deps.issues.labels(repo, row.issueNumber);
+          const stateAfterLabels = deps.db
+            .select({ state: schema.jobs.state })
+            .from(schema.jobs)
+            .where(eq(schema.jobs.id, jobId))
+            .get()?.state;
+          if (
+            (queuedPlannerChild ? stateAfterLabels !== 'queued' : stateAfterLabels !== 'admitted') ||
+            cancellationRequested(jobId)
+          )
+            return { skipped: 'cancellation_requested' };
+          for (const label of CREATOR_LANE_LABELS) {
+            if (!labels.includes(label)) await deps.issues.addLabel(repo, row.issueNumber, label);
+          }
           if (!labels.includes(todo)) await deps.issues.addLabel(repo, row.issueNumber, todo);
         } catch (error) {
           await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
           return { deferred: 'github' };
         }
+      }
+      if (row.todoAt === null) {
         const todoAt = now().toISOString();
         deps.db
           .update(schema.jobTickets)
@@ -428,6 +519,7 @@ export function createIntake(deps: IntakeDeps) {
       issueNumbers.push(row.issueNumber);
     }
 
+    if (cancellationRequested(jobId)) return { skipped: 'cancellation_requested' };
     try {
       await aiur.nudgeTodo(issueNumbers.map(String));
     } catch (error) {
@@ -435,7 +527,14 @@ export function createIntake(deps: IntakeDeps) {
     }
 
     const updatedAt = now().toISOString();
-    const filedUpdate = deps.db
+    const currentState = deps.db
+      .select({ state: schema.jobs.state })
+      .from(schema.jobs)
+      .where(eq(schema.jobs.id, jobId))
+      .get()?.state;
+    if (currentState === 'running') return { filed: true, issues: issueNumbers };
+    if (currentState !== 'admitted') return { skipped: `state:${currentState ?? 'missing'}` };
+    const filed = deps.db
       .update(schema.jobs)
       .set({
         state: 'filed',
@@ -444,9 +543,28 @@ export function createIntake(deps: IntakeDeps) {
         aiurSpendCapMicroUsd: reservation.amountMicroUsd,
         updatedAt,
       })
-      .where(and(eq(schema.jobs.id, jobId), eq(schema.jobs.state, 'admitted')))
+      .where(
+        and(
+          eq(schema.jobs.id, jobId),
+          eq(schema.jobs.state, 'admitted'),
+          notExists(
+            deps.db
+              .select({ key: schema.jobTickets.key })
+              .from(schema.jobTickets)
+              .where(and(eq(schema.jobTickets.jobId, jobId), isNotNull(schema.jobTickets.cancelRequestedAt))),
+          ),
+        ),
+      )
       .run();
-    if (filedUpdate.changes === 0) return { filed: true, issues: issueNumbers };
+    if (filed.changes === 0) {
+      const state = deps.db
+        .select({ state: schema.jobs.state })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.id, jobId))
+        .get()?.state;
+      if (state === 'running') return { filed: true, issues: issueNumbers };
+      return { skipped: `state:${state ?? 'missing'}` };
+    }
     if (found.job.kind === 'scope') {
       deps.db
         .update(schema.scopeSessions)
@@ -639,10 +757,29 @@ export function createIntake(deps: IntakeDeps) {
   }
 
   async function failPreflight(job: typeof schema.jobs.$inferSelect, reasons: string[]): Promise<FileResult> {
-    await notify({ code: 'preflight_failed', jobId: job.id, reasons });
+    const result = deps.db.transaction(
+      (tx): FileResult => {
+        const current = tx
+          .select({ state: schema.jobs.state })
+          .from(schema.jobs)
+          .where(eq(schema.jobs.id, job.id))
+          .get();
+        if (current?.state !== 'admitted') return { skipped: `state:${current?.state ?? 'missing'}` };
+        const ticket = tx
+          .select({ key: schema.jobTickets.key })
+          .from(schema.jobTickets)
+          .where(eq(schema.jobTickets.jobId, job.id))
+          .get();
+        if (ticket) return { deferred: 'aiur' };
+        deps.failJob(job.id);
+        return { failed: 'preflight', reasons };
+      },
+      { behavior: 'immediate' },
+    );
     if ((job.idempotencyKey ?? '').startsWith('planner:')) return { deferred: 'aiur' };
-    deps.failJob(job.id);
-    return { failed: 'preflight', reasons };
+    if ('skipped' in result) return result;
+    await notify({ code: 'preflight_failed', jobId: job.id, reasons });
+    return result;
   }
 
   async function sweep(): Promise<void> {

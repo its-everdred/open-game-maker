@@ -365,6 +365,13 @@
       "when": 1795842106729,
       "tag": "20261128050146_publish_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "6",
+      "when": 1795854937483,
+      "tag": "20261128083537_ticket_lifecycle",
+      "breakpoints": true
     }
   ]
 }

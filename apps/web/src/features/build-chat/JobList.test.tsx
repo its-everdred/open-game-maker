@@ -16,6 +16,26 @@ afterEach(() => {
 });
 
 describe('JobList', () => {
+  it('shows a queued job position', () => {
+    render(
+      <MemoryRouter>
+        <JobList jobs={[buildChatJob({ state: 'queued', position: 2 })]} unitLabel="coin" onOpen={vi.fn()} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Waiting for a build slot: #2')).toBeTruthy();
+  });
+  it('does not describe a reset-scheduled job as waiting for a slot', () => {
+    render(
+      <MemoryRouter>
+        <JobList
+          jobs={[buildChatJob({ state: 'queued', start: 'at_reset', position: 2 })]}
+          unitLabel="coin"
+          onOpen={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText('Waiting for a build slot: #2')).toBeNull();
+  });
   it('surfaces a cancel failure through the existing toast feed', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     cancelJob.mockRejectedValue(new Error('offline'));

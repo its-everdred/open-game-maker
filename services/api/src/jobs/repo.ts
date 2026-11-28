@@ -1,10 +1,10 @@
 import { JobPlan, Reservation, type CreateJobAccepted, type Job, type JobState } from '@ogm/contracts';
 import { schema, type Db } from '@ogm/db';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 
 import { HttpError } from '../app/errors.js';
 import { daemonRowForGame } from './daemons.js';
-import { SLOT_STATES } from './state.js';
+import { hasUnfinishedTickets, jobHasOutstandingWork } from './creator-slot.js';
 
 export type JobRow = typeof schema.jobs.$inferSelect;
 
@@ -12,6 +12,7 @@ export function toJob(
   row: JobRow,
   projection?: typeof schema.jobProjections.$inferSelect | null,
   openRequestCount = 0,
+  position?: number,
 ): Job {
   return {
     id: row.id,
@@ -43,6 +44,7 @@ export function toJob(
       ? {}
       : { progressPercent: projection.progressPercent }),
     openRequestCount,
+    ...(position === undefined ? {} : { position }),
   };
 }
 
@@ -60,7 +62,7 @@ export function findJob(db: Db, id: string): Job {
     .where(eq(schema.jobs.id, id))
     .get();
   if (!found) throw new HttpError(404, 'job_not_found');
-  return toJob(found.job, found.projection, openRequestCounts(db, [id]).get(id));
+  return toJob(found.job, found.projection, openRequestCounts(db, [id]).get(id), queuePosition(db, found.job));
 }
 
 export function listJobs(db: Db, gameIds: string | readonly string[]): Job[] {
@@ -77,7 +79,8 @@ export function listJobs(db: Db, gameIds: string | readonly string[]): Job[] {
     db,
     rows.map(({ job }) => job.id),
   );
-  return rows.map(({ job, projection }) => toJob(job, projection, requests.get(job.id)));
+  const at = new Date();
+  return rows.map(({ job, projection }) => toJob(job, projection, requests.get(job.id), queuePosition(db, job, at)));
 }
 
 function openRequestCounts(db: Db, jobIds: readonly string[]): Map<string, number> {
@@ -91,25 +94,33 @@ function openRequestCounts(db: Db, jobIds: readonly string[]): Map<string, numbe
   return new Map(rows.map(({ jobId, count }) => [jobId, Number(count)]));
 }
 
-export function acceptedFor(db: Db, row: JobRow): CreateJobAccepted {
+export function acceptedFor(db: Db, row: JobRow, at = new Date()): CreateJobAccepted {
   const reservation = Reservation.parse(JSON.parse(row.reservation));
   if (row.state !== 'queued') return { jobId: row.id, state: 'admitted', reservation, slot: row.slot };
+  return { jobId: row.id, state: row.state, reservation, slot: row.slot, position: queuePosition(db, row, at) };
+}
+
+function queuePosition(db: Db, row: JobRow, at = new Date()): number | undefined {
+  if (row.state !== 'queued') return undefined;
+  const now = at.toISOString();
+  const ready = row.start === 'now' || (row.startAt !== null && row.startAt <= now);
   const position =
     db
       .select({ id: schema.jobs.id })
       .from(schema.jobs)
       .where(
         and(
-          eq(schema.jobs.familyId, row.familyId),
+          // Creator capacity is shared across games and families. A creator waiting on that
+          // limit needs one coherent position across every queue that can consume the slot.
+          eq(schema.jobs.creatorId, row.creatorId),
           eq(schema.jobs.state, 'queued'),
-          eq(schema.jobs.slot, row.slot),
-          eq(schema.jobs.start, row.start),
+          ready ? or(eq(schema.jobs.start, 'now'), lte(schema.jobs.startAt, now)) : eq(schema.jobs.start, 'at_reset'),
         ),
       )
       .orderBy(asc(schema.jobs.createdAt), sql`rowid`)
       .all()
       .findIndex(({ id }) => id === row.id) + 1;
-  return { jobId: row.id, state: row.state, reservation, slot: row.slot, position: Math.max(1, position) };
+  return Math.max(1, position);
 }
 
 // A daemon's ticket maps to a job through the job's game: the game's own daemon, or the registered daemon its
@@ -117,6 +128,14 @@ export function acceptedFor(db: Db, row: JobRow): CreateJobAccepted {
 export function byTicket(db: Db, daemonSlug: string, ticket: string): { id: string; state: JobState } | null {
   const issueNumber = Number(ticket);
   if (!Number.isSafeInteger(issueNumber)) return null;
+  const linked = db
+    .select({ id: schema.jobs.id, state: schema.jobs.state, gameId: schema.jobs.gameId })
+    .from(schema.jobTickets)
+    .innerJoin(schema.jobs, eq(schema.jobTickets.jobId, schema.jobs.id))
+    .where(eq(schema.jobTickets.issueNumber, issueNumber))
+    .all()
+    .find((job) => daemonRowForGame(db, job.gameId)?.slug === daemonSlug);
+  if (linked) return { id: linked.id, state: linked.state };
   const found = db
     .select({ id: schema.jobs.id, state: schema.jobs.state, gameId: schema.jobs.gameId })
     .from(schema.jobs)
@@ -132,12 +151,27 @@ export function activeJobs(db: Db, daemonSlug: string): { jobId: string; ticket:
   return db
     .select({ jobId: schema.jobs.id, gameId: schema.jobs.gameId, issueNumber: schema.jobs.aiurIssueNumber })
     .from(schema.jobs)
-    .where(and(inArray(schema.jobs.state, NON_TERMINAL_STATES), isNull(schema.jobs.releasedAt)))
+    .where(
+      or(
+        and(inArray(schema.jobs.state, NON_TERMINAL_STATES), isNull(schema.jobs.releasedAt)),
+        hasUnfinishedTickets(db),
+      ),
+    )
     .orderBy(asc(schema.jobs.aiurIssueNumber), asc(schema.jobs.id))
     .all()
-    .filter((row): row is { jobId: string; gameId: string; issueNumber: number } => row.issueNumber !== null)
     .filter((row) => daemonRowForGame(db, row.gameId)?.slug === daemonSlug)
-    .map(({ jobId, issueNumber }) => ({ jobId, ticket: String(issueNumber) }));
+    .flatMap(({ jobId, issueNumber }) => {
+      const tickets = db
+        .select({ issueNumber: schema.jobTickets.issueNumber })
+        .from(schema.jobTickets)
+        .where(eq(schema.jobTickets.jobId, jobId))
+        .orderBy(asc(schema.jobTickets.issueNumber))
+        .all();
+      return (tickets.length === 0 ? (issueNumber === null ? [] : [{ issueNumber }]) : tickets).map((ticket) => ({
+        jobId,
+        ticket: String(ticket.issueNumber),
+      }));
+    });
 }
 
 // Jobs admitted and not finished for one game's daemon: the fleet sizes its concurrency from these.
@@ -146,13 +180,7 @@ export function activeJobsForSlug(db: Db, gameSlug: string): { kind: 'new_game' 
     .select({ kind: schema.jobs.kind })
     .from(schema.jobs)
     .innerJoin(schema.games, eq(schema.jobs.gameId, schema.games.id))
-    .where(
-      and(
-        eq(schema.games.slug, gameSlug.toLowerCase()),
-        inArray(schema.jobs.state, SLOT_STATES),
-        isNull(schema.jobs.releasedAt),
-      ),
-    )
+    .where(and(eq(schema.games.slug, gameSlug.toLowerCase()), jobHasOutstandingWork(db)))
     .all()
     .map(({ kind }) => ({ kind: kind === 'scope' ? ('feature' as const) : kind }));
 }

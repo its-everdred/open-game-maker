@@ -49,6 +49,7 @@ export interface AppDeps {
     voiceInternalSecret?: string;
     narrationConcurrency: number;
     defaultDailyAllowanceMicroUsd: number;
+    creatorJobLimit: number;
     defaultDailyAllowanceConfigured?: boolean;
     resetZoneDefault: string;
     testerNewGamesPerDay?: number;

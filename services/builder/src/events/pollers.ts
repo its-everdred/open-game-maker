@@ -1,4 +1,7 @@
+import { AiurHttpError } from '@ogm/aiur-client';
+
 import type { FeedDeps, RunningDaemon } from './types.js';
+import { terminalSnapshot } from './terminal-snapshot.js';
 
 // What the feed lacks: the agent's phase and percent, and the tracker label with its waiting reasons.
 export function createPollers(deps: FeedDeps) {
@@ -24,8 +27,18 @@ export function createPollers(deps: FeedDeps) {
         deps.apply.progress(daemon.slug, ticket, await daemon.client.progress(ticket)),
       ),
     issue: (running: RunningDaemon[]) =>
-      each(running, 'issue', async (daemon, ticket) =>
-        deps.apply.issue(daemon.slug, ticket, await daemon.client.issue(ticket)),
-      ),
+      each(running, 'issue', async (daemon, ticket) => {
+        try {
+          const issue = await daemon.client.issue(ticket);
+          deps.apply.issue(daemon.slug, ticket, issue);
+          if (terminalSnapshot(issue)) await deps.onMissingIssue?.(daemon.slug, ticket);
+        } catch (error) {
+          if (error instanceof AiurHttpError && error.status === 404 && deps.onMissingIssue) {
+            await deps.onMissingIssue(daemon.slug, ticket);
+            return;
+          }
+          throw error;
+        }
+      }),
   };
 }

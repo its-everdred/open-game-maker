@@ -6,6 +6,7 @@ export const aiurEvents = sqliteTable(
   'aiur_events',
   {
     daemonSlug: text('daemon_slug').notNull(),
+    epoch: text('epoch').notNull().default(''),
     seq: integer('seq').notNull(),
     topic: text('topic').notNull(),
     ticket: text('ticket'),
@@ -14,7 +15,7 @@ export const aiurEvents = sqliteTable(
     observedAt: text('observed_at').notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.daemonSlug, table.seq] }),
+    primaryKey({ columns: [table.daemonSlug, table.epoch, table.seq] }),
     index('aiur_events_job_seq').on(table.jobId, table.seq),
   ],
 );

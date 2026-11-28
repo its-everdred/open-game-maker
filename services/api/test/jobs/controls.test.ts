@@ -325,6 +325,92 @@ describe('job controls', () => {
     expect(cancel).toHaveBeenCalledWith('99');
     expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, ids.job)).get()?.state).toBe('cancelled');
   });
+  it('does not release an admitted job while its ticket is being filed', async () => {
+    const deps = setup('queued');
+    deps.db.update(schema.jobs).set({ state: 'admitted' }).run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({
+        jobId: ids.job,
+        key: 'first',
+        issueNumber: 142,
+        repo: 'owner/game',
+        sig: 'first',
+        capSetAt: NOW.toISOString(),
+      })
+      .run();
+    const { app } = appWith(deps);
+
+    expect((await post(app, 'cancel')).status).toBe(409);
+    expect(deps.db.select().from(schema.jobs).get()).toMatchObject({ state: 'admitted', releasedAt: null });
+  });
+  it('cancels a stalled filing before any ticket has a spend cap', async () => {
+    const deps = setup('queued');
+    deps.db.update(schema.jobs).set({ state: 'admitted' }).run();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({ jobId: ids.job, key: 'first', issueNumber: 142, repo: 'owner/game', sig: 'first' })
+      .run();
+    const { app } = appWith(deps);
+
+    expect((await post(app, 'cancel')).status).toBe(200);
+    expect(deps.db.select().from(schema.jobs).get()).toMatchObject({
+      state: 'cancelled',
+      releasedAt: expect.any(String),
+    });
+    expect(deps.db.select().from(schema.jobTickets).get()?.terminalState).toBe('cancelled');
+  });
+  it('does not cancel an admitted New Game request while its parent may be in flight', async () => {
+    const deps = setup('queued');
+    deps.db.update(schema.jobs).set({ state: 'admitted', kind: 'new_game' }).run();
+    const { app } = appWith(deps);
+    expect((await post(app, 'cancel')).status).toBe(409);
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('admitted');
+  });
+  it('confirms every ticket before cancelling a multi-ticket job', async () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.jobTickets)
+      .values([
+        { jobId: ids.job, key: 'first', issueNumber: 142, repo: 'owner/game', sig: 'first' },
+        { jobId: ids.job, key: 'second', issueNumber: 143, repo: 'owner/game', sig: 'second' },
+      ])
+      .run();
+    const cancel = vi
+      .fn()
+      .mockResolvedValueOnce({ process: { status: 'exited' } })
+      .mockResolvedValue({ process: { status: 'still_running' } });
+    const { app } = appWith(deps, { client: { cancel } });
+
+    expect((await post(app, 'cancel')).status).toBe(503);
+    expect(cancel.mock.calls.map(([ticket]) => ticket)).toEqual(['142', '143', '143', '143']);
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('running');
+    cancel.mockReset().mockResolvedValue({ process: { status: 'exited' } });
+    expect((await post(app, 'cancel')).status).toBe(200);
+    expect(cancel.mock.calls.map(([ticket]) => ticket)).toEqual(['143']);
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('cancelled');
+  });
+  it('keeps multi-ticket work active when the daemon is unavailable', async () => {
+    const deps = setup();
+    deps.db
+      .insert(schema.jobTickets)
+      .values([
+        { jobId: ids.job, key: 'first', issueNumber: 142, repo: 'owner/game', sig: 'first' },
+        { jobId: ids.job, key: 'second', issueNumber: 143, repo: 'owner/game', sig: 'second' },
+      ])
+      .run();
+    const setStateLabel = vi.fn();
+    const { app } = appWith(deps, { client: null, issues: { setStateLabel } });
+    expect((await post(app, 'cancel')).status).toBe(503);
+    expect(setStateLabel).not.toHaveBeenCalled();
+    expect(
+      deps.db
+        .select()
+        .from(schema.jobTickets)
+        .all()
+        .every((ticket) => ticket.terminalState === null),
+    ).toBe(true);
+  });
   it('authorizes before making an aiur call', async () => {
     const deps = setup();
     const cancel = vi.fn();

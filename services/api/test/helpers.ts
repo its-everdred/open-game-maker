@@ -79,6 +79,7 @@ export function makeDeps(): AppDeps & { lines: LogLine[] } {
       designDefaultMs: 300_000,
       analyticsRetentionDays: 90,
       defaultDailyAllowanceMicroUsd: 5_000_000,
+      creatorJobLimit: 1,
       resetZoneDefault: 'America/Los_Angeles',
       reportBundleMaxBytes: 2 * 1024 * 1024,
       blobPutMaxBytes: 1024,

@@ -35,8 +35,9 @@ import { finishRun, startBuildSweep } from './builds/publish.js';
 import { plannerBaseVerifier } from './previews/planner-base.js';
 import { createDaemonDirectory, daemonRowForGame } from './jobs/daemons.js';
 import { recordDaemonReadTokenStatus } from './job-commands/health.js';
-import { activeJobs, activeJobsForSlug, byTicket } from './jobs/repo.js';
-import { applyAiurEvent, applyIssueSnapshot, applyProgress } from './jobs/projection.js';
+import { activeJobs, activeJobsForSlug, byTicket, findJobRow } from './jobs/repo.js';
+import { applyAiurEvent, applyIssueSnapshot, applyProgress, reconcileFiledTickets } from './jobs/projection.js';
+import { createTicketRecovery, resetTicketSequences } from './jobs/ticket-recovery.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { ticketJobResolver } from './internal/ticket-job.js';
 import { markPaused, markRunning, markTerminal } from './jobs/spend-cap.js';
@@ -121,6 +122,7 @@ const deps: AppDeps = {
     voiceInternalSecret: env.OGM_VOICE_INTERNAL_SECRET,
     narrationConcurrency: env.OGM_NARRATION_CONCURRENCY,
     defaultDailyAllowanceMicroUsd: env.OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD,
+    creatorJobLimit: env.OGM_CREATOR_JOB_LIMIT,
     defaultDailyAllowanceConfigured: env.defaultDailyAllowanceConfigured,
     resetZoneDefault: env.OGM_RESET_ZONE_DEFAULT,
     testerNewGamesPerDay: env.OGM_TESTER_NEW_GAMES_PER_DAY,
@@ -190,6 +192,7 @@ startPreviewRelay(deps, previewTicketVerifier(env.OGM_INTAKE_GITHUB_TOKEN));
 
 const budgetDefaults = {
   dailyAllowanceMicroUsd: deps.config.defaultDailyAllowanceMicroUsd,
+  creatorJobLimit: deps.config.creatorJobLimit,
   defaultAllowanceConfigured: deps.config.defaultDailyAllowanceConfigured,
   resetZone: deps.config.resetZoneDefault,
 };
@@ -231,7 +234,15 @@ const intake = createIntake({
       if (state === 'admitted' || state === 'queued') listener(jobId);
     });
   },
-  onJobChanged: (event) => deps.events.emit('job.changed', event),
+  onJobChanged: (event) => {
+    deps.events.emit('job.changed', event);
+    if (event.state === 'filed') {
+      const daemon = daemonRowForGame(db, event.gameId);
+      const job = findJobRow(db, event.jobId);
+      if (daemon && job.aiurIssueNumber !== null)
+        reconcileFiledTickets(projectionDeps, daemon.slug, String(job.aiurIssueNumber));
+    }
+  },
   alert: (event) => log({ event: 'job_intake_alert', ...event }),
   sweepMs: env.OGM_INTAKE_SWEEP_SECONDS * 1000,
 });
@@ -293,6 +304,8 @@ const feed = startFeedConsumers({
   fleet,
   db,
   activeJobs: (daemonSlug) => activeJobs(db, daemonSlug),
+  onMissingIssue: createTicketRecovery(projectionDeps, (repo, issueNumber) => issues.labels(repo, issueNumber)),
+  onFeedReset: (daemonSlug) => resetTicketSequences(db, daemonSlug),
   apply: {
     record: (daemonSlug, record) => void applyAiurEvent(projectionDeps, daemonSlug, record),
     issue: (daemonSlug, ticket, issue) => void applyIssueSnapshot(projectionDeps, daemonSlug, ticket, issue),

@@ -6,6 +6,7 @@ export type BudgetDefaults = {
   dailyAllowanceMicroUsd: number;
   resetZone: string;
   defaultAllowanceConfigured?: boolean;
+  creatorJobLimit?: number;
 };
 
 // Legacy cost caps remain effective only when an admin has explicitly configured them.

@@ -105,6 +105,7 @@ export const Job = z.object({
   phase: z.enum(['brainstorm', 'plan', 'work', 'review']).optional(),
   progressPercent: z.number().int().min(0).max(100).optional(),
   openRequestCount: z.number().int().nonnegative().optional(),
+  position: z.number().int().positive().optional(),
 });
 // The words OGM-076/079 display verbatim; `paused` reads JOB_WAITING_FOR_ANSWER while aiur holds a decision.
 export const JOB_STAGE_WORDS = {

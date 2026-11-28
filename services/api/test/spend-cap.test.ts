@@ -71,6 +71,12 @@ const lifecycleDeps = (deps: ReturnType<typeof makeDeps>) => ({
 });
 
 describe('job spend cap and lifecycle', () => {
+  it('records completion when a budget-paused worker finishes', () => {
+    const { deps, changed } = seed('paused_budget');
+    markTerminal(lifecycleDeps(deps), 'j_1', 'done', { deferRelease: true });
+    expect(deps.db.select().from(schema.jobs).get()?.state).toBe('done');
+    expect(changed).toEqual(['done']);
+  });
   it('formats integer micro-dollars without float ambiguity', () => {
     expect(toUsdString(9_000_000)).toBe('9.000000');
     expect(toUsdString(1)).toBe('0.000001');
