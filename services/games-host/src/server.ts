@@ -11,6 +11,7 @@ import { gameHeaders, healthHeaders } from './headers.js';
 import { FRAME_OBSERVER, FRAME_OBSERVER_FILE, observeFrameHtml } from './frame-observer.js';
 import { BadBlobName, BadId, blobPath, buildDir, isComplete, resolveFile } from './layout.js';
 import { isCompressiblePath, mimeForPath } from './mime.js';
+import { liveAsset, liveEntry } from './live-route.js';
 import { bootstrapPreviewHtml, PREVIEW_BOOTSTRAP, PREVIEW_BOOTSTRAP_FILE } from './preview-bootstrap.js';
 
 export interface GamesHostOptions {
@@ -31,10 +32,10 @@ export function createApp(options: GamesHostOptions): Hono {
     for (const [name, value] of gameHeaderEntries) {
       context.res.headers.set(name, value);
     }
-    if (new URL(context.req.url).pathname.startsWith('/p/')) {
+    if (/^\/(?:p|l)\//u.test(new URL(context.req.url).pathname)) {
       context.res.headers.set('Access-Control-Allow-Origin', '*');
     }
-    if (context.res.status !== 200 || new URL(context.req.url).pathname.startsWith('/p/')) {
+    if (context.res.status !== 200 || /^\/(?:p|l)\//u.test(new URL(context.req.url).pathname)) {
       context.res.headers.set('Cache-Control', 'no-store');
     } else if (new URL(context.req.url).pathname === '/game-cache.js') {
       context.res.headers.set('Cache-Control', 'no-cache');
@@ -43,6 +44,7 @@ export function createApp(options: GamesHostOptions): Hono {
   };
   app.use('/g/*', secureResponse);
   app.use('/p/*', secureResponse);
+  app.use('/l/*', secureResponse);
   app.use('/a/*', secureResponse);
   app.use('/game-cache.js', secureResponse);
 
@@ -156,6 +158,9 @@ export function createApp(options: GamesHostOptions): Hono {
   });
   app.on(['GET', 'HEAD'], '/g/:gameId/:buildId/*', serveGame);
   app.on(['GET', 'HEAD'], '/p/:gameId/:buildId/*', serveGame);
+  app.on(['GET', 'HEAD'], '/l/:gameId/:accessId', liveEntry(options.root));
+  app.on(['GET', 'HEAD'], '/l/:gameId/:accessId/', liveEntry(options.root));
+  app.on(['GET', 'HEAD'], '/l/:gameId/:accessId/:version/*', liveAsset(options.root));
   app.on(['GET', 'HEAD'], '/a/:file', serveBlob);
   app.on(['GET', 'HEAD'], '/game-cache.js', (context) =>
     serveFile(context, options.workerScript, { 'Service-Worker-Allowed': '/g/' }),

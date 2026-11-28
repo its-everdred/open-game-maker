@@ -9,6 +9,7 @@ import { parseBody } from '../app/validate.js';
 import type { ApiBindings } from '../app/types.js';
 import { authorizedGame } from '../games/authorize.js';
 import { requirePrincipal } from '../app/principal.js';
+import { issueLiveAccess } from './live.js';
 import { latestRoundForTicket, roundForBuild } from '../review-rounds/store.js';
 import {
   beginReviewAnswer,
@@ -36,6 +37,11 @@ const Verdict = z
   .strict();
 
 export default new Hono<ApiBindings>()
+  .get('/games/:gameId/live/:ticket', async (c) => {
+    const game = authorizedGame(c, 'game.edit');
+    const live = await issueLiveAccess(c.get('deps'), game, c.req.param('ticket'));
+    return c.json({ gameId: game.id, ...live });
+  })
   .get('/games/:gameId/editor/preview-history', async (c) => {
     const game = authorizedGame(c, 'game.edit');
     return c.json({ previews: await listPreviewHistory(c.get('deps'), game.id) });

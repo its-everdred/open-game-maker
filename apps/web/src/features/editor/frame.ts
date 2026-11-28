@@ -97,6 +97,8 @@ export type MountGameFrameOptions = {
   gameId: string;
   buildId: string;
   preview?: boolean;
+  live?: boolean;
+  liveVersion?: string;
   mode: 'play' | 'edit';
   design: { rev: number; doc: DesignDoc };
   build?: 'draft' | 'test' | 'published';
@@ -237,7 +239,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
   const observeOrigin = (event: MessageEvent) => {
     if (event.origin === trustedOrigin) return;
     if (
-      options.preview &&
+      (options.preview || options.live) &&
       event.origin === 'null' &&
       event.source === options.container.querySelector('iframe')?.contentWindow
     )
@@ -255,6 +257,8 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
       gameId: options.gameId,
       buildId: options.buildId,
       ...(options.preview ? { preview: true } : {}),
+      ...(options.live ? { live: true } : {}),
+      ...(options.liveVersion ? { liveVersion: options.liveVersion } : {}),
       build: options.build ?? 'draft',
       ...(options.params === undefined ? {} : { params: options.params }),
       mode: options.mode,

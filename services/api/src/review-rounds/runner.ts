@@ -15,6 +15,19 @@ import { syncCommandVerdicts } from './command-verdicts.js';
 import { queueReviewReminders } from './reminders.js';
 import { stopReview } from './kill.js';
 import { dispatchPublishedPrototypeVerdict } from './publish-verdict.js';
+import { grantedLiveWorkspace } from '../previews/live-workspace.js';
+
+function isLiveRound(round: { id: string; media: string }): boolean {
+  try {
+    const media: unknown = JSON.parse(round.media);
+    return (
+      Array.isArray(media) &&
+      media.some((item: { kind?: string; ref?: string }) => item.kind === 'build' && item.ref === `live-${round.id}`)
+    );
+  } catch {
+    return false;
+  }
+}
 
 export function createReviewSync(deps: {
   db: Db;
@@ -77,15 +90,19 @@ export function createReviewSync(deps: {
           if (shared && intent?.state !== 'delivered' && intent?.state !== 'consumed') {
             const game = deps.db.select().from(schema.games).where(eq(schema.games.id, round.gameId)).get();
             const daemon = reviewDaemonForGame(deps.db, round.gameId);
-            if (!game?.githubPath || !game.githubOwner || !game.githubRepo || !daemon)
+            if (!game?.slug || !game.githubPath || !game.githubOwner || !game.githubRepo)
               throw new Error('review_game_not_configured');
-            const track = (
-              await listTracks(
-                await reviewCheckout(daemon.checkoutPath, round.ticket, daemon.repo),
-                game.githubPath,
-                round.sha,
-              )
-            ).find((item) => item.id === round.track);
+            const checkout = isLiveRound(round)
+              ? await grantedLiveWorkspace(
+                  `${game.githubOwner}/${game.githubRepo}`.toLowerCase(),
+                  round.ticket,
+                  game.slug,
+                )
+              : daemon && (await reviewCheckout(daemon.checkoutPath, round.ticket, daemon.repo));
+            if (!checkout) throw new Error('review_game_not_configured');
+            const track = (await listTracks(checkout, game.githubPath, round.sha)).find(
+              (item) => item.id === round.track,
+            );
             const index = track?.phases.findIndex((phase) => phase.id === round.phase) ?? -1;
             if (!track || index < 0) throw new Error('review_track_not_found');
             const phase = track.phases[index]!;
@@ -104,9 +121,16 @@ export function createReviewSync(deps: {
         } else {
           const game = deps.db.select().from(schema.games).where(eq(schema.games.id, round.gameId)).get();
           const daemon = reviewDaemonForGame(deps.db, round.gameId);
-          if (!game?.slug || !game.githubOwner || !game.githubRepo || !game.githubPath || !daemon)
+          if (!game?.slug || !game.githubOwner || !game.githubRepo || !game.githubPath)
             throw new Error('review_game_not_configured');
-          const checkout = await reviewCheckout(daemon.checkoutPath, round.ticket, daemon.repo);
+          const checkout = isLiveRound(round)
+            ? await grantedLiveWorkspace(
+                `${game.githubOwner}/${game.githubRepo}`.toLowerCase(),
+                round.ticket,
+                game.slug,
+              )
+            : daemon && (await reviewCheckout(daemon.checkoutPath, round.ticket, daemon.repo));
+          if (!checkout) throw new Error('review_game_not_configured');
           const tracks = await listTracks(checkout, game.githubPath, round.sha);
           const currentTracks = await listTracks(checkout, game.githubPath);
           for (const candidate of [...tracks, ...currentTracks]) {

@@ -35,6 +35,7 @@ export function buildRoutes(opts: {
   gameForSecret?: HookGameResolver;
   trackFor?: (checkout: string, gamePath: string, sha: string, track: string) => Promise<ReviewTrack>;
   authorizedAudio?: ReadonlySet<string>;
+  authorizedLive?: boolean;
   publishLog?: typeof logReviewPublish;
   submitReview?: (
     deps: import('../app/types.js').AppDeps,
@@ -161,14 +162,21 @@ export function buildRoutes(opts: {
       }
       const parsed = ReviewSubmission.safeParse(body);
       if (!parsed.success) return c.json({ error: { code: 'invalid_round', details: parsed.error.issues } }, 400);
+      const builds = parsed.data.media.filter((media) => media.kind === 'build');
+      if (
+        builds.some((build) => build.ref.startsWith('live-')) &&
+        (!opts.authorizedLive || builds.length !== 1 || builds[0]!.ref !== `live-${parsed.data.id}`)
+      )
+        return c.json({ error: { code: 'preview_not_found' } }, 422);
       const daemonRow = reviewDaemonForGame(deps.db, game.id);
-      if (!daemonRow || !game.githubPath) return c.json({ error: { code: 'track_checkout_unavailable' } }, 503);
+      if (!game.githubPath || (!daemonRow && !(opts.authorizedLive && opts.trackFor)))
+        return c.json({ error: { code: 'track_checkout_unavailable' } }, 503);
       let track: ReviewTrack;
       try {
         track = await (opts.trackFor ?? readTrack)(
           opts.trackFor
-            ? daemonRow.checkoutPath
-            : await reviewCheckout(daemonRow.checkoutPath, parsed.data.ticket, daemonRow.repo),
+            ? (daemonRow?.checkoutPath ?? '')
+            : await reviewCheckout(daemonRow!.checkoutPath, parsed.data.ticket, daemonRow!.repo),
           game.githubPath,
           parsed.data.sha,
           parsed.data.track,
@@ -196,7 +204,8 @@ export function buildRoutes(opts: {
           return c.json({ error: { code: 'review_media_invalid' } }, 422);
       }
       if (
-        (parsed.data.category === 'art' || (parsed.data.category === 'gameplay' && parsed.data.phase === 'mock')) &&
+        (parsed.data.category === 'art' ||
+          (parsed.data.category === 'gameplay' && (parsed.data.phase === 'mock' || opts.authorizedLive))) &&
         !getRound(deps.db, game.id, parsed.data.id)
       ) {
         const assets = parsed.data.media.filter((media) => media.kind === 'still' || media.kind === 'clip');
@@ -225,7 +234,12 @@ export function buildRoutes(opts: {
       if (
         parsed.data.category === 'gameplay' &&
         parsed.data.media.some((media) => media.kind === 'build') &&
-        !getRound(deps.db, game.id, parsed.data.id)
+        !getRound(deps.db, game.id, parsed.data.id) &&
+        !(
+          opts.authorizedLive &&
+          parsed.data.media.filter((media) => media.kind === 'build').length === 1 &&
+          parsed.data.media.some((media) => media.kind === 'build' && media.ref === `live-${parsed.data.id}`)
+        )
       ) {
         const previews = await listEditorPreviews(deps, game.id);
         const builds = parsed.data.media.filter((media) => media.kind === 'build');
