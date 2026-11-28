@@ -61,6 +61,7 @@ export interface GameFrame {
   send<T extends HostType>(type: T, payload: HostPayload<T>): void;
   request<T extends Extract<HostType, `test.${string}`>>(type: T, payload: HostPayload<T>): Promise<unknown>;
   restoreSave?(payload: HostPayload<'save.restore'>): Promise<HostPayload<'save.restore'>>;
+  captureReport(): Promise<string | undefined>;
   project(x: number, y: number, prefab?: string): Promise<[number, number, number] | null>;
   pick(x: number, y: number): ReturnType<HostBridge['pick']>;
   on<T extends GameType>(type: T, callback: (payload: GamePayload<T>) => void): () => void;
@@ -235,6 +236,7 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
     send: bridge.send.bind(bridge) as GameFrame['send'],
     request: bridge.request.bind(bridge) as GameFrame['request'],
     restoreSave: bridge.restoreSave.bind(bridge),
+    captureReport: bridge.captureReport.bind(bridge),
     project: bridge.project.bind(bridge),
     pick: bridge.pick.bind(bridge),
     on: bridge.on.bind(bridge) as GameFrame['on'],

@@ -48,7 +48,7 @@ import { annotateGeneratedPalette } from '../../features/editor/palette-generate
 import { starterPalette } from '../../features/editor/starter-palette';
 import { containedStagePoint, mountStagePreview } from '../../features/editor/stage-preview';
 import { admitJob } from '../../features/scope-chat/admit';
-import { sendReport, setBugContext } from '../../features/bug-report';
+import { bugContext, registerReportCapture, sendReport, setBugContext } from '../../features/bug-report';
 import type { FileBug } from '../../features/game-menu/BugComposer';
 import { bugLog } from '../../features/game-menu/bug-log';
 import { fileBug as fileBugRequest } from '../../features/game-menu/file-bug';
@@ -148,6 +148,10 @@ export function GameScreen() {
   const jobBranch = branches.data?.find(({ id }) => id === branch)?.name === 'main' ? 'main' : branch;
   const containerRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<GameFrameController | undefined>(undefined);
+  useEffect(
+    () => registerReportCapture(gameId, () => frameRef.current?.captureReport?.() ?? Promise.resolve(undefined)),
+    [gameId],
+  );
   const awayHold = useRef(false);
   useEarlyAwayHold(mode === 'play' && roomId === undefined, gameId, awayHold, () => setMenuOpen(true));
   const [frameController, setFrameController] = useState<GameFrameController>();
@@ -512,10 +516,14 @@ export function GameScreen() {
       return;
     }
     frameRef.current = controller;
+    const reportBuildId = framePreview?.buildId ?? snapshot.buildId;
+    setBugContext({ gameId, buildHash: reportBuildId });
     setFrameController(controller);
     setWatcherCamera('follow');
     return () => {
       controller.dispose();
+      const context = bugContext();
+      if (context.gameId === gameId && context.buildHash === reportBuildId) setBugContext({});
       if (frameRef.current === controller) frameRef.current = undefined;
       setFrameController((current) => (current === controller ? undefined : current));
     };

@@ -287,6 +287,85 @@ describe('file_issue', () => {
     ).resolves.toMatchObject({ ok: false, verdict: { reasons: [{ code: 'denylist' }] } });
     expect(calls).toHaveLength(0);
   });
+
+  it('allows reports to enter the non-dispatching triage queue', async () => {
+    const { request, calls } = fakeRequest(() => ({ number: 43 }));
+    await expect(
+      fileIssue(
+        { kind: 'file_issue', title: 'Player report', body: 'Build b_1', labels: ['needs-triage'] },
+        contextWith(request),
+      ),
+    ).resolves.toEqual({ ok: true, sha: 'issue:43' });
+    expect(calls.find((call) => call.route === 'POST /repos/{owner}/{repo}/issues')?.parameters).toMatchObject({
+      labels: ['needs-triage'],
+    });
+  });
+
+  it('finds an earlier issue after an indeterminate filing result', async () => {
+    const { request, calls } = fakeRequest((call) => {
+      if (call.route.startsWith('GET ')) return [{ number: 43, body: 'Report\n\n<!-- ogm-report:r_1 -->' }];
+      throw new Error('must not create a second issue');
+    });
+    await expect(
+      fileIssue(
+        {
+          kind: 'file_issue',
+          title: 'Report',
+          body: 'Report',
+          labels: ['needs-triage'],
+          idempotencyKey: 'r_1',
+          reconcile: true,
+        },
+        contextWith(request),
+      ),
+    ).resolves.toEqual({ ok: true, sha: 'issue:43' });
+    expect(calls).toHaveLength(2);
+  });
+
+  it('coalesces concurrent filings of the same report', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { request, calls } = fakeRequest(async () => {
+      await held;
+      return { number: 44 };
+    });
+    const op = {
+      kind: 'file_issue' as const,
+      title: 'Report',
+      body: 'Report',
+      labels: ['needs-triage'],
+      idempotencyKey: 'r_concurrent',
+    };
+    const context = contextWith(request);
+    const first = fileIssue(op, context);
+    const second = fileIssue({ ...op, reconcile: true }, context);
+    release();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { ok: true, sha: 'issue:44' },
+      { ok: true, sha: 'issue:44' },
+    ]);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('creates the triage label when the repository does not have it', async () => {
+    const { request, calls } = fakeRequest((call) => {
+      if (call.route === 'GET /repos/{owner}/{repo}/labels/{name}') throw new GitHubRequestError('missing', 404);
+      return call.route === 'POST /repos/{owner}/{repo}/issues' ? { number: 45 } : {};
+    });
+    await expect(
+      fileIssue(
+        { kind: 'file_issue', title: 'Report', body: 'Report', labels: ['needs-triage'] },
+        contextWith(request),
+      ),
+    ).resolves.toEqual({ ok: true, sha: 'issue:45' });
+    expect(calls.map((call) => call.route)).toEqual([
+      'GET /repos/{owner}/{repo}/labels/{name}',
+      'POST /repos/{owner}/{repo}/labels',
+      'POST /repos/{owner}/{repo}/issues',
+    ]);
+  });
 });
 
 function repositoryOf(): GameRepository {

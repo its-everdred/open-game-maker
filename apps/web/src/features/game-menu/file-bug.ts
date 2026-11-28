@@ -5,7 +5,7 @@ import { editJobRequest } from '../build-chat/edit';
 type Admit = (
   request: CreateJobRequest,
 ) => Promise<{ kind: 'accepted'; jobId: string } | { kind: 'refused' } | { kind: string }>;
-type Report = (input: { text: string }) => Promise<unknown>;
+type Report = (input: { text: string; skipRepair?: boolean; requestKey?: string }) => Promise<unknown>;
 
 /** The report route caps a report's text; the description comes first so the log is what gets cut. */
 export const REPORT_TEXT_MAX = 2000;
@@ -29,8 +29,17 @@ export async function fileBug(
       plan: { ...request.plan, title: line.length > 120 ? `${line.slice(0, 119)}…` : line },
     });
     if (result.kind !== 'accepted' || !('jobId' in result)) throw new Error('bug_not_admitted');
+    await deps.report({
+      text: `${bug.text}\n\n${bug.log}`.slice(0, REPORT_TEXT_MAX),
+      skipRepair: true,
+      requestKey: `bug-${bug.attempt}`,
+    });
     return { jobId: result.jobId };
   }
-  await deps.report({ text: `${bug.text}\n\n${bug.log}`.slice(0, REPORT_TEXT_MAX) });
+  await deps.report({
+    text: `${bug.text}\n\n${bug.log}`.slice(0, REPORT_TEXT_MAX),
+    skipRepair: true,
+    requestKey: `bug-${bug.attempt}`,
+  });
   return {};
 }

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 import { games } from './accounts.js';
 
@@ -14,6 +14,8 @@ export const reports = sqliteTable(
     buildHash: text('build_hash').notNull(),
     text: text('text'),
     errorJson: text('error_json'),
+    screenshot: text('screenshot'),
+    requestKey: text('request_key'),
     signature: text('signature').notNull(),
     platformSignature: text('platform_signature'),
     route: text('route', { enum: ['game_repair', 'platform', 'editor_hint', 'stored'] }).notNull(),
@@ -32,6 +34,7 @@ export const reports = sqliteTable(
   },
   (table) => [
     index('reports_game_created').on(table.gameId, table.createdAt),
+    uniqueIndex('reports_request_key').on(table.gameId, table.reporterId, table.requestKey),
     index('reports_signature').on(table.signature),
     index('reports_platform_signature').on(table.platformSignature),
     index('reports_triage_claim').on(table.triageState, table.route, table.createdAt),
@@ -78,6 +81,7 @@ export const platformIssueQueue = sqliteTable(
     labelsJson: text('labels_json').notNull(),
     status: text('status', { enum: ['pending', 'filed', 'dismissed'] }).notNull(),
     ref: text('ref'),
+    nextAttemptAt: integer('next_attempt_at'),
     createdAt: text('created_at').notNull(),
   },
   (table) => [

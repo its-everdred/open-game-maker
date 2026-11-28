@@ -13,14 +13,23 @@ export const ReportError = z.object({
   message: z.string().max(1000),
   frames: z.array(ReportFrame).max(50),
 });
-export const CreateReport = z.object({
+const reportFields = z.object({
   gameId: Id,
   releaseId: Id.optional(),
   buildHash: z.string().regex(/^[A-Za-z0-9:_-]{1,200}$/),
   text: z.string().max(2000).optional(),
   error: ReportError.optional(),
+  screenshot: z
+    .string()
+    .max(32768)
+    .regex(/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/u)
+    .optional(),
   bundleKey: z.string().max(200).optional(),
 });
+export const CreateReport = z.union([
+  reportFields.extend({ requestKey: z.never().optional(), skipRepair: z.boolean().optional() }),
+  reportFields.extend({ requestKey: z.string().regex(/^[A-Za-z0-9:_-]{1,100}$/), skipRepair: z.literal(true) }),
+]);
 export const ReportRoute = z.enum(['game_repair', 'platform', 'editor_hint', 'stored']);
 export const CreateReportResponse = z.object({
   reportId: Id,
@@ -32,7 +41,14 @@ export const CreateReportResponse = z.object({
   resetsAt: IsoTime.optional(),
 });
 export interface IssueWriter {
-  file(input: { title: string; body: string; labels: string[] }): Promise<{ ref: string }>;
+  file(input: {
+    title: string;
+    body: string;
+    labels: string[];
+    gameId?: string;
+    idempotencyKey?: string;
+    reconcile?: boolean;
+  }): Promise<{ ref: string }>;
 } // never carries agent:todo
 
 export const ReplayClass = z.enum(['reproduces_with_error', 'reproduces_no_error', 'not_reproducible']);

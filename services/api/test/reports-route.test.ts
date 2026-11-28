@@ -9,8 +9,32 @@ import { crash, ids, reportsApp } from './reports-helpers.js';
 type Created = { reportId: string; signature: string; route: string; jobId?: string; pendingBudget?: true };
 
 describe('POST /api/v1/reports', () => {
-  it('routes the worked example to one repair job and attaches the duplicate', async () => {
+  it('accepts a valid report whose escaped frames exceed 64 KiB', async () => {
+    const { post } = await reportsApp();
+    const body = {
+      ...crash(),
+      error: {
+        type: 'Error',
+        message: 'x',
+        frames: Array.from({ length: 50 }, () => ({ file: '\u0000'.repeat(300), line: 1 })),
+      },
+    };
+    expect(Buffer.byteLength(JSON.stringify(body))).toBeGreaterThan(64 * 1024);
+    expect((await post(body)).status).toBe(201);
+  });
+  it('deduplicates a repeated owner bug report without admitting a second repair', async () => {
     const { deps, post } = await reportsApp();
+    const body = { ...crash(), requestKey: 'bug-a1', skipRepair: true };
+    const first = (await (await post(body, ids.owner)).json()) as Created;
+    const second = (await (await post(body, ids.owner)).json()) as Created;
+    expect(second.reportId).toBe(first.reportId);
+    expect(first.route).toBe('stored');
+    expect(deps.db.select().from(schema.reports).all()).toHaveLength(1);
+    expect(deps.db.select().from(schema.jobs).all()).toHaveLength(0);
+  });
+  it('routes the worked example to one repair job and attaches the duplicate', async () => {
+    const { deps, post: postAs } = await reportsApp();
+    const post = (body: unknown) => postAs(body, ids.owner);
     const first = await post(crash());
     expect(first.status).toBe(201);
     const a = (await first.json()) as Created;
@@ -43,7 +67,11 @@ describe('POST /api/v1/reports', () => {
     expect(body.route).toBe('platform');
     expect(body.jobId).toBeUndefined();
     expect(deps.db.select().from(schema.jobs).all()).toHaveLength(0);
-    const queue = deps.db.select().from(schema.platformIssueQueue).all();
+    const queue = deps.db
+      .select()
+      .from(schema.platformIssueQueue)
+      .all()
+      .filter((row) => row.id.startsWith('piq_'));
     expect(queue).toHaveLength(1);
     expect(queue[0].body).toContain("cannot read properties of undefined (reading 'hp') at tick #");
     expect(queue[0].body).not.toContain('secret');
@@ -58,12 +86,19 @@ describe('POST /api/v1/reports', () => {
   });
 
   it('turns the same crash from a second game into a platform bug', async () => {
-    const { deps, post } = await reportsApp();
+    const { deps, post: postAs } = await reportsApp();
+    const post = (body: unknown) => postAs(body, ids.owner);
     expect(((await (await post(crash(ids.game))).json()) as Created).route).toBe('game_repair');
     const second = (await (await post(crash(ids.otherGame))).json()) as Created;
     expect(second.route).toBe('platform');
     expect(deps.db.select().from(schema.jobs).all()).toHaveLength(1);
-    expect(deps.db.select().from(schema.platformIssueQueue).get()?.body).toContain('Games affected 2');
+    expect(
+      deps.db
+        .select()
+        .from(schema.platformIssueQueue)
+        .all()
+        .find((row) => row.id.startsWith('piq_'))?.body,
+    ).toContain('Games affected 2');
   });
 
   it('offers tuning complaints as editor hints without spending', async () => {
@@ -87,6 +122,15 @@ describe('POST /api/v1/reports', () => {
     expect(deps.db.select().from(schema.reports).get()?.buildHash).toBe('b_1f2e3d4c');
   });
 
+  it('stores a player crash without spending the game owner’s allowance', async () => {
+    const { deps, post } = await reportsApp();
+    const response = await post(crash(), ids.player);
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ route: 'stored' });
+    expect(deps.db.select().from(schema.jobs).all()).toHaveLength(0);
+    expect(deps.db.select().from(schema.reports).get()).toMatchObject({ reporterId: ids.player, route: 'stored' });
+  });
+
   it('rejects build ids that could escape the game build directory', async () => {
     const { app } = await reportsApp();
     const response = await app.request('/api/v1/reports', {
@@ -99,7 +143,8 @@ describe('POST /api/v1/reports', () => {
   });
 
   it('admits one repair on the third matching wrong-behaviour report', async () => {
-    const { deps, post } = await reportsApp();
+    const { deps, post: postAs } = await reportsApp();
+    const post = (body: unknown) => postAs(body, ids.owner);
     const report = { gameId: ids.game, releaseId: ids.release, buildHash: 'b'.repeat(64), text: 'jumping feels wrong' };
     const routes: Created[] = [];
     for (let i = 0; i < 4; i += 1) routes.push((await (await post(report)).json()) as Created);
@@ -111,7 +156,8 @@ describe('POST /api/v1/reports', () => {
   });
 
   it('stores the report with pendingBudget when the owner has nothing left', async () => {
-    const { deps, post } = await reportsApp({ ownerDaily: 0 });
+    const { deps, post: postAs } = await reportsApp({ ownerDaily: 0 });
+    const post = (body: unknown) => postAs(body, ids.owner);
     const response = await post(crash());
     expect(response.status).toBe(201);
     const body = (await response.json()) as Created;
@@ -123,7 +169,8 @@ describe('POST /api/v1/reports', () => {
   });
 
   it('returns 502 with the report kept when admission fails for another reason', async () => {
-    const { deps, post } = await reportsApp();
+    const { deps, post: postAs } = await reportsApp();
+    const post = (body: unknown) => postAs(body, ids.owner);
     deps.db
       .update(schema.familyMembers)
       .set({ capability: 'player' })
@@ -136,7 +183,8 @@ describe('POST /api/v1/reports', () => {
   });
 
   it('re-admits a crash that comes back after its repair is done, but not after a failed one', async () => {
-    const { deps, post } = await reportsApp();
+    const { deps, post: postAs } = await reportsApp();
+    const post = (body: unknown) => postAs(body, ids.owner);
     const first = (await (await post(crash())).json()) as Created;
     deps.db.update(schema.jobs).set({ state: 'done' }).where(eq(schema.jobs.id, first.jobId!)).run();
 
@@ -154,7 +202,8 @@ describe('POST /api/v1/reports', () => {
   });
 
   it('retries a budget-refused repair on the next matching report', async () => {
-    const { deps, post } = await reportsApp({ ownerDaily: 0 });
+    const { deps, post: postAs } = await reportsApp({ ownerDaily: 0 });
+    const post = (body: unknown) => postAs(body, ids.owner);
     expect(((await (await post(crash())).json()) as Created).pendingBudget).toBe(true);
     deps.db
       .update(schema.allowances)
@@ -176,7 +225,13 @@ describe('POST /api/v1/reports', () => {
     await post(report);
     await post(report);
     expect(file).toHaveBeenCalledTimes(2);
-    expect(deps.db.select().from(schema.platformIssueQueue).all()).toHaveLength(1);
+    expect(
+      deps.db
+        .select()
+        .from(schema.platformIssueQueue)
+        .all()
+        .filter((row) => row.id.startsWith('piq_')),
+    ).toHaveLength(1);
     file.mockRestore();
   });
 
@@ -229,6 +284,24 @@ describe('report bundles and reads', () => {
     const read = (user: string) => harness.app.request(`/api/v1/reports/${reportId}/bundle`, { headers: asUser(user) });
     return { ...harness, reportId, upload, read };
   }
+
+  it('limits individual report details to admins without exposing the reporter', async () => {
+    const { app, post } = await reportsApp();
+    const created = (await (await post({ gameId: ids.game, buildHash: 'b_1', text: 'door stuck' })).json()) as Created;
+    const read = (user: string) => app.request(`/api/v1/reports/${created.reportId}`, { headers: asUser(user) });
+    expect((await read(ids.player)).status).toBe(403);
+    expect((await read(ids.owner)).status).toBe(403);
+    const response = await read(ids.admin);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      reportId: created.reportId,
+      gameId: ids.game,
+      buildHash: 'b_1',
+      text: 'door stuck',
+      hasBundle: false,
+      createdAt: expect.any(String),
+    });
+  });
 
   it('stores a bundle privately and signs reads for admins only', async () => {
     const { deps, reportId, upload, read } = await withReport();
@@ -304,8 +377,11 @@ describe('report bundles and reads', () => {
     const owner = await list(ids.owner);
     expect(owner.status).toBe(200);
     const { reports } = (await owner.json()) as { reports: { bundleKey?: string; hasBundle: boolean }[] };
-    expect(reports).toHaveLength(1);
-    expect(reports[0]).not.toHaveProperty('bundleKey');
+    expect(reports).toHaveLength(0);
+    const admin = await list(ids.admin);
+    const all = (await admin.json()) as { reports: { bundleKey?: string; hasBundle: boolean }[] };
+    expect(all.reports).toHaveLength(1);
+    expect(all.reports[0]).not.toHaveProperty('bundleKey');
   });
 
   it('shows the platform queue to admins only', async () => {

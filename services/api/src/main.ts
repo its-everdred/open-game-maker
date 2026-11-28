@@ -54,6 +54,7 @@ import { createTicketConversationReader } from './worker-progress/conversation.j
 import { startBriefingPush } from './voice/briefing-push.js';
 import { questionSession } from './voice/question-session.js';
 import { createQaAiurClient, withQaAiur } from './qa/aiur.js';
+import { startQaReportDelivery } from './reports/qa-outbox.js';
 
 const log = (line: LogLine) => console.log(JSON.stringify({ service: 'api', ...line }));
 
@@ -285,6 +286,7 @@ const feed = startFeedConsumers({
 
 const app = createApp(deps);
 for (const { prefix, file } of (await scanRoutes(app, { deps })).mounted) log({ event: 'mounted', prefix, file });
+const qaReportDelivery = startQaReportDelivery(deps);
 const resourceMaintainers = parseEmailList(loadAuthEnv().OGM_MAINTAINER_EMAILS);
 let resourceMailPending: Promise<void> | null = null;
 const resourceMailTick = () => {
@@ -341,11 +343,16 @@ process.once('SIGTERM', () => {
   stopScheduler();
   stopEstimateRefinement();
   stopBuildSweep();
+  qaReportDelivery.stop();
   decisionWaits.stop();
   reviewNotifications.stop();
   stopBriefingPush();
   usageReconciler.stop();
-  void Promise.all([feed.stop(), usageReconciler.idle(), reviewNotifications.idle(), resourceMailPending]).finally(() =>
-    server.close(() => sqlite.close()),
-  );
+  void Promise.all([
+    feed.stop(),
+    usageReconciler.idle(),
+    reviewNotifications.idle(),
+    resourceMailPending,
+    qaReportDelivery.idle(),
+  ]).finally(() => server.close(() => sqlite.close()));
 });

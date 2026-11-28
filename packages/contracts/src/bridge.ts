@@ -162,6 +162,7 @@ export const hostToGameSchema = z
       }),
     ),
     envelope('save.restore', save),
+    envelope('report.capture', empty),
     envelope(
       'net.players',
       z.looseObject({
@@ -353,6 +354,7 @@ export const gameToHostSchema = z
     /** The host fills identity and slot. */
     envelope('save.write', save),
     envelope('save.restored', z.looseObject({ save: save.optional() })),
+    envelope('report.captured', z.looseObject({ screenshot: save.shape.thumbnail })),
     envelope(
       'event',
       z.looseObject({ kind: z.enum(['achievement', 'analytics', 'checkpoint']), payload: z.unknown() }),

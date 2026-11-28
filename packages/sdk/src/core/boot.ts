@@ -81,6 +81,7 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
   const events = new EventRing();
   const runtimeState: { current?: RuntimeImpl<D, S> } = {};
   const saveMachineState: { current?: SaveMachine<S> } = {};
+  let reportScreenshot: (() => string | undefined) | undefined;
   let eventCursor = 0;
   let lifecyclePaused = false;
   let networkPaused = false;
@@ -202,10 +203,8 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
     const hooks = new SdkHooks(runtime, module.manifest, marks);
     runtime.attachHooks(hooks);
     host.test.register(hooks);
-    const thumbnails =
-      !scenario && module.manifest.saves && module.manifest.manualSaveSlots
-        ? createSaveThumbnailCache({ onFrame: (callback) => runtime.onFrame(callback) })
-        : undefined;
+    const thumbnails = createSaveThumbnailCache({ onFrame: (callback) => runtime.onFrame(callback) });
+    reportScreenshot = () => thumbnails.current();
     if (thumbnails) runtime.addCleanup(() => thumbnails.dispose());
     const saveMachine = createSaveMachine({
       instance,
@@ -434,6 +433,9 @@ export async function boot<D, S>(module: GameModule<D, S>, options: BootOptions 
           return;
         case 'settings':
           host.updateSettings(envelope.payload as PlayerSettings);
+          return;
+        case 'report.capture':
+          send('report.captured', { screenshot: reportScreenshot?.() }, envelope.id);
           return;
         case 'save.restore': {
           let save = envelope.payload as SaveData<unknown>;

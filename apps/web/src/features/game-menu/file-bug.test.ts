@@ -17,7 +17,11 @@ describe('filing a bug from the play menu (#1326)', () => {
     expect(request.idempotencyKey).toBe('edit:bug-a1');
     expect(request.plan.summary).toBe('Bug: The goblin froze\n\nLog:\ngame g1\nbuild b1');
     expect(request.plan.title).toBe('Bug: The goblin froze');
-    expect(report).not.toHaveBeenCalled();
+    expect(report).toHaveBeenCalledWith({
+      text: 'The goblin froze\n\ngame g1\nbuild b1',
+      skipRepair: true,
+      requestKey: 'bug-a1',
+    });
   });
 
   it('sends a retry of the same bug with the same key, so a lost response never files it twice', async () => {
@@ -41,7 +45,11 @@ describe('filing a bug from the play menu (#1326)', () => {
     expect(await fileBug({ admit, report }, { ...target, owner: false }, bug)).toEqual({});
 
     expect(admit).not.toHaveBeenCalled();
-    expect(report).toHaveBeenCalledWith({ text: 'The goblin froze\n\ngame g1\nbuild b1' });
+    expect(report).toHaveBeenCalledWith({
+      text: 'The goblin froze\n\ngame g1\nbuild b1',
+      skipRepair: true,
+      requestKey: 'bug-a1',
+    });
   });
 
   it('keeps the description whole when the log has to be cut to fit a report', async () => {

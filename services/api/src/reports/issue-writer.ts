@@ -54,11 +54,19 @@ export class CommitServiceIssueWriter implements IssueWriter {
     const response = await this.#fetch(`${this.#baseUrl}/internal/commit`, {
       method: 'POST',
       headers: { authorization: `Bearer ${this.#token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ kind: 'file_issue', title: input.title, body: input.body, labels: input.labels }),
+      body: JSON.stringify({
+        kind: 'file_issue',
+        title: input.title,
+        body: input.body,
+        labels: input.labels,
+        ...(input.gameId ? { gameId: input.gameId } : {}),
+        ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+        ...(input.reconcile ? { reconcile: true } : {}),
+      }),
       signal: AbortSignal.timeout(30_000),
     });
     const result = (await response.json().catch(() => null)) as { ok?: boolean; sha?: string } | null;
-    if (!response.ok || result?.ok !== true || typeof result.sha !== 'string') {
+    if (!response.ok || result?.ok !== true || typeof result.sha !== 'string' || !/^issue:[1-9]\d*$/.test(result.sha)) {
       throw new Error(`commit service refused file_issue (${response.status})`);
     }
     return { ref: result.sha };

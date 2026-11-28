@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 
 import {
@@ -175,7 +176,7 @@ function requireRepairService(c: Parameters<typeof requirePrincipal>[0]): void {
 }
 
 const routes = new Hono<ApiBindings>()
-  .post('/', async (c) => {
+  .post('/', bodyLimit({ maxSize: 256 * 1024 }), async (c) => {
     const principal = requirePrincipal(c, ['user']);
     const deps = c.get('deps');
     const actor = actorFromPrincipal(principal);
@@ -213,12 +214,22 @@ const routes = new Hono<ApiBindings>()
         body: { ...body, bundleKey: undefined },
         reporterId: actor.userId,
         now: new Date(),
+        ...(!probe ? { qaOrigin: deps.config.appOrigin } : {}),
       });
       const { report, signature: sig } = intake;
       if (probe && report.route !== 'game_repair') throw new HttpError(409, 'qa_energy_probe_wrong_route');
       const response: CreateReportResponse = { reportId: report.id, signature: sig.signature, route: report.route };
+      if (intake.duplicate) {
+        if (report.jobId) response.jobId = report.jobId;
+        return c.json(response, 201);
+      }
       if (report.route === 'game_repair') {
-        Object.assign(response, await routeRepair(deps, intake, game, probe));
+        if (actor.userId === game.ownerId && !body.skipRepair) {
+          Object.assign(response, await routeRepair(deps, intake, game, probe));
+        } else {
+          setReportRoute(deps.db, report.id, 'stored');
+          response.route = 'stored';
+        }
       } else if (report.route === 'platform' && body.error && claimPlatformFiling(deps.db, sig.signature)) {
         try {
           const { ref } = await context(deps).issueWriter.file(platformIssue(deps, intake, body.error));
@@ -237,8 +248,9 @@ const routes = new Hono<ApiBindings>()
     const principal = requirePrincipal(c, ['user']);
     const deps = c.get('deps');
     const { gameId } = parseQuery(c, listQuery);
-    requireViewer(actorFromPrincipal(principal), findGame(deps.db, gameId));
-    return c.json({ reports: listReports(deps.db, gameId) });
+    const actor = actorFromPrincipal(principal);
+    requireViewer(actor, findGame(deps.db, gameId));
+    return c.json({ reports: listReports(deps.db, gameId, actor.platformRole === 'admin' ? undefined : actor.userId) });
   })
   .get('/platform-queue', (c) => {
     const principal = requirePrincipal(c, ['user']);
@@ -313,6 +325,23 @@ const routes = new Hono<ApiBindings>()
       return c.json({ reportId: report.id }, 201);
     }
   })
+  .get('/:id', (c) => {
+    const principal = requirePrincipal(c, ['user']);
+    requireAuthorization(authorize(actorFromPrincipal(principal), 'report.view'));
+    const report = findReport(c.get('deps').db, c.req.param('id'));
+    c.header('Cache-Control', 'private, no-store');
+    return c.json({
+      reportId: report.id,
+      gameId: report.gameId,
+      buildHash: report.buildHash,
+      ...(report.releaseId ? { releaseId: report.releaseId } : {}),
+      ...(report.text ? { text: report.text } : {}),
+      ...(report.errorJson ? { error: JSON.parse(report.errorJson) as ReportError } : {}),
+      ...(report.screenshot ? { screenshot: report.screenshot } : {}),
+      hasBundle: report.bundleKey !== null,
+      createdAt: report.createdAt,
+    });
+  })
   .get('/:id/bundle', async (c) => {
     const principal = requirePrincipal(c, ['user']);
     const deps = c.get('deps');
@@ -325,6 +354,16 @@ const routes = new Hono<ApiBindings>()
       new Date(Date.now() + BUNDLE_URL_TTL_MS),
     );
     return c.redirect(url, 302);
+  })
+  .get('/:id/screenshot', (c) => {
+    const principal = requirePrincipal(c, ['user']);
+    requireAuthorization(authorize(actorFromPrincipal(principal), 'report.view'));
+    const report = findReport(c.get('deps').db, c.req.param('id'));
+    if (!report.screenshot) throw new HttpError(404, 'screenshot_not_found');
+    c.header('Cache-Control', 'private, no-store');
+    c.header('Content-Type', 'image/webp');
+    c.header('X-Content-Type-Options', 'nosniff');
+    return c.body(Buffer.from(report.screenshot.split(',')[1]!, 'base64'));
   });
 
 export default routes;

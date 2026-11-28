@@ -19,6 +19,7 @@ type FrameLike = Pick<GameFrame, 'dispose' | 'on' | 'send' | 'setMode' | 'setSet
   bridge: Pick<GameFrame['bridge'], 'dropped'>;
   /** Optional so a test double need not answer diagnostics; `netInfo()` reports `undefined` when it cannot ask. */
   request?: GameFrame['request'];
+  captureReport?: GameFrame['captureReport'];
   project?: GameFrame['project'];
   pick?: GameFrame['pick'];
 };
@@ -88,6 +89,7 @@ export type GameFrameController = {
    * within `timeoutMs`. Read by the diagnostics overlay; nothing in the product path calls it.
    */
   netInfo(timeoutMs?: number): Promise<unknown>;
+  captureReport?(): Promise<string | undefined>;
   dispose(): void;
 };
 
@@ -424,6 +426,7 @@ export function mountGameFrame(options: MountGameFrameOptions): GameFrameControl
 
   return {
     state: snapshot,
+    captureReport: () => frame.captureReport?.() ?? Promise.resolve(undefined),
     setMode: (mode) => {
       currentMode = mode;
       if (mode !== 'play') {

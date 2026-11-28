@@ -58,31 +58,39 @@ function harness(
     request: async <R>(message: Envelope<string, unknown>) => {
       requests.push(message);
       return (
-        message.t === 'save.restore'
-          ? { v: 1, id: 'restored-1', replyTo: message.id, t: 'save.restored', payload: { save: message.payload } }
-          : message.t === 'editor.project'
-            ? {
-                v: 1,
-                id: 'projected-1',
-                replyTo: message.id,
-                t: 'editor.projected',
-                payload: { position: [2, 0, -1] },
-              }
-            : message.t === 'editor.pick'
+        message.t === 'report.capture'
+          ? {
+              v: 1,
+              id: 'capture-1',
+              replyTo: message.id,
+              t: 'report.captured',
+              payload: { screenshot: 'data:image/webp;base64,UklGRg==' },
+            }
+          : message.t === 'save.restore'
+            ? { v: 1, id: 'restored-1', replyTo: message.id, t: 'save.restored', payload: { save: message.payload } }
+            : message.t === 'editor.project'
               ? {
                   v: 1,
-                  id: 'picked-1',
+                  id: 'projected-1',
                   replyTo: message.id,
-                  t: 'editor.picked',
-                  payload: { targets: [{ kind: 'entity', id: 'tree' }] },
+                  t: 'editor.projected',
+                  payload: { position: [2, 0, -1] },
                 }
-              : {
-                  v: 1,
-                  id: 'result-1',
-                  replyTo: message.id,
-                  t: 'test.result',
-                  payload: { ok: true, value: { rendered: true } },
-                }
+              : message.t === 'editor.pick'
+                ? {
+                    v: 1,
+                    id: 'picked-1',
+                    replyTo: message.id,
+                    t: 'editor.picked',
+                    payload: { targets: [{ kind: 'entity', id: 'tree' }] },
+                  }
+                : {
+                    v: 1,
+                    id: 'result-1',
+                    replyTo: message.id,
+                    t: 'test.result',
+                    payload: { ok: true, value: { rendered: true } },
+                  }
       ) as R;
     },
     close,
@@ -209,6 +217,15 @@ describe('HostBridge', () => {
     const save = { saveSchemaVersion: 1, data: { checkpoint: 2 } };
     await expect(bridge.restoreSave(save)).resolves.toEqual(save);
     expect(requests.at(-1)).toMatchObject({ t: 'save.restore', payload: save });
+    bridge.close();
+  });
+
+  it('requests a screenshot from the running game', async () => {
+    const { bridge, inbound, requests } = harness(() => 'player');
+    inbound(ready());
+    await bridge.whenReady;
+    await expect(bridge.captureReport()).resolves.toBe('data:image/webp;base64,UklGRg==');
+    expect(requests.at(-1)).toMatchObject({ t: 'report.capture', payload: {} });
     bridge.close();
   });
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OgmHost } from '../../app/testHook';
 import { GameMenuProvider, useGameMenu } from '../../app/GameMenu';
+import { bugContext } from '../../features/bug-report';
 
 type MockFrameState = {
   bridgeState: 'connecting' | 'ready' | 'error';
@@ -211,6 +212,12 @@ afterEach(() => {
 });
 
 describe('GameScreen', () => {
+  it('sets the menu report context for the mounted build and clears it on exit', async () => {
+    const view = renderGame();
+    await waitFor(() => expect(bugContext()).toMatchObject({ gameId: 'game', buildHash: 'build' }));
+    view.unmount();
+    expect(bugContext()).toEqual({});
+  });
   it('includes the running build id in player bug reports', async () => {
     const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       void input;

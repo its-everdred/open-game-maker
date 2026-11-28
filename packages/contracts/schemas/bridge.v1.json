@@ -993,6 +993,41 @@
             },
             "t": {
               "type": "string",
+              "const": "report.capture"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            },
+            "replyTo": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "v",
+            "id",
+            "t",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "t": {
+              "type": "string",
               "const": "net.players"
             },
             "payload": {
@@ -4621,6 +4656,47 @@
                     "data"
                   ],
                   "additionalProperties": {}
+                }
+              },
+              "additionalProperties": {}
+            },
+            "replyTo": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "v",
+            "id",
+            "t",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "t": {
+              "type": "string",
+              "const": "report.captured"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "screenshot": {
+                  "type": "string",
+                  "maxLength": 32768,
+                  "pattern": "^data:image\\/webp;base64,[A-Za-z0-9+/]+={0,2}$"
                 }
               },
               "additionalProperties": {}

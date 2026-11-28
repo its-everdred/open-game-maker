@@ -110,6 +110,11 @@ export const CommitOp = z.discriminatedUnion('kind', [
       labels: z.array(z.string().min(1)),
       // Present when the report is about one game: the issue lands in the instance repo with a `game:<slug>` label.
       gameId: Identifier.optional(),
+      idempotencyKey: z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{1,100}$/)
+        .optional(),
+      reconcile: z.boolean().optional(),
     })
     .strict(),
   z

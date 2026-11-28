@@ -13,10 +13,10 @@ const service = (name = 'repair') => ({
 
 async function withBundle() {
   const harness = await reportsApp();
-  const created = (await (await harness.post(crash())).json()) as { reportId: string; jobId: string };
+  const created = (await (await harness.post(crash(), ids.owner)).json()) as { reportId: string; jobId: string };
   const uploaded = await harness.app.request(`/api/v1/reports/${created.reportId}/bundle`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-test-user': ids.player },
+    headers: { 'content-type': 'application/json', 'x-test-user': ids.owner },
     body: JSON.stringify({ seed: 7, actions: [{}] }),
   });
   expect(uploaded.status).toBe(201);
@@ -124,15 +124,18 @@ describe('internal report triage', () => {
     const harness = await reportsApp();
     const create = async (type: string, gameId = ids.game) =>
       (await (
-        await harness.post({
-          ...crash(gameId),
-          error: { ...crash(gameId).error, type },
-        })
+        await harness.post(
+          {
+            ...crash(gameId),
+            error: { ...crash(gameId).error, type },
+          },
+          ids.owner,
+        )
       ).json()) as { reportId: string; jobId: string };
     const upload = (reportId: string) =>
       harness.app.request(`/api/v1/reports/${reportId}/bundle`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-test-user': ids.player },
+        headers: { 'content-type': 'application/json', 'x-test-user': ids.owner },
         body: '{}',
       });
     const claim = () =>

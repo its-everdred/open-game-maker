@@ -20,6 +20,21 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('sendReport', () => {
+  it('attaches the current game screenshot and ignores a stale registration', async () => {
+    const fetchMock = vi.fn(async () => created());
+    vi.stubGlobal('fetch', fetchMock);
+    bug.setBugContext({ gameId: 'g1', buildHash: 'b1' });
+    const stop = bug.registerReportCapture('g1', async () => 'data:image/webp;base64,UklGRg==');
+    await bug.sendReport({ text: 'stuck' });
+    expect(JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toMatchObject({
+      screenshot: 'data:image/webp;base64,UklGRg==',
+    });
+    stop();
+    await bug.sendReport({ text: 'again' });
+    expect(
+      JSON.parse((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body as string),
+    ).not.toHaveProperty('screenshot');
+  });
   it('files the report with the screen context and leaves nothing queued', async () => {
     const fetchMock = vi.fn(async () => created());
     vi.stubGlobal('fetch', fetchMock);
@@ -53,6 +68,19 @@ describe('sendReport', () => {
     await expect(bug.sendReport({ text: 'the door is stuck' })).resolves.toEqual({ queued: true });
 
     expect(queued()).toEqual([{ text: 'the door is stuck' }]);
+  });
+
+  it('does not persist a screenshot in the shared offline queue', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('offline');
+      }),
+    );
+    bug.setBugContext({ gameId: 'g1', buildHash: 'b1' });
+    bug.registerReportCapture('g1', async () => 'data:image/webp;base64,UklGRg==');
+    await expect(bug.sendReport({ text: 'stuck' })).resolves.toEqual({ queued: true });
+    expect(JSON.stringify(queued())).not.toContain('data:image');
   });
 
   it('keeps the report while the reports route is not deployed', async () => {
@@ -140,5 +168,20 @@ describe('error capture', () => {
     const body = JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
     expect(body.error).toMatchObject({ type: 'RangeError', message: 'bad tile' });
     expect(body.error.frames.length).toBeLessThanOrEqual(5);
+  });
+
+  it('sends captured stack frames in the report API format', async () => {
+    const fetchMock = vi.fn(async () => created());
+    vi.stubGlobal('fetch', fetchMock);
+    const error = new Error('crashed');
+    error.stack =
+      'Error: crashed\n    at run (https://example.test/g/a/main.js:12:34)\nrun@https://example.test/g/a/other.js:56:78';
+    bug.captureError(error);
+    await bug.sendReport({ text: 'crashed' });
+    const body = JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    expect(body.error.frames).toEqual([
+      { file: 'https://example.test/g/a/main.js', line: 12, col: 34 },
+      { file: 'https://example.test/g/a/other.js', line: 56, col: 78 },
+    ]);
   });
 });

@@ -152,6 +152,15 @@ export class HostBridge {
     return result.data.payload.save;
   }
 
+  async captureReport(): Promise<string | undefined> {
+    if (!this.readyPayload) throw new BridgeError('not_ready');
+    const request = hostToGameSchema.parse({ v: 1, id: this.nextId(), t: 'report.capture', payload: {} });
+    const reply = await this.transport.request<Envelope<string, unknown>>(request, 1500);
+    const result = gameToHostSchema.safeParse(reply);
+    if (!result.success || result.data.t !== 'report.captured') throw new TypeError('invalid report.captured reply');
+    return result.data.payload.screenshot;
+  }
+
   async project(x: number, y: number, prefab?: string): Promise<[number, number, number] | null> {
     if (!this.readyPayload) throw new BridgeError('not_ready');
     const parsed = hostToGameSchema.safeParse({

@@ -2,27 +2,53 @@ import { randomUUID } from 'node:crypto';
 
 import type { CompleteTriage, CreateReport, ReportRoute, TriageResult } from '@ogm/contracts';
 import { schema, type Db, type Sqlite } from '@ogm/db';
-import { and, asc, desc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte, ne, notLike, or, sql } from 'drizzle-orm';
 
 import { HttpError } from '../app/errors.js';
 import { classify, type Classification } from './classify.js';
 import { signature, textSignature, type SignatureScope } from './signature.js';
+import { qaIssue } from './qa-delivery.js';
 
 export type ReportRow = typeof schema.reports.$inferSelect;
 export type SignatureRow = typeof schema.reportSignatures.$inferSelect;
 
-export type Intake = { report: ReportRow; signature: SignatureRow; classification: Classification };
+export type Intake = {
+  report: ReportRow;
+  signature: SignatureRow;
+  classification: Classification;
+  duplicate?: boolean;
+};
 
 // Classify and record in one immediate transaction, so concurrent reports see each other's counts.
 export function recordReport(
   deps: { db: Db; sqlite: Sqlite },
-  input: { body: CreateReport; reporterId: string; now: Date },
+  input: { body: CreateReport; reporterId: string; now: Date; qaOrigin?: string },
 ): Intake {
   const { db } = deps;
   const { body } = input;
   const at = input.now.toISOString();
   return deps.sqlite
     .transaction(() => {
+      if (body.requestKey) {
+        const existing = db
+          .select()
+          .from(schema.reports)
+          .where(
+            and(
+              eq(schema.reports.gameId, body.gameId),
+              eq(schema.reports.reporterId, input.reporterId),
+              eq(schema.reports.requestKey, body.requestKey),
+            ),
+          )
+          .get();
+        if (existing)
+          return {
+            report: existing,
+            signature: signatureRow(db, existing.signature)!,
+            classification: { route: existing.route, reproduction: existing.reproduction, reason: 'duplicate' },
+            duplicate: true,
+          };
+      }
       const platformSig = body.error ? signature({ error: body.error, gameId: body.gameId, scope: 'platform' }) : null;
       const seenInOtherGame =
         platformSig !== null &&
@@ -34,7 +60,11 @@ export function recordReport(
       const textSig = body.error ? null : textSignature(body);
       const textCount = textSig ? (signatureRow(db, textSig)?.count ?? 0) : 0;
 
-      const classification = classify({ report: body, existing: { seenInOtherGame, wrongBehaviourCount: textCount } });
+      const classified = classify({ report: body, existing: { seenInOtherGame, wrongBehaviourCount: textCount } });
+      const classification =
+        body.skipRepair && classified.route === 'game_repair'
+          ? { ...classified, route: 'stored' as const }
+          : classified;
       const scope: SignatureScope = classification.route === 'platform' ? 'platform' : 'game';
       const sig =
         textSig ??
@@ -63,6 +93,8 @@ export function recordReport(
         buildHash: body.buildHash,
         text: body.text ?? null,
         errorJson: body.error ? JSON.stringify(body.error) : null,
+        screenshot: body.screenshot ?? null,
+        requestKey: body.requestKey ?? null,
         signature: sig,
         platformSignature: platformSig,
         route: classification.route,
@@ -78,6 +110,30 @@ export function recordReport(
         createdAt: at,
       };
       db.insert(schema.reports).values(report).run();
+      if (input.qaOrigin) {
+        const verifiedBuild = db
+          .select({ id: schema.builds.id })
+          .from(schema.builds)
+          .where(and(eq(schema.builds.gameId, report.gameId), eq(schema.builds.id, report.buildHash)))
+          .get();
+        const issue = qaIssue({
+          reportId: report.id,
+          gameId: report.gameId,
+          ...(verifiedBuild ? { buildHash: verifiedBuild.id } : {}),
+          ...(body.error ? { errorType: body.error.type } : {}),
+          appOrigin: input.qaOrigin,
+        });
+        db.insert(schema.platformIssueQueue)
+          .values({
+            id: `qa_${report.id}`,
+            title: issue.title,
+            body: issue.body,
+            labelsJson: JSON.stringify(issue.labels),
+            status: 'pending',
+            createdAt: at,
+          })
+          .run();
+      }
       return { report, signature: signatureRow(db, sig)!, classification };
     })
     .immediate();
@@ -235,11 +291,22 @@ export function jobState(db: Db, jobId: string) {
   return db.select({ state: schema.jobs.state }).from(schema.jobs).where(eq(schema.jobs.id, jobId)).get()?.state;
 }
 
-export function listReports(db: Db, gameId: string) {
+export function listReports(db: Db, gameId: string, reporterId?: string) {
   return db
-    .select()
+    .select({
+      id: schema.reports.id,
+      releaseId: schema.reports.releaseId,
+      signature: schema.reports.signature,
+      route: schema.reports.route,
+      reproduction: schema.reports.reproduction,
+      jobId: schema.reports.jobId,
+      text: schema.reports.text,
+      errorJson: schema.reports.errorJson,
+      bundleKey: schema.reports.bundleKey,
+      createdAt: schema.reports.createdAt,
+    })
     .from(schema.reports)
-    .where(eq(schema.reports.gameId, gameId))
+    .where(and(eq(schema.reports.gameId, gameId), reporterId ? eq(schema.reports.reporterId, reporterId) : undefined))
     .orderBy(desc(schema.reports.createdAt))
     .limit(200)
     .all()
@@ -261,6 +328,7 @@ export function listPlatformQueue(db: Db) {
   return db
     .select()
     .from(schema.platformIssueQueue)
+    .where(notLike(schema.platformIssueQueue.id, 'qa_%'))
     .orderBy(desc(schema.platformIssueQueue.createdAt))
     .limit(200)
     .all()

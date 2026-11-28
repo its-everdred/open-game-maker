@@ -1,83 +1,194 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "properties": {
-    "gameId": {
-      "type": "string",
-      "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"
-    },
-    "releaseId": {
-      "type": "string",
-      "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"
-    },
-    "buildHash": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9:_-]{1,200}$"
-    },
-    "text": {
-      "type": "string",
-      "maxLength": 2000
-    },
-    "error": {
+  "anyOf": [
+    {
       "type": "object",
       "properties": {
-        "type": {
+        "gameId": {
           "type": "string",
-          "maxLength": 80
+          "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"
         },
-        "message": {
+        "releaseId": {
           "type": "string",
-          "maxLength": 1000
+          "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"
         },
-        "frames": {
-          "maxItems": 50,
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string",
-                "maxLength": 300
-              },
-              "line": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991
-              },
-              "col": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991
-              },
-              "fn": {
-                "type": "string",
-                "maxLength": 120
-              }
+        "buildHash": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_-]{1,200}$"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "maxLength": 80
             },
-            "required": [
-              "file",
-              "line"
-            ],
-            "additionalProperties": false
-          }
+            "message": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "frames": {
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "line": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "col": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "fn": {
+                    "type": "string",
+                    "maxLength": 120
+                  }
+                },
+                "required": [
+                  "file",
+                  "line"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "type",
+            "message",
+            "frames"
+          ],
+          "additionalProperties": false
+        },
+        "screenshot": {
+          "type": "string",
+          "maxLength": 32768,
+          "pattern": "^data:image\\/webp;base64,[A-Za-z0-9+/]+={0,2}$"
+        },
+        "bundleKey": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "requestKey": {
+          "not": {}
+        },
+        "skipRepair": {
+          "type": "boolean"
         }
       },
       "required": [
-        "type",
-        "message",
-        "frames"
+        "gameId",
+        "buildHash"
       ],
       "additionalProperties": false
     },
-    "bundleKey": {
-      "type": "string",
-      "maxLength": 200
+    {
+      "type": "object",
+      "properties": {
+        "gameId": {
+          "type": "string",
+          "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"
+        },
+        "releaseId": {
+          "type": "string",
+          "pattern": "^[a-z]{1,3}_[0-9a-f-]{36}$"
+        },
+        "buildHash": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_-]{1,200}$"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "message": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "frames": {
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "line": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "col": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "fn": {
+                    "type": "string",
+                    "maxLength": 120
+                  }
+                },
+                "required": [
+                  "file",
+                  "line"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "type",
+            "message",
+            "frames"
+          ],
+          "additionalProperties": false
+        },
+        "screenshot": {
+          "type": "string",
+          "maxLength": 32768,
+          "pattern": "^data:image\\/webp;base64,[A-Za-z0-9+/]+={0,2}$"
+        },
+        "bundleKey": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "requestKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_-]{1,100}$"
+        },
+        "skipRepair": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "gameId",
+        "buildHash",
+        "requestKey",
+        "skipRepair"
+      ],
+      "additionalProperties": false
     }
-  },
-  "required": [
-    "gameId",
-    "buildHash"
   ],
-  "additionalProperties": false,
   "$id": "https://open-game-maker-2000.local/schemas/reports.create.request.v1.json"
 }

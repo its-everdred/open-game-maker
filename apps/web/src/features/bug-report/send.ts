@@ -5,7 +5,13 @@ import { bugContext, setBugContext, type BugContext } from './slice';
 // a server error) it waits in localStorage and is sent on the next load. The queue holds only what the player typed,
 // the screen's ids and the last error's summary.
 export type ReportError = { type: string; message: string; frames: string[] };
-export type Report = BugContext & { text?: string; error?: ReportError };
+export type Report = BugContext & {
+  text?: string;
+  error?: ReportError;
+  screenshot?: string;
+  skipRepair?: boolean;
+  requestKey?: string;
+};
 export type ReportResult =
   { reportId: string; route?: string; jobId?: string; pendingBudget?: true; resetsAt?: string } | { queued: true };
 
@@ -13,6 +19,15 @@ const QUEUE_KEY = 'ogm.reports.queue';
 const FRAMES = 5;
 
 let lastError: ReportError | undefined;
+let capture: { gameId: string; read: () => Promise<string | undefined> } | undefined;
+
+export function registerReportCapture(gameId: string, read: () => Promise<string | undefined>): () => void {
+  const registration = { gameId, read };
+  capture = registration;
+  return () => {
+    if (capture === registration) capture = undefined;
+  };
+}
 
 /** The last uncaught error's summary, for the log a bug report carries. */
 export function lastReportError(): ReportError | undefined {
@@ -21,13 +36,26 @@ export function lastReportError(): ReportError | undefined {
 
 type ErrorContext = { route?: string; gameId?: string };
 
-export async function sendReport(input: { text?: string }): Promise<ReportResult> {
-  const report: Report = { ...bugContext(), text: input.text, error: lastError };
+export async function sendReport(input: {
+  text?: string;
+  skipRepair?: boolean;
+  requestKey?: string;
+}): Promise<ReportResult> {
+  const report: Report = { ...bugContext(), ...input, error: lastError };
+  if (capture && capture.gameId === report.gameId) {
+    try {
+      report.screenshot = await capture.read();
+    } catch {
+      // Older games cannot answer the capture request; the report can still be sent.
+    }
+  }
   try {
     return await post(report);
   } catch (e) {
     if (!unreachable(e)) throw e;
-    writeQueue([...readQueue(), report]);
+    const queuedReport = { ...report };
+    delete queuedReport.screenshot;
+    writeQueue([...readQueue(), queuedReport]);
     return { queued: true };
   }
 }
@@ -67,9 +95,21 @@ export function captureError(error: unknown, context: ErrorContext = {}, fallbac
 }
 
 function post(report: Report) {
+  const error = report.error && {
+    type: report.error.type.slice(0, 80),
+    message: report.error.message.slice(0, 1000),
+    frames: report.error.frames.flatMap((frame) => {
+      const match = /(?:\(|@|\s)([^\s()]+?):(\d+)(?::(\d+))?\)?$/.exec(frame);
+      if (!match) return [];
+      const line = Number(match[2]);
+      const col = match[3] ? Number(match[3]) : undefined;
+      if (!Number.isSafeInteger(line) || (col !== undefined && !Number.isSafeInteger(col))) return [];
+      return [{ file: match[1].slice(0, 300), line, ...(col !== undefined ? { col } : {}) }];
+    }),
+  };
   return api<{ reportId: string; route?: string; jobId?: string; pendingBudget?: true; resetsAt?: string }>(
     '/reports',
-    { method: 'POST', json: report },
+    { method: 'POST', json: { ...report, ...(error ? { error } : {}) } },
   );
 }
 

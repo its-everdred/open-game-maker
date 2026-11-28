@@ -57,6 +57,48 @@ describe('boot', () => {
     bridge.onMessage = undefined;
   });
 
+  it('answers a screenshot request even when no canvas is available', async () => {
+    const { runtime } = await start({ helloBuild: 'published' });
+    const request = message('report.capture', {});
+    bridge.onMessage!(request);
+    expect(bridge.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        t: 'report.captured',
+        replyTo: request.id,
+        payload: { screenshot: undefined },
+      }),
+    );
+    runtime.dispose();
+  });
+
+  it('returns the sampled game canvas in a published build', async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 450;
+    document.body.append(canvas);
+    const context = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: () => ({ data: new Uint8ClampedArray([0, 0, 0, 255, 1, 0, 0, 255]) }),
+    } as unknown as CanvasRenderingContext2D);
+    const image = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/webp;base64,YWJj');
+    const { runtime } = await start({ helloBuild: 'published' });
+    (runtime as RuntimeImpl<unknown, unknown>).render();
+    await Promise.resolve();
+    const request = message('report.capture', {});
+    bridge.onMessage!(request);
+    expect(bridge.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        t: 'report.captured',
+        replyTo: request.id,
+        payload: { screenshot: 'data:image/webp;base64,YWJj' },
+      }),
+    );
+    runtime.dispose();
+    context.mockRestore();
+    image.mockRestore();
+    canvas.remove();
+  });
+
   it('holds simulation until the host resumes after startup', async () => {
     const pauses: boolean[] = [];
     const onPause = (event: Event) => pauses.push((event as CustomEvent<{ paused: boolean }>).detail.paused);
