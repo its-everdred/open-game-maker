@@ -4,7 +4,6 @@ import { readFile, realpath } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { compareGlassScreen } from '../../../packages/gm-cli/src/design-parity/compare';
-import { assertGameFramePainted } from '../../../packages/gm-cli/src/design-parity/game-frame';
 import { verifyGlassReference } from '../../../packages/gm-cli/src/design-parity/reference';
 import { installAuthRoutes } from './fixtures/auth-routes';
 import { mockGamesRoutes } from './fixtures/games-routes';
@@ -18,6 +17,7 @@ import {
   requiredParityArtboards,
 } from './support/parity-coverage';
 import { parityEditorRoute } from './support/parity-editor-route';
+import { assertIsolatedGameFramePainted } from './support/parity-game-frame';
 import { paritySelection } from './support/parity-selection';
 import { installTitleCapture, settleTitleCapture } from './support/parity-title';
 import { intersectsViewport } from './support/parity-viewport';
@@ -441,13 +441,9 @@ for (const target of screens) {
           clearTimeout(timer!);
         }
       });
+      if (target.screen === 'Editor') await assertIsolatedGameFramePainted(page, target.scale);
       console.log(`Capturing ${target.name}`);
       const actual = await page.screenshot({ timeout: 120_000 });
-      if (target.screen === 'Editor') {
-        const frame = await page.locator('.game-frame iframe').boundingBox();
-        if (!frame) throw new Error('Game frame is not visible');
-        await assertGameFramePainted(actual, frame, target.scale);
-      }
       const reference = await readFile(resolve(baseline, `${target.name}.png`));
       const manifest: unknown = JSON.parse(await readFile(resolve(baseline, 'manifest.json'), 'utf8'));
       verifyGlassReference(reference, manifest, `${target.name}.png`);
