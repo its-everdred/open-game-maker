@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { encodeBase64, packJson } from './codec.js';
 import { createNetController } from './index.js';
+import { createFixtureGame } from './test/fixture-game.js';
 
 const manifest = { inputs: { actions: {} } } as GameManifest;
 const hooks: MultiplayerHooks = {
@@ -18,6 +19,92 @@ const event = (seq: number, value: unknown) => ({
 });
 
 describe('GmNet controller', () => {
+  it('exposes the room primary independently of the editor role', () => {
+    const controller = createNetController({
+      manifest: { ...manifest, net: { authority: 'per-seat', maxSeats: 4 } } as GameManifest,
+      hooks: createFixtureGame([0, 1, 2]),
+      localPlayerIndex: 1,
+      send: vi.fn(),
+      acceptInput: vi.fn(),
+      syncPlayers: vi.fn(),
+      setLocalPlayerIndex: vi.fn(),
+      recordEvent: vi.fn(),
+      now: () => 0,
+    });
+    const seat = (index: number, connected = true) => ({
+      seat: index,
+      userId: `seat-${index}`,
+      name: `Player ${index}`,
+      team: 0,
+      connected,
+      ready: true,
+      forfeited: false,
+      spectator: false,
+    });
+    const seats = [seat(0, false), seat(1), seat(2)];
+    expect(controller.net.primarySeat).toBeNull();
+    controller.handleMessage('net.role', { role: 'peer' });
+    controller.handleMessage('net.seats', { seats });
+    expect(controller.net.primarySeat).toBe(1);
+    const seen: Array<number | null> = [];
+    controller.net.onSeats(() => seen.push(controller.net.primarySeat));
+    controller.handleMessage('net.start', {
+      epoch: 'epoch-1',
+      mode: 'per-seat',
+      startAt: 1000,
+      seed: 42,
+      primarySeat: 1,
+      seats,
+    });
+    controller.handleMessage('net.primary', { epoch: 'old-epoch', seat: 0 });
+    expect(controller.net.primarySeat).toBe(1);
+    controller.handleMessage('net.start', {
+      epoch: 'epoch-1',
+      mode: 'per-seat',
+      startAt: 1000,
+      seed: 42,
+      primarySeat: 2,
+      seats,
+    });
+    expect(controller.net.primarySeat).toBe(2);
+    expect(seen).toEqual([1, 2]);
+    controller.handleMessage('net.primary', { epoch: 'epoch-1', seat: 1 });
+    expect(controller.net.primarySeat).toBe(1);
+    controller.handleMessage('net.primary', { epoch: 'epoch-1', seat: 2 });
+    expect(controller.net.primarySeat).toBe(2);
+    expect(seen).toEqual([1, 2, 1, 2]);
+    controller.handleMessage('net.epoch.end', { epoch: 'epoch-1', tick: 0 });
+    expect(controller.net.primarySeat).toBe(1);
+    controller.dispose();
+  });
+
+  it('forwards per-seat readiness and start requests until disposed', () => {
+    const send = vi.fn();
+    const controller = createNetController({
+      manifest: { ...manifest, net: { authority: 'per-seat', maxSeats: 4 } } as GameManifest,
+      hooks: createFixtureGame([0]),
+      localPlayerIndex: 0,
+      send,
+      acceptInput: vi.fn(),
+      syncPlayers: vi.fn(),
+      setLocalPlayerIndex: vi.fn(),
+      recordEvent: vi.fn(),
+      now: () => 0,
+    });
+    controller.net.setReady(true);
+    controller.net.setReady(false);
+    controller.net.requestStart();
+    expect(send.mock.calls).toEqual([
+      ['net.ready', { ready: true }],
+      ['net.ready', { ready: false }],
+      ['net.start.request', {}],
+    ]);
+    controller.dispose();
+    controller.net.requestStart();
+    controller.net.setReady(true);
+    expect(send).toHaveBeenCalledTimes(3);
+  });
+
   it('delivers reliable events in sequence order without reporting a gap that closes in time', () => {
     const controller = createNetController({
       manifest,

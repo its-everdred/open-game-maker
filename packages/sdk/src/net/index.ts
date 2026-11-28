@@ -40,6 +40,8 @@ export interface GmNet {
   readonly mode: AuthorityMode;
   /** This client's seat, or `null` for a spectator — the one honest value that cannot be confused with seat 0. */
   readonly localSeat: number | null;
+  /** The room's primary seat; before a match, `null` until an eligible seat is known. */
+  readonly primarySeat: number | null;
   /** The seat table: who is seated, on which team, connected, ready, forfeited or spectating. */
   readonly seats: readonly NetSeat[];
   /** `''` outside a per-seat match. */
@@ -48,6 +50,10 @@ export interface GmNet {
   readonly started: boolean;
   onSeats(callback: (seats: readonly NetSeat[]) => void): () => void;
   onStart(callback: (start: NetStart) => void): () => void;
+  /** Set this seat's room readiness; the room validates membership. */
+  setReady(ready: boolean): void;
+  /** Ask the room to start; the room validates the primary seat and readiness. */
+  requestStart(): void;
   now(): NetTime;
   /** The tick-stamped frame this client holds for `seat`, if any. */
   frameFor(seat: number, tick: number): ActionFrame | undefined;
@@ -117,6 +123,7 @@ export interface NetController {
 /** The v2 inbound names a per-seat controller handles. Host mode ignores them (routing is N3's). */
 const V2_INBOUND = new Set([
   'net.start',
+  'net.primary',
   'net.start.cancel',
   'net.epoch.end',
   'net.seats',
@@ -247,6 +254,9 @@ export function createNetController(options: NetControllerOptions): NetControlle
       if (!perSeat) return roles.localPlayerIndex;
       return perSeat.spectator ? null : perSeat.localSeat;
     },
+    get primarySeat() {
+      return perSeat ? perSeat.currentPrimarySeat : null;
+    },
     get seats() {
       return perSeat?.seatList ?? [];
     },
@@ -261,6 +271,12 @@ export function createNetController(options: NetControllerOptions): NetControlle
     },
     onSeats: (callback) => subscribe(seatListeners, callback),
     onStart: (callback) => subscribe(startListeners, callback),
+    setReady: (ready) => {
+      if (!disposed && perSeat) options.send('net.ready', { ready });
+    },
+    requestStart: () => {
+      if (!disposed && perSeat) options.send('net.start.request', {});
+    },
     now: () => ({
       serverMs: options.now() + (perSeat?.offsetMs ?? 0),
       tick: perSeat?.tick ?? 0,

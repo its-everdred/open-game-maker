@@ -99,6 +99,8 @@ export class PerSeatMode {
   private readonly sampledTicks = new Set<number>();
   private readonly pendingStates = new Map<number, { tick: number; state: unknown }[]>();
   private seats: NetSeat[];
+  private hasSeatTable = false;
+  private epochPrimary: number | undefined;
   private epoch = '';
   private currentTick = 0;
   private inputSequence = 0;
@@ -162,6 +164,16 @@ export class PerSeatMode {
 
   get seatList(): readonly NetSeat[] {
     return this.seats;
+  }
+
+  /** The room elects the lowest connected, occupied, non-forfeited seat before an epoch. */
+  get currentPrimarySeat(): number | null {
+    if (this.epochPrimary !== undefined) return this.epochPrimary;
+    if (!this.hasSeatTable) return null;
+    return this.seats.reduce<number | null>((primary, seat) => {
+      if (!seat.userId || !seat.connected || seat.forfeited || seat.spectator) return primary;
+      return primary === null ? seat.seat : Math.min(primary, seat.seat);
+    }, null);
   }
 
   digest(): readonly number[] {
@@ -277,11 +289,21 @@ export class PerSeatMode {
     if (type === 'net.start.cancel' || type === 'net.epoch.end') {
       this.gate.cancel();
       this.started = false;
+      this.epochPrimary = undefined;
+      this.options.emitSeats(this.seats);
       this.syncDiagnostics();
       return;
     }
     if (type === 'net.seats') {
       this.setSeats((payload as { seats: NetSeat[] }).seats);
+      return;
+    }
+    if (type === 'net.primary') {
+      const primary = payload as { epoch: string; seat: number };
+      if (this.started && primary.epoch === this.epoch && this.epochPrimary !== primary.seat) {
+        this.epochPrimary = primary.seat;
+        this.options.emitSeats(this.seats);
+      }
       return;
     }
     if (!this.started) return;
@@ -325,10 +347,13 @@ export class PerSeatMode {
 
   private start(start: NetStart): void {
     if (this.started && this.epoch === start.epoch) {
+      this.epochPrimary = start.primarySeat;
       this.setSeats(start.seats);
       return;
     }
     this.epoch = start.epoch;
+    this.epochPrimary = start.primarySeat;
+    this.hasSeatTable = true;
     this.seats = [...start.seats];
     this.streams = createStreams(start.seed, start.privateSeed ?? 0);
     this.rings.setSeats(this.seats.map((seat) => seat.seat));
@@ -359,6 +384,7 @@ export class PerSeatMode {
 
   private setSeats(seats: readonly NetSeat[]): void {
     this.seats = [...seats];
+    this.hasSeatTable = true;
     this.rings.setSeats(this.seats.map((seat) => seat.seat));
     this.options.emitSeats(this.seats);
   }
@@ -635,8 +661,7 @@ export class PerSeatMode {
   }
 
   private primarySeat(): number {
-    const primary = this.seats.find((seat) => seat.connected && seat.seat === 0);
-    return primary?.seat ?? this.seats[0]?.seat ?? 0;
+    return this.currentPrimarySeat ?? 0;
   }
 
   private drop(label: string, error: unknown): void {
