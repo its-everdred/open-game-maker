@@ -47,6 +47,13 @@ it('requires landscape coverage for each selected screen, without requiring unre
     missingReferences: [],
     missingCaptures: [],
   });
+  expect(
+    missingSelectedParityCoverage(
+      [...reference, `${landscape.name}.png`, 'SettingsDesktop-1280x800.png'],
+      [capture, landscape],
+      selected,
+    ),
+  ).toEqual({ missingReferences: [], missingCaptures: ['SettingsDesktop-1280x800'] });
 });
 
 it('does not count a capture whose viewport or scale differs from its reference', () => {

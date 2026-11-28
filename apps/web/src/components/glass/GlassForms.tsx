@@ -44,12 +44,12 @@ export function GlassSlider({ value, min = 0, max = 100, className, style, ...pr
   const bounded = Number.isFinite(value) ? Math.max(low, Math.min(high, value)) : low;
   const requestedStep = Number(props.step);
   const step = Number.isFinite(requestedStep) && requestedStep > 0 ? requestedStep : 1;
+  const stepsToMax = (high - low) / step;
+  const maxSteps = Math.floor(stepsToMax + Number.EPSILON * Math.max(1, Math.abs(stepsToMax)) * 4);
   const current =
     props.step === 'any'
       ? bounded
-      : Number(
-          (low + Math.min(Math.round((bounded - low) / step), Math.floor((high - low) / step)) * step).toPrecision(15),
-        );
+      : Number((low + Math.min(Math.round((bounded - low) / step), maxSteps) * step).toPrecision(15));
   const fill = `${((current - low) / (high - low)) * 100}%`;
   return (
     <input

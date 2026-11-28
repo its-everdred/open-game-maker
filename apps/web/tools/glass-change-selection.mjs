@@ -44,6 +44,15 @@ export function changedGlassFiles(root, base) {
       'apps/web/src',
       'apps/web/public',
       'apps/web/title-town',
+      'apps/web/vendor',
+      'packages/contracts',
+      'packages/design-log',
+      'packages/iframe-bridge',
+      'packages/voice-client',
+      'packages/sdk',
+      'packages/host',
+      'packages/pack-adapters/smallscaleint',
+      'pnpm-lock.yaml',
       'apps/web/package.json',
       'apps/web/playwright.config.ts',
       'apps/web/tools',
@@ -102,6 +111,13 @@ export function glassScreens(files) {
       file === 'apps/web/e2e/glass-parity.spec.ts' ||
       file === 'apps/web/package.json' ||
       file === 'apps/web/playwright.config.ts' ||
+      file === 'apps/web/src/glass-tokens.css' ||
+      file.startsWith('apps/web/src/components/glass/') ||
+      file === 'pnpm-lock.yaml' ||
+      file.startsWith('apps/web/vendor/') ||
+      /^packages\/(?:contracts|design-log|iframe-bridge|voice-client|sdk|host|pack-adapters\/smallscaleint)\//.test(
+        file,
+      ) ||
       file.startsWith('apps/web/e2e/fixtures/glass/') ||
       /^apps\/web\/tools\/(?:glass-|generate-glass-tokens|import-glass-exports)/.test(file) ||
       /^apps\/web\/e2e\/support\/(?:mock-game-api\.ts|stage-prototype-fixture\.mjs)$/.test(file) ||
@@ -111,8 +127,7 @@ export function glassScreens(files) {
       (file.startsWith('packages/gm-cli/src/design-parity/') && !/\.test\.ts$/.test(file)) ||
       /^tests\/design-baselines\/ogm-glass\/(?:manifest|masks)\.json$/.test(file)
     ) {
-      for (const screen of coveredScreens) screens.add(screen);
-      screens.add('Unmapped');
+      screens.add('All');
       continue;
     }
     if (/\.(?:test|spec)\.[^.]+$/.test(file)) continue;
@@ -168,8 +183,9 @@ export function runGlassScreens(files, { gameDist, run, log, error }) {
       `Glass parity has no capture for changed UI: ${unmapped.join(', ')}. Add a reviewed screen capture before merging.`,
     );
   }
+  const runAll = screens.includes('All');
   const runnable = [];
-  for (const screen of screens.filter((item) => item !== 'Unmapped')) {
+  for (const screen of (runAll ? coveredScreens : screens).filter((item) => item !== 'Unmapped')) {
     if (screen === 'Editor' && !gameDist) {
       error('Glass parity requires OGM_GLASS_GAME_DIST pointing to a real built game for the Editor capture.');
       failed = true;
@@ -181,6 +197,6 @@ export function runGlassScreens(files, { gameDist, run, log, error }) {
       );
     runnable.push(screen);
   }
-  if (runnable.length && !run(runnable)) failed = true;
+  if (runnable.length && !run(runAll && gameDist ? ['all'] : runnable)) failed = true;
   return failed ? 1 : 0;
 }

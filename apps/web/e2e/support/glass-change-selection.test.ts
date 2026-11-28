@@ -22,7 +22,7 @@ it('selects affected screens and fails closed on other visible routes', () => {
   expect(glassScreens(['apps/web/src/routes/games/GameDetail.tsx'])).toEqual(['GameSheet', 'Home']);
   expect(glassScreens(['apps/web/src/components/GlassButton.tsx'])).toEqual(['Unmapped']);
   expect(glassScreens(['apps/web/public/new-image.png'])).toEqual(['Unmapped']);
-  expect(glassScreens(['apps/web/src/glass-tokens.css'])).toEqual(['Unmapped']);
+  expect(glassScreens(['apps/web/src/glass-tokens.css'])).toEqual(['All']);
   expect(glassScreens(['apps/web/src/routes/games/GamesScreen.test.tsx'])).toEqual([]);
   expect(glassScreens(['tests/design-baselines/ogm-glass/HomeDesktop-1440x900.png'])).toEqual(['Home']);
   expect(glassScreens(['tests/design-baselines/ogm-glass/Join-780x1688.png'])).toEqual(['Unmapped']);
@@ -35,11 +35,24 @@ it('selects affected screens and fails closed on other visible routes', () => {
     'apps/web/tools/glass-parity-ci.mjs',
     'apps/web/playwright.config.ts',
     'packages/gm-cli/src/design-parity/metrics.ts',
+    'packages/host/src/index.ts',
+    'apps/web/vendor/aiur-conversation/src/composer.mjs',
+    'pnpm-lock.yaml',
     'tests/design-baselines/ogm-glass/masks.json',
   ]) {
-    expect(glassScreens([file])).toContain('Unmapped');
-    expect(glassScreens([file])).toContain('Home');
+    expect(glassScreens([file])).toEqual(['All']);
   }
+});
+
+it('runs the full coverage gate for parity infrastructure without unconditional failure', async () => {
+  const { runGlassScreens } = await import('../../tools/glass-change-selection.mjs');
+  const run = vi.fn(() => true);
+  const error = vi.fn();
+  const log = vi.fn();
+  expect(runGlassScreens(['apps/web/e2e/glass-parity.spec.ts'], { gameDist: '/real/dist', run, error, log })).toBe(0);
+  expect(run).toHaveBeenCalledWith(['all']);
+  expect(runGlassScreens(['apps/web/e2e/glass-parity.spec.ts'], { run, error, log })).toBe(1);
+  expect(error).toHaveBeenCalledWith(expect.stringContaining('requires OGM_GLASS_GAME_DIST'));
 });
 
 it('finds changed screen files from the repository root', async () => {
@@ -83,17 +96,17 @@ it('finds changed screen files from the repository root', async () => {
     await writeFile(join(root, 'apps/web/src/components/glass/Another.tsx'), 'export {}');
     git('add', '.');
     git('commit', '-qm', 'add another shared component');
-    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Unmapped']);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['All']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     await writeFile(join(root, 'apps/web/src/components/glass/Glass.tsx'), 'export const changed = true');
     git('add', '.');
     git('commit', '-qm', 'change library');
-    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Unmapped']);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['All']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     await writeFile(join(root, 'apps/web/src/glass-tokens.css'), ':root { color: red }');
     git('add', '.');
     git('commit', '-qm', 'change tokens');
-    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Unmapped']);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['All']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     git('rm', 'apps/web/src/glass-tokens.css');
     git('commit', '-qm', 'remove tokens');
@@ -101,7 +114,7 @@ it('finds changed screen files from the repository root', async () => {
     await writeFile(join(root, 'apps/web/src/glass-tokens.css'), ':root {}');
     git('add', '.');
     git('commit', '-qm', 'restore tokens');
-    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Unmapped']);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['All']);
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     await mkdir(join(root, 'tests/design-baselines/ogm-glass'), { recursive: true });
     await writeFile(join(root, 'tests/design-baselines/ogm-glass/Home-780x1688.png'), 'reference');
@@ -114,6 +127,14 @@ it('finds changed screen files from the repository root', async () => {
     git('add', '.');
     git('commit', '-qm', 'change title town');
     expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['Title']);
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    await mkdir(join(root, 'packages/host/src'), { recursive: true });
+    await writeFile(join(root, 'packages/host/src/index.ts'), 'export {}');
+    await writeFile(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
+    git('add', '.');
+    git('commit', '-qm', 'change shared dependency');
+    expect(changedGlassFiles(root, 'origin/main')).toEqual(['packages/host/src/index.ts', 'pnpm-lock.yaml']);
+    expect(glassScreens(changedGlassFiles(root, 'origin/main'))).toEqual(['All']);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

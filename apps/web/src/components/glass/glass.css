@@ -271,12 +271,14 @@
   display: flex;
   flex-direction: column;
   border-radius: var(--ogm-radius-xl);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   animation: ogm-sheet-enter var(--ogm-motion-spring-duration) var(--ogm-motion-spring) both;
 }
 
 .ogm-glass-sheet.ogm-bottom {
   inset: auto 0 0;
+  max-height: calc(100% - 20px);
   border-radius: var(--ogm-radius-xl) var(--ogm-radius-xl) 0 0;
 }
 

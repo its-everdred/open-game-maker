@@ -79,3 +79,17 @@ test('chat controls use one blue accent and embedded buttons have no raised edge
   expect(result.chat).toBe(result.blue);
   expect(result.bubble).toBe(result.blueRgb);
 });
+
+test('a tall glass sheet scrolls to its last action in landscape', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.setContent(
+    '<div class="ogm-glass-sheet"><div style="flex: none; height: 900px">Content</div><button style="flex: none">Last action</button></div>',
+  );
+  await page.addStyleTag({ content: `${tokens}\n${componentCss}` });
+  const sheet = page.locator('.ogm-glass-sheet');
+  await expect.poll(() => sheet.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await page.mouse.move(400, 195);
+  await page.mouse.wheel(0, 1000);
+  await expect.poll(() => sheet.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect(page.getByRole('button', { name: 'Last action' })).toBeInViewport();
+});

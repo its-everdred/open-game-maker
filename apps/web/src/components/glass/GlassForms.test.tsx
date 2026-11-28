@@ -51,6 +51,9 @@ it('keeps the fill aligned with stepped and continuous range values', () => {
   rerender(<GlassSlider aria-label="Music" min={0} max={10} step="any" value={8} readOnly />);
   expect(slider).toHaveValue('8');
   expect(slider).toHaveStyle('--ogm-slider-fill: 80%');
+  rerender(<GlassSlider aria-label="Music" min={0} max={0.3} step={0.1} value={0.3} readOnly />);
+  expect(slider).toHaveValue('0.3');
+  expect(slider).toHaveStyle('--ogm-slider-fill: 100%');
 }, 30_000);
 
 it('connects a field label to its control', () => {

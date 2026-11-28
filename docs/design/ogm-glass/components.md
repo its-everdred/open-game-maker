@@ -24,7 +24,7 @@ Class names are those in [glass.css](glass.css); the canvas's Components artboar
 | Resource meter | `.meter` | Icon, name, % right, thin gradient bar, reset or budget line. Low: orange ring; out: red ring and greyed icon. |
 | Activity banner | `.banner` | 48 px purple-tinted glass pill with a pulse dot: "N agents working · <ticket> <n>%". Under the corner, never in play view. Opens Activity. |
 | Chat | `.thread`, `.msg.a/.me/.sys`, `.step` | Agent bubbles glass, mine green with gloss, system centred muted. Steps are one line with a green check or a blue pulse. Media inside bubbles at full width, object-fit cover. Bug reports show my words in a red outline bubble. |
-| Composer | `.composer` | Glass pill: attach orb, text, dictate orb, live-voice orb (purple). Send (green orb) replaces dictate once there is text. |
+| Composer | `.composer` | Glass pill: attach, text, dictate and live voice. Chat controls share one blue accent; embedded buttons have no border or shadow. |
 | Live voice | VoiceLive artboard | Blurred game, 132 px purple breathing orb with waveform, my words muted above the agent's reply, three orbs: mute, end (red, 72), show chat. |
 | Choice card | `.choice`, `.pick` | Full-width media with a lettered orb (A, B…); selected = orange ring and glow. Every option has media. |
 | Option tile | `.opt` | New Game tiles: 92 px, icon in the option's hue, near-clear fill; selected fills 14% of the hue, edge ends in the hue, hue glow. |

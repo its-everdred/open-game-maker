@@ -102,15 +102,14 @@ export function missingSelectedParityCoverage(
   captures: readonly Capture[],
   selectedScreens: ReadonlySet<string>,
 ) {
-  const required = requiredParityArtboards.filter((name) =>
+  const belongsToSelected = (name: string) =>
     [...selectedScreens].some((screen) =>
       [screen, `${screen}Landscape`, `${screen}Desktop`].some((artboard) => name.startsWith(`${artboard}-`)),
-    ),
-  );
-  const requiredSet = new Set<string>(required);
+    );
+  const required = requiredParityArtboards.filter(belongsToSelected);
   return missingParityCoverage(
     required,
-    references.filter((file) => requiredSet.has(file.replace(/\.png$/, ''))),
+    references.filter((file) => belongsToSelected(file.replace(/\.png$/, ''))),
     captures,
     selectedScreens,
   );
