@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { EXIT, type GmCommand } from '../../command.js';
-import { inventoryPath, readInventory, renderInventory } from '../../decision-inventory.js';
+import { inventoryPath, readRenderableInventory, renderInventory } from '../../decision-inventory.js';
 
 export const command: GmCommand = {
   name: 'decisions render',
@@ -11,7 +11,7 @@ export const command: GmCommand = {
   async run(ctx, args) {
     if (args.length) return EXIT.usage;
     const { file } = inventoryPath(ctx.cwd);
-    const markdown = renderInventory(readInventory(file));
+    const markdown = renderInventory(readRenderableInventory(file, (message) => ctx.err(`warning: ${message}`)));
     const target = file.replace(/decisions\.json$/, 'decisions.md');
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, markdown);
