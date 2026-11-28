@@ -1,10 +1,11 @@
 import type { AiurClient, Decision, DecisionAnswer } from '@ogm/aiur-client';
 import { describe, expect, it } from 'vitest';
+import { schema } from '@ogm/db';
 
 import { listCommands, parseCommand } from '../../src/build-chat/store.js';
 import { listReviews, recordReview } from '../../src/reviews/store.js';
 import type { AppDeps } from '../../src/app/types.js';
-import { as, chatJob, jobTable, makeChatApp } from '../build-chat/setup.js';
+import { as, chatJob, jobTable, makeChatApp, users } from '../build-chat/setup.js';
 import {
   CP_ID,
   GAME,
@@ -41,6 +42,16 @@ async function setup() {
     client,
   );
   seedDesignGame(deps);
+  deps.db
+    .insert(schema.familyMembers)
+    .values({
+      familyId: users.owner.familyId,
+      userId: users.owner.userId,
+      role: 'owner',
+      capability: 'creator',
+      joinedAt: '2026-11-18T05:00:00.000Z',
+    })
+    .run();
   return { app, deps, answers };
 }
 
