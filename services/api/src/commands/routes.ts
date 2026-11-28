@@ -53,6 +53,7 @@ export default new Hono<ApiBindings>()
         command.ticket ? [{ ticket: command.ticket, id: command.decision_id, postedAt: command.opened_at }] : [],
       ),
       c.get('deps').log,
+      c.get('deps').reviewLogPath,
     );
     return c.json(page);
   })
@@ -67,6 +68,7 @@ export default new Hono<ApiBindings>()
         command.ticket ? [{ ticket: command.ticket, id: command.decision_id, postedAt: command.opened_at }] : [],
       ),
       c.get('deps').log,
+      c.get('deps').reviewLogPath,
     );
     return c.json(page);
   })

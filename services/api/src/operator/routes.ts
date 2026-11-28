@@ -242,7 +242,12 @@ const routes = new Hono<ApiBindings>()
     }
     const round = submitRound(deps.db, game.id, submission);
     deps.db.update(schema.builds).set({ prototypeReviewState: 'posted' }).where(eq(schema.builds.id, build.id)).run();
-    await logReviewPublish(game.id, { ticket: submission.ticket, id: round.id, postedAt: round.postedAt }, deps.log);
+    await logReviewPublish(
+      game.id,
+      { ticket: submission.ticket, id: round.id, postedAt: round.postedAt },
+      deps.log,
+      deps.reviewLogPath,
+    );
     return c.json({ id: round.id, round: round.round, state: 'posted' }, 201);
   })
   .post('/games/:ref/builds/:buildId/prototype-review-check', (c) => {

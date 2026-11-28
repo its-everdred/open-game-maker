@@ -123,6 +123,7 @@ export default new Hono<ApiBindings>()
       game.id,
       result.map((round) => ({ ticket: round.ticket, id: round.id, postedAt: round.postedAt })),
       deps.log,
+      deps.reviewLogPath,
     );
     return c.json({ rounds: result });
   })

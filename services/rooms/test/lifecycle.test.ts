@@ -66,7 +66,7 @@ describe('GameRoom lifecycle', () => {
   });
 
   it('pauses for an editor drop, restores phase on reconnect, and sends resync', async () => {
-    const room = await newRoom(harness.testServer);
+    const room = await newRoom(harness.testServer, { timings: { ownerReconnectSec: 30 } });
     const owner = await connect(harness.testServer, room, 'owner', 'owner');
     owner.send('design.tx', {
       tx: {
@@ -84,8 +84,7 @@ describe('GameRoom lifecycle', () => {
     const token = owner.reconnectionToken;
     owner.reconnection.enabled = false;
     await owner.leave(false);
-    await sleep(30);
-    expect(room.state.phase).toBe('pausedForHost');
+    await waitFor(() => room.state.phase === 'pausedForHost', 'owner paused', 5_000);
 
     const reconnected = await harness.testServer.sdk.reconnect(token);
     const resync = await reconnected.waitForMessage('resync');
@@ -178,31 +177,30 @@ describe('GameRoom lifecycle', () => {
   });
 
   it('rejects a revoked session that tries to reconnect from a held seat', async () => {
-    const room = await newRoom(harness.testServer);
+    const room = await newRoom(harness.testServer, { timings: { playerReconnectSec: 30 } });
     const player = await connect(harness.testServer, room, 'player', 'player');
     const token = player.reconnectionToken;
     player.reconnection.enabled = false;
     await player.leave(false);
-    await sleep(30);
+    await waitFor(() => room.state.members.get('player')?.connected === false, 'player held', 5_000);
 
     room.revoke({ userId: 'player' });
 
     await expect(harness.testServer.sdk.reconnect(token)).rejects.toThrow();
-    await sleep(30);
-    expect(room.state.members.has('player')).toBe(false);
+    await waitFor(() => !room.state.members.has('player'), 'revoked player removed', 5_000);
   });
 
   it('keeps a held owner session alive when the other owner device closes', async () => {
-    const room = await newRoom(harness.testServer);
+    const room = await newRoom(harness.testServer, { timings: { ownerReconnectSec: 30 } });
     const first = await connect(harness.testServer, room, 'owner', 'owner');
     const second = await connect(harness.testServer, room, 'owner', 'owner');
     const token = second.reconnectionToken;
     second.reconnection.enabled = false;
     await second.leave(false);
-    await sleep(30);
+    await waitFor(() => room.state.editorSessionId === first.sessionId, 'first owner restored', 5_000);
 
     await first.leave();
-    expect(room.state.phase).toBe('pausedForHost');
+    await waitFor(() => room.state.phase === 'pausedForHost', 'owner paused', 5_000);
     expect(harness.testServer.getRoomById(room.roomId)).toBeDefined();
 
     const reconnected = await harness.testServer.sdk.reconnect(token);

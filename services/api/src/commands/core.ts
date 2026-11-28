@@ -131,6 +131,7 @@ export default new Hono<ApiBindings>()
       'core',
       visible.map((command) => ({ ticket: command.ticket!, id: command.decision_id, postedAt: command.opened_at })),
       deps.log,
+      deps.reviewLogPath,
     );
     const workerResults = await Promise.all(
       entries.map(async ({ id, repo }) => ({

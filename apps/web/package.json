@@ -13,7 +13,7 @@
     "pretypecheck": "pnpm run build:deps",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src e2e tools",
-    "prepare:browser": "VITE_GAMES_ORIGIN=http://127.0.0.1:${OGM_WEB_BRIDGE_PORT:-10001} pnpm build && node e2e/support/stage-prototype-fixture.mjs",
+    "prepare:browser": "pnpm --filter @ogm/api build && VITE_GAMES_ORIGIN=http://127.0.0.1:${OGM_WEB_BRIDGE_PORT:-10001} pnpm build && node e2e/support/stage-prototype-fixture.mjs",
     "pree2e": "pnpm run prepare:browser",
     "e2e": "playwright test",
     "pretest:browser": "pnpm run prepare:browser",

@@ -12,6 +12,10 @@
   pointer-events: none;
 }
 
+.editor-chrome > .palette-items {
+  pointer-events: auto;
+}
+
 .editor-canvas-surface {
   position: absolute;
   inset: 0;

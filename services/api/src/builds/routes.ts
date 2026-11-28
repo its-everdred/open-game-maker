@@ -357,6 +357,7 @@ export function buildRoutes(opts: {
             game.id,
             { ticket: parsed.data.ticket, id: round.id, postedAt: new Date().toISOString() },
             deps.log,
+            deps.reviewLogPath,
           );
         return c.json({ id: round.id, round: round.round }, 201);
       } catch (error) {

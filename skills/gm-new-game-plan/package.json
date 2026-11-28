@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude 'dist/**'",
     "lint": "eslint skill.test.ts scripts"
   },
   "devDependencies": {
