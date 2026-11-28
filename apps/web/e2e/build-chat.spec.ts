@@ -356,7 +356,7 @@ test('names a blocked microphone and a refused voice token at 390x844', async ({
   const composer = page.locator('#chat-dock-slot aiur-composer');
   const alert = page.locator('.build-chat-panel [role="alert"]');
   await composer.getByRole('button', { name: 'Dictate' }).click();
-  await composer.getByRole('button', { name: 'Stop dictation' }).click();
+  await composer.getByRole('button', { name: 'Stop and send' }).click();
   await expect(alert).toHaveText(/^Microphone blocked\..*Safari.*\(dictation: mic_denied\)$/);
   await page.screenshot({ path: testInfo.outputPath('mic-denied.png') });
   await expect.poll(() => reports).toContainEqual(expect.objectContaining({ action: 'dictation', code: 'mic_denied' }));

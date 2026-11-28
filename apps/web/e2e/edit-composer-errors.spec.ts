@@ -20,7 +20,7 @@ test('the edit page names a blocked microphone, a refused voice token and a fail
   const alert = page.locator('.edit-workspace-chat [role="alert"]');
 
   await composer.getByRole('button', { name: 'Dictate' }).click();
-  await composer.getByRole('button', { name: 'Stop dictation' }).click();
+  await composer.getByRole('button', { name: 'Stop and send' }).click();
   await expect(alert).toHaveText(/^Microphone blocked\..*Safari.*\(dictation: mic_denied\)$/);
   await page.screenshot({ path: testInfo.outputPath('edit-mic-denied.png') });
   await expect
