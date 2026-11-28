@@ -196,6 +196,9 @@ describe('verdicts', () => {
     expect(dictationFailure('Make the sky blue.')).toBeNull();
     expect(dictationFailure('make the skies Blue')).toBeNull();
     expect(dictationFailure('Make the sky')).toMatch(/not the clip's words/);
+    expect(dictationFailure('the sky blue')).toMatch(/not the clip's words/);
+    expect(dictationFailure('Make sky blue')).toMatch(/not the clip's words/);
+    expect(dictationFailure('blue make the sky')).toMatch(/not the clip's words/);
     expect(dictationFailure('blue')).toMatch(/not the clip's words/);
     expect(dictationFailure('  ')).toBe('the message box stayed empty after the clip');
     expect(dictationFailure('Hello there')).toMatch(/not the clip's words/);

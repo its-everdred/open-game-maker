@@ -13,8 +13,8 @@ type Page = Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['newPa
 /** Spoken by Piper's public-domain LJSpeech voice, 16 kHz mono; together 3.2 s, under the ticket's 10 s cap. */
 export const CLIPS = { dictate: 'say.wav', talk: 'hello.wav' } as const;
 export const CLIP_SECONDS = { dictate: 1.61, talk: 1.62 } as const;
-/** The clip's distinctive words must both reach the box in order. */
-export const DICTATED = /\bsk(?:y|ies)\b.*\bblue\b/iu;
+/** Every spoken word must reach the box in order; distinctive-word-only checks miss clipped openings. */
+export const DICTATED = /\bmake\b.*\bthe\b.*\bsk(?:y|ies)\b.*\bblue\b/iu;
 const MEDIA_DIR = new URL('../qa/voice-e2e/', import.meta.url);
 const VIEWPORT = { width: 390, height: 844 };
 const TITLE = 'QA voice';
@@ -116,7 +116,7 @@ export function tallyFrames(frames: readonly string[]): VoiceTally {
   return tally;
 }
 
-/** One-way: the clip's words reached the message box. */
+/** One-way: the complete clip's words reached the message box in order. */
 export function dictationFailure(box: string): string | null {
   if (!box.trim()) return 'the message box stayed empty after the clip';
   if (!DICTATED.test(box)) return `the message box shows "${box.slice(0, 80)}", not the clip's words`;
