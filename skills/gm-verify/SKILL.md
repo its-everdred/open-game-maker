@@ -5,8 +5,7 @@ description: Use before showing a creator any visual game change. Run determinis
 
 # Verify a game
 
-For a playable review round, run `gm live-build` after each change and attach `https://<app-host>/live/<slug>/<ticket>?scenario=<name>` as the round's `preview_url`.
-The creator can review that live build immediately; the gates below run in the background and remain required before shipping.
+For a playable review round, run `gm live-build` after each change and attach `https://<app-host>/live/<slug>/<ticket>?scenario=<name>` as the round's `preview_url`. The creator can review that live build immediately; the gates below run in the background and remain required before shipping.
 
 Never report a visual result you have not looked at. Code, logs, and a passing command are not visual evidence. For a custom rigged machine, see `vendor/anymachine/SKILL.md` for overlap sweeps and GLB re-import checks.
 
@@ -40,12 +39,7 @@ A report budget whose status is `over` blocks the PR. Name the tier and measured
 
 ## Matching concept art
 
-On every iteration, capture a settled view with the same camera and size. Measure the concept directly: express sizes and positions as fractions of a cell. Run `gm look score <target.png> <candidate.png>` and
-`gm look judge <sheet.png> --rubric tiers`. Fix the highest-ranked differences and repeat. Stop when all tiers pass
-at 8 or more. If three iterations fail to beat the best score so far by at least the larger of 0.5 and the reported tier spread, change technique (a different renderer,
-library or layout, not another layer or parameter on the same one); if that stalls too, return to the best checkpoint
-and raise one Command with the scored sheet (Blobs #309 ran 40 trials at 4.2-5.4 and #310 58 at SSIM 0.12, 2026-11-11). Choosing the next technique is yours: if you can name a recommended option, take it and note it in the workpad (#310 raised five blocking Commands in 90 minutes, each with a sound recommendation, 2026-11-12). After judging, rerun `gm look score` to include the cached default-run `judge_spread` in its JSON; it is null until that judgment exists. The spread is the largest absolute deviation from each tier median among the sampled runs, not a guarantee for a new image. Ready posts include the score JSON and side-by-side. Do not ask the Executor or
-creator to judge differences the scorer can judge. Follow the look broker's consent and licence restrictions.
+On every iteration, capture a settled view with the same camera and size. Measure the concept directly: express sizes and positions as fractions of a cell. Run `gm look score <target.png> <candidate.png>` and `gm look judge <sheet.png> --rubric tiers`. Fix the highest-ranked differences and repeat. Stop when all tiers pass at 8 or more. If three iterations fail to beat the best score so far by at least the larger of 0.5 and the reported tier spread, change technique (a different renderer, library or layout, not another layer or parameter on the same one); if that stalls too, return to the best checkpoint and raise one Command with the scored sheet (Blobs #309 ran 40 trials at 4.2-5.4 and #310 58 at SSIM 0.12, 2026-11-11). Choosing the next technique is yours: if you can name a recommended option, take it and note it in the workpad (#310 raised five blocking Commands in 90 minutes, each with a sound recommendation, 2026-11-12). After judging, rerun `gm look score` to include the cached default-run `judge_spread` in its JSON; it is null until that judgment exists. The spread is the largest absolute deviation from each tier median among the sampled runs, not a guarantee for a new image. Ready posts include the score JSON and side-by-side. Do not ask the Executor or creator to judge differences the scorer can judge. Follow the look broker's consent and licence restrictions.
 
 ## Binary visual checklist
 
