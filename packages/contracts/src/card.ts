@@ -25,6 +25,9 @@ function readSchema(relativePath: string): object {
 }
 
 const cardValidator = ajv.compile<AssetCard>(readSchema('../schemas/asset-card.schema.json'));
+const rightsValidator = ajv.getSchema<NonNullable<AssetCard['rights']>>(
+  'https://open-game-maker-2000.local/schemas/asset-card/1.0.json#/$defs/rights',
+);
 const layoutValidator = ajv.compile<MapLayoutSpec>(readSchema('../schemas/map-layout-spec.schema.json'));
 
 function errorsFor(errors: ErrorObject[] | null | undefined): string[] {
@@ -42,6 +45,15 @@ function validate<T>(
 export function validateCard(doc: unknown): { ok: true; card: AssetCard } | { ok: false; errors: string[] } {
   const result = validate(cardValidator, doc);
   return result.ok ? { ok: true, card: result.value } : result;
+}
+
+/** Validate rights independently when other card metadata is not yet compatible with the card schema. */
+export function validateCardRights(
+  doc: unknown,
+): { ok: true; rights: NonNullable<AssetCard['rights']> } | { ok: false; errors: string[] } {
+  if (!rightsValidator) throw new Error('asset card rights schema is unavailable');
+  const result = validate(rightsValidator, doc);
+  return result.ok ? { ok: true, rights: result.value } : result;
 }
 
 export function validateLayoutSpec(doc: unknown): { ok: true; spec: MapLayoutSpec } | { ok: false; errors: string[] } {

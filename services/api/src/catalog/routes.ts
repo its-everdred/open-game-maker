@@ -26,7 +26,9 @@ import {
 import type { ApiBindings } from '../app/types.js';
 import { requirePrincipal } from '../app/principal.js';
 import { audioStyleRoutes } from './audio-styles.js';
+import { catalogAssetRoutes } from './assets.js';
 import { streamMedia } from './byte-range.js';
+import { catalogMediaRoutes } from './media.js';
 
 export type { StyleFamilyApi } from '@ogm/asset-cards';
 
@@ -378,6 +380,8 @@ export function catalogRoutes(opts: { assetsRoot?: string }): Hono<ApiBindings> 
       })
       // The Sound step's tiles and their 60 s montages (#357); the montage builder writes the files this reads.
       .route('/', audioStyleRoutes({ assetsRoot: opts.assetsRoot, prefix }))
+      .route('/', catalogMediaRoutes(opts.assetsRoot))
+      .route('/', catalogAssetRoutes(opts.assetsRoot))
   );
 }
 

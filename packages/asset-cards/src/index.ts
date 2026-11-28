@@ -1,4 +1,16 @@
 export type { CardIndex, IndexError, ResolvedCard, Rights, SearchQuery } from './types.js';
+export { CATALOG_KINDS, catalogKind, type CatalogKind } from './catalog-kind.js';
+export { catalogMedia, type CatalogMedia, type CatalogMediaRole } from './catalog-media.js';
+export { loadCatalog } from './catalog-load.js';
+export {
+  buildCatalog,
+  searchCatalog,
+  type CatalogAsset,
+  type CatalogIndex,
+  type CatalogPack,
+  type CatalogPackInput,
+  type CatalogQuery,
+} from './catalog.js';
 export { fallbackEditorPalette } from './editor-palette.js';
 export { intersectRights, resolve } from './resolve.js';
 export {
