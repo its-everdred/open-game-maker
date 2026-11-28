@@ -5,17 +5,24 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import type { GmContext } from '../src/command.js';
 import { command } from '../src/commands/design/parity.js';
 
-const child = vi.hoisted(() => ({ calls: [] as { args: string[]; env: NodeJS.ProcessEnv }[], codes: [] as number[] }));
+const child = vi.hoisted(() => ({
+  calls: [] as { args: string[]; env: NodeJS.ProcessEnv }[],
+  codes: [] as number[],
+  onStart: undefined as ((signal: AbortSignal) => void) | undefined,
+}));
 vi.mock('../src/commands/capture/shell.js', async (original) => ({
   ...(await original<typeof import('../src/commands/capture/shell.js')>()),
-  runChild: async (_cwd: string, args: string[], env: NodeJS.ProcessEnv) => {
+  runChild: async (_cwd: string, args: string[], env: NodeJS.ProcessEnv, _timeout: number, signal: AbortSignal) => {
     child.calls.push({ args, env });
+    child.onStart?.(signal);
+    if (signal.aborted) return 130;
     return child.codes.shift() ?? 0;
   },
 }));
 beforeEach(() => {
   child.calls = [];
   child.codes = [];
+  child.onStart = undefined;
 });
 const flags = { screen: 'Home', web: 'apps/web', timeout: 900, port: 43175, 'bridge-port': 43176 };
 function fixture(): GmContext {
@@ -77,4 +84,17 @@ it('rejects fixture games as editor evidence', async () => {
     'test fixture',
   );
   expect(child.calls).toHaveLength(0);
+});
+
+it('cancels its child process and removes signal handlers', async () => {
+  const existing = new Set(process.listeners('SIGINT'));
+  child.onStart = (signal) => {
+    const handler = process.listeners('SIGINT').find((listener) => !existing.has(listener));
+    expect(handler).toBeDefined();
+    handler!('SIGINT');
+    expect(signal.aborted).toBe(true);
+  };
+  expect(await command.run(fixture(), [], flags)).toBe(130);
+  expect(child.calls).toHaveLength(1);
+  expect(process.listeners('SIGINT')).toEqual([...existing]);
 });

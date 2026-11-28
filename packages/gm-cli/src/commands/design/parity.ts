@@ -77,18 +77,25 @@ export const command: GmCommand = {
       ...(dist ? { OGM_GLASS_GAME_DIST: dist } : {}),
     };
     const deadline = Date.now() + timeout * 1000;
-    const signal = new AbortController().signal;
-    const build = await runChild(web, ['run', 'prepare:browser'], env, timeout * 1000, signal);
-    if (build !== EXIT.ok) return build;
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) return EXIT.timeout;
-    const result = await runChild(
-      web,
-      ['exec', 'playwright', 'test', 'e2e/glass-parity.spec.ts', '--project', 'desktop', '--workers=1'],
-      env,
-      remaining,
-      signal,
-    );
-    return result;
+    const abort = new AbortController();
+    const stop = () => abort.abort();
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+    try {
+      const build = await runChild(web, ['run', 'prepare:browser'], env, timeout * 1000, abort.signal);
+      if (build !== EXIT.ok) return build;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return EXIT.timeout;
+      return await runChild(
+        web,
+        ['exec', 'playwright', 'test', 'e2e/glass-parity.spec.ts', '--project', 'desktop', '--workers=1'],
+        env,
+        remaining,
+        abort.signal,
+      );
+    } finally {
+      process.removeListener('SIGINT', stop);
+      process.removeListener('SIGTERM', stop);
+    }
   },
 };
