@@ -1,9 +1,10 @@
-import { AgreedScope, ScopeChoices } from '@ogm/contracts';
+import { AgreedScope, ScopeChoices, type DesignDecision } from '@ogm/contracts';
 import { schema, type Db, type Sqlite } from '@ogm/db';
 import { and, asc, desc, eq, inArray, lte } from 'drizzle-orm';
 
 import { jobAttachments, type AttachmentRow } from '../build-chat/attachments.js';
 import { listSince, type ChatRow } from '../build-chat/store.js';
+import { listDesignDecisions } from '../design-decisions/store.js';
 
 // A New Game request's private context. The store is the app's own private storage — the jobs and scope-session rows,
 // the append-only chat table (voice transcripts land there as text), the scope revision history and the blob store —
@@ -15,7 +16,15 @@ export type NewGameContext = {
   brief: string;
   spec: AgreedScope | null;
   revisions: { revision: number; agreedAt: string }[];
-  messages: { at: string; actor: ChatRow['actor']; kind: ChatRow['kind']; text: string | null; media: boolean }[];
+  designDecisions: DesignDecision[];
+  messages: {
+    id: string;
+    at: string;
+    actor: ChatRow['actor'];
+    kind: ChatRow['kind'];
+    text: string | null;
+    media: boolean;
+  }[];
   attachments: {
     id: string;
     kind: AttachmentRow['kind'];
@@ -46,13 +55,30 @@ export function newGameContext(db: Db, sqlite: Sqlite, requestId: string): NewGa
   const found = findRequest(db, requestId);
   if (!found) return null;
   const { job, game } = found;
+  const parent = db
+    .select({ repo: schema.jobTickets.repo, number: schema.jobTickets.issueNumber })
+    .from(schema.jobTickets)
+    .where(and(eq(schema.jobTickets.jobId, job.id), eq(schema.jobTickets.key, 'new-game')))
+    .get();
   const plan = json(job.plan);
   const session = latestAgreedSession(db, job);
 
   const messages: NewGameContext['messages'] = [];
   for (const chatJobId of new Set([session?.chatJobId, job.id].filter((id): id is string => typeof id === 'string'))) {
-    for (const row of listSince(sqlite, chatJobId, 0, MESSAGE_LIMIT)) {
-      messages.push({ at: row.at, actor: row.actor, kind: row.kind, text: row.text, media: row.mediaHash !== null });
+    let cursor = 0;
+    for (;;) {
+      const page = listSince(sqlite, chatJobId, cursor, MESSAGE_LIMIT);
+      for (const row of page)
+        messages.push({
+          id: row.id,
+          at: row.at,
+          actor: row.actor,
+          kind: row.kind,
+          text: row.text,
+          media: row.mediaHash !== null,
+        });
+      if (page.length < MESSAGE_LIMIT) break;
+      cursor = page[page.length - 1]!.seq;
     }
   }
   messages.sort((left, right) => (left.at < right.at ? -1 : left.at > right.at ? 1 : 0));
@@ -76,12 +102,14 @@ export function newGameContext(db: Db, sqlite: Sqlite, requestId: string): NewGa
     brief: typeof plan.summary === 'string' ? plan.summary.slice(0, BRIEF_MAX) : '',
     spec: session?.scope ?? null,
     revisions: session?.revisions ?? [],
+    designDecisions: listDesignDecisions(db, game.id),
     messages,
     attachments,
     parent:
-      job.aiurRepo === null || job.aiurIssueNumber === null
+      parent ??
+      (job.aiurRepo === null || job.aiurIssueNumber === null
         ? null
-        : { repo: job.aiurRepo, number: job.aiurIssueNumber },
+        : { repo: job.aiurRepo, number: job.aiurIssueNumber }),
   };
 }
 

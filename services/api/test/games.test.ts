@@ -583,6 +583,61 @@ describe('games routes', () => {
     expect(deps.db.select().from(schema.games).all()).toHaveLength(1);
   });
 
+  it('enforces the daily game cap before provisioning, even for concurrent creates', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.config.testerNewGamesPerDay = 1;
+    deps.registry.repoProvisioner = new NullRepoProvisioner();
+    const { app } = await makeApp(deps);
+    const results = await Promise.all([createGame(app), createGame(app)]);
+    expect(results.map((result) => result.status).sort()).toEqual([201, 402]);
+    expect(deps.db.select().from(schema.games).all()).toHaveLength(1);
+    expect((await createGame(app, admin)).status).toBe(201);
+  });
+
+  it('counts a game queued on a prior day before provisioning another today', async () => {
+    const deps = makeDeps();
+    seedFamily(deps);
+    deps.config.testerNewGamesPerDay = 1;
+    deps.registry.repoProvisioner = new NullRepoProvisioner();
+    deps.db
+      .insert(schema.games)
+      .values({
+        id: 'g_queued',
+        familyId,
+        ownerId: creator.userId,
+        title: 'Queued',
+        visibility: 'private',
+        repoVisibility: 'private',
+        createdAt: '2020-01-01T00:00:00.000Z',
+      })
+      .run();
+    deps.db
+      .insert(schema.jobs)
+      .values({
+        id: 'j_queued',
+        gameId: 'g_queued',
+        branchId: 'main',
+        familyId,
+        creatorId: creator.userId,
+        kind: 'new_game',
+        complexity: 1,
+        state: 'queued',
+        start: 'at_reset',
+        startAt: new Date().toISOString(),
+        slot: 'new_game',
+        plan: '{}',
+        reservation: '{}',
+        hardCapMicroUsd: 1,
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+      })
+      .run();
+    const { app } = await makeApp(deps);
+    expect((await createGame(app)).status).toBe(402);
+    expect(deps.db.select().from(schema.games).all()).toHaveLength(1);
+  });
+
   it('refuses an admin patch of another adult game', async () => {
     const deps = makeDeps();
     seedFamily(deps);

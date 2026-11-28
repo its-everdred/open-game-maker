@@ -275,6 +275,30 @@ describe('after_create hook', () => {
     expect(readFileSync(join(dir, '.gm/context/design.missing'), 'utf8')).toBe('design snapshot unavailable\n');
   });
 
+  it('refreshes a same-version New Game planner pack before running the worker', async () => {
+    const pack = mkdtempSync(join(tmpdir(), 'ogm-hook-planner-'));
+    mkdirSync(join(pack, 'gm-new-game-plan/scripts'), { recursive: true });
+    writeFileSync(join(pack, 'gm-new-game-plan/SKILL.md'), 'planner\n');
+    for (const script of ['context', 'relay', 'child'])
+      writeFileSync(join(pack, `gm-new-game-plan/scripts/${script}.mjs`), `${script}\n`);
+    const tgz = execFileSync('tar', ['-czf', '-', '-C', pack, 'gm-new-game-plan']);
+    const base = await api((req, res) => {
+      if (req.url === '/internal/jobs/by-ticket/12/bundle')
+        res.end(
+          JSON.stringify({ v: 1, kind: 'new_game', skillPackVersion: '0.0.0', skillPackUrl: `${base}/skills.tgz` }),
+        );
+      else if (req.url === '/skills.tgz') res.end(tgz);
+      else {
+        res.statusCode = 404;
+        res.end();
+      }
+    });
+    const { dir, result } = await runHook({ OGM_INTERNAL_URL: base }, true);
+    expect(result.status).toBe(0);
+    expect(readFileSync(join(dir, '.claude/skills/gm-new-game-plan/scripts/context.mjs'), 'utf8')).toBe('context\n');
+    expect(readFileSync(join(dir, '.agents/skills/gm-new-game-plan/SKILL.md'), 'utf8')).toBe('planner\n');
+  });
+
   it('retries a missing feature skill in the retained workspace', async () => {
     const pack = mkdtempSync(join(tmpdir(), 'ogm-hook-retry-'));
     mkdirSync(join(pack, 'gm-prototype'));

@@ -9,7 +9,12 @@ import { gameDir, workspaceRoot } from './outbox.js';
 export function inventoryPath(cwd: string): { file: string; slug: string } {
   const root = workspaceRoot(cwd);
   const slug = basename(gameDir(cwd, root));
-  return { file: join(root, 'docs', slug, 'decisions.json'), slug };
+  return { file: inventoryFile(root, slug), slug };
+}
+
+export function inventoryFile(root: string, slug: string): string {
+  const local = join(root, 'games', slug, 'docs', 'decisions.json');
+  return existsSync(local) ? local : join(root, 'docs', slug, 'decisions.json');
 }
 
 export function readInventory(file: string): Inventory {

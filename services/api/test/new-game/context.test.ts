@@ -1,4 +1,5 @@
 import { schema } from '@ogm/db';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 
 import { claimAttachments, storeAttachment } from '../../src/build-chat/attachments.js';
@@ -166,6 +167,21 @@ async function setup() {
 }
 
 describe('GET /internal/new-game/requests/:requestId', () => {
+  it('keeps the parent reference when the active job points at its planner', async () => {
+    const { deps } = await setup();
+    deps.db
+      .insert(schema.jobTickets)
+      .values({
+        jobId: REQUEST,
+        key: 'new-game',
+        issueNumber: 12,
+        repo: 'owner/game',
+        sig: 'sig',
+      })
+      .run();
+    deps.db.update(schema.jobs).set({ aiurIssueNumber: 99 }).where(eq(schema.jobs.id, REQUEST)).run();
+    expect(newGameContext(deps.db, deps.sqlite, REQUEST)?.parent).toEqual({ repo: 'owner/game', number: 12 });
+  });
   it('refuses a request without an authorised token', async () => {
     const { get } = await setup();
     expect((await get(`/internal/new-game/requests/${REQUEST}`)).status).toBe(401);
@@ -194,6 +210,7 @@ describe('GET /internal/new-game/requests/:requestId', () => {
     expect(body.attachments).toEqual([
       expect.objectContaining({ kind: 'text', name: 'mood-board.md', mime: 'text/markdown' }),
     ]);
+    expect(body.attachments[0].messageId).toBe(body.messages[1].id);
 
     const foreign = await get(`/internal/new-game/requests/${REQUEST}`, {
       authorization: `Bearer ${scoped(OTHER_REQUEST)}`,

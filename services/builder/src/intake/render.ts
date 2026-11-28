@@ -12,6 +12,7 @@ export type RenderIssueInput = {
   ticket: PlanTicket;
   blockedBy: readonly number[];
   shippedSkills: readonly string[];
+  planner?: { parent: number; gameSlug: string; role: string; decisions: string[] };
 };
 
 export function renderIssue(input: RenderIssueInput): {
@@ -32,6 +33,16 @@ export function renderIssue(input: RenderIssueInput): {
     ].join('\n'),
   );
   if (input.blockedBy.length > 0) sections.push(input.blockedBy.map((number) => `Blocked by #${number}`).join('\n'));
+  if (input.planner) {
+    sections.push(`Refs #${input.planner.parent}`);
+    sections.push(`Decision inventory: games/${input.planner.gameSlug}/docs/decisions.json`);
+    sections.push(
+      [
+        '## Creator decisions',
+        ...(input.planner.decisions.length ? input.planner.decisions.map((id) => `- ${id}`) : ['- none']),
+      ].join('\n'),
+    );
+  }
   sections.push(skillsSection(input.ticket, input.shippedSkills));
   const unsigned = sections.join('\n\n');
   const sig = createHash('sha256').update(unsigned).digest('hex');
@@ -39,7 +50,13 @@ export function renderIssue(input: RenderIssueInput): {
     title: input.plan.title.trim().slice(0, 120),
     body: `${unsigned}\n\n<!-- gm-job:${input.jobId} gm-ticket:${input.ticket.key} gm-sig:${sig} -->`,
     sig,
-    labels: [`complexity:${input.complexity}`, `feature:gm-${input.jobId}`, 'phase:mock', 'model:low'],
+    labels: [
+      `complexity:${input.complexity}`,
+      `feature:gm-${input.jobId}`,
+      'phase:mock',
+      'model:low',
+      ...(input.planner ? [`game:${input.planner.gameSlug}`, input.planner.role, 'priority:1'] : []),
+    ],
   };
 }
 

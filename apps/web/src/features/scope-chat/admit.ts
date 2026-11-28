@@ -64,12 +64,18 @@ export async function admitJob(
       ...(accepted.reused ? { reused: true, samePlan: accepted.samePlan } : {}),
     };
   } catch (error) {
-    const response = error as Partial<ApiError>;
-    if (response.status !== 402 || !response.body || typeof response.body !== 'object') throw error;
-    const body = response.body as AllowanceExceeded;
-    const offers = body.offers.filter(isSupportedOffer);
-    return { kind: 'refused', ...body, offers: offers.length > 0 ? offers : ['ask_admin'] };
+    const refusal = admissionRefusal(error);
+    if (!refusal) throw error;
+    return refusal;
   }
+}
+
+export function admissionRefusal(error: unknown): Extract<AdmissionResult, { kind: 'refused' }> | null {
+  const response = error as Partial<ApiError> | null;
+  if (response?.status !== 402 || !response.body || typeof response.body !== 'object') return null;
+  const body = response.body as AllowanceExceeded;
+  const offers = body.offers.filter(isSupportedOffer);
+  return { kind: 'refused', ...body, offers: offers.length > 0 ? offers : ['ask_admin'] };
 }
 
 function isSupportedOffer(offer: AllowanceExceeded['offers'][number]): offer is SupportedOffer {

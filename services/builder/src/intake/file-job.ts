@@ -1,13 +1,15 @@
 import { AiurHttpError } from '@ogm/aiur-client';
 import { CompleteTriage, JobPlan, Reservation, type TriageResult } from '@ogm/contracts';
 import { schema } from '@ogm/db';
-import { and, eq, lte } from 'drizzle-orm';
+import { and, eq, exists, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 
 import { isDaemonLabel } from '@ogm/game-repo-template';
 
 import { OutcomeUnknownError } from '../github/issues.js';
 import { scopeTicketForJob } from '../scope/file.js';
 import { PARENT_LABEL, PARENT_TICKET_KEY, parentIssueFor, type ParentIssue } from './parent.js';
+import { PLANNER_TICKET_KEY, plannerIssue } from './planner-issue.js';
+import { withJobDispatchLock } from './job-lock.js';
 import { renderIssue, renderRepairIssue, usdFromMicro } from './render.js';
 import type { FileResult, IntakeAlert, IntakeDeps } from './types.js';
 
@@ -28,8 +30,16 @@ export function createIntake(deps: IntakeDeps) {
 
   function fileJob(jobId: string): Promise<FileResult> {
     const current = inFlight.get(jobId);
-    if (current) return current;
-    const pending = performFileJob(jobId).finally(() => inFlight.delete(jobId));
+    if (current)
+      return current.then((result) => {
+        const job = deps.db
+          .select({ state: schema.jobs.state })
+          .from(schema.jobs)
+          .where(eq(schema.jobs.id, jobId))
+          .get();
+        return job?.state === 'admitted' ? fileJob(jobId) : result;
+      });
+    const pending = withJobDispatchLock(jobId, () => performFileJob(jobId)).finally(() => inFlight.delete(jobId));
     inFlight.set(jobId, pending);
     return pending;
   }
@@ -42,9 +52,68 @@ export function createIntake(deps: IntakeDeps) {
       .where(eq(schema.jobs.id, jobId))
       .get();
     if (!found) return { skipped: 'missing' };
-    if (found.job.state !== 'admitted') return { skipped: `state:${found.job.state}` };
+    const queuedPlannerChild = found.job.state === 'queued' && (found.job.idempotencyKey ?? '').startsWith('planner:');
+    if (found.job.state !== 'admitted' && !queuedPlannerChild) {
+      const pendingPlanner =
+        found.job.kind === 'new_game' && found.job.state === 'filed'
+          ? deps.db
+              .select()
+              .from(schema.jobTickets)
+              .where(and(eq(schema.jobTickets.jobId, jobId), eq(schema.jobTickets.key, PLANNER_TICKET_KEY)))
+              .get()
+          : undefined;
+      if (!pendingPlanner || pendingPlanner.todoAt !== null) return { skipped: `state:${found.job.state}` };
+    }
     const repairTriage = found.job.kind === 'repair' ? triageForRepair(deps.db, jobId) : undefined;
     if (found.job.kind === 'repair' && !repairTriage?.ticket) return { deferred: 'triage' };
+
+    if (queuedPlannerChild) {
+      const parentMatch = /^planner:(j_[A-Za-z0-9-]+):[A-Za-z0-9_-]{1,60}$/.exec(found.job.idempotencyKey ?? '');
+      const parent = parentMatch
+        ? deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, parentMatch[1]!)).get()
+        : undefined;
+      if (!parent || parent.state === 'failed' || parent.state === 'cancelled') {
+        const plan = JobPlan.parse(JSON.parse(found.job.plan));
+        const ticket = plan.tickets[0];
+        if (!ticket) return failPreflight(found.job, ['planner child has no ticket']);
+        const recorded = deps.db
+          .select()
+          .from(schema.jobTickets)
+          .where(and(eq(schema.jobTickets.jobId, jobId), eq(schema.jobTickets.key, ticket.key)))
+          .get();
+        const parentTicket = parentMatch
+          ? (deps.db
+              .select()
+              .from(schema.jobTickets)
+              .where(and(eq(schema.jobTickets.jobId, parentMatch[1]!), eq(schema.jobTickets.key, PLANNER_TICKET_KEY)))
+              .get() ??
+            deps.db
+              .select()
+              .from(schema.jobTickets)
+              .where(and(eq(schema.jobTickets.jobId, parentMatch[1]!), eq(schema.jobTickets.key, PARENT_TICKET_KEY)))
+              .get())
+          : undefined;
+        const cleanupRepo = recorded?.repo ?? found.job.aiurRepo ?? parentTicket?.repo;
+        if (!cleanupRepo) return { deferred: 'github' };
+        try {
+          const issue = recorded ?? (await deps.issues.findByMarkers(cleanupRepo, jobId, ticket.key));
+          if (issue) {
+            if (!deps.issues.close) throw new Error('issue closer unavailable');
+            await deps.issues.close(
+              'repo' in issue ? issue.repo : cleanupRepo,
+              'issueNumber' in issue ? issue.issueNumber : issue.number,
+            );
+          }
+        } catch (error) {
+          await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
+          return { deferred: 'github' };
+        }
+        if (parent?.state === 'cancelled' && deps.cancelJob) deps.cancelJob(jobId);
+        else deps.failJob(jobId);
+        return { skipped: 'parent_terminal' };
+      }
+      if (found.job.aiurIssueNumber !== null) return { skipped: 'staged' };
+    }
 
     const repo =
       found.game.githubOwner && found.game.githubRepo
@@ -84,12 +153,46 @@ export function createIntake(deps: IntakeDeps) {
     const todo = `${fleetResult.labelPrefix ?? gameSlug}:todo`;
 
     if (found.job.kind === 'new_game') {
+      if (!deps.shippedSkills.includes('gm-new-game-plan')) {
+        await notify({
+          code: 'preflight_failed',
+          jobId,
+          reasons: ['deployed skill pack does not contain gm-new-game-plan'],
+        });
+        return { deferred: 'aiur' };
+      }
       const parent = parentIssueFor(deps.db, found.job, found.game);
       if (parent === null) return failPreflight(found.job, ['new game request is missing its title']);
-      return fileParent(repo, found.job, parent);
+      return fileParent(repo, found.job, parent, gameSlug, daemonSlug, todo);
     }
 
     const plan = JobPlan.parse(JSON.parse(found.job.plan));
+    const parentMatch = /^planner:(j_[A-Za-z0-9-]+):[A-Za-z0-9_-]{1,60}$/.exec(found.job.idempotencyKey ?? '');
+    const parentRow = parentMatch
+      ? deps.db
+          .select()
+          .from(schema.jobTickets)
+          .where(and(eq(schema.jobTickets.jobId, parentMatch[1]!), eq(schema.jobTickets.key, PARENT_TICKET_KEY)))
+          .get()
+      : undefined;
+    const role = plan.tickets[0]?.skills.find((skill) => skill.startsWith('role:'));
+    if (parentMatch && (!parentRow || !role))
+      return failPreflight(found.job, ['planner child is missing its parent or role']);
+    if (parentRow && parentRow.repo.toLowerCase() !== repo) {
+      await notify({ code: 'preflight_failed', jobId, reasons: ['planner parent and game repository differ'] });
+      return { deferred: 'github' };
+    }
+    const planner =
+      parentRow && role
+        ? {
+            parent: parentRow.issueNumber,
+            gameSlug,
+            role,
+            decisions: plan.tickets[0]!.skills.filter((skill) => skill.startsWith('decision:')).map((skill) =>
+              skill.slice(9),
+            ),
+          }
+        : undefined;
     let tickets: JobPlan['tickets'];
     try {
       tickets = dependencyOrder(plan.tickets);
@@ -108,6 +211,9 @@ export function createIntake(deps: IntakeDeps) {
         await deps.issues.ensureLabel(repo, 'phase:mock', 'bfd4f2', 'creator review mock phase');
         await deps.issues.ensureLabel(repo, 'model:low', 'ededed', 'low reasoning effort');
       }
+      if (planner)
+        for (const label of [`game:${gameSlug}`, planner.role, 'priority:1'])
+          await deps.issues.ensureLabel(repo, label);
     } catch (error) {
       await notify({ code: 'github_failed', jobId, reasons: [message(error)] });
       return { deferred: 'github' };
@@ -146,6 +252,7 @@ export function createIntake(deps: IntakeDeps) {
               ticket,
               blockedBy,
               shippedSkills: deps.shippedSkills,
+              planner,
             }));
       let row = rows.get(ticket.key);
 
@@ -195,6 +302,10 @@ export function createIntake(deps: IntakeDeps) {
           await setSpendCap(aiur, row.issueNumber, spendCap, sleep);
         } catch (error) {
           if (error instanceof AiurHttpError && error.status === 409 && error.code === 'spend_cap_exhausted') {
+            if (queuedPlannerChild) {
+              await notify({ code: 'spend_cap_failed', jobId, reasons: [message(error)] });
+              return { deferred: 'aiur' };
+            }
             const at = now().toISOString();
             deps.db
               .update(schema.jobs)
@@ -220,6 +331,21 @@ export function createIntake(deps: IntakeDeps) {
           .run();
         row = { ...row, capSetAt };
         rows.set(ticket.key, row);
+      }
+
+      if (queuedPlannerChild) {
+        const updatedAt = now().toISOString();
+        deps.db
+          .update(schema.jobs)
+          .set({
+            aiurRepo: repo,
+            aiurIssueNumber: row.issueNumber,
+            aiurSpendCapMicroUsd: reservation.amountMicroUsd,
+            updatedAt,
+          })
+          .where(and(eq(schema.jobs.id, jobId), inArray(schema.jobs.state, ['queued', 'admitted'])))
+          .run();
+        return { filed: true, issues: [row.issueNumber] };
       }
 
       if (row.todoAt === null) {
@@ -249,7 +375,7 @@ export function createIntake(deps: IntakeDeps) {
     }
 
     const updatedAt = now().toISOString();
-    deps.db
+    const filedUpdate = deps.db
       .update(schema.jobs)
       .set({
         state: 'filed',
@@ -258,8 +384,9 @@ export function createIntake(deps: IntakeDeps) {
         aiurSpendCapMicroUsd: reservation.amountMicroUsd,
         updatedAt,
       })
-      .where(eq(schema.jobs.id, jobId))
+      .where(and(eq(schema.jobs.id, jobId), eq(schema.jobs.state, 'admitted')))
       .run();
+    if (filedUpdate.changes === 0) return { filed: true, issues: issueNumbers };
     if (found.job.kind === 'scope') {
       deps.db
         .update(schema.scopeSessions)
@@ -276,14 +403,14 @@ export function createIntake(deps: IntakeDeps) {
     return { filed: true, issues: issueNumbers };
   }
 
-  // A New Game request files one parent issue and hands it to the Executor. The parent carries no dispatch label and
-  // gets no spend cap and no aiur nudge, so no worker claims it; the Executor reads it and creates the Build Order
-  // children with gm-new-game-plan. The request's own obligation ends at filing, so the job completes and releases
-  // its slot instead of holding the new_game slot for a build nobody in this system owns.
+  // The parent remains a planning record; a separate capped planner ticket is the job's active worker.
   async function fileParent(
     repo: string,
     job: typeof schema.jobs.$inferSelect,
     parent: ParentIssue,
+    gameSlug: string,
+    daemonSlug: string,
+    todo: string,
   ): Promise<FileResult> {
     try {
       await deps.issues.ensureLabel(repo, PARENT_LABEL, '0e8a16', 'new game request for the Executor');
@@ -330,28 +457,131 @@ export function createIntake(deps: IntakeDeps) {
         .get()!;
     }
 
-    const updatedAt = now().toISOString();
-    deps.db
-      .update(schema.jobs)
-      .set({ state: 'filed', aiurRepo: repo, aiurIssueNumber: row.issueNumber, updatedAt })
-      .where(eq(schema.jobs.id, job.id))
-      .run();
-    deps.onJobChanged?.({
+    // Pin the policy before creating the issue, so retries and later config changes keep the same bound.
+    const storedPlan = JSON.parse(job.plan) as Record<string, unknown>;
+    const storedLimit = storedPlan._plannerTicketLimit;
+    const ticketLimit =
+      typeof storedLimit === 'number' && Number.isSafeInteger(storedLimit) && storedLimit > 0
+        ? storedLimit
+        : (deps.plannerTicketLimit ?? 1);
+    if (storedLimit !== ticketLimit) {
+      deps.db
+        .update(schema.jobs)
+        .set({ plan: JSON.stringify({ ...storedPlan, _plannerTicketLimit: ticketLimit }) })
+        .where(eq(schema.jobs.id, job.id))
+        .run();
+    }
+    const rendered = plannerIssue({
       jobId: job.id,
-      gameId: job.gameId,
-      familyId: job.familyId,
-      state: 'filed',
+      parentNumber: row.issueNumber,
+      gameSlug,
+      ticketLimit,
     });
-    deps.completeJob?.(job.id);
-    return { filed: true, issues: [row.issueNumber] };
+    let planner = deps.db
+      .select()
+      .from(schema.jobTickets)
+      .where(and(eq(schema.jobTickets.jobId, job.id), eq(schema.jobTickets.key, PLANNER_TICKET_KEY)))
+      .get();
+    try {
+      for (const label of [...rendered.labels, todo]) await deps.issues.ensureLabel(repo, label);
+      if (!planner) {
+        let issue = await deps.issues.findByMarkers(repo, job.id, PLANNER_TICKET_KEY);
+        if (!issue) {
+          try {
+            const created = await deps.issues.create(repo, {
+              title: rendered.title,
+              body: rendered.body,
+              labels: rendered.labels,
+            });
+            issue = { ...created, labels: rendered.labels };
+          } catch (error) {
+            if (!(error instanceof OutcomeUnknownError)) throw error;
+            issue = await deps.issues.findByMarkers(repo, job.id, PLANNER_TICKET_KEY);
+            if (!issue) throw error;
+          }
+        }
+        deps.db
+          .insert(schema.jobTickets)
+          .values({
+            jobId: job.id,
+            key: PLANNER_TICKET_KEY,
+            issueNumber: issue.number,
+            repo,
+            sig: rendered.sig,
+          })
+          .run();
+        planner = deps.db
+          .select()
+          .from(schema.jobTickets)
+          .where(and(eq(schema.jobTickets.jobId, job.id), eq(schema.jobTickets.key, PLANNER_TICKET_KEY)))
+          .get()!;
+      }
+    } catch (error) {
+      await notify({ code: 'github_failed', jobId: job.id, reasons: [message(error)] });
+      return { deferred: 'github' };
+    }
+    let aiur: Awaited<ReturnType<IntakeDeps['aiurForGame']>>;
+    try {
+      aiur = await deps.aiurForGame(daemonSlug);
+      if (planner.capSetAt === null) {
+        const reservation = Reservation.parse(JSON.parse(job.reservation));
+        await setSpendCap(aiur, planner.issueNumber, usdFromMicro(reservation.amountMicroUsd), sleep);
+        deps.db
+          .update(schema.jobTickets)
+          .set({ capSetAt: now().toISOString() })
+          .where(and(eq(schema.jobTickets.jobId, job.id), eq(schema.jobTickets.key, PLANNER_TICKET_KEY)))
+          .run();
+      }
+    } catch (error) {
+      await notify({ code: 'spend_cap_failed', jobId: job.id, reasons: [message(error)] });
+      return { deferred: 'aiur' };
+    }
+    // Make the planner visible to the lifecycle and chat before its dispatch label can wake a worker.
+    const updatedAt = now().toISOString();
+    const reservation = Reservation.parse(JSON.parse(job.reservation));
+    const transitioned = deps.db
+      .update(schema.jobs)
+      .set({
+        state: 'filed',
+        aiurRepo: repo,
+        aiurIssueNumber: planner.issueNumber,
+        aiurSpendCapMicroUsd: reservation.amountMicroUsd,
+        updatedAt,
+      })
+      .where(and(eq(schema.jobs.id, job.id), eq(schema.jobs.state, 'admitted')))
+      .run();
+    if (transitioned.changes === 0) {
+      const current = deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, job.id)).get();
+      if (current?.state !== 'filed' || current.aiurIssueNumber !== planner.issueNumber)
+        return { skipped: `state:${current?.state ?? 'missing'}` };
+    }
+    deps.onJobChanged?.({ jobId: job.id, gameId: job.gameId, familyId: job.familyId, state: 'filed' });
+    try {
+      if (planner.todoAt === null) {
+        const labels = await deps.issues.labels(repo, planner.issueNumber);
+        if (!labels.includes(todo)) await deps.issues.addLabel(repo, planner.issueNumber, todo);
+        deps.db
+          .update(schema.jobTickets)
+          .set({ todoAt: now().toISOString(), filedAt: now().toISOString() })
+          .where(and(eq(schema.jobTickets.jobId, job.id), eq(schema.jobTickets.key, PLANNER_TICKET_KEY)))
+          .run();
+      }
+    } catch (error) {
+      await notify({ code: 'github_failed', jobId: job.id, reasons: [message(error)] });
+      return { deferred: 'github' };
+    }
+    try {
+      await aiur.nudgeTodo([String(planner.issueNumber)]);
+    } catch (error) {
+      await notify({ code: 'nudge_failed', jobId: job.id, reasons: [message(error)] });
+    }
+    return { filed: true, issues: [row.issueNumber, planner.issueNumber] };
   }
 
-  async function failPreflight(
-    job: typeof schema.jobs.$inferSelect,
-    reasons: string[],
-  ): Promise<{ failed: 'preflight'; reasons: string[] }> {
-    deps.failJob(job.id);
+  async function failPreflight(job: typeof schema.jobs.$inferSelect, reasons: string[]): Promise<FileResult> {
     await notify({ code: 'preflight_failed', jobId: job.id, reasons });
+    if ((job.idempotencyKey ?? '').startsWith('planner:')) return { deferred: 'aiur' };
+    deps.failJob(job.id);
     return { failed: 'preflight', reasons };
   }
 
@@ -360,7 +590,31 @@ export function createIntake(deps: IntakeDeps) {
     const admitted = deps.db
       .select({ id: schema.jobs.id })
       .from(schema.jobs)
-      .where(and(eq(schema.jobs.state, 'admitted'), lte(schema.jobs.updatedAt, cutoff)))
+      .where(
+        and(
+          lte(schema.jobs.updatedAt, cutoff),
+          or(
+            eq(schema.jobs.state, 'admitted'),
+            and(eq(schema.jobs.state, 'queued'), sql`substr(${schema.jobs.idempotencyKey}, 1, 8) = 'planner:'`),
+            and(
+              eq(schema.jobs.state, 'filed'),
+              eq(schema.jobs.kind, 'new_game'),
+              exists(
+                deps.db
+                  .select({ id: schema.jobTickets.issueNumber })
+                  .from(schema.jobTickets)
+                  .where(
+                    and(
+                      eq(schema.jobTickets.jobId, schema.jobs.id),
+                      eq(schema.jobTickets.key, PLANNER_TICKET_KEY),
+                      isNull(schema.jobTickets.todoAt),
+                    ),
+                  ),
+              ),
+            ),
+          ),
+        ),
+      )
       .all();
     for (const { id } of admitted) {
       try {

@@ -64,6 +64,53 @@ function queued(deps: ReturnType<typeof makeDeps>, id: string, createdAt: string
 }
 
 describe('job scheduler', () => {
+  it('waits for the planner to merge before starting its child', () => {
+    const { deps } = setup();
+    queued(deps, 'j_parent', BEFORE.toISOString());
+    deps.db
+      .update(schema.jobs)
+      .set({ kind: 'new_game', slot: 'new_game', state: 'running' })
+      .where(eq(schema.jobs.id, 'j_parent'))
+      .run();
+    queued(deps, 'j_child', BEFORE.toISOString());
+    deps.db
+      .update(schema.jobs)
+      .set({ idempotencyKey: 'planner:j_parent:starter' })
+      .where(eq(schema.jobs.id, 'j_child'))
+      .run();
+    const input = { db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults };
+    expect(tick(input, RESET)).toEqual([]);
+    deps.db.update(schema.jobs).set({ state: 'done' }).where(eq(schema.jobs.id, 'j_parent')).run();
+    expect(tick(input, RESET)).toEqual([]);
+    deps.db
+      .update(schema.jobs)
+      .set({ aiurIssueNumber: 42, aiurRepo: 'owner/game' })
+      .where(eq(schema.jobs.id, 'j_child'))
+      .run();
+    expect(tick(input, RESET)).toEqual(['j_child']);
+    expect(deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_child')).get()?.state).toBe('admitted');
+  });
+
+  it('keeps a waiting child out of dispatch if the planner fails', () => {
+    const { deps } = setup();
+    queued(deps, 'j_parent', BEFORE.toISOString());
+    deps.db
+      .update(schema.jobs)
+      .set({ kind: 'new_game', slot: 'new_game', state: 'failed' })
+      .where(eq(schema.jobs.id, 'j_parent'))
+      .run();
+    queued(deps, 'j_child', BEFORE.toISOString());
+    deps.db
+      .update(schema.jobs)
+      .set({ idempotencyKey: 'planner:j_parent:starter' })
+      .where(eq(schema.jobs.id, 'j_child'))
+      .run();
+    expect(tick({ db: deps.db, sqlite: deps.sqlite, events: deps.events, defaults }, RESET)).toEqual([]);
+    const child = deps.db.select().from(schema.jobs).where(eq(schema.jobs.id, 'j_child')).get()!;
+    expect(child.state).toBe('queued');
+    expect(child.releasedAt).toBeNull();
+  });
+
   it('starts an at-reset job exactly when the family reset arrives', () => {
     const { deps, started, changed } = setup();
     queued(deps, 'j_reset', BEFORE.toISOString(), 'at_reset');

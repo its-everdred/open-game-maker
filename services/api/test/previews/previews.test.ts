@@ -734,6 +734,102 @@ describe('preview builds', () => {
         .token;
       const dir = join(workspace, '.gm/preview');
       mkdirSync(dir);
+      deps.db
+        .insert(schema.jobs)
+        .values({
+          id: 'j_planner',
+          gameId: ids.game,
+          branchId: 'main',
+          familyId: ids.family,
+          creatorId: ids.user,
+          kind: 'new_game',
+          aiurRepo: REPO,
+          aiurIssueNumber: 12,
+          complexity: 1,
+          state: 'filed',
+          start: 'now',
+          slot: 'new_game',
+          plan: '{}',
+          reservation: '{}',
+          hardCapMicroUsd: 1,
+          createdAt: '2026-11-13T00:00:00Z',
+          updatedAt: '2026-11-13T00:00:00Z',
+        })
+        .run();
+      deps.db
+        .insert(schema.jobTickets)
+        .values({
+          jobId: 'j_planner',
+          key: 'new-game-plan',
+          issueNumber: 12,
+          repo: REPO,
+          sig: 'sig',
+        })
+        .run();
+      const contextRequest = randomUUID();
+      writeFileSync(
+        join(dir, `${contextRequest}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token,
+          ticket: '12',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+          kind: 'new-game-context',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${contextRequest}.response`), 'utf8'))).toMatchObject({
+        state: 'done',
+        result: expect.objectContaining({ request: 'j_planner' }),
+      });
+      const submitChild = async (key: string) => {
+        const requestId = randomUUID();
+        writeFileSync(
+          join(dir, `${requestId}.json`),
+          JSON.stringify({
+            state: 'pending',
+            token,
+            ticket: '12',
+            slug: 'castle-game',
+            sha: SHA,
+            branch: 'main',
+            kind: 'new-game-child',
+            child: {
+              key,
+              role: 'role:gameplay',
+              decisions: [],
+              complexity: 1,
+              plan: {
+                title: 'Starter',
+                summary: 'Build the starter',
+                scope: { included: [], excluded: [] },
+                tickets: [{ key: 'build', skills: [], dependsOn: [], acceptanceCriteria: ['playable'] }],
+              },
+            },
+          }),
+        );
+        await scanPreviewRelay(deps, home, async () => true);
+        return JSON.parse(readFileSync(join(dir, `${requestId}.response`), 'utf8'));
+      };
+      expect(await submitChild('starter')).toMatchObject({ state: 'done', result: { jobId: expect.any(String) } });
+      expect(await submitChild('extra')).toMatchObject({ state: 'failed', error: 'planner_ticket_limit' });
+      const wrongTicket = randomUUID();
+      writeFileSync(
+        join(dir, `${wrongTicket}.json`),
+        JSON.stringify({
+          state: 'pending',
+          token,
+          ticket: '13',
+          slug: 'castle-game',
+          sha: SHA,
+          branch: 'main',
+          kind: 'new-game-context',
+        }),
+      );
+      await scanPreviewRelay(deps, home, async () => true);
+      expect(JSON.parse(readFileSync(join(dir, `${wrongTicket}.response`), 'utf8')).state).toBe('failed');
       const id = randomUUID();
       writeFileSync(join(dir, `${id}.tgz`), archive());
       writeFileSync(

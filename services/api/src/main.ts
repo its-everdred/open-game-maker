@@ -118,6 +118,8 @@ const deps: AppDeps = {
     defaultDailyAllowanceMicroUsd: env.OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD,
     defaultDailyAllowanceConfigured: env.defaultDailyAllowanceConfigured,
     resetZoneDefault: env.OGM_RESET_ZONE_DEFAULT,
+    testerNewGamesPerDay: env.OGM_TESTER_NEW_GAMES_PER_DAY,
+    plannerTicketLimit: env.OGM_NEW_GAME_PLAN_TICKET_LIMIT,
     intakeDir: env.OGM_INTAKE_DIR,
     reportBundleMaxBytes: env.OGM_REPORT_BUNDLE_MAX_BYTES,
     blobPutMaxBytes: env.OGM_BLOB_PUT_MAX_BYTES,
@@ -225,13 +227,13 @@ const intake = createIntake({
     return running.client;
   },
   shippedSkills: skillPack().discovery.map(({ name }) => name),
+  plannerTicketLimit: env.OGM_NEW_GAME_PLAN_TICKET_LIMIT,
   coreRepo: env.OGM_CORE_BUMP_CORE_REPO || undefined,
   failJob: (jobId) => void markTerminal(lifecycleDeps, jobId, 'failed'),
-  // A New Game request's parent issue hands the Build Order to the Executor, so the request job ends at filing.
-  completeJob: (jobId) => void markTerminal(lifecycleDeps, jobId, 'done'),
+  cancelJob: (jobId) => void markTerminal(lifecycleDeps, jobId, 'cancelled'),
   subscribeAdmitted(listener) {
     return deps.events.on('job.changed', ({ jobId, state }) => {
-      if (state === 'admitted') listener(jobId);
+      if (state === 'admitted' || state === 'queued') listener(jobId);
     });
   },
   onJobChanged: (event) => deps.events.emit('job.changed', event),

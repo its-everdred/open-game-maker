@@ -446,7 +446,7 @@ turn. `--limit` caps the tickets and the decisions listed (default 10).
 ## Check ticket roles
 
 ```text
-gm plan check --tickets <issues.json> [--game <slug>]
+gm plan check --tickets <issues.json> [--game <slug>] [--first-playable] [--max-tickets <count>]
 ```
 
 `gm plan check` reads `--tickets` (from `gh issue list --json number,title,labels`) and fails each ticket that lacks
@@ -455,6 +455,10 @@ carries a role the table does not list. The roles come from the platform skill p
 the same table the builder uses. The new-game parent (`request:new-game`) is skipped, and with `--game` so is a ticket
 carrying exactly one other game's label. It prints one line per failing ticket (or `plan ok`), `--json` prints the
 report, and it exits 1 on any failure or when no ticket was left to check.
+With `--game`, the check also validates ticket decision references against the game's inventory. Use
+`--first-playable` for a bounded starter plan to leave later inventory decisions unassigned.
+`--max-tickets` also checks the game child count, excluding its parent and planner; supply all issues, including closed
+ones, when using this limit.
 
 ## Agree a scope session
 

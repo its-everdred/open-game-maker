@@ -29,3 +29,9 @@ it('distinguishes an explicitly configured daily allowance from the built-in def
     loadApiEnv(makeApiEnv({ OGM_DEFAULT_DAILY_ALLOWANCE_MICROUSD: '5000000' })).defaultDailyAllowanceConfigured,
   ).toBe(true);
 });
+
+it('accepts a positive configurable daily New Game limit', () => {
+  expect(loadApiEnv(makeApiEnv()).OGM_TESTER_NEW_GAMES_PER_DAY).toBe(1);
+  expect(loadApiEnv(makeApiEnv({ OGM_TESTER_NEW_GAMES_PER_DAY: '4' })).OGM_TESTER_NEW_GAMES_PER_DAY).toBe(4);
+  expect(() => loadApiEnv(makeApiEnv({ OGM_TESTER_NEW_GAMES_PER_DAY: '0' }))).toThrow(/OGM_TESTER_NEW_GAMES_PER_DAY/);
+});

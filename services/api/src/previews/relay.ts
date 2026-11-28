@@ -20,6 +20,12 @@ import { readTrack, reviewCheckout } from '../review-rounds/tracks.js';
 import { phaseOwner } from '../review-rounds/owners.js';
 import { submitRound } from '../review-rounds/store.js';
 import { withArtifactMutation } from '../builds/artifact-lock.js';
+import { plannerRequest } from './new-game.js';
+import { newGameContext } from '../new-game/context.js';
+import { getAttachment, readBlob } from '../build-chat/attachments.js';
+import { admitPlannerChild, plannerChildStatus } from './planner-child.js';
+import { HttpError } from '../app/errors.js';
+import { AdmissionRefused } from '../jobs/admission.js';
 import type { PreviewTicketVerifier } from './ticket.js';
 
 const requestName = /^[0-9a-f-]{36}\.json$/u;
@@ -38,6 +44,9 @@ type Request = {
   kind?: string;
   submission?: unknown;
   attachments?: unknown;
+  attachment?: string;
+  child?: unknown;
+  childKey?: string;
 };
 type RepoGrant = { repo: string; ticket: string; game: string; grant: string; secret: string; workspace: string };
 
@@ -87,6 +96,7 @@ async function processRequest(
         typeof data.token !== 'string' ||
         typeof data.ticket !== 'string' ||
         !ticketPattern.test(data.ticket) ||
+        !Number.isSafeInteger(Number(data.ticket)) ||
         typeof data.slug !== 'string' ||
         typeof data.sha !== 'string' ||
         !SHA.test(data.sha) ||
@@ -142,6 +152,34 @@ async function processRequest(
         !(await verifyTicket(`${game.githubOwner}/${game.githubRepo}`, data.ticket, data.slug, !!repoGrant))
       )
         throw new Error('unauthorized');
+      if (
+        ['new-game-context', 'new-game-attachment', 'new-game-child', 'new-game-child-status'].includes(data.kind ?? '')
+      ) {
+        const repo = `${game.githubOwner}/${game.githubRepo}`.toLowerCase();
+        const requestId = plannerRequest(deps.db, repo, Number(data.ticket), game.id);
+        if (!requestId) throw new Error('unauthorized');
+        if (data.kind === 'new-game-child' || data.kind === 'new-game-child-status') {
+          const childResult =
+            data.kind === 'new-game-child'
+              ? await admitPlannerChild(deps, requestId, data.child)
+              : plannerChildStatus(deps, requestId, data.childKey ?? '');
+          await response.writeFile(Buffer.from(JSON.stringify({ state: 'done', result: childResult })));
+          return;
+        }
+        const context = newGameContext(deps.db, deps.sqlite, requestId);
+        if (!context) throw new Error('unauthorized');
+        let result: unknown = context;
+        if (data.kind === 'new-game-attachment') {
+          const attachment = context.attachments.find((item) => item.id === data.attachment);
+          const row = attachment && getAttachment(deps.sqlite, attachment.id);
+          const bytes = row && (await readBlob(deps.blobStore, row.blobHash));
+          if (!attachment || !bytes || !plannerRequest(deps.db, repo, Number(data.ticket), game.id))
+            throw new Error('unauthorized');
+          result = { id: attachment.id, data: Buffer.from(bytes).toString('base64') };
+        }
+        await response.writeFile(Buffer.from(JSON.stringify({ state: 'done', result })));
+        return;
+      }
       if (data.kind === 'review') {
         if (
           !data.submission ||
@@ -296,7 +334,14 @@ async function processRequest(
       result = { state: 'done', gameId: preview.gameId, buildId: preview.buildId };
     } catch (error) {
       deps.log({ event: 'preview_relay_failed', reason: error instanceof Error ? error.name : 'Error' });
-      result = { state: 'failed', error: 'preview upload refused' };
+      const code =
+        error instanceof HttpError &&
+        ['planner_ticket_limit', 'planner_child_conflict', 'invalid_planner_child'].includes(error.code)
+          ? error.code
+          : error instanceof AdmissionRefused
+            ? error.body.error
+            : 'preview upload refused';
+      result = { state: 'failed', error: code };
     }
     const output = Buffer.from(JSON.stringify(result));
     await response.writeFile(output);

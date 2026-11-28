@@ -26,10 +26,10 @@ after_create: |
     want="$(node -p "require('./.gm/context/bundle.json').skillPackVersion")"
     have="$(node -p "require('./skills.lock').pack" 2>/dev/null || echo none)"
     kind="$(node -p "require('./.gm/context/bundle.json').kind || ''")"
-    if [ "$kind" = feature ]; then
+    if [ "$kind" = feature ] || [ "$kind" = new_game ]; then
       echo "bundle inputs incomplete" > .gm/context/bundle.missing
     fi
-    if [ "$want" != "$have" ] || [ "$kind" = feature ]; then
+    if [ "$want" != "$have" ] || [ "$kind" = feature ] || [ "$kind" = new_game ]; then
       url="$(node -p "require('./.gm/context/bundle.json').skillPackUrl")"
       if curl -fsS --max-time 60 --retry 3 --retry-connrefused --retry-delay 1 -H "Authorization: Bearer ${secret}" "$url" -o .gm/context/skills.tgz; then
         for dir in .claude .claude/skills .codex .codex/skills .agents .agents/skills; do
@@ -56,6 +56,11 @@ after_create: |
     if [ "$kind" = feature ] && [ ! -f .claude/skills/gm-prototype/SKILL.md ]; then
       echo "bundle inputs incomplete" > .gm/context/bundle.missing
       echo "required gm-prototype skill is unavailable" >&2
+      exit 1
+    fi
+    if [ "$kind" = new_game ] && { [ ! -f .claude/skills/gm-new-game-plan/scripts/context.mjs ] || [ ! -f .claude/skills/gm-new-game-plan/scripts/relay.mjs ] || [ ! -f .claude/skills/gm-new-game-plan/scripts/child.mjs ]; }; then
+      echo "bundle inputs incomplete" > .gm/context/bundle.missing
+      echo "required gm-new-game-plan skill is unavailable" >&2
       exit 1
     fi
     node -e '
@@ -126,10 +131,12 @@ before_run: |
     done < .gm/context/attachments.retry
     rm -f .gm/context/attachments.retry
   fi
-  if [ -f .gm/context/bundle.json ] && [ "$(node -p "require('./.gm/context/bundle.json').kind || ''")" = feature ] && { [ ! -f .claude/skills/gm-prototype/SKILL.md ] || [ "$recovered_bundle" = yes ]; }; then
+  kind="$(node -p "require('./.gm/context/bundle.json').kind || ''" 2>/dev/null || true)"
+  if { [ "$kind" = feature ] && [ ! -f .claude/skills/gm-prototype/SKILL.md ]; } || { [ "$kind" = new_game ] && { [ ! -f .claude/skills/gm-new-game-plan/scripts/context.mjs ] || [ ! -f .claude/skills/gm-new-game-plan/scripts/relay.mjs ] || [ ! -f .claude/skills/gm-new-game-plan/scripts/child.mjs ]; }; } || { [ "$recovered_bundle" = yes ] && { [ "$kind" = feature ] || [ "$kind" = new_game ]; }; }; then
     url="$(node -p "require('./.gm/context/bundle.json').skillPackUrl")"
     if [ -z "$secret" ] || ! curl -fsS --max-time 60 --retry 3 --retry-connrefused --retry-delay 1 -H "Authorization: Bearer ${secret}" "$url" -o .gm/context/skills.tgz; then
-      echo "required gm-prototype skill is unavailable" >&2
+      if [ "$kind" = new_game ]; then echo "required gm-new-game-plan skill is unavailable" >&2
+      else echo "required gm-prototype skill is unavailable" >&2; fi
       exit 1
     fi
     for dir in .claude .claude/skills .codex .codex/skills .agents .agents/skills; do
@@ -151,8 +158,12 @@ before_run: |
         fi
       done
     done
-    if [ ! -f .claude/skills/gm-prototype/SKILL.md ]; then
+    if [ "$kind" = feature ] && [ ! -f .claude/skills/gm-prototype/SKILL.md ]; then
       echo "required gm-prototype skill is unavailable" >&2
+      exit 1
+    fi
+    if [ "$kind" = new_game ] && { [ ! -f .claude/skills/gm-new-game-plan/scripts/context.mjs ] || [ ! -f .claude/skills/gm-new-game-plan/scripts/relay.mjs ] || [ ! -f .claude/skills/gm-new-game-plan/scripts/child.mjs ]; }; then
+      echo "required gm-new-game-plan skill is unavailable" >&2
       exit 1
     fi
   fi

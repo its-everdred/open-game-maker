@@ -43,6 +43,14 @@ function jobRow(deps: AppDeps, jobId: string) {
 
 export function awaitsBuild(deps: AppDeps, jobId: string): boolean {
   const job = jobRow(deps, jobId);
+  if (job?.kind === 'new_game') {
+    const planner = deps.db
+      .select({ id: schema.jobTickets.issueNumber })
+      .from(schema.jobTickets)
+      .where(and(eq(schema.jobTickets.jobId, jobId), eq(schema.jobTickets.key, 'new-game-plan')))
+      .get();
+    if (planner) return false;
+  }
   return job !== undefined && (BUILD_KINDS as readonly string[]).includes(job.kind) && !isTerminal(job.state);
 }
 

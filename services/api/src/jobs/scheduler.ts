@@ -17,7 +17,7 @@ export type SchedulerDeps = {
 type Started = { jobId: string; gameId: string; familyId: string; creatorId: string };
 
 export function tick(deps: SchedulerDeps, now = (deps.now ?? (() => new Date()))()): string[] {
-  const started = deps.sqlite
+  const outcome = deps.sqlite
     .transaction((): Started[] => {
       const queued = deps.db
         .select()
@@ -34,6 +34,15 @@ export function tick(deps: SchedulerDeps, now = (deps.now ?? (() => new Date()))
       const settingsByFamily = new Map<string, ReturnType<typeof getBudgetSettings>>();
 
       for (const row of queued) {
+        const parentMatch = /^planner:(j_[A-Za-z0-9-]+):[A-Za-z0-9_-]{1,60}$/.exec(row.idempotencyKey ?? '');
+        if (parentMatch) {
+          const parent = deps.db
+            .select({ state: schema.jobs.state })
+            .from(schema.jobs)
+            .where(eq(schema.jobs.id, parentMatch[1]!))
+            .get();
+          if (!parent || parent.state !== 'done' || row.aiurIssueNumber === null) continue;
+        }
         const settings = settingsByFamily.get(row.familyId) ?? getBudgetSettings(deps.db, row.familyId, deps.defaults);
         settingsByFamily.set(row.familyId, settings);
         const held = deps.db
@@ -63,7 +72,7 @@ export function tick(deps: SchedulerDeps, now = (deps.now ?? (() => new Date()))
     })
     .immediate();
 
-  for (const job of started) {
+  for (const job of outcome) {
     deps.events.emit('job.changed', {
       jobId: job.jobId,
       gameId: job.gameId,
@@ -77,7 +86,7 @@ export function tick(deps: SchedulerDeps, now = (deps.now ?? (() => new Date()))
       userIds: [job.creatorId],
     });
   }
-  return started.map(({ jobId }) => jobId);
+  return outcome.map(({ jobId }) => jobId);
 }
 
 export function startScheduler(deps: SchedulerDeps, intervalMs = 60_000): () => void {

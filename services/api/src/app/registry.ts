@@ -73,6 +73,8 @@ export type UserDirectory = {
   userIdForEmail(email: string): Promise<string | null>;
 };
 export interface IssueStateWriter {
+  close?(repo: string, issue: number): Promise<void>;
+  findByMarkers?(repo: string, jobId: string, key: string): Promise<{ number: number } | null>;
   setStateLabel(repo: string, issue: number, state: 'cancelled', prefix?: string): Promise<void>;
 }
 
