@@ -13,6 +13,37 @@ afterEach(() => {
   queryClient.clear();
 });
 
+it('lets the creator play and answer a live gameplay round', async () => {
+  render(
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <RoundReviews
+          gameId="game"
+          rounds={[
+            {
+              id: 'round',
+              ticket: '42',
+              track: 'gameplay',
+              buildId: 'live-round',
+              playUrl: 'https://app.test/live/demo/42?scenario=yard',
+              question: 'How does it feel?',
+              media: [],
+            },
+          ]}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+  expect(screen.getByText('Play this build')).toHaveAttribute('href', '/live/demo/42?scenario=yard');
+  fireEvent.click(screen.getByText('Looks right'));
+  await waitFor(() =>
+    expect(send).toHaveBeenCalledWith(
+      '/games/game/review-rounds/round/answer',
+      expect.objectContaining({ json: { verdict: 'approved' } }),
+    ),
+  );
+});
+
 it('offers playback for an audio mock', () => {
   render(
     <QueryClientProvider client={queryClient}>

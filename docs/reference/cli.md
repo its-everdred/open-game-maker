@@ -40,6 +40,12 @@ with no repository metadata or release. The default is a dry run; `--dry-run` ma
 remove only those audited rows. The command uses the host's `OGM_INTERNAL_TOKEN` and
 `OGM_API_PORT` from `api.env`; `--api` can select a loopback API explicitly.
 
+## Live workspace prototype
+
+Run `gm live-build` in the game folder after each change. It builds into a separate workspace generation and switches
+the live pointer only after the build succeeds. A signed-in reviewer can open
+`/live/<slug>/<ticket>?scenario=<name>` on the app to play the latest completed generation.
+
 ## Preview an unmerged build
 
 ```text
@@ -60,6 +66,8 @@ gm review post <submission.json>
 ```
 
 In a configured worker workspace, the submission uses that ticket's scoped relay credential.
+For a live gameplay round, run `gm live-build` first and use a build media item with `"ref": "live"` and its
+`"scenario"`. The round links to the workspace's current completed generation without uploading a preview.
 
 Host merge tools can call `gm review close-check <game> <ticket> <sha>` before closing a ticket. It exits successfully
 only when the API confirms that the ticket's review phases permit closure; missing configuration and API errors refuse it.

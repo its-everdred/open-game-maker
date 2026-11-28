@@ -25,6 +25,9 @@ export const command: GmCommand = {
     }
     const parsed = ReviewSubmission.safeParse(input);
     if (!parsed.success) throw new CommandError(parsed.error.issues.map((issue) => issue.message).join('; '));
+    for (const media of parsed.data.media) {
+      if (media.kind === 'build' && media.ref === 'live') media.ref = `live-${parsed.data.id}`;
+    }
     /* The creator plays a review in place, so every playable build starts in the slice it reviews (#1281). */
     if (parsed.data.media.some((media) => media.kind === 'build' && !media.scenario))
       throw new UsageError(

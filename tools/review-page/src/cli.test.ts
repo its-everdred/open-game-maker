@@ -102,13 +102,28 @@ it('builds a publish bundle, records a version, and relays picks once', () => {
     const inventory = join(root, 'inventory.json');
     const feed = join(root, 'rounds.jsonl');
     writeFileSync(inventory, '[]');
-    writeFileSync(feed, JSON.stringify({ key: 'extra', title: 'Extra', image }));
+    writeFileSync(
+      feed,
+      [
+        JSON.stringify({ key: 'extra', title: 'Extra', image, preview_url: 'https://example.invalid/live/demo/12' }),
+        JSON.stringify({ key: 'legacy', title: 'Legacy', image, play: 'https://example.invalid/legacy' }),
+      ].join('\n'),
+    );
+    const playLinks = join(root, 'play-links.json');
+    writeFileSync(
+      playLinks,
+      JSON.stringify({
+        'pack-rounds-extra': 'https://example.invalid/old',
+        'pack-rounds-legacy': 'https://example.invalid/mapped',
+      }),
+    );
     writeFileSync(
       config,
       JSON.stringify({
         sources: [{ key: 'core', checkout: root, repository: 'example/repo', aiur, gh, decideRepo: 'core' }],
         mediaRoots: [assets],
         feeds: { rounds: feed },
+        playLinks,
         output: out,
         state,
         artifactUrl: 'https://example.invalid/artifact',
@@ -128,6 +143,10 @@ it('builds a publish bundle, records a version, and relays picks once', () => {
     const bundle = JSON.parse(readFileSync(join(out, 'bundle.json'), 'utf8')) as { files: Record<string, string> };
     expect(Object.keys(bundle.files)).toHaveLength(1);
     expect(readFileSync(join(out, 'index.html'), 'utf8')).toContain('Which one?');
+    expect(readFileSync(join(out, 'index.html'), 'utf8')).toContain('https://example.invalid/live/demo/12');
+    expect(readFileSync(join(out, 'index.html'), 'utf8')).not.toContain('https://example.invalid/old');
+    expect(readFileSync(join(out, 'index.html'), 'utf8')).toContain('https://example.invalid/mapped');
+    expect(readFileSync(join(out, 'index.html'), 'utf8')).not.toContain('https://example.invalid/legacy');
     run('record', config, 'version-1');
     run('build', config);
     expect(JSON.parse(readFileSync(join(out, 'bundle.json'), 'utf8')).files).toEqual({});

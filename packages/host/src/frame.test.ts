@@ -6,6 +6,25 @@ import { createGameFrame, HostError } from './frame.js';
 afterEach(() => document.body.replaceChildren());
 
 describe('createGameFrame', () => {
+  it('keeps a live build in an opaque frame pinned to its generation', () => {
+    const frame = createGameFrame({
+      container: document.createElement('div'),
+      gamesOrigin: 'https://games.test',
+      appOrigin: 'https://app.test',
+      gameId: 'g1',
+      buildId: 'pv-123',
+      live: true,
+      liveVersion: 'generation',
+      build: 'draft',
+      mode: 'play',
+      playerIndex: 0,
+      capabilities: [],
+      role: () => 'owner',
+    });
+    expect(new URL(frame.iframe.src).pathname).toBe('/l/g1/pv-123/generation/index.html');
+    expect(frame.iframe.getAttribute('sandbox')).toBe('allow-scripts allow-pointer-lock');
+    frame.dispose();
+  });
   it('places a draft grant in a scoped URL outside the game cache worker', () => {
     const container = document.createElement('div');
     const frame = createGameFrame({
