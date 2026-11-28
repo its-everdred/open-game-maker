@@ -66,6 +66,9 @@ Only aiur main runs on the NUC: fixes reach us by ticket → branch → PR → m
 - **Zomboid must keep running.** If load stays above about 80 or RPCs time out, lower `max_concurrent_agents` in `.aiur/config`, which hot-reloads.
 - **Never delete** without Kevin's OK, and never `commit -a`.
 
+## Say it works only after QA on the real path
+Kevin 11-28: "please actually QA to confirm things like this work before saying so". Exercise every user-facing fix as he would (prod URL, phone size, screenshot) before saying it works. Agents never hide, remove or move controls under a "visual fixes" ask (#698 hid the host menu button); that needs Kevin's request.
+
 ## Root causes, not symptoms
 Kevin 2026-11-27: "treating symptoms is a very common problem". Every recovery (relabel, requeue, reset-budget, park, restart, fresh-thread) is paired in the same turn with its named root cause and a fix or a filed owner issue (aiur → the PC aiur agent over Khala; our scripts → fix them). A second occurrence means file it now, with the count. Reports lead with the root cause and owner.
 
