@@ -17,6 +17,7 @@ let server: Server;
 let api: string;
 let requests: Logged[] = [];
 let uploadAnswer: { status: number; body: string } = { status: 201, body: '' };
+let releaseAnswer = { status: 200, body: '{"state":"published"}' };
 // Uploads still to drop by closing the connection without an answer, as a reset keep-alive socket does.
 let dropUploads = 0;
 // Uploads to answer with headers and then cut off mid-body, after the API has acted on them.
@@ -183,6 +184,11 @@ beforeAll(async () => {
       }
       if (
         request.method === 'POST' &&
+        request.url?.match(/^\/internal\/operator\/games\/blobs\/builds\/[^/]+\/release$/)
+      )
+        return json(releaseAnswer.status, releaseAnswer.body);
+      if (
+        request.method === 'POST' &&
         request.url?.match(/^\/internal\/operator\/games\/blobs\/builds\/[^/]+\/access$/)
       )
         return json(200, JSON.stringify({ url: 'https://games.example/d/g_blobs/build/secret/' }));
@@ -249,6 +255,7 @@ describe('gm publish', () => {
     ]);
     const upload = requests.find((r) => r.method === 'POST')!;
     expect(upload).toMatchObject({ url: '/internal/operator/games/blobs/builds', token: TOKEN, sha: remoteSha });
+    expect(requests.some((r) => r.url.endsWith('/builds/build_publish/release') && r.token === TOKEN)).toBe(true);
     expect(requests.some((r) => r.url.endsWith('/builds/build_publish/access') && r.token === TOKEN)).toBe(true);
     const review = requests.find((r) => r.url.endsWith('/prototype-reviews'))!;
     expect(JSON.parse(review.body.toString())).toMatchObject({
@@ -355,6 +362,7 @@ describe('gm publish', () => {
     expect(requests.map((r) => `${r.method} ${r.url}`)).toEqual([
       'GET /internal/operator/games/blobs',
       'POST /internal/operator/games/blobs/builds',
+      'POST /internal/operator/games/blobs/builds/build_2/release',
       'POST /internal/operator/games/blobs/builds/build_2/prototype-review-check',
     ]);
     expect(requests[1]!.sha).toBe(staleSha);
@@ -383,6 +391,19 @@ describe('gm publish', () => {
     expect(run.err).toEqual([`not published (${remoteSha}): {"error":{"code":"manifest_invalid"}}`]);
   });
 
+  it('reports failure when the uploaded build cannot be released', async () => {
+    uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_fail","buildId":"build_fail"}' };
+    releaseAnswer = { status: 422, body: '{"error":"rights"}' };
+    try {
+      const run = await publish(['blobs', '--api', api]);
+      expect(run.code).toBe(1);
+      expect(run.err).toContain('build build_fail uploaded but release failed (422): {"error":"rights"}');
+      expect(run.out.some((line) => line.startsWith('published '))).toBe(false);
+    } finally {
+      releaseAnswer = { status: 200, body: '{"state":"published"}' };
+    }
+  });
+
   // #646: the first upload after a long build failed with "fetch failed" and an immediate rerun published.
   it('sends the upload once more when the connection drops before an answer, and publishes', async () => {
     uploadAnswer = { status: 201, body: '{"state":"done","jobId":"j_3","buildId":"build_3"}' };
@@ -393,7 +414,7 @@ describe('gm publish', () => {
     expect(run.err).toEqual([]);
     expect(run.code).toBe(0);
     expect(run.out).toContain(`published games/blobs at ${remoteSha}: build build_3`);
-    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST', 'POST']);
+    expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST', 'POST', 'POST']);
   });
 
   it('exits 1 naming the socket error when the upload drops twice, so a publish chain stops', async () => {
@@ -516,7 +537,10 @@ it('confirms a newly landed build after the upload times out', async () => {
   const originalFetch = globalThis.fetch;
   let factsReads = 0;
   const mock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-    if (init?.method === 'POST') throw new DOMException('timed out', 'TimeoutError');
+    if (init?.method === 'POST') {
+      if (String(input).endsWith('/builds')) throw new DOMException('timed out', 'TimeoutError');
+      return originalFetch(input, init);
+    }
     factsReads += 1;
     if (factsReads === 2) return new Response('', { status: 404 });
     if (factsReads === 3) return new Response(JSON.stringify({ state: 'filed', buildId: null }), { status: 200 });
@@ -530,6 +554,7 @@ it('confirms a newly landed build after the upload times out', async () => {
     const run = await publish(['blobs', '--api', api]);
     expect(run.code).toBe(0);
     expect(run.out.join('\n')).toContain('build build_landed');
+    expect(requests.some((r) => r.url.endsWith('/builds/build_landed/release'))).toBe(true);
   } finally {
     mock.mockRestore();
   }

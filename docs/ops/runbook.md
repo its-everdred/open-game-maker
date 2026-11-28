@@ -317,8 +317,8 @@ Operator publish can reuse a repository daemon checkout for multiple registered 
 ## Publish a build for a registered game
 
 A game the app registered against a repository whose own tickets are not Game Maker jobs never gets a build: the
-daemon's `before_remove` hook uploads a build per ticket, and those tickets never run in this instance's daemon. The
-The game is playable by ordinary players only after its owner publishes a release.
+daemon's `before_remove` hook uploads a build per ticket, and those tickets never run in this instance's daemon.
+The game is playable by ordinary players after a release is published.
 
 `gm publish` builds one registered game at a git SHA and registers a tested build through the same publisher the daemon's
 uploads use (`ops/bin/ogm-publish` is a thin wrapper that runs it with the
@@ -337,8 +337,9 @@ under `~/.local/state/ogm/publish`. It refuses before building when the game's c
 the checkout's own HEAD or a stale `origin/main`. It builds that folder's own build script in production mode with a
 relative base (`--base=./`, so the build works under `/g/<gameId>/<buildId>/`) and `OGM_ASSETS_ROOT`, then archives
 `dist/` with the repository's `manifest.json`, `design/design.json` and `achievements.json` and posts it to the API's
-internal route. The build lands as the next tested build on the game's `main` branch;
-the command prints the build id and the game's play link.
+internal route. The build lands as the next tested build on the game's `main` branch. The operator release step then
+runs the normal rights and commit checks and moves the release pointer; the command prints the build id and play link
+only after that step succeeds.
 
 It needs the host's `~/.config/ogm/env/api.env`, so run it on the host as the API's user:
 
@@ -351,18 +352,28 @@ gm publish blobs --dry-run       # confirm registration without building or publ
 gm publish blobs --json          # one JSON line with build details, exact-build play URL and prototypeReview status
 ```
 
-For an existing listed game without a release, choose a specific tested build with its owner and verify it in the
-editor. In Releases, select that build and publish it; this creates the design snapshot and release record through
-the normal rights and commit checks. Registration or a new build never silently promotes the latest draft. Repeat
-the release step for later builds. The previous release stays playable until the published pointer moves.
-Exit codes follow the gm CLI: 0 build registered, 1 the build or the upload failed (a
+To backfill an already published game without rebuilding it, use the internal operator API on the host. Set
+`OGM_INTERNAL_TOKEN` and `OGM_API_PORT` from the API environment without printing the token; choose a registered slug
+and verify its current build is the intended one. Then run:
+
+```sh
+slug='<game-slug>'
+api="http://127.0.0.1:${OGM_API_PORT}"
+build_id=$(curl -fsS -H "x-ogm-internal: ${OGM_INTERNAL_TOKEN}" "$api/internal/operator/games/$slug" | jq -r '.branch.latestBuildId')
+curl -fsS -X POST -H "x-ogm-internal: ${OGM_INTERNAL_TOKEN}" "$api/internal/operator/games/$slug/builds/$build_id/release"
+```
+
+The action rejects a build that is no longer current and is safe to repeat for the same release. It performs the same
+rights, gameplay, snapshot and commit checks as the creator release flow. Repeat for each existing published game.
+The previous release stays playable until the published pointer moves.
+Exit codes follow the gm CLI: 0 release published, 1 the build, upload, or release failed (a
 refused archive prints the API's reason), 2 bad usage, an unknown game, no checkout or no internal token.
 
-The two routes it calls are operator-only, reached with the internal token in `x-ogm-internal` and never with a user
-session: `GET /internal/operator/games/<slug>` returns the game's facts and `POST /internal/operator/games/<slug>/builds`
+The routes it calls are operator-only, reached with the internal token in `x-ogm-internal` and never with a user
+session: `GET /internal/operator/games/<slug>` returns the game's facts, `POST /internal/operator/games/<slug>/builds`
 takes the gzipped archive with the commit in `x-gm-sha`. The upload writes a `feature` job row that the publisher
 settles — `done` for a published build, `failed` for a refused archive — so the release history reads like any other
-build's.
+build's. `POST /internal/operator/games/<slug>/builds/<build-id>/release` promotes the current tested build.
 
 Set `OGM_API_INTERNAL_URL=http://127.0.0.1:<api-port>` in the games service environment and restart games-host
 after the API. The host denies artifact requests if this authorization service is unavailable. Current listed
@@ -599,6 +610,7 @@ more than waiting does. A swipe that moves nothing is reported as unchecked inst
 the game's move stick (a `move` stick without `touch: "self"`). One game plays at a time, in the capture slot, and
 each play has a load-adjusted wall-time budget capped at 340 s; capture-slot waiting is capped at 90 s. Published JSON fetches retry transient failures and report their final cause. A boot timeout is inconclusive. A game that fails is played once more and fails only when both plays fail: a loaded host
 can miss one boot, a broken game misses both.
+The default sweep selects listed games; `--game <slug>` also permits an explicitly requested private game.
 
 The QA account cannot read another family's private game, so the check answers that game's own API routes from its
 published build (`design/design.json`) and absorbs its writes; the shell, auth, the rest of the API and the games host

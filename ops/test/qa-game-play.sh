@@ -23,10 +23,11 @@ c.execute("create table games (id text, slug text, delisted_at text, visibility 
 c.execute('create table builds (id text, game_id text, status text, created_at text)')
 c.executemany('insert into games (id, slug, delisted_at) values (?, ?, null)',
               [('g_ok', 'ok'), ('g_bad', 'bad'), ('g_qa', 'qa-review'), ('g_new', 'new')])
+c.execute("insert into games (id, slug, visibility) values ('g_private', 'private', 'private')")
 c.executemany('insert into builds values (?, ?, ?, ?)', [
   ('build_old', 'g_ok', 'tested', '2026-11-20'), ('build_new', 'g_ok', 'tested', '2026-11-21'),
   ('build_bad', 'g_bad', 'tested', '2026-11-21'), ('build_qa', 'g_qa', 'tested', '2026-11-21'),
-  ('build_queued', 'g_new', 'queued', '2026-11-21')])
+  ('build_queued', 'g_new', 'queued', '2026-11-21'), ('build_private', 'g_private', 'tested', '2026-11-21')])
 c.commit()
 PY
 
@@ -95,6 +96,13 @@ grep -qE "qa-game-play failed: $line" "$attention" || fail 'attention line lacks
 "$check" --db "$db" --repo "$stack" --game ok > "$scratch/out"
 assert_eq "qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/build_new" "$(cat "$scratch/calls")" \
   '--game plays one game'
+assert_grep 'exit=0 qa-game-play' "$scratch/out"
+
+# An explicitly requested private game can be checked without adding it to the default listed-game sweep.
+: > "$scratch/calls"
+"$check" --db "$db" --repo "$stack" --game private > "$scratch/out"
+assert_eq "qa play-check g_private build_private --out $stack/assets-local/review/app/play-check/build_private" "$(cat "$scratch/calls")" \
+  '--game selects an explicitly requested private game'
 assert_grep 'exit=0 qa-game-play' "$scratch/out"
 
 # A game that fails one play and passes the next (a loaded host) is ok, and wakes no one.

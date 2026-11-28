@@ -16,7 +16,7 @@ logo must load and stay visible for 5 s. It also runs with --frames-only; a fail
 
 usage: ogm-qa-game-play [--db <ogm.sqlite3>] [--game <slug> [--build <id>]] [--repo <checkout>] [--attention <file>]
                         [--frames-only]
-  --game         play only this game (the publish hook passes the game it published)
+  --game         play only this game, including an explicitly named private game
   --build        play this build of that game instead of its latest tested one (the build just published)
   --attention    append one line per failing game: its failures, bridge trace, play-check.json and stills
   --frames-only  run only the frame check (web deploys)
@@ -164,7 +164,9 @@ def main(argv):
         rows = conn.execute(
             """select g.id, g.slug, (select b.id from builds b where b.game_id = g.id and b.status = 'tested'
                                       order by b.created_at desc limit 1)
-               from games g where g.delisted_at is null and g.visibility = 'listed' and g.release_state = 'released' and g.slug not like 'qa-%' order by g.slug"""
+               from games g where g.delisted_at is null and (g.visibility = 'listed' or (g.visibility = 'private' and g.slug = ?))
+               and g.release_state = 'released' and g.slug not like 'qa-%' order by g.slug""",
+            (args.get('--game'),),
         ).fetchall()
     if args.get('--game'):
         rows = [row for row in rows if row[1] == args['--game']]
