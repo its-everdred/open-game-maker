@@ -22,13 +22,16 @@ export function jobHasOutstandingWork(db: Db) {
 }
 
 // Called inside the admission transaction, so concurrent requests cannot both claim a creator's slot.
-export function creatorHoldsSlot(db: Db, creatorId: string, limit: number): boolean {
+export function creatorHoldsSlot(db: Db, creatorId: string, limit: number, excludeJobId?: string): boolean {
   if (limit === 0) return false;
+  const creatorJobs = excludeJobId
+    ? and(eq(schema.jobs.creatorId, creatorId), ne(schema.jobs.id, excludeJobId), jobHasOutstandingWork(db))
+    : and(eq(schema.jobs.creatorId, creatorId), jobHasOutstandingWork(db));
   return (
     db
       .select({ count: sql<number>`count(*)` })
       .from(schema.jobs)
-      .where(and(eq(schema.jobs.creatorId, creatorId), jobHasOutstandingWork(db)))
+      .where(creatorJobs)
       .get()!.count >= limit
   );
 }
