@@ -2,7 +2,8 @@
 """OGM post-deploy game play check (#1272): play every published game's latest tested build in the production app shell.
 
 ogm-qa-game-boot only proves a game's files return 200; on 2026-11-22 every game still showed "Try again" for a day
-(#1252, #1266, #1267). For each game with a tested build (QA games excluded), this runs `gm qa play-check`: the
+(#1252, #1266, #1267). For each released game with a tested build, private family games included (the QA account is a family member
+with play invites; 2026-11-28 the check skipped Blobs and Dusk Helm), QA games excluded, this runs `gm qa play-check`: the
 production shell at 390x844 with the QA session, the bridge handshake and first frame, the game's first tap path, and
 one input that must change the frame. One game at a time; each play has a load-adjusted wall-time budget capped at 340 s. A game that
 fails is played once more and fails only if both plays fail: a loaded host can miss one boot, a broken game misses both.
@@ -164,7 +165,7 @@ def main(argv):
         rows = conn.execute(
             """select g.id, g.slug, (select b.id from builds b where b.game_id = g.id and b.status = 'tested'
                                       order by b.created_at desc limit 1)
-               from games g where g.delisted_at is null and g.visibility = 'listed' and g.release_state = 'released' and g.slug not like 'qa-%' order by g.slug"""
+               from games g where g.delisted_at is null and g.release_state = 'released' and g.slug not like 'qa-%' order by g.slug"""
         ).fetchall()
     if args.get('--game'):
         rows = [row for row in rows if row[1] == args['--game']]

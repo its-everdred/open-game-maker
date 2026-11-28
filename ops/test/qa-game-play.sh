@@ -23,10 +23,11 @@ c.execute("create table games (id text, slug text, delisted_at text, visibility 
 c.execute('create table builds (id text, game_id text, status text, created_at text)')
 c.executemany('insert into games (id, slug, delisted_at) values (?, ?, null)',
               [('g_ok', 'ok'), ('g_bad', 'bad'), ('g_qa', 'qa-review'), ('g_new', 'new')])
+c.execute("insert into games (id, slug, delisted_at, visibility) values ('g_fam', 'fam', null, 'private')")
 c.executemany('insert into builds values (?, ?, ?, ?)', [
   ('build_old', 'g_ok', 'tested', '2026-11-20'), ('build_new', 'g_ok', 'tested', '2026-11-21'),
   ('build_bad', 'g_bad', 'tested', '2026-11-21'), ('build_qa', 'g_qa', 'tested', '2026-11-21'),
-  ('build_queued', 'g_new', 'queued', '2026-11-21')])
+  ('build_queued', 'g_new', 'queued', '2026-11-21'), ('build_fam', 'g_fam', 'tested', '2026-11-21')])
 c.commit()
 PY
 
@@ -79,9 +80,11 @@ set -e
 assert_eq 1 "$rc" 'a game stuck on Try again fails'
 assert_eq "qa play-check g_bad build_bad --out $stack/assets-local/review/app/play-check/build_bad
 qa play-check g_bad build_bad --out $stack/assets-local/review/app/play-check/build_bad
+qa play-check g_fam build_fam --out $stack/assets-local/review/app/play-check/build_fam
 qa play-check g_ok build_new --out $stack/assets-local/review/app/play-check/build_new" "$(cat "$scratch/calls")" \
-  'each published game is played at its latest tested build, a failing one twice; QA games are skipped'
+  'each published game, private family games included, is played at its latest tested build, a failing one twice; QA games are skipped'
 assert_grep 'ok build_new: ok' "$scratch/out"
+assert_grep 'fam build_fam: ok' "$scratch/out"
 assert_grep 'new: no tested build, not played' "$scratch/out"
 # A type the game sent with a newline in it is shown as ?, so it cannot forge an attention line.
 line="bad build_bad: bridge error; the shell shows Try again; trace hello>load.progress x65>[?]; host load [0-9]+; stills $stack/assets-local/review/app/play-check/build_bad"
