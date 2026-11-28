@@ -32,6 +32,7 @@ import { currentPublishedBuild } from '../artifacts/published.js';
 import { releaseRuntimeFor } from '../releases/routes.js';
 import { publish, ReleaseError } from '../releases/service.js';
 import { withArtifactMutation } from '../builds/artifact-lock.js';
+import { withReleaseSource } from './release-source.js';
 
 // An operator's route to publish a build for a game the app registered against a repository whose own tickets are
 // not Game Maker jobs — the daemon's `before_remove` hook never runs for them, so nothing ever uploads a build.
@@ -354,20 +355,27 @@ const routes = new Hono<ApiBindings>()
       return c.json({ state: 'published', buildId });
     }
     try {
-      const release = await withArtifactMutation(async () => {
-        const current = deps.db
-          .select({ buildId: schema.branches.latestBuildId })
-          .from(schema.branches)
-          .where(eq(schema.branches.id, branch.id))
-          .get();
-        if (current?.buildId !== buildId) throw new HttpError(409, 'not_current_build');
-        return publish(deps, releaseRuntimeFor(deps), {
-          gameId: game.id,
-          buildId,
-          actor: PUBLISH_ACTOR,
-          requireCurrentMain: true,
-        });
-      });
+      const release = await withReleaseSource(deps, game, buildId, async (source) =>
+        withArtifactMutation(async () => {
+          const current = deps.db
+            .select({ buildId: schema.branches.latestBuildId })
+            .from(schema.branches)
+            .where(eq(schema.branches.id, branch.id))
+            .get();
+          if (current?.buildId !== buildId) throw new HttpError(409, 'not_current_build');
+          const runtime = releaseRuntimeFor(deps);
+          return publish(
+            deps,
+            { ...runtime, checkRights: (_artifact, visibility) => runtime.checkRights(source, visibility) },
+            {
+              gameId: game.id,
+              buildId,
+              actor: PUBLISH_ACTOR,
+              requireCurrentMain: true,
+            },
+          );
+        }),
+      );
       return c.json({ state: 'published', buildId: release.buildId });
     } catch (error) {
       if (error instanceof ReleaseError) throw new HttpError(error.status, error.code, undefined, error.payload);

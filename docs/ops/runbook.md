@@ -363,8 +363,10 @@ build_id=$(curl -fsS -H "x-ogm-internal: ${OGM_INTERNAL_TOKEN}" "$api/internal/o
 curl -fsS -X POST -H "x-ogm-internal: ${OGM_INTERNAL_TOKEN}" "$api/internal/operator/games/$slug/builds/$build_id/release"
 ```
 
-The action rejects a build that is no longer current and is safe to repeat for the same release. It performs the same
-rights, gameplay, snapshot and commit checks as the creator release flow. Repeat for each existing published game.
+The action rejects a build that is no longer current and is safe to repeat for the same release. It checks rights
+against the build's recorded Git revision in the registered checkout, and performs the gameplay, snapshot and commit
+checks used by the creator release flow. It fails closed if that revision or its source assets cannot be checked.
+Repeat for each existing published game.
 The previous release stays playable until the published pointer moves.
 Exit codes follow the gm CLI: 0 release published, 1 the build, upload, or release failed (a
 refused archive prints the API's reason), 2 bad usage, an unknown game, no checkout or no internal token.
@@ -380,6 +382,8 @@ after the API. The host denies artifact requests if this authorization service i
 releases alone authorize public build and legacy shared-blob URLs; owner draft URLs expire after 30 minutes without renewal and their session
 and role are rechecked for every request. The updated game cache worker stops using its old build and blob caches.
 Treat `/d/` and `/p/` URLs as credentials: exclude their paths from proxy access logs and never share them.
+The published-release API returns a session-scoped `/d/` URL for private and coming-soon releases; its response is not
+cacheable.
 Purge any reverse proxy or CDN caches for `/g/` and `/a/` during rollout and verify the new worker has activated.
 Previously downloaded or cached bytes cannot be recalled, including copies held by old clients.
 

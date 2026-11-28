@@ -16,6 +16,7 @@ import { countSavesAboveSchema } from '../saves/store.js';
 import { CommitUnavailable, HttpCommitClient } from './commit-client.js';
 import { checkPublishRights, RightsCheckUnavailable } from './rights.js';
 import { collectBuildArtifact } from './gc.js';
+import { issueGrant } from '../artifacts/grants.js';
 import {
   ReleaseError,
   addChangeNote,
@@ -72,7 +73,7 @@ function requireBuilder(c: Parameters<typeof requirePrincipal>[0]): void {
   if (principal.service !== 'builder') throw new HttpError(403, 'forbidden');
 }
 
-function requirePlayer(c: Parameters<typeof requirePrincipal>[0], gameId: string): void {
+function requirePlayer(c: Parameters<typeof requirePrincipal>[0], gameId: string) {
   const principal = requirePrincipal(c, ['user']);
   const game = findGameForPlay(c.get('deps').db, gameId, actorFromPrincipal(principal));
   requireAuthorization(
@@ -84,6 +85,7 @@ function requirePlayer(c: Parameters<typeof requirePrincipal>[0], gameId: string
       granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
     }),
   );
+  return { principal, game };
 }
 
 function requirePublisher(c: Parameters<typeof requirePrincipal>[0], gameId: string) {
@@ -225,19 +227,34 @@ const routes = new Hono<ApiBindings>()
     requirePublisher(c, c.req.param('gameId'));
     return c.json({ releases: listReleases(c.get('deps'), c.req.param('gameId')) });
   })
-  .get('/api/v1/games/:gameId/published', (c) => {
-    requirePlayer(c, c.req.param('gameId'));
+  .get('/api/v1/games/:gameId/published', async (c) => {
+    const { principal, game } = requirePlayer(c, c.req.param('gameId'));
     try {
       const release = published(c.get('deps'), c.req.param('gameId'));
       const etag = `"${release.id}"`;
-      c.header('ETag', etag);
-      c.header('Cache-Control', 'no-cache');
-      if (c.req.header('if-none-match') === etag) return c.body(null, 304);
+      const scoped = game.visibility !== 'listed' || game.releaseState !== 'released';
+      let buildUrl = `${runtime(c).gamesOrigin.replace(/\/$/, '')}/g/${release.gameId}/${release.buildId}/`;
+      if (scoped) {
+        const grant = await issueGrant(
+          c.get('deps'),
+          game.id,
+          release.buildId,
+          principal.userId,
+          c.req.raw.headers,
+          'player',
+        );
+        buildUrl = `${runtime(c).gamesOrigin.replace(/\/$/, '')}/d/${release.gameId}/${release.buildId}/${grant}/`;
+        c.header('Cache-Control', 'private, no-store');
+      } else {
+        c.header('ETag', etag);
+        c.header('Cache-Control', 'no-cache');
+        if (c.req.header('if-none-match') === etag) return c.body(null, 304);
+      }
       return c.json({
         releaseId: release.id,
         version: release.version,
         buildId: release.buildId,
-        buildUrl: `${runtime(c).gamesOrigin.replace(/\/$/, '')}/g/${release.gameId}/${release.buildId}/`,
+        buildUrl,
         changelog: release.changelog,
       });
     } catch (error) {
