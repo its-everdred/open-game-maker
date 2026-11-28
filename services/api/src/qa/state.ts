@@ -24,6 +24,8 @@ export type QaState = {
   received: QaReceived[];
   // Ticket details a ticket-detail E2E seeded (#873): open ones list as the game's builds, closed ones as completed.
   tickets?: TicketDetail[];
+  voiceDraftId?: string;
+  voiceDraftRun?: string;
 };
 
 export function readQaState(db: Db): QaState | null {
