@@ -507,8 +507,10 @@ test('build composer keeps voice controls at the right through dictation and liv
       const frame = JSON.parse(String(message)) as { type: string };
       if (frame.type === 'audio')
         socket.send(JSON.stringify({ v: 1, type: 'transcript', kind: 'partial', text: 'Make the moonlight warmer' }));
-      if (frame.type === 'commit')
+      if (frame.type === 'commit') {
         socket.send(JSON.stringify({ v: 1, type: 'transcript', kind: 'final', text: 'Make the moonlight warmer' }));
+        socket.send(JSON.stringify({ v: 1, type: 'ended' }));
+      }
     });
   });
   let receivedVoiceText = '';
