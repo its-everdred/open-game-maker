@@ -2,7 +2,7 @@ import { readFileSync, lstatSync, realpathSync } from 'node:fs';
 import { extname, isAbsolute, relative, sep } from 'node:path';
 import { indexUnityGuids } from './guid-index.js';
 import { expandUnityInstances } from './instances.js';
-import { meshNameFromMeta } from './model-meta.js';
+import { meshNameFromMeta, validateMeshImportSettings } from './model-meta.js';
 import {
   materialColorProperties,
   materialFloatProperties,
@@ -37,7 +37,7 @@ export type PlannedUnitySurface = Omit<UnitySurface, 'blends' | 'products' | 'sc
   }>;
 };
 export type PlannedUnityMesh = UnityMeshNode & {
-  model?: { path: string; name: string };
+  model?: { path: string; name: string; unityMesh?: boolean };
   surfaces: PlannedUnitySurface[];
 };
 
@@ -122,12 +122,15 @@ export async function planUnityAssembly(
     if (node.skinnedRendererActive && visible(node)) throw new Error('unsupported Unity skinned mesh');
     if (!node.mesh || !node.rendererActive || !visible(node)) return { ...node, surfaces: [] };
     const modelPath = node.mesh ? file(node.mesh, '.fbx') : undefined;
+    const modelMeta = modelPath ? readFileSync(`${modelPath}.meta`, 'utf8') : undefined;
+    if (modelMeta) validateMeshImportSettings(modelMeta);
     const model =
       modelPath && node.mesh
         ? {
             path: modelPath,
+            unityMesh: true,
             name: meshNameFromMeta(
-              readFileSync(`${modelPath}.meta`, 'utf8'),
+              modelMeta!,
               node.mesh.fileId,
               onWarning
                 ? {

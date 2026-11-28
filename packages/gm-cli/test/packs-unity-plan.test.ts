@@ -44,7 +44,7 @@ MeshRenderer:
     );
     expect(await planUnityAssembly(root, prefab)).toMatchObject([
       {
-        model: { path: join(root, 'model.fbx'), name: 'Roof' },
+        model: { path: join(root, 'model.fbx'), name: 'Roof', unityMesh: true },
         surfaces: [{ path: join(root, 'roof.mat'), color: [1, 1, 1, 1] }],
       },
     ]);

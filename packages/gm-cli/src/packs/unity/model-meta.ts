@@ -1,5 +1,28 @@
 import { parseDocument } from 'yaml';
 
+/** Validate the Unity FBX mesh settings supported by the assembly exporter. */
+export function validateMeshImportSettings(source: string): void {
+  const document = parseDocument(source, { intAsBigInt: true });
+  if (document.errors.length) throw new Error(`invalid Unity model metadata: ${document.errors[0]!.message}`);
+  const data = document.toJS({ mapAsMap: true, maxAliasCount: 0 }) as Map<unknown, unknown>;
+  const importer = data.get('ModelImporter');
+  if (!(importer instanceof Map)) throw new Error('missing Unity ModelImporter metadata');
+  const meshes = importer.get('meshes');
+  if (meshes === undefined) return;
+  if (!(meshes instanceof Map)) throw new Error('invalid Unity model mesh settings');
+  for (const [key, expected] of [
+    ['globalScale', '1'],
+    ['useFileUnits', '1'],
+    ['useFileScale', '1'],
+    ['bakeAxisConversion', '0'],
+    ['swapUVChannels', '0'],
+  ] as const) {
+    const value = meshes.get(key);
+    if (value !== undefined && String(value) !== expected)
+      throw new Error(`unsupported Unity FBX mesh setting ${key}: ${String(value)}`);
+  }
+}
+
 /** Resolve a Unity mesh subasset ID to its model-importer name. */
 export function meshNameFromMeta(
   source: string,

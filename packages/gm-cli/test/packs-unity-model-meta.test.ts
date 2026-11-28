@@ -1,5 +1,20 @@
 import { expect, it } from 'vitest';
-import { meshNameFromMeta } from '../src/packs/unity/model-meta.js';
+import { meshNameFromMeta, validateMeshImportSettings } from '../src/packs/unity/model-meta.js';
+
+it('rejects FBX import settings whose mesh coordinates are not supported', () => {
+  const defaults =
+    'ModelImporter:\n  meshes:\n    globalScale: 1\n    useFileUnits: 1\n    useFileScale: 1\n    bakeAxisConversion: 0\n    swapUVChannels: 0\n';
+  expect(() => validateMeshImportSettings(defaults)).not.toThrow();
+  for (const [key, from, to] of [
+    ['globalScale', '1', '2'],
+    ['useFileUnits', '1', '0'],
+    ['useFileScale', '1', '0'],
+    ['bakeAxisConversion', '0', '1'],
+    ['swapUVChannels', '0', '1'],
+  ]) {
+    expect(() => validateMeshImportSettings(defaults.replace(`${key}: ${from}`, `${key}: ${to}`))).toThrow(key);
+  }
+});
 
 it('resolves model subasset names without losing 64-bit IDs', () => {
   const legacy = `ModelImporter:\n  fileIDToRecycleName:\n    4300000: Roof\n`;

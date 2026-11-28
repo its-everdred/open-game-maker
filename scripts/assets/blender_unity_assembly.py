@@ -329,6 +329,23 @@ def import_model(path, cache):
     return meshes
 
 
+def unity_mesh_unit_scale(path):
+    # Unity's default unbaked FBX importer exposes mesh vertices in metres,
+    # while Blender puts FBX axis/unit conversion on the imported object tree.
+    # Read the FBX unit directly so no model-root conversion is applied twice.
+    from io_scene_fbx import parse_fbx, import_fbx
+
+    root, _version = parse_fbx.parse(path)
+    settings = import_fbx.elem_find_first(root, b'GlobalSettings')
+    props = import_fbx.elem_find_first(settings, b'Properties70') if settings else None
+    if props is None:
+        raise ValueError('FBX is missing global unit settings')
+    unit = import_fbx.elem_props_get_number(props, b'UnitScaleFactor', 1.0)
+    if not math.isfinite(unit) or unit <= 0:
+        raise ValueError(f'unsupported Unity FBX unit scale: {unit}')
+    return unit / 100.0
+
+
 def main():
     args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     if len(args) != 2:
@@ -356,6 +373,7 @@ def main():
             obj.parent = objects[parent]
         obj.matrix_basis = transform(node)
     cache = {}
+    unity_scales = {}
     materials = {}
     baked_meshes = {}
     baked_materials = 0
@@ -376,6 +394,10 @@ def main():
             if len(candidates) != 1:
                 raise ValueError(f"mesh name is missing or ambiguous: {model['name']}")
             _, _, mesh, matrix = candidates[0]
+            if model.get('unityMesh'):
+                if model['path'] not in unity_scales:
+                    unity_scales[model['path']] = unity_mesh_unit_scale(model['path'])
+                matrix = Matrix.Rotation(math.pi / 2, 4, 'X') @ Matrix.Scale(unity_scales[model['path']], 4)
             mesh = mesh.copy()
             surfaces = node["surfaces"]
             if len(surfaces) != len(mesh.materials):
