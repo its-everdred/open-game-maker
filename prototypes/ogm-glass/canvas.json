@@ -53,6 +53,10 @@
   {
    "id": "access",
    "name": "Game access"
+  },
+  {
+   "id": "catalogue",
+   "name": "Catalogue"
   }
  ],
  "boards": {
@@ -589,6 +593,122 @@
    "x": 924,
    "y": 964,
    "title": "Users · phone landscape"
+  },
+  "CatHome.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Catalogue home · new",
+   "page": "catalogue",
+   "radius": 38
+  },
+  "CatAnim.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Animation preview · new",
+   "page": "catalogue",
+   "radius": 38
+  },
+  "CatAnimCompare.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Animation compare-2 · new",
+   "page": "catalogue",
+   "radius": 38
+  },
+  "CatAudio.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Audio preview + A/B · new",
+   "page": "catalogue",
+   "radius": 38
+  },
+  "CatModel.dc.html": {
+   "x": 1880,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Model turntable · new",
+   "page": "catalogue",
+   "radius": 38
+  },
+  "CatMap.dc.html": {
+   "x": 2350,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Map preview + zoom · new",
+   "page": "catalogue",
+   "radius": 38
+  },
+  "CatFlag.dc.html": {
+   "x": 2820,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Useful for a game · new",
+   "page": "catalogue",
+   "radius": 38
+  },
+  "CatAllowlist.dc.html": {
+   "x": 0,
+   "y": 964,
+   "w": 390,
+   "h": 844,
+   "title": "Game allowlist + used in · new",
+   "page": "catalogue",
+   "radius": 38
+  },
+  "CatAllowAdd.dc.html": {
+   "x": 470,
+   "y": 964,
+   "w": 390,
+   "h": 844,
+   "title": "Allowlist: add from catalogue · new",
+   "page": "catalogue",
+   "radius": 38
+  },
+  "CatEditorAnim.dc.html": {
+   "x": 940,
+   "y": 964,
+   "w": 390,
+   "h": 844,
+   "title": "Editor picker: animation · new",
+   "page": "catalogue",
+   "radius": 38
+  },
+  "CatEditorMusic.dc.html": {
+   "x": 1410,
+   "y": 964,
+   "w": 390,
+   "h": 844,
+   "title": "Editor picker: music · new",
+   "page": "catalogue",
+   "radius": 38
+  },
+  "CatHomeLandscape.dc.html": {
+   "x": 0,
+   "y": 1928,
+   "w": 844,
+   "h": 390,
+   "title": "Catalogue home · phone landscape",
+   "page": "catalogue",
+   "radius": 30
+  },
+  "CatHomeDesktop.dc.html": {
+   "x": 924,
+   "y": 1928,
+   "w": 1440,
+   "h": 900,
+   "title": "Catalogue home · desktop",
+   "page": "catalogue"
   }
  },
  "order": [
@@ -651,7 +771,20 @@
   "UsersInvite.dc.html",
   "UserType.dc.html",
   "AccessLandscape.dc.html",
-  "UsersLandscape.dc.html"
+  "UsersLandscape.dc.html",
+  "CatHome.dc.html",
+  "CatAnim.dc.html",
+  "CatAnimCompare.dc.html",
+  "CatAudio.dc.html",
+  "CatModel.dc.html",
+  "CatMap.dc.html",
+  "CatFlag.dc.html",
+  "CatAllowlist.dc.html",
+  "CatAllowAdd.dc.html",
+  "CatEditorAnim.dc.html",
+  "CatEditorMusic.dc.html",
+  "CatHomeLandscape.dc.html",
+  "CatHomeDesktop.dc.html"
  ],
  "notes": {},
  "designSystems": []

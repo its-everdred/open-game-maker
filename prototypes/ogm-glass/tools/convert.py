@@ -26,6 +26,26 @@ BLOBS = {
     '54e39352b082909ec95fef62e2e0fed8': ('spr-hero.png', False, 'Knight hero sprite (SmallScaleInt)', 160, 160),
     '939932aad2e4dee3b8fd4857c2fa5bb2': ('spr-archer.png', False, 'Archer sprite (SmallScaleInt)', 160, 160),
     '6fdb0a8de3a37e057847d2e5250f60ac': ('spr-wizard.png', False, 'Wizard sprite (SmallScaleInt)', 160, 160),
+    # Catalogue page (core #1504): Quaternius and KayKit (CC0), chierit (CC-BY), Hivemind and Leartes (NoAI), CC3+ (reference only)
+    '45339d8e6fae2fe702b53f6e8ef332df': ('cat-q-idle.png', False, 'Quaternius UAL Idle_Loop clip thumbnail (CC0)', 256, 256),
+    '30c47695c6c0e09606663a63e8aa0457': ('cat-q-jog.png', False, 'Quaternius UAL Jog_Fwd_Loop clip thumbnail (CC0)', 256, 256),
+    'bded2cce21880b8fca1eec514116ee6e': ('cat-q-sword.png', False, 'Quaternius UAL Sword_Attack clip thumbnail (CC0)', 256, 256),
+    'e355474144cee7d6fea042ff5e13c6c8': ('cat-q-punch.png', False, 'Quaternius UAL Punch_Jab clip thumbnail (CC0)', 256, 256),
+    '79d73b2694499a976c8c7402525f4563': ('cat-q-roll.png', False, 'Quaternius UAL Roll clip thumbnail (CC0)', 256, 256),
+    '107957e1277344fd108c7ffdf5d72b75': ('cat-q-spell.png', False, 'Quaternius UAL Spell_Simple_Shoot clip thumbnail (CC0)', 256, 256),
+    '73cef04252080589bd3191c2e0ba30d3': ('cat-q-walk.png', False, 'Quaternius UAL Walk_Loop clip thumbnail (CC0)', 256, 256),
+    'e6ce523f294c690b207ce13860da6084': ('cat-q-death.png', False, 'Quaternius UAL Death01 clip thumbnail (CC0)', 256, 256),
+    '3deabeb9ee13636dac88d72e40068950': ('cat-q-jump.png', False, 'Quaternius UAL Jump_Loop clip thumbnail (CC0)', 256, 256),
+    '18cce8cf3fd691a44bc32317fe30343d': ('cat-q-swidle.png', False, 'Quaternius UAL Sword_Idle clip thumbnail (CC0)', 256, 256),
+    '19c238bdc483cc6d33ebf629ea52d1cb': ('cat-m-knight.png', False, 'KayKit Adventurers knight thumbnail, background keyed out (CC0)', 512, 512),
+    '414c4f3948406bbe5eab18b9b0c0714e': ('cat-m-mage.png', False, 'KayKit Adventurers mage thumbnail, background keyed out (CC0)', 512, 512),
+    '681d5d5ffa1a92cedd9d64526f05c394': ('cat-m-barbarian.png', False, 'KayKit Adventurers barbarian thumbnail, background keyed out (CC0)', 512, 512),
+    '590b7e852e9df4eb8c5d96fdc3c05cd6': ('cat-m-rogue.png', False, 'KayKit Adventurers rogue thumbnail, background keyed out (CC0)', 512, 512),
+    'e9387d9cf525d7a6756d73a971ab3efa': ('cat-m-chest.png', False, 'KayKit Dungeon gold chest thumbnail, background keyed out (CC0)', 512, 512),
+    'a19c62728c27b741a47bd9b33ab190c8': ('cat-map-hall.jpg', False, 'CC3+ Rothenburg town hall crop (ProFantasy, reference only)', 520, 600),
+    'd8811104c4b6dc4e111ad5887bd7f984': ('cat-minotaur.png', False, 'chierit Minotaur idle frame (CC-BY-4.0)', 288, 160),
+    '2660a83461c102a6160593ebec2e4fa7': ('cat-fx-fire.jpg', False, 'Hivemind fire VFX store preview, torches crop (NoAI)', 300, 300),
+    '7a4471c850fe621d6db33ced3900e688': ('cat-m-village.jpg', False, 'Leartes Medieval Russian Village store preview (NoAI)', 480, 270),
 }
 # Fixes applied on top of the canvas. glass.css gained a global .pick (editor picks, 42x42) on 2026-11-27,
 # which squashes the square A/B choice tiles these three chats approved on 2026-11-26; restore height:auto and block display.
@@ -40,7 +60,8 @@ os.makedirs(os.path.join(out, 'img'), exist_ok=True)
 os.makedirs(localimg, exist_ok=True)
 for bid, (name, commit, *_rest) in BLOBS.items():
     shutil.copyfile(os.path.join(blobdir, name), os.path.join(out, 'img', name) if commit else os.path.join(localimg, name))
-shutil.copyfile(os.path.join(src, 'glass.css'), os.path.join(out, 'glass.css'))
+for css in ('glass.css', 'catalogue.css'):
+    shutil.copyfile(os.path.join(src, css), os.path.join(out, css))
 shutil.copyfile(os.path.join(src, 'canvas.json'), os.path.join(out, 'canvas.json'))
 
 manifest = []
