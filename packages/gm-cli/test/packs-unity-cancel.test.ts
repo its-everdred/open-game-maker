@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 
-const state = vi.hoisted(() => ({ spawn: vi.fn(), beforeStat: undefined as undefined | (() => Promise<void>) }));
+const state = vi.hoisted(() => ({
+  spawn: vi.fn(),
+  beforeStat: undefined as undefined | (() => Promise<void>),
+  beforeRm: undefined as undefined | (() => Promise<void>),
+}));
 vi.mock('node:child_process', async (original) => ({
   ...(await original<typeof import('node:child_process')>()),
   spawn: state.spawn,
@@ -19,7 +23,57 @@ vi.mock('node:fs/promises', async (original) => {
       if (state.beforeStat) await state.beforeStat();
       return actual.stat(...args);
     },
+    rm: async (...args: Parameters<typeof actual.rm>) => {
+      if (state.beforeRm) await state.beforeRm();
+      return actual.rm(...args);
+    },
   };
+});
+
+it('removes the linked output when cancelled during staging cleanup', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'gm-unity-cancel-cleanup-'));
+  const before = process.listeners('SIGTERM');
+  let release!: () => void;
+  let entered!: () => void;
+  const enteredRm = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  state.beforeRm = async () => {
+    entered();
+    await blocked;
+  };
+  state.spawn.mockImplementation((_command, args: string[]) => {
+    const child = Object.assign(new EventEmitter(), {
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+      kill: vi.fn(),
+    });
+    void writeFile(args.at(-1)!, 'glb').then(() => child.emit('close', 0, null));
+    return child;
+  });
+  try {
+    const run = exportUnityAssembly([], join(root, 'result.glb'));
+    const result = run.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await enteredRm;
+    expect(await readdir(root)).toContain('result.glb');
+    const listener = process.listeners('SIGTERM').find((item) => !before.includes(item));
+    expect(listener).toBeDefined();
+    listener!();
+    release();
+    expect(await result).toMatchObject({ message: 'Unity exporter cancelled' });
+    expect(await readdir(root)).toEqual([]);
+  } finally {
+    release();
+    state.beforeRm = undefined;
+    state.spawn.mockReset();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 import { exportUnityAssembly } from '../src/packs/unity/export.js';

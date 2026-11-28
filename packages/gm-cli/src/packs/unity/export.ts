@@ -57,6 +57,7 @@ export async function exportUnityAssembly(
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
   let directory: string | undefined;
+  let published = false;
   try {
     directory = await mkdtemp(join(dirname(output), '.unity-assembly-'));
     if (abort.signal.aborted) throw new Error('Unity exporter cancelled');
@@ -85,16 +86,18 @@ export async function exportUnityAssembly(
     if (!(await stat(resultFile)).size) throw new Error('Unity exporter wrote an empty GLB');
     if (abort.signal.aborted) throw new Error('Unity exporter cancelled');
     await link(resultFile, output);
-    if (abort.signal.aborted) {
-      await unlink(output);
-      throw new Error('Unity exporter cancelled');
-    }
+    published = true;
   } finally {
     try {
       if (directory) await rm(directory, { recursive: true, force: true });
     } finally {
-      process.removeListener('SIGINT', stop);
-      process.removeListener('SIGTERM', stop);
+      try {
+        if (abort.signal.aborted && published) await unlink(output);
+      } finally {
+        process.removeListener('SIGINT', stop);
+        process.removeListener('SIGTERM', stop);
+      }
     }
   }
+  if (abort.signal.aborted) throw new Error('Unity exporter cancelled');
 }
