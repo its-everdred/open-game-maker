@@ -15,6 +15,61 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it('shows another creator’s round without verdict controls or missing-media requests', () => {
+  api.mockResolvedValue({ reviews: [] });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox
+        commands={[]}
+        onClose={() => {}}
+        readOnlyReviewGames={['g']}
+        reviews={[
+          {
+            kind: 'round',
+            gameId: 'g',
+            round: { id: 'a', ticket: '12', question: 'A view', media: [{ kind: 'still', url: '/image.png' }] },
+          },
+        ]}
+      />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('A view')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Needs changes' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Looks right' })).toBeNull();
+  expect(api.mock.calls.some(([path]) => String(path).includes('missing-media'))).toBe(false);
+});
+
+it('lets an administrator inspect another creator’s text Command without answering it', () => {
+  api.mockResolvedValue({ reviews: [] });
+  const command = {
+    game_id: 'foreign',
+    game_title: 'Other game',
+    job_id: null,
+    ticket: '12',
+    title: 'Colors',
+    command_id: 'c',
+    decision_id: 'd',
+    version: 1,
+    question: 'Which color?',
+    blocking: false,
+    opened_at: '2026-01-01T00:00:00Z',
+    text_only: true as const,
+    options: [
+      { id: 'a', label: 'Red' },
+      { id: 'b', label: 'Blue' },
+    ],
+  };
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ReviewInbox reviews={[]} commands={[command]} readOnlyReviewGames={['foreign']} onClose={() => {}} />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('Which color?')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Pick A/ })).toBeNull();
+  expect(api.mock.calls.some(([path]) => String(path).includes('missing-media'))).toBe(false);
+});
+
 it('answers a ledger round with a note and advances to the next review', async () => {
   api.mockResolvedValue({ status: 'answered' });
   render(

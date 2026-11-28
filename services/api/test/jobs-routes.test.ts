@@ -78,6 +78,47 @@ async function createJob(app: Awaited<ReturnType<typeof makeApp>>['app'], overri
 }
 
 describe('jobs routes', () => {
+  it('does not expose job queues or plans to players of a listed game', async () => {
+    const deps = setup();
+    const player = 'u_50000000-0000-4000-8000-000000000099';
+    deps.db.update(schema.games).set({ visibility: 'listed' }).where(eq(schema.games.id, ids.game)).run();
+    deps.db
+      .insert(schema.familyMembers)
+      .values({ familyId: ids.family, userId: player, role: 'member', capability: 'player', joinedAt: '2026-11-01' })
+      .run();
+    installUsers(deps, [
+      {
+        kind: 'user',
+        userId: player,
+        familyId: ids.family,
+        platformRole: 'none',
+        capability: 'player',
+        email: 'player@example.test',
+      },
+    ]);
+    const { app } = await makeApp(deps);
+    const created = await createJob(app);
+    const { jobId } = (await created.json()) as { jobId: string };
+    expect((await app.request(`/api/v1/jobs?gameId=${ids.game}`, { headers: asUser(player) })).status).toBe(403);
+    expect((await app.request(`/api/v1/jobs/${jobId}`, { headers: asUser(player) })).status).toBe(403);
+    expect(await (await app.request('/api/v1/jobs?state=active', { headers: asUser(player) })).json()).toEqual({
+      jobs: [],
+    });
+    deps.db
+      .update(schema.familyMembers)
+      .set({ capability: 'player' })
+      .where(eq(schema.familyMembers.userId, ids.user))
+      .run();
+    expect(
+      (
+        await app.request(`/api/v1/jobs/${jobId}`, {
+          method: 'PATCH',
+          headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+          body: '{}',
+        })
+      ).status,
+    ).toBe(403);
+  });
   it('enforces the configured daily New Game limit through the public route', async () => {
     const deps = setup();
     deps.config.testerNewGamesPerDay = 1;

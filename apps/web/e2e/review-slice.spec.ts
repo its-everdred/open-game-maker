@@ -73,13 +73,13 @@ async function installApi(page: Page, designs: string[]) {
     if (path === '/api/v1/notifications/stream') {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
     }
-    if (path === '/api/v1/me') return json(route, { platformRole: 'none' });
+    if (path === '/api/v1/me') return json(route, { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' });
     if (path === '/api/v1/games/resolve/fall') {
       return json(route, {
         game: {
           id: gameId,
           familyId: 'f_1',
-          ownerId: 'u_1',
+          ownerId: 'u1',
           title: 'Block Fall',
           slug: 'fall',
           repo: null,

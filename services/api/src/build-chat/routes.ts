@@ -8,7 +8,7 @@ import { readBoundedBody } from '../app/read-body.js';
 import type { ChatJob } from '../app/registry.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
 import { parseBody, parseQuery } from '../app/validate.js';
-import { authorizedChatJob } from './authorization.js';
+import { authorizedChatJob, canReadChat } from './authorization.js';
 import { createMirror, type Mirror } from './aiur-mirror.js';
 import {
   attachmentLimit,
@@ -159,11 +159,24 @@ function chatStream(c: Context<ApiBindings>, job: ChatJob, since: number) {
       chain = chain
         .then(async () => {
           for (;;) {
+            if (!(await canReadChat(deps, job.jobId, c.req.raw.headers))) {
+              finish();
+              return;
+            }
             const rows = listSince(deps.sqlite, job.jobId, cursor);
             if (rows.length === 0) return;
             for (const row of rows) {
               if (shownInChat(row)) {
-                await stream.write(formatChatFrame(row.seq, await messageOf(deps, row, runtime.sign)));
+                if (!(await canReadChat(deps, job.jobId, c.req.raw.headers))) {
+                  finish();
+                  return;
+                }
+                const message = await messageOf(deps, row, runtime.sign);
+                if (!(await canReadChat(deps, job.jobId, c.req.raw.headers))) {
+                  finish();
+                  return;
+                }
+                await stream.write(formatChatFrame(row.seq, message));
               }
               cursor = row.seq;
             }

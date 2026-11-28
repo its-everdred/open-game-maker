@@ -44,6 +44,9 @@ vi.mock('../features/worker-builds/useWorkers', () => ({
     loading: false,
   }),
 }));
+vi.mock('../features/worker-builds/useAdminReviewGames', () => ({
+  useAdminReviewGames: () => ({ data: undefined, isError: false, isLoading: false }),
+}));
 vi.mock('../features/worker-builds/useWorkerReviews', () => ({
   useWorkerReviews: () => ({ reviews: [], error: false, loading: false }),
 }));

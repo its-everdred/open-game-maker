@@ -153,7 +153,8 @@ test('asks the Executor from a game, reads the reply with media, and sees each g
     if (url.pathname.endsWith('/review-rounds')) return json(route, { rounds: [] });
     if (url.pathname.endsWith('/previews')) return json(route, { previews: [] });
     if (/^\/api\/v1\/games\/[^/]+\/commands$/u.test(url.pathname)) return json(route, { commands: [] });
-    if (url.pathname === '/api/v1/me') return json(route, { platformRole: 'none' });
+    if (url.pathname === '/api/v1/me')
+      return json(route, { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' });
     return json(route, { error: 'not_mocked', path: url.pathname }, 404);
   });
 

@@ -48,7 +48,9 @@ async function openEditPage(page: Page): Promise<void> {
   await installGameApi(page);
   await page.route('**/api/v1/me/commands**', (route) => route.fulfill({ json: { commands: [], sessions: [] } }));
   await page.route('**/api/v1/me/core-commands', (route) => route.fulfill({ json: { commands: [], targets: [] } }));
-  await page.route('**/api/v1/me', (route) => route.fulfill({ json: { platformRole: 'none' } }));
+  await page.route('**/api/v1/me', (route) =>
+    route.fulfill({ json: { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' } }),
+  );
   await page.route('**/api/v1/me/executor/thread', (route) => route.fulfill({ status: 403, json: {} }));
   await page.route('**/api/v1/energy', (route) =>
     route.fulfill({ json: { level: 'limited', preference: 'balanced', windows: [], services: [] } }),

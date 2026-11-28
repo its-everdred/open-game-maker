@@ -8,7 +8,7 @@ export type WorkerReview =
   | { kind: 'preview'; gameId: string; gameTitle?: string; preview: Preview; round: Round }
   | { kind: 'standalone-preview'; gameId: string; gameTitle?: string; preview: Preview };
 
-type Game = { id: string; title?: string; slug?: string | null };
+type Game = { id: string; title?: string; slug?: string | null; ownerId?: string };
 
 // Gameplay rounds are represented by their playable preview; the rounds endpoint excludes them.
 export function useWorkerReviews(games: readonly Game[], creatorId?: string) {

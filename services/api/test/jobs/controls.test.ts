@@ -128,6 +128,18 @@ const post = (app: ReturnType<typeof createApp>, path: string, userId = ids.owne
   });
 
 describe('job controls', () => {
+  it('refuses job controls after the game owner is demoted to player', async () => {
+    const deps = setup();
+    deps.db
+      .update(schema.familyMembers)
+      .set({ capability: 'player' })
+      .where(eq(schema.familyMembers.userId, ids.owner))
+      .run();
+    const { app } = appWith(deps);
+    for (const path of ['cancel', 'pause', 'resume', 'message', 'decide']) {
+      expect((await post(app, path, ids.owner, {})).status).toBe(403);
+    }
+  });
   it('accepts a staged child worker event before the filed checkpoint', () => {
     const deps = setup('queued');
     deps.db

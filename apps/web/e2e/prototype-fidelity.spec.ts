@@ -359,7 +359,9 @@ async function prepareEditor(app: Page, reference: Page): Promise<Masks> {
   await installGameApi(app);
   await app.route('**/api/v1/me/commands**', (route) => route.fulfill({ json: { commands: [], sessions: [] } }));
   await app.route('**/api/v1/me/core-commands', (route) => route.fulfill({ json: { commands: [], targets: [] } }));
-  await app.route('**/api/v1/me', (route) => route.fulfill({ json: { platformRole: 'none' } }));
+  await app.route('**/api/v1/me', (route) =>
+    route.fulfill({ json: { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' } }),
+  );
   await app.route('**/api/v1/me/executor/thread', (route) => route.fulfill({ status: 403, json: {} }));
   await app.route('**/api/v1/energy', (route) =>
     route.fulfill({

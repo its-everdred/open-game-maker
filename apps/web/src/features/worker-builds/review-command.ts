@@ -2,6 +2,20 @@ import type { CreatorCommand, GameCommand } from '@ogm/contracts';
 // `daemon: 'pc'` marks a Command held by the PC's core daemon rather than the NUC's.
 export type CoreReviewCommand = GameCommand & { source: 'core'; daemon?: 'pc' };
 export type ReviewCommand = CreatorCommand | CoreReviewCommand;
+export function readOnlyGameIds(
+  games: readonly { id: string; ownerId: string }[],
+  userId: string | undefined,
+  capability: 'creator' | 'player' | undefined,
+): string[] {
+  return games.filter((game) => game.ownerId !== userId || capability === 'player').map((game) => game.id);
+}
+export function withoutGameCommands<T extends { decision_id: string }>(
+  core: readonly T[],
+  games: readonly { decision_id: string }[],
+): T[] {
+  const ids = new Set(games.map((command) => command.decision_id));
+  return core.filter((command) => !ids.has(command.decision_id));
+}
 export function commandSource(command: ReviewCommand): string {
   if (!('source' in command)) return command.game_id;
   return command.daemon === 'pc' ? 'core:pc' : 'core';

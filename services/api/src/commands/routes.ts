@@ -1,6 +1,8 @@
 import { AiurHttpError } from '@ogm/aiur-client';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { schema } from '@ogm/db';
+import { isNull } from 'drizzle-orm';
 
 import { CommandAnswerBody, decisionKeyFromMarker } from '@ogm/contracts';
 
@@ -8,7 +10,8 @@ import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import { parseBody } from '../app/validate.js';
 import type { ApiBindings } from '../app/types.js';
-import { authorizedGame } from '../games/authorize.js';
+import { authorizedCreatorReviewGame, authorizedReviewGame } from '../games/authorize.js';
+import { isReviewAdmin } from '../games/review-admin.js';
 import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js';
 import { tryRecordReview } from '../reviews/store.js';
 import { toGameCommand } from './aiur.js';
@@ -41,8 +44,24 @@ const AnswerCommandBody = CommandAnswerBody.extend({
 
 export default new Hono<ApiBindings>()
   .route('/', coreRoutes)
+  .get('/me/review-games', (c) => {
+    const principal = requirePrincipal(c, ['user']);
+    if (!isReviewAdmin(c.get('deps'), principal)) throw new HttpError(403, 'forbidden');
+    const games = c
+      .get('deps')
+      .db.select({
+        id: schema.games.id,
+        title: schema.games.title,
+        ownerId: schema.games.ownerId,
+        slug: schema.games.slug,
+      })
+      .from(schema.games)
+      .where(isNull(schema.games.delistedAt))
+      .all();
+    return c.json({ games });
+  })
   .get('/games/:gameId/commands', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedReviewGame(c);
     const principal = requirePrincipal(c, ['user']);
     // A product question waits for a voice session (#612); the game's inbox shows the decisions only.
     const page = await listGameCommandPage(c.get('deps'), game, principal);
@@ -59,7 +78,12 @@ export default new Hono<ApiBindings>()
   // The menu's decision inbox: the caller's player-facing Commands across every game they may edit.
   .get('/me/commands', async (c) => {
     const principal = requirePrincipal(c, ['user']);
-    const page = await listCreatorCommands(c.get('deps'), principal, c.req.query('includeQuestions') === '1');
+    const page = await listCreatorCommands(
+      c.get('deps'),
+      principal,
+      c.req.query('includeQuestions') === '1',
+      c.req.query('owned') === '1',
+    );
     await logReviewFeedRefresh(
       'creator_commands',
       'creator',
@@ -71,7 +95,7 @@ export default new Hono<ApiBindings>()
     return c.json(page);
   })
   .post('/games/:gameId/commands/:decisionId/missing-media', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedCreatorReviewGame(c);
     if (requirePrincipal(c, ['user']).userId !== game.ownerId) throw new HttpError(403, 'forbidden');
     const deps = c.get('deps');
     const command = await findGameCommand(deps, game, c.req.param('decisionId'));
@@ -103,7 +127,7 @@ export default new Hono<ApiBindings>()
   // A Command with no job: the player answered one the game's own aiur instance holds. Aiur's canonical Decision API
   // validates the option and the version, so an answer from here lands exactly as one from the aiur dashboard would.
   .post('/games/:gameId/commands/:decisionId/answer', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedCreatorReviewGame(c);
     const deps = c.get('deps');
     const body = await parseBody(c, AnswerCommandBody);
     const decisionId = c.req.param('decisionId');

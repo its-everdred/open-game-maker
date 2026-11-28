@@ -273,7 +273,7 @@ test('asking for a change with no build running starts an edit job and streams i
     }
   });
   // Registered after installGameApi, so these win over its catch-all.
-  await page.route('**/api/v1/games', (route) => json(route, { games: [{ id: 'game' }] }));
+  await page.route('**/api/v1/games', (route) => json(route, { games: [{ id: 'game', ownerId: 'u1' }] }));
   await page.route('**/api/v1/jobs?gameId=*', async (route) => {
     await json(route, { jobs: created.length > 0 ? [editJob] : [] });
     jobResponses += 1;
@@ -405,7 +405,7 @@ async function installBuildRoutes(page: Page, options: { brokenPicker?: boolean;
               createdAt: job.createdAt,
             },
           ]
-        : [{ id: job.gameId, title: 'Moonlit Door' }],
+        : [{ id: job.gameId, title: 'Moonlit Door', ownerId: job.creatorId }],
     }),
   );
   await page.route('**/api/v1/jobs?gameId=*', (route) => json(route, { jobs: [job] }));

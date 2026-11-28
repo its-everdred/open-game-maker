@@ -45,6 +45,10 @@ async function setup(client: Partial<AiurClient>) {
       createdAt: AT,
     })
     .run();
+  deps.db
+    .insert(schema.familyMembers)
+    .values({ familyId: ids.family, userId: ids.owner, role: 'owner', capability: 'creator', joinedAt: AT })
+    .run();
   installUsers(deps, [
     {
       kind: 'user',

@@ -118,6 +118,7 @@ export async function gameCommandsFromAiur(
   sign: MediaSigner,
   onUnavailable?: () => void,
   linkedDecisions: ReadonlyMap<string, { version: number; ticket: string | null }> = new Map(),
+  onScopedDecision?: (decisionId: string) => void,
 ): Promise<GameCommand[]> {
   // An unlinked game has no daemon. The QA game deliberately uses its synthetic daemon without a repository.
   if (!game.githubOwner && !game.githubRepo && !isQaGame(deps.db, game.id)) return [];
@@ -148,8 +149,7 @@ export async function gameCommandsFromAiur(
     linkedDecisions.get(decision.decision_id)?.ticket === decision.ticket.identifier;
   const candidates = decisions.filter(
     (decision) =>
-      (!jobTickets.has(decision.ticket.identifier) || linked(decision)) &&
-      isOpen(decision) &&
+      (isOpen(decision) || (decision.decision_status === 'pending' && !decision.answer && !decision.active_answer)) &&
       (isForCreator(decision) || linked(decision)) &&
       toGameCommand(decision) !== null,
   );
@@ -161,10 +161,11 @@ export async function gameCommandsFromAiur(
     onUnavailable?.();
     return [];
   }
-  const open = candidates.filter(
+  const scoped = candidates.filter((decision) => allowed(decision.ticket.identifier));
+  for (const decision of scoped) onScopedDecision?.(decision.decision_id);
+  const open = scoped.filter(
     (decision) =>
       (!jobTickets.has(decision.ticket.identifier) || linked(decision)) &&
-      allowed(decision.ticket.identifier) &&
       isOpen(decision) &&
       (isForCreator(decision) || linked(decision)) &&
       toGameCommand(decision) !== null,

@@ -7,7 +7,9 @@ import { z } from 'zod';
 import { HttpError } from '../app/errors.js';
 import { parseBody } from '../app/validate.js';
 import type { ApiBindings } from '../app/types.js';
-import { authorizedGame } from '../games/authorize.js';
+import { authorizedCreatorReviewGame, authorizedGame, authorizedReviewGame } from '../games/authorize.js';
+import { isReviewAdmin } from '../games/review-admin.js';
+import { findGameBySlugOrId } from '../games/slug.js';
 import { requirePrincipal } from '../app/principal.js';
 import { issueLiveAccess } from './live.js';
 import { bindPreview, hasCreatorMembership } from '../artifacts/grants.js';
@@ -45,9 +47,10 @@ function bindPreviews<T extends { accessId: string }>(
   c.header('Cache-Control', 'no-store');
   const principal = requirePrincipal(c, ['user']);
   if (
-    principal.userId !== game.ownerId ||
-    principal.capability !== 'creator' ||
-    !hasCreatorMembership(c.get('deps'), game.familyId, principal.userId)
+    !isReviewAdmin(c.get('deps'), principal) &&
+    (principal.userId !== game.ownerId ||
+      principal.capability !== 'creator' ||
+      !hasCreatorMembership(c.get('deps'), game.familyId, principal.userId))
   )
     return [];
   return previews.map((preview) => ({
@@ -57,16 +60,46 @@ function bindPreviews<T extends { accessId: string }>(
 }
 
 export default new Hono<ApiBindings>()
+  .get('/games/live-resolve/:ref/:ticket', (c) => {
+    const deps = c.get('deps');
+    const principal = requirePrincipal(c, ['user']);
+    const game = findGameBySlugOrId(deps.db, c.req.param('ref'));
+    if (!game || game.delistedAt !== null) throw new HttpError(404, 'game_not_found');
+    const isOwner =
+      principal.userId === game.ownerId &&
+      principal.familyId === game.familyId &&
+      principal.capability === 'creator' &&
+      hasCreatorMembership(deps, game.familyId, principal.userId);
+    const round = latestRoundForTicket(deps.db, game.id, c.req.param('ticket'));
+    const isLiveReview =
+      round &&
+      round.verdict === null &&
+      (JSON.parse(round.media) as { kind: string; ref: string }[]).some(
+        (item) => item.kind === 'build' && item.ref === `live-${round.id}`,
+      );
+    if (!isOwner && !(isReviewAdmin(deps, principal) && isLiveReview)) throw new HttpError(404, 'game_not_found');
+    c.header('Cache-Control', 'no-store');
+    return c.json({ game: { id: game.id } });
+  })
   .get('/games/:gameId/live/:ticket', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedReviewGame(c);
     c.header('Cache-Control', 'no-store');
     const principal = requirePrincipal(c, ['user']);
-    if (
-      principal.userId !== game.ownerId ||
-      principal.capability !== 'creator' ||
-      !hasCreatorMembership(c.get('deps'), game.familyId, principal.userId)
-    )
-      throw new HttpError(404, 'live_preview_not_found');
+    const round = latestRoundForTicket(c.get('deps').db, game.id, c.req.param('ticket'));
+    const isLiveReview =
+      round &&
+      round.verdict === null &&
+      (JSON.parse(round.media) as { kind: string; ref: string }[]).some(
+        (item) => item.kind === 'build' && item.ref === `live-${round.id}`,
+      );
+    if (!isReviewAdmin(c.get('deps'), principal) || !isLiveReview) {
+      if (
+        principal.userId !== game.ownerId ||
+        principal.capability !== 'creator' ||
+        !hasCreatorMembership(c.get('deps'), game.familyId, principal.userId)
+      )
+        throw new HttpError(404, 'live_preview_not_found');
+    }
     const live = await issueLiveAccess(c.get('deps'), game, c.req.param('ticket'));
     const accessId = bindPreview(c.get('deps'), game.id, live.accessId, principal.userId, c.req.raw.headers);
     return c.json({ gameId: game.id, ...live, accessId });
@@ -82,7 +115,7 @@ export default new Hono<ApiBindings>()
     return c.json({ previews: bindPreviews(c, game, previews) });
   })
   .get('/games/:gameId/previews', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedReviewGame(c);
     const deps = c.get('deps');
     const previews = (await listPreviews(deps, game.id)).filter((preview) => currentPreview(deps, preview));
     const repo = game.githubOwner && game.githubRepo ? { owner: game.githubOwner, name: game.githubRepo } : undefined;
@@ -96,7 +129,7 @@ export default new Hono<ApiBindings>()
     return c.json({ previews: named });
   })
   .get('/games/:gameId/previews/:ticket/design', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedReviewGame(c);
     const deps = c.get('deps');
     const preview = (await listEditorPreviews(deps, game.id)).find((item) => item.ticket === c.req.param('ticket'));
     if (!preview || preview.buildId !== c.req.query('buildId')) throw new HttpError(404, 'preview_not_found');
@@ -106,7 +139,7 @@ export default new Hono<ApiBindings>()
     return c.json({ rev: 0, doc });
   })
   .post('/games/:gameId/previews/:ticket/answer', async (c) => {
-    const game = authorizedGame(c, 'game.edit');
+    const game = authorizedCreatorReviewGame(c);
     const { buildId, verdict, note } = await parseBody(c, Verdict);
     const ticket = c.req.param('ticket');
     if (!/^[1-9]\d{0,15}$/u.test(ticket)) throw new HttpError(400, 'invalid_ticket');

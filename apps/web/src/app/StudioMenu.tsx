@@ -56,8 +56,9 @@ import {
   missingReviewTargets,
 } from '../features/worker-builds/BuildTracker';
 import { useWorkers } from '../features/worker-builds/useWorkers';
-import { commandSource } from '../features/worker-builds/review-command';
+import { commandSource, readOnlyGameIds, withoutGameCommands } from '../features/worker-builds/review-command';
 import { useWorkerReviews } from '../features/worker-builds/useWorkerReviews';
+import { useAdminReviewGames } from '../features/worker-builds/useAdminReviewGames';
 import { useWorkerFinishes, type FinishedWorker } from '../features/worker-builds/useWorkerFinishes';
 import { usePastTickets } from '../features/worker-builds/usePastTickets';
 import { EditMenu } from '../features/game-menu/EditMenu';
@@ -91,8 +92,16 @@ export function StudioMenu() {
   const { data: session } = useSession();
   const creatorId = session?.user.id;
   const admin = useAdminMe(Boolean(session));
+  const adminReviewGames = useAdminReviewGames(creatorId, admin.data?.platformRole !== 'none' && !!admin.data);
+  const reviewViewKey = `${creatorId ?? 'signed-out'}:${adminReviewGames.data ? 'all' : 'own'}:${admin.data?.capability ?? 'unknown'}`;
+  const playerOnly =
+    admin.data?.capability === 'player' &&
+    (admin.data.platformRole === 'none' || (admin.data.platformRole === 'maintainer' && !adminReviewGames.data));
+  const reviewPrincipal = playerOnly || admin.attested === false ? undefined : creatorId;
   const builds = useMyJobs();
-  const decisions = useCreatorCommands(creatorId);
+  const visibleJobs = useMemo(() => (reviewPrincipal ? builds.jobs : []), [reviewPrincipal, builds.jobs]);
+  const actionPrincipal = admin.data?.capability === 'player' ? undefined : reviewPrincipal;
+  const decisions = useCreatorCommands(actionPrincipal);
   const sound = useSyncExternalStore(onChange, status);
   const [volume, setLocalVolume] = useState(getVolume);
   const [announcement, setAnnouncement] = useState('');
@@ -112,50 +121,81 @@ export function StudioMenu() {
   const isGameView = Boolean(game || isShowcase);
   const hasStudioHeader = Boolean(matchPath('/all', location.pathname) || matchPath('/new', location.pathname));
   const gameId = game?.params.gameId;
-  const unreadUpdates = useNotify((state) => scopedUpdates(state, creatorId, gameId).unread);
-  const hasUpdates = useNotify((state) => scopedUpdates(state, creatorId, gameId).updates.length > 0);
-  const ownedGames = isShowcase ? [] : builds.games.filter((item) => item.ownerId === creatorId);
+  const unreadUpdates = useNotify((state) =>
+    reviewPrincipal ? scopedUpdates(state, reviewPrincipal, gameId).unread : 0,
+  );
+  const hasUpdates = useNotify((state) =>
+    reviewPrincipal ? scopedUpdates(state, reviewPrincipal, gameId).updates.length > 0 : false,
+  );
+  const ownedGames = isShowcase || !reviewPrincipal ? [] : builds.games.filter((item) => item.ownerId === creatorId);
   // In a game, builds, reviews and Commands are that game's only; the core's and other games' stay on the library.
   const trackedGames = gameId === undefined ? ownedGames : ownedGames.filter((item) => item.id === gameId);
   const {
-    workers,
-    feeds,
+    workers: workerRows,
+    feeds: workerFeeds,
     error: workerError,
     loading: workersLoading,
-  } = useWorkers(trackedGames, undefined, creatorId);
-  const reviewData = useWorkerReviews(trackedGames, creatorId);
+  } = useWorkers(trackedGames, undefined, reviewPrincipal);
+  const workers = reviewPrincipal ? workerRows : [];
+  const feeds = reviewPrincipal ? workerFeeds : [];
+  const reviewGames =
+    admin.data?.capability === 'player' && !adminReviewGames.data ? [] : (adminReviewGames.data?.games ?? trackedGames);
+  const readOnlyReviewGames = readOnlyGameIds(adminReviewGames.data?.games ?? [], creatorId, admin.data?.capability);
+  const reviewData = useWorkerReviews(
+    gameId ? reviewGames.filter((item) => item.id === gameId) : reviewGames,
+    reviewPrincipal,
+  );
+  const reviewError = reviewData.error || adminReviewGames.isError;
+  const reviewsLoading = reviewData.loading || adminReviewGames.isLoading;
   const reviews = reviewData.reviews;
-  const past = usePastTickets(trackedGames, creatorId);
-  const gameReview = useCreatorReviewCommands(creatorId);
-  const allCore = useCoreReviewCommands(creatorId);
-  const coreReview = gameId === undefined ? allCore : { commands: [], targets: [], error: false, loading: false };
+  const past = usePastTickets(trackedGames, reviewPrincipal);
+  const gameReview = useCreatorReviewCommands(reviewPrincipal, Boolean(adminReviewGames.data));
+  const allCore = useCoreReviewCommands(reviewPrincipal);
+  const coreReview =
+    gameId === undefined
+      ? {
+          ...allCore,
+          commands:
+            gameReview.loading || gameReview.error
+              ? []
+              : withoutGameCommands(allCore.commands, [
+                  ...gameReview.commands,
+                  ...(gameReview.decisionIds ?? []).map((decision_id) => ({ decision_id })),
+                ]),
+        }
+      : { commands: [], targets: [], error: false, loading: false };
+  const reviewScopeReady =
+    !admin.isLoading && !adminReviewGames.isLoading && !(admin.data?.capability === 'player' && !adminReviewGames.data);
   const reviewCommands = [
-    ...gameReview.commands.filter((command) => gameId === undefined || command.game_id === gameId),
+    ...gameReview.commands.filter(
+      (command) => reviewScopeReady && (gameId === undefined || command.game_id === gameId),
+    ),
     ...coreReview.commands,
   ];
-  const { finished, dismiss: dismissFinished } = useWorkerFinishes(workers, feeds, creatorId);
-  const visibleFinished = isShowcase
-    ? []
-    : gameId
-      ? finished.filter(({ ticket }) => ticket.startsWith(gameId + ':'))
-      : finished;
+  const { finished, dismiss: dismissFinished } = useWorkerFinishes(workers, feeds, reviewPrincipal);
+  const visibleFinished =
+    isShowcase || !reviewPrincipal
+      ? []
+      : gameId
+        ? finished.filter(({ ticket }) => ticket.startsWith(gameId + ':'))
+        : finished;
   const gameTitles = useMemo(() => new Map(builds.games.map(({ id, title }) => [id, title])), [builds.games]);
-  const visibleBuilds = useMemo(() => recentBuilds(builds.jobs), [builds.jobs, buildClock]);
+  const visibleBuilds = useMemo(() => recentBuilds(visibleJobs), [visibleJobs, buildClock]);
   // Status: every game the creator owns, live or not, with its running builds and what waits on them.
   const buildGroups = useMemo(
     () => statusGroups(groupBuilds(visibleBuilds, gameTitles), ownedGames),
     [gameTitles, ownedGames, visibleBuilds],
   );
-  const buildingJobs = useMemo(() => builds.jobs.filter(isBuilding), [builds.jobs]);
+  const buildingJobs = useMemo(() => visibleJobs.filter(isBuilding), [visibleJobs]);
   // The badge counts every open player-facing decision across the creator's games, and each game's quick voice chat
   // as one entry; red when a decision blocks its build.
   const openDecisions = decisions.commands.length + decisions.sessions.length;
   const blocked = decisions.commands.some((command) => command.blocking);
   // The instance owner's thread with the Executor. A reply only raises a count, never text over the screen; its text
   // shows when the owner opens the thread.
-  const threadAccess = useThreadAccess(isShowcase ? undefined : creatorId);
-  useThreadPolling(creatorId, threadAccess);
-  const unreadReplies = useUnreadReplies(threadAccess ? creatorId : undefined);
+  const threadAccess = useThreadAccess(isShowcase ? undefined : reviewPrincipal);
+  useThreadPolling(reviewPrincipal, threadAccess);
+  const unreadReplies = useUnreadReplies(threadAccess ? reviewPrincipal : undefined);
   const pendingReviews =
     reviews.length +
     reviewCommands.length +
@@ -179,7 +219,7 @@ export function StudioMenu() {
     ? workRows(
         gameId,
         workers,
-        builds.jobs,
+        visibleJobs,
         new Set(
           [...reviewCommands, ...decisions.commands]
             .filter((command) => commandSource(command) === gameId)
@@ -248,19 +288,19 @@ export function StudioMenu() {
 
   useEffect(() => {
     if (!creatorId) return;
-    const messages = buildAnnouncements(creatorId, builds.jobs, buildingJobs, gameTitles);
+    const messages = buildAnnouncements(creatorId, visibleJobs, buildingJobs, gameTitles);
     if (messages.length > 0) setAnnouncement(messages.join('. '));
-  }, [buildingJobs, builds.jobs, creatorId, gameTitles]);
+  }, [buildingJobs, visibleJobs, creatorId, gameTitles]);
 
   useEffect(() => {
-    const nextExpiry = nextRecentBuildExpiry(builds.jobs);
+    const nextExpiry = nextRecentBuildExpiry(visibleJobs);
     if (nextExpiry === undefined) return;
     const timer = window.setTimeout(
       () => setBuildClock((current) => current + 1),
       Math.max(0, nextExpiry - Date.now() + 1),
     );
     return () => window.clearTimeout(timer);
-  }, [buildClock, builds.jobs]);
+  }, [buildClock, visibleJobs]);
 
   const changeVolume = (next: number) => {
     setLocalVolume(next);
@@ -340,7 +380,10 @@ export function StudioMenu() {
   if (
     isGameView &&
     (hasUpdates ||
-      (acknowledged && acknowledged.creatorId === creatorId && acknowledged.finished.length > 0) ||
+      (reviewPrincipal &&
+        acknowledged &&
+        acknowledged.creatorId === reviewPrincipal &&
+        acknowledged.finished.length > 0) ||
       visibleFinished.length > 0 ||
       sheet === 'builds' ||
       workers.length > 0 ||
@@ -349,7 +392,7 @@ export function StudioMenu() {
       coreReview.targets.length > 0 ||
       past.tickets.length > 0 ||
       workerError ||
-      reviewData.error ||
+      reviewError ||
       gameReview.error ||
       coreReview.error ||
       past.error)
@@ -550,24 +593,25 @@ export function StudioMenu() {
   } else if (sheet === 'builds') {
     sheetContent = (
       <BuildPanel
-        key={creatorId ?? 'signed-out'}
-        creatorId={creatorId}
+        key={reviewPrincipal ? reviewViewKey : 'no-review'}
+        creatorId={reviewPrincipal}
         gameId={gameId}
         workers={workers}
         reviews={reviews}
         commands={reviewCommands}
+        readOnlyReviewGames={readOnlyReviewGames}
         coreTargets={coreReview.targets}
         past={past.tickets}
         historyError={past.error}
         workerError={workerError}
-        reviewError={reviewData.error || gameReview.error || coreReview.error}
-        reviewLoading={
-          builds.isLoading || workersLoading || reviewData.loading || gameReview.loading || coreReview.loading
-        }
+        reviewError={reviewError || gameReview.error || coreReview.error}
+        reviewLoading={builds.isLoading || workersLoading || reviewsLoading || gameReview.loading || coreReview.loading}
         historyLoading={past.loading}
-        jobs={builds.jobs}
+        jobs={visibleJobs}
         finished={[
-          ...(acknowledged && acknowledged.creatorId === creatorId ? acknowledged.finished : []),
+          ...(reviewPrincipal && acknowledged && acknowledged.creatorId === reviewPrincipal
+            ? acknowledged.finished
+            : []),
           ...visibleFinished,
         ]}
         id="studio-menu-builds"
@@ -672,21 +716,22 @@ export function StudioMenu() {
       )}
       {!isGameView && (
         <BuildTracker
-          key={creatorId ?? 'signed-out'}
-          creatorId={creatorId}
+          key={reviewPrincipal ? reviewViewKey : 'no-review'}
+          creatorId={reviewPrincipal}
           workers={workers}
           reviews={reviews}
           commands={reviewCommands}
+          readOnlyReviewGames={readOnlyReviewGames}
           coreTargets={coreReview.targets}
           past={past.tickets}
           historyError={past.error}
           workerError={workerError}
-          reviewError={reviewData.error || gameReview.error || coreReview.error}
+          reviewError={reviewError || gameReview.error || coreReview.error}
           reviewLoading={
-            builds.isLoading || workersLoading || reviewData.loading || gameReview.loading || coreReview.loading
+            builds.isLoading || workersLoading || reviewsLoading || gameReview.loading || coreReview.loading
           }
           historyLoading={past.loading}
-          jobs={builds.jobs}
+          jobs={visibleJobs}
           finished={visibleFinished}
           onDismiss={() => dismissFinished(visibleFinished.map((item) => item.ticket))}
         />
@@ -746,6 +791,7 @@ export function StudioMenu() {
       <div ref={traySlot} style={{ display: 'contents' }} />
       {isEdit && gamePath ? (
         <EditMenu
+          key={reviewPrincipal ? reviewViewKey : 'no-review'}
           open={open}
           onClose={close}
           cards={editCards}
@@ -756,17 +802,18 @@ export function StudioMenu() {
             workers,
             reviews,
             commands: reviewCommands,
+            readOnlyReviewGames,
             targets: editTargets,
-            error: reviewData.error || gameReview.error || coreReview.error,
+            error: reviewError || gameReview.error || coreReview.error,
             incomplete:
               builds.isLoading ||
               workersLoading ||
-              reviewData.loading ||
+              reviewsLoading ||
               gameReview.loading ||
               coreReview.loading ||
               workerError,
           }}
-          creatorId={creatorId}
+          creatorId={reviewPrincipal}
           gamePath={gamePath}
           admin={requireAdmin(admin.data ?? null) === 'ok'}
           signedIn={Boolean(session)}
@@ -794,7 +841,7 @@ export function StudioMenu() {
       ) : (
         createPortal(tray, trayHost)
       )}
-      <JobConversationModal />
+      {reviewPrincipal ? <JobConversationModal /> : null}
       {threadAccess && creatorId ? (
         <ExecutorThread
           creatorId={creatorId}
@@ -810,10 +857,10 @@ export function StudioMenu() {
           }}
         />
       ) : null}
-      {deck && deck.creatorId === creatorId ? (
+      {deck && deck.creatorId === reviewPrincipal ? (
         <DecisionDeck commands={decisions.commands} first={deck.command} onClose={() => setDeck(undefined)} />
       ) : null}
-      {questions && questions.creatorId === creatorId ? (
+      {questions && questions.creatorId === reviewPrincipal ? (
         <QuestionSession
           session={questions.session}
           creatorId={questions.creatorId}

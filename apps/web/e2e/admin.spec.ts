@@ -223,6 +223,7 @@ async function installAdminRoutes(page: Page, platformRole: 'admin' | 'maintaine
         user: { id: 'u1', email: owner.email },
         family: { id: ids.family, name: 'Door Family', role: 'owner', capability: 'creator' },
         platformRole,
+        capability: 'creator',
       });
     }
     if (path === '/api/v1/admin/members' && request.method() === 'GET') {

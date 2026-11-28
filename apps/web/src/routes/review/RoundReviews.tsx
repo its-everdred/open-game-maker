@@ -67,6 +67,7 @@ export function RoundCard({
   onPendingChange,
   onPlay,
   isNew = false,
+  readOnly = false,
 }: {
   gameId: string;
   round: Round;
@@ -75,6 +76,7 @@ export function RoundCard({
   onPendingChange?(pending: boolean): void;
   onPlay?(): void;
   isNew?: boolean;
+  readOnly?: boolean;
 }) {
   const [note, setNote] = useState('');
   const answer = useMutation({
@@ -149,7 +151,9 @@ export function RoundCard({
           New round
         </p>
       ) : null}
-      {swipe ? (
+      {readOnly ? (
+        media
+      ) : swipe ? (
         <SwipeVerdict
           disabled={answer.isPending || answer.isSuccess || needsPreview}
           onPendingChange={onPendingChange}

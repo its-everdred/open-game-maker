@@ -127,6 +127,83 @@ async function read(deps: ReturnType<typeof makeDeps>, path: string, userId: str
 }
 
 describe('the creator’s decision inbox', () => {
+  it('hides a former creator’s review queue after their capability is changed to player', async () => {
+    const deps = seed();
+    deps.sqlite.prepare("UPDATE family_members SET capability = 'player' WHERE user_id = ?").run(ids.user);
+    deps.registry.principalResolvers = [
+      async () => ({
+        kind: 'user',
+        userId: ids.user,
+        familyId: ids.family,
+        platformRole: 'none',
+        capability: 'creator',
+      }),
+    ];
+    serveAiur(deps, { [ids.blobs]: [decision('d_private')] });
+    const { app } = await makeApp(deps);
+    const request = (path: string) => app.request(`/api/v1${path}`, { headers: asUser(ids.user) });
+    expect(await (await request('/me/commands?includeQuestions=1')).json()).toMatchObject({ commands: [] });
+    expect((await request(`/games/${ids.blobs}/commands`)).status).toBe(403);
+    expect((await request(`/games/${ids.blobs}/review-rounds`)).status).toBe(403);
+    for (const path of [
+      `/games/${ids.blobs}/commands/d_private/answer`,
+      `/games/${ids.blobs}/review-rounds/r/answer`,
+      `/games/${ids.blobs}/previews/12/answer`,
+    ]) {
+      const response = await app.request(`/api/v1${path}`, {
+        method: 'POST',
+        headers: { ...asUser(ids.user), 'content-type': 'application/json' },
+        body: '{}',
+      });
+      expect(response.status).toBe(403);
+    }
+  });
+  it('lists every game for an administrator and only the creator’s games for other users', async () => {
+    const deps = seed();
+    deps.registry.principalResolvers.length = 0;
+    installUsers(deps, [
+      {
+        kind: 'user',
+        userId: ids.user,
+        familyId: ids.family,
+        platformRole: 'admin',
+        capability: 'creator',
+        email: 'admin@example.test',
+      },
+      {
+        kind: 'user',
+        userId: ids.outsider,
+        familyId: ids.otherFamily,
+        platformRole: 'none',
+        capability: 'creator',
+        email: 'creator@example.test',
+      },
+    ]);
+    serveAiur(deps, { [ids.blobs]: [decision('d_blobs')], [ids.foreign]: [decision('d_foreign')] });
+    const { app } = await makeApp(deps);
+    const request = (path: string, userId = ids.user) => app.request(`/api/v1${path}`, { headers: asUser(userId) });
+    const admin = (await (await request('/me/commands?includeQuestions=1')).json()) as {
+      commands: Array<{ decision_id: string }>;
+    };
+    expect(admin.commands.map((item) => item.decision_id).sort()).toEqual(['d_blobs', 'd_foreign']);
+    const own = (await (await request('/me/commands')).json()) as { commands: Array<{ decision_id: string }> };
+    expect(own.commands.map((item) => item.decision_id)).toEqual(['d_blobs']);
+    const ownReview = (await (await request('/me/commands?includeQuestions=1&owned=1')).json()) as {
+      commands: Array<{ decision_id: string }>;
+    };
+    expect(ownReview.commands.map((item) => item.decision_id)).toEqual(['d_blobs']);
+    const creator = (await (await request('/me/commands', ids.outsider)).json()) as {
+      commands: Array<{ decision_id: string }>;
+    };
+    expect(creator.commands.map((item) => item.decision_id)).toEqual(['d_foreign']);
+    expect((await request('/me/review-games', ids.outsider)).status).toBe(403);
+    const games = (await (await request('/me/review-games')).json()) as { games: Array<{ id: string }> };
+    expect(games.games.map((game) => game.id)).toContain(ids.foreign);
+    expect((await request(`/games/${ids.foreign}/commands`)).status).toBe(200);
+    expect((await request(`/games/${ids.blobs}/commands`, ids.outsider)).status).not.toBe(200);
+    expect((await request(`/games/${ids.foreign}/review-rounds`)).status).toBe(200);
+    expect((await request(`/games/${ids.blobs}/review-rounds`, ids.outsider)).status).not.toBe(200);
+  });
   it('lists marker metadata and layout on /me/commands', async () => {
     const deps = seed();
     const metadata = reviewMetaMarker(
@@ -405,6 +482,19 @@ describe('a job’s Commands in the decision inbox', () => {
       },
     });
   }
+
+  it('reports an unmirrored game decision for core-deck deduplication without making it answerable', async () => {
+    const deps = seed();
+    seedJob(deps);
+    serveAiur(deps, { [ids.blobs]: [decision('d_unmirrored'), decision('d_pending', { decision_status: 'pending' })] });
+    const body = (await (await read(deps, '/me/commands?includeQuestions=1')).json()) as {
+      commands: Array<{ decision_id: string }>;
+      game_decision_ids: string[];
+    };
+    expect(body.commands).toEqual([]);
+    expect(body.game_decision_ids).toContain('d_unmirrored');
+    expect(body.game_decision_ids).toContain('d_pending');
+  });
 
   // A decision mirrored before aiur marked it for the creator (or before this app read the mark) is stored without an
   // audience. The next poll must catch it up, or it stays hidden from the creator for good.

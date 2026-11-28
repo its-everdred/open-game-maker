@@ -455,13 +455,13 @@ async function installReviewApi(page: Page, options: ReviewApiOptions = {}) {
     if (path === '/api/v1/notifications/stream') {
       return route.fulfill({ contentType: 'text/event-stream', body: 'retry: 60000\n\n' });
     }
-    if (path === '/api/v1/me') return json(route, { platformRole: 'none' });
+    if (path === '/api/v1/me') return json(route, { user: { id: 'u1' }, platformRole: 'none', capability: 'creator' });
     if (path === '/api/v1/games/resolve/blobs') {
       return json(route, {
         game: {
           id: gameId,
           familyId: 'f_1',
-          ownerId: 'u_1',
+          ownerId: 'u1',
           title: 'Blobs',
           slug: 'blobs',
           repo: null,
@@ -470,7 +470,8 @@ async function installReviewApi(page: Page, options: ReviewApiOptions = {}) {
       });
     }
     if (path === `/api/v1/games/${gameId}/commands`) return json(route, { commands });
-    if (options.voice && path === '/api/v1/games') return json(route, { games: [{ id: gameId, title: 'Blobs' }] });
+    if (options.voice && path === '/api/v1/games')
+      return json(route, { games: [{ id: gameId, title: 'Blobs', ownerId: 'u1' }] });
     if (options.voice && path === '/api/v1/jobs') return json(route, { jobs: [job] });
     if (options.voice && path === '/api/v1/voice/token') {
       voiceTokenTargets.push(

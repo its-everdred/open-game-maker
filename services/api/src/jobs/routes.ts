@@ -1,13 +1,15 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { CreateJobRequest, Id, JobPlan, MicroUsd } from '@ogm/contracts';
+import { CreateJobRequest, Id, JobPlan, MicroUsd, type Principal } from '@ogm/contracts';
 import { schema } from '@ogm/db';
 import { authorize } from '@ogm/policy';
 import { and, eq } from 'drizzle-orm';
 
 import { actorFromPrincipal, requireAuthorization } from '../accounts/families.js';
-import { hasGameGrant, listGames as listVisibleGames } from '../games/games.js';
+import { listGames as listVisibleGames } from '../games/games.js';
+import { isReviewAdmin } from '../games/review-admin.js';
+import { hasCreatorMembership } from '../artifacts/grants.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings, AppDeps } from '../app/types.js';
@@ -39,17 +41,16 @@ function gameFor(deps: AppDeps, gameId: string) {
   return game;
 }
 
-function requireRead(deps: AppDeps, gameId: string, actor: ReturnType<typeof actorFromPrincipal>) {
+function requireRead(deps: AppDeps, gameId: string, principal: Extract<Principal, { kind: 'user' }>) {
   const game = gameFor(deps, gameId);
-  requireAuthorization(
-    authorize(actor, 'game.play', {
-      familyId: game.familyId,
-      ownerId: game.ownerId,
-      visibility: game.visibility,
-      releaseState: game.releaseState,
-      granted: hasGameGrant(deps.db, game.id, actor.userId),
-    }),
-  );
+  if (
+    !isReviewAdmin(deps, principal) &&
+    (principal.userId !== game.ownerId ||
+      principal.familyId !== game.familyId ||
+      principal.capability !== 'creator' ||
+      !hasCreatorMembership(deps, game.familyId, principal.userId))
+  )
+    throw new HttpError(403, 'forbidden');
   return game;
 }
 
@@ -84,23 +85,22 @@ const routes = new Hono<ApiBindings>()
     const principal = requirePrincipal(c, ['user']);
     const query = parseQuery(c, listQuery);
     const deps = c.get('deps');
-    const actor = actorFromPrincipal(principal);
     if ('gameId' in query) {
-      requireRead(deps, query.gameId, actor);
+      requireRead(deps, query.gameId, principal);
       return c.json({ jobs: listJobs(deps.db, query.gameId) });
     }
 
-    requireAuthorization(authorize(actor, 'game.play', { familyId: principal.familyId, visibility: 'listed' }));
-    const visibleGameIds = listVisibleGames(deps.db, principal.familyId, principal.userId)
+    const admin = isReviewAdmin(deps, principal);
+    const games = admin
+      ? deps.db.select().from(schema.games).all()
+      : listVisibleGames(deps.db, principal.familyId, principal.userId);
+    const visibleGameIds = games
       .filter(
         (game) =>
-          authorize(actor, 'game.play', {
-            familyId: game.familyId,
-            ownerId: game.ownerId,
-            visibility: game.visibility,
-            releaseState: game.releaseState,
-            granted: hasGameGrant(deps.db, game.id, principal.userId),
-          }).ok,
+          admin ||
+          (game.ownerId === principal.userId &&
+            principal.capability === 'creator' &&
+            hasCreatorMembership(deps, game.familyId, principal.userId)),
       )
       .map((game) => game.id);
     const jobs = listJobs(deps.db, visibleGameIds).filter((job) => !isTerminal(job.state));
@@ -110,7 +110,7 @@ const routes = new Hono<ApiBindings>()
     const principal = requirePrincipal(c, ['user']);
     const deps = c.get('deps');
     const row = findJobRow(deps.db, c.req.param('id'));
-    requireRead(deps, row.gameId, actorFromPrincipal(principal));
+    requireRead(deps, row.gameId, principal);
     return c.json(findJob(deps.db, row.id));
   })
   .patch('/jobs/:id', async (c) => {
@@ -118,6 +118,12 @@ const routes = new Hono<ApiBindings>()
     const deps = c.get('deps');
     const row = findJobRow(deps.db, c.req.param('id'));
     const game = gameFor(deps, row.gameId);
+    if (
+      principal.capability !== 'creator' ||
+      principal.userId !== game.ownerId ||
+      !hasCreatorMembership(deps, game.familyId, principal.userId)
+    )
+      throw new HttpError(403, 'forbidden');
     requireAuthorization(
       authorize(actorFromPrincipal(principal), 'game.edit', { familyId: game.familyId, ownerId: game.ownerId }),
     );

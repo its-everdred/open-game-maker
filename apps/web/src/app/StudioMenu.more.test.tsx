@@ -12,6 +12,9 @@ vi.mock('../features/build-chat/jobs', () => ({
   setJobPaused: vi.fn(),
 }));
 vi.mock('../features/worker-builds/useWorkers', () => ({ useWorkers: () => ({ workers: [], feeds: [] }) }));
+vi.mock('../features/worker-builds/useAdminReviewGames', () => ({
+  useAdminReviewGames: () => ({ data: undefined, isError: false, isLoading: false }),
+}));
 vi.mock('../features/worker-builds/useWorkerReviews', () => ({
   useWorkerReviews: () => ({ reviews: [], error: false, loading: false }),
 }));

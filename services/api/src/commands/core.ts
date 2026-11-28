@@ -3,6 +3,9 @@ import type { GameCommand } from '@ogm/contracts';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { CommandAnswerBody } from '@ogm/contracts';
+import { schema } from '@ogm/db';
+import { hasCreatorMembership } from '../artifacts/grants.js';
+import { isReviewAdmin } from '../games/review-admin.js';
 import { HttpError } from '../app/errors.js';
 import { requirePrincipal } from '../app/principal.js';
 import type { ApiBindings } from '../app/types.js';
@@ -13,6 +16,8 @@ import { reviewDecisionFields, reviewProblem } from '../reviews/review-answer.js
 import { logReviewFeedRefresh } from '../review-rounds/feed-log.js';
 import { optionMediaFromAiur } from './aiur-media.js';
 import { toGameCommand } from './aiur.js';
+import { coreTicketFilter } from './core-scope.js';
+import { belongsToGame, ticketScope } from '../worker-progress/scope.js';
 import { currentRung, deliverAdvance, withPhases } from './advance.js';
 import {
   bindReviewEpisode,
@@ -38,9 +43,16 @@ export function owner(c: import('hono').Context<ApiBindings>): {
   repo?: { owner: string; name: string };
 } {
   const deps = c.get('deps');
-  const principal = requirePrincipal(c, ['user']).userId;
+  const user = requirePrincipal(c, ['user']);
+  const principal = user.userId;
   const ownerId = deps.config.instanceOwnerId;
-  if (!ownerId || principal !== ownerId) throw new HttpError(403, 'forbidden');
+  if (
+    !ownerId ||
+    principal !== ownerId ||
+    (!isReviewAdmin(deps, user) &&
+      (user.capability !== 'creator' || !hasCreatorMembership(deps, user.familyId, principal)))
+  )
+    throw new HttpError(403, 'forbidden');
   const daemon = c.req.query('daemon') ?? 'core';
   if (daemon !== 'core' && daemon !== 'pc') throw new HttpError(400, 'invalid_daemon');
   const entry = deps.registry.coreAiurClients.find((item) => item.id === daemon);
@@ -77,9 +89,15 @@ function validated(decision: Decision): GameCommand {
 
 export default new Hono<ApiBindings>()
   .get('/me/core-commands', async (c) => {
-    const principal = requirePrincipal(c, ['user']).userId;
+    const user = requirePrincipal(c, ['user']);
+    const principal = user.userId;
     const deps = c.get('deps');
-    if (!deps.config.instanceOwnerId || principal !== deps.config.instanceOwnerId)
+    if (
+      !deps.config.instanceOwnerId ||
+      principal !== deps.config.instanceOwnerId ||
+      (!isReviewAdmin(deps, user) &&
+        (user.capability !== 'creator' || !hasCreatorMembership(deps, user.familyId, principal)))
+    )
       throw new HttpError(403, 'forbidden');
     const entries = deps.registry.coreAiurClients.length
       ? deps.registry.coreAiurClients
@@ -93,6 +111,13 @@ export default new Hono<ApiBindings>()
       await Promise.all(
         entries.map(async ({ id, client, repo }) => {
           let decisions: Decision[];
+          let isCoreTicket: (ticket: string) => boolean;
+          try {
+            isCoreTicket = await coreTicketFilter(deps, repo);
+          } catch {
+            daemonUnavailable = true;
+            return [];
+          }
           try {
             decisions = await client.decisions({}, AbortSignal.timeout(5000));
           } catch {
@@ -101,19 +126,23 @@ export default new Hono<ApiBindings>()
             return [];
           }
           const listed = await Promise.all(
-            decisions.filter(open).map(async (decision) => {
-              const command = toGameCommand(
-                decision,
-                await optionMediaFromAiur(
-                  deps,
-                  client,
+            decisions
+              .filter(
+                (decision) => open(decision) && decision.ticket?.identifier && isCoreTicket(decision.ticket.identifier),
+              )
+              .map(async (decision) => {
+                const command = toGameCommand(
                   decision,
-                  (hash) => reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash),
-                  repo ? { ...repo, ticket: decision.ticket.identifier } : undefined,
-                ),
-              );
-              return command ? { ...command, source: 'core' as const, daemon: id } : null;
-            }),
+                  await optionMediaFromAiur(
+                    deps,
+                    client,
+                    decision,
+                    (hash) => reviewMediaUrl(deps.blobStore, deps.config.appOrigin, hash),
+                    repo ? { ...repo, ticket: decision.ticket.identifier } : undefined,
+                  ),
+                );
+                return command ? { ...command, source: 'core' as const, daemon: id } : null;
+              }),
           );
           return withPhases(
             deps,
@@ -154,9 +183,11 @@ export default new Hono<ApiBindings>()
     });
   })
   .get('/core/tickets/:ticket/state', async (c) => {
-    const { client } = owner(c);
+    const { client, repo } = owner(c);
     const ticket = c.req.param('ticket');
     if (!/^[1-9]\d{0,18}$/u.test(ticket)) throw new HttpError(400, 'invalid_ticket');
+    if (!(await coreTicketFilter(c.get('deps'), repo, true))(ticket))
+      throw new HttpError(404, 'review_ticket_not_found');
     const issue = await coreCall(() => client.issue(ticket));
     return c.json({ state: issue.status });
   })
@@ -167,6 +198,8 @@ export default new Hono<ApiBindings>()
     const decision = await coreCall(() => client.decision(id));
     const command = isForCreator(decision) ? toGameCommand(decision) : null;
     if (!command || !command.ticket) throw new HttpError(404, 'command_not_found');
+    if (!(await coreTicketFilter(c.get('deps'), repo, true))(command.ticket))
+      throw new HttpError(404, 'command_not_found');
     if (!command.options.some((option) => option.id === body.option_id))
       throw new HttpError(400, 'command_option_invalid');
     if (body.review) {
@@ -265,9 +298,11 @@ export default new Hono<ApiBindings>()
     return c.json({ status: 'asked' });
   })
   .post('/core/commands/:id/missing-media', async (c) => {
-    const { client } = owner(c);
+    const { client, repo } = owner(c);
     const decision = await coreCall(() => client.decision(c.req.param('id')));
     const command = validated(decision);
+    if (!(await coreTicketFilter(c.get('deps'), repo, true))(command.ticket!))
+      throw new HttpError(404, 'command_not_found');
     if (!hasMissingDeclaredMedia(decision, command)) throw new HttpError(409, 'media_present');
     const receipt = await coreCall(() =>
       client.message(
@@ -294,14 +329,29 @@ async function reviewWorkers(
     throw new HttpError(503, 'core_tracker_unavailable');
   }
   if (snapshot.stale) throw new HttpError(503, 'core_tracker_unavailable');
+  const repoName = `${repo.owner}/${repo.name}`.toLowerCase();
+  const scopes = deps.db
+    .select()
+    .from(schema.games)
+    .all()
+    .filter(
+      (game) =>
+        game.githubOwner && game.githubRepo && `${game.githubOwner}/${game.githubRepo}`.toLowerCase() === repoName,
+    )
+    .map((game) => ticketScope(deps.db, game.id, game.slug ?? '', repoName));
+  const coreTickets = snapshot.tickets.filter(
+    (ticket) =>
+      !ticket.labels.some((label) => label.startsWith('game:')) &&
+      !scopes.some((scope) => belongsToGame(ticket, scope)),
+  );
   retainReviewTickets(
     deps.db,
     source,
     new Set(
-      snapshot.tickets.filter((ticket) => ticket.labels.includes('agent:human-review')).map((ticket) => ticket.ticket),
+      coreTickets.filter((ticket) => ticket.labels.includes('agent:human-review')).map((ticket) => ticket.ticket),
     ),
   );
-  return snapshot.tickets
+  return coreTickets
     .filter((ticket) => ticket.labels.includes('agent:human-review'))
     .map((ticket) => ({ ticket: ticket.ticket, title: ticket.title, state: 'human-review' }));
 }

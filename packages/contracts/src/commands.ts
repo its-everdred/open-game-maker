@@ -102,6 +102,7 @@ export const CreatorCommandsPage = z.object({
   commands: z.array(CreatorCommand),
   question_sessions: z.array(QuestionSession).optional(),
   missing_media_commands: z.array(MissingMediaCommand).optional(),
+  game_decision_ids: z.array(z.string().min(1)).optional(),
 });
 
 export type CommandOption = z.infer<typeof CommandOption>;

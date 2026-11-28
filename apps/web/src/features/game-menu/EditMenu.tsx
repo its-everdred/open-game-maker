@@ -31,6 +31,7 @@ type EditMenuProps = {
     workers: WorkerBuild[];
     reviews: readonly WorkerReview[];
     commands: readonly ReviewCommand[];
+    readOnlyReviewGames?: readonly string[];
     targets: readonly ReviewTarget[];
     error: boolean;
     incomplete: boolean;
@@ -301,6 +302,7 @@ export function EditMenu({
           workers={inbox.workers}
           reviews={inbox.reviews}
           commands={inbox.commands}
+          readOnlyReviewGames={inbox.readOnlyReviewGames}
           initialReview={'review' in review ? review.review : undefined}
           initialCommand={'command' in review ? review.command : undefined}
           initialTarget={'target' in review ? review.target : undefined}

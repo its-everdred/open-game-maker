@@ -5,6 +5,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { nextActiveJobsPoll, useActiveJobs } from './useActiveJobs';
 
+const identity = vi.hoisted(() => ({
+  userId: 'creator',
+  capability: 'creator' as 'creator' | 'player',
+  role: 'none' as 'none' | 'admin',
+}));
+vi.mock('../../lib/api/session', () => ({ useSession: () => ({ data: { user: { id: identity.userId } } }) }));
+vi.mock('../admin/api', () => ({
+  useAdminMe: () => ({ data: { capability: identity.capability, platformRole: identity.role } }),
+}));
+
 const activeJob = {
   id: 'j_1',
   gameId: 'g_1',
@@ -18,9 +28,26 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  identity.userId = 'creator';
+  identity.capability = 'creator';
+  identity.role = 'none';
 });
 
 describe('useActiveJobs', () => {
+  it('hides cached active jobs after the same user becomes a player', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ jobs: [activeJob] })));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result, rerender, unmount } = renderHook(() => useActiveJobs(), { wrapper });
+    await waitFor(() => expect(result.current.data).toEqual([activeJob]));
+    identity.capability = 'player';
+    rerender();
+    expect(result.current.data).toBeUndefined();
+    unmount();
+    client.clear();
+  });
   it('selects a 10-second interval only while a job is active', () => {
     expect(nextActiveJobsPoll([activeJob])).toBe(10_000);
     expect(nextActiveJobsPoll([{ ...activeJob, state: 'done' }])).toBe(false);

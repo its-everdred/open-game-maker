@@ -4,6 +4,7 @@ import type { BuildTimeline, Rollup } from '@ogm/contracts';
 
 import { queryClient } from '../../app/query';
 import { api, ApiError } from '../../lib/api/client';
+import { useSession } from '../../lib/api/session';
 import type {
   AdminAllowedUser,
   AdminBudget,
@@ -49,7 +50,20 @@ export async function invalidateAdmin(...keys: readonly (readonly unknown[])[]):
 }
 
 export function useAdminMe(enabled = true) {
-  return useQuery({ queryKey: adminKeys.me(), queryFn: () => adminRequest<AdminMe>('/me'), retry: false, enabled });
+  const { data: session } = useSession();
+  const userId = session?.user.id;
+  const query = useQuery({
+    queryKey: [...adminKeys.me(), userId, session?.session?.id],
+    queryFn: () => adminRequest<AdminMe>('/me'),
+    retry: false,
+    enabled: enabled && Boolean(userId),
+    refetchOnMount: 'always',
+    refetchInterval: 15_000,
+  });
+  return {
+    ...query,
+    attested: Boolean(userId && query.isFetchedAfterMount && !query.isError && query.data?.user.id === userId),
+  };
 }
 
 export function useMembers() {
