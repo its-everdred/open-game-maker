@@ -19,7 +19,13 @@ describe('games-host environment', () => {
       port: 3400,
       root: resolve('./games'),
       workerScript: defaultWorkerScript,
+      releaseGate: false,
     });
+  });
+
+  it('turns the artifact release gate on only when asked', () => {
+    expect(loadGamesHostEnv({ ...validEnvironment, OGM_ARTIFACT_RELEASE_GATE: '1' }).releaseGate).toBe(true);
+    expect(loadGamesHostEnv({ ...validEnvironment, OGM_ARTIFACT_RELEASE_GATE: 'false' }).releaseGate).toBe(false);
   });
 
   it('resolves an explicit cache worker path', () => {

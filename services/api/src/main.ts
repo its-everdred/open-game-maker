@@ -107,6 +107,7 @@ const deps: AppDeps = {
     pcCoreRepo: env.OGM_CORE_PC_REPO ? parseRepositoryName(env.OGM_CORE_PC_REPO) : undefined,
     instanceOwnerId: env.OGM_INSTANCE_OWNER_ID,
     gamesRoot: env.OGM_GAMES_ROOT ?? join(env.OGM_DATA_DIR, '..', 'games'),
+    artifactReleaseGate: env.OGM_ARTIFACT_RELEASE_GATE === true,
     vapidKeyFile: env.OGM_VAPID_KEY_FILE,
     vapidSubject: `mailto:${env.OGM_VAPID_SUBJECT}`,
     builderWorkspacesRoot: env.OGM_BUILDER_WORKSPACES_ROOT,

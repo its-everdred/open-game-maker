@@ -23,6 +23,9 @@ export interface GamesHostOptions {
   uptimeSec?: () => number;
   version: string;
   workerScript: string;
+  /** Off (the default until #1505 ships private releases and their backfill): /g/ and /a/ serve every complete
+   * build as they did before #1473; draft grants (/d/) and previews (/p/) are checked either way. */
+  releaseGate?: boolean;
   authorize?: (request: {
     gameId?: string;
     buildId?: string;
@@ -109,6 +112,7 @@ export function createApp(options: GamesHostOptions): Hono {
     if (isDraft && (!grant || !/^[A-Za-z0-9_-]{43,2048}$/u.test(grant))) return context.text('Not Found', 404);
     if (
       !new URL(context.req.url).pathname.startsWith('/p/') &&
+      (options.releaseGate || isDraft) &&
       !(await options.authorize?.({ gameId, buildId, ...(grant ? { grant } : {}) }).catch(() => false))
     ) {
       return context.text('Not Found', 404);
@@ -226,7 +230,8 @@ export function createApp(options: GamesHostOptions): Hono {
       throw error;
     }
 
-    if (!(await options.authorize?.({ blob: file }).catch(() => false))) return context.text('Not Found', 404);
+    if (options.releaseGate && !(await options.authorize?.({ blob: file }).catch(() => false)))
+      return context.text('Not Found', 404);
     return serveFile(context, path, { ETag: `"${file.slice(0, 64)}"` });
   };
 
@@ -241,7 +246,8 @@ export function createApp(options: GamesHostOptions): Hono {
       }
       throw error;
     }
-    if (!(await options.authorize?.({ gameId, buildId }).catch(() => false))) return context.text('Not Found', 404);
+    if (options.releaseGate && !(await options.authorize?.({ gameId, buildId }).catch(() => false)))
+      return context.text('Not Found', 404);
     return context.redirect(`/g/${gameId}/${buildId}/`, 308);
   });
   app.on(['GET', 'HEAD'], '/g/:gameId/:buildId/*', serveGame);

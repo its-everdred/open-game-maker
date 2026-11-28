@@ -31,6 +31,8 @@ export interface AppDeps {
     pcCoreRepo?: { owner: string; name: string };
     instanceOwnerId?: string;
     gamesRoot: string;
+    // Off until #1505 ships private releases and their backfill: the game's tested main build is its playable build.
+    artifactReleaseGate?: boolean;
     vapidKeyFile: string;
     vapidSubject: string;
     // Build chat: the relay starts only with a workspaces root; the progress poller only with a period.

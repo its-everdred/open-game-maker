@@ -69,6 +69,7 @@ export const apiEnvSpec = {
   OGM_DESIGN_DEFAULT_MS: { kind: 'int', default: '300000' },
   // How many queued product questions offer the creator a quick voice chat (#612).
   OGM_VOICE_QUESTIONS_AT: { kind: 'int', default: '5' },
+  OGM_ARTIFACT_RELEASE_GATE: { kind: 'bool', required: false },
 } as const;
 
 export function loadApiEnv(source?: Record<string, string | undefined>) {
