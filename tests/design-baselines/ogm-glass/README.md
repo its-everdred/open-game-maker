@@ -8,7 +8,7 @@ The approved source is now also available in `prototypes/ogm-glass/`. To render 
 GM_VERIFY_SOFTWARE_GL=1 node apps/web/tools/render-glass-references.mjs <output-directory> Settings
 ```
 
-The renderer uses the canvas dimensions, refuses missing assets, fonts or prototype fallbacks, and records hashes for the HTML, shared CSS and PNG. It needs the prototype's remote fonts and the local review image library. The hashes do not cover those dependencies. Inspect the result against the approved export before changing a baseline: the Settings HTML render was visually close but did not pass the strict pixel threshold against the JPEG-derived reference. The prototype also predates the single-blue chat direction.
+The renderer uses the canvas dimensions, refuses missing assets, fonts or prototype fallbacks, and records hashes for the HTML, shared CSS and PNG. It needs the prototype's remote fonts and the local review image library. The hashes do not cover those dependencies. In two software-rendered runs, seven of 33 PNGs differed at the byte level; all seven passed the image comparison thresholds against each other. Inspect the result against the approved export before changing a baseline: the Settings HTML render was visually close but did not pass the strict pixel threshold against the JPEG-derived reference. The prototype also predates the single-blue chat direction.
 
 Regenerate from the approved export directory at the repository root:
 
