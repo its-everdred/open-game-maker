@@ -20,7 +20,13 @@ it('composes a fenced yard whose gate path reaches the chapel door and stays cle
     palette: [{ asset: 'stones-a', facing: 'E' }],
     seed: 3,
   });
-  const reserved = [...route.map(({ cell }) => cell), chapel.entry, gate.cell, ...chapelCells];
+  const reserved = [
+    ...fence.placements.map(({ cell }) => cell),
+    ...route.map(({ cell }) => cell),
+    chapel.entry,
+    gate.cell,
+    ...chapelCells,
+  ];
   const dressing = scatter(walkable, [{ asset: 'grave', facing: 'S', solid: true, footprint: [{ x: 0, y: 0 }] }], 0.6, {
     seed: 11,
     avoid: reserved,
@@ -45,6 +51,8 @@ it('composes a fenced yard whose gate path reaches the chapel door and stays cle
   expect(dressing.length).toBeGreaterThan(0);
   const blocked = new Set([...routeCells, chapel.entry, gate.cell].map(key));
   expect(dressing.some(({ cell }) => blocked.has(key(cell)))).toBe(false);
+  const fenceCells = new Set(fence.placements.map(({ cell }) => key(cell)));
+  expect(dressing.some(({ cell }) => fenceCells.has(key(cell)))).toBe(false);
   // The roof covers the whole chapel and the fence keeps exactly one gap.
   for (const { x, y } of chapelCells) expect(map.roofTilesAbove(x, y)).toHaveLength(1);
   expect(fence.placements).toHaveLength(31);

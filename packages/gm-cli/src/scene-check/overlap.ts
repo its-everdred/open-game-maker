@@ -37,6 +37,22 @@ export function noOverlap(grid: Grid): Finding[] {
       objects: props.map((piece) => piece.key),
     });
   }
+  for (const [key, pieces] of grid.byCell) {
+    const fences = pieces.filter((piece) => piece.role === 'fence');
+    const graves = pieces.filter((piece) => DRESSING.has(piece.role) && /grave|tombstone|headstone/i.test(piece.asset));
+    if (!fences.length || !graves.length) continue;
+    const [x, y] = key.split(',').map(Number);
+    findings.push({
+      check: 'no-overlap',
+      id: 'no-overlap/fence-gravestone',
+      severity: 'high',
+      message: `${graves.map((piece) => piece.asset).join(', ')} share occupied cell (${x},${y}) with ${fences
+        .map((piece) => piece.asset)
+        .join(', ')}`,
+      cells: [{ x: x!, y: y! }],
+      objects: [...fences, ...graves].map((piece) => piece.key),
+    });
+  }
   const standing = grid.scene.pieces.filter((piece) => !FLAT.has(piece.role));
   const boxed = standing
     .map((piece) => ({ piece, box: screenBox(grid.scene, piece) }))

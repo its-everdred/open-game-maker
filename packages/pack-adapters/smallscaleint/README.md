@@ -60,14 +60,15 @@ through `@gm/sdk/assets`, never from pack files, and ships no asset bytes.
     0.4 with elevation 0.5. The source masks establish contact with ground-level Fence B1 E at the vertices;
     in-game depth and actor traversal still need verification. Post sprites do not block the gate cell.
   - `building(footprint, 'stone' | 'timber', door, walkable)` returns `{ placements, entry }`: a closed shell, a gable over a
-    two-row footprint, and a door on a `yMax` edge opening onto the walkable `entry` cell. Provisional until checked
-    in a game render. The timber style uses a thatched roof and per-piece depth offsets inspected in a standalone render;
-    actor occlusion and traversal remain unverified.
+    two-row footprint, and a door on a `yMax` edge opening onto the walkable `entry` cell. The stone roof uses `roof-a1`;
+    both styles remain provisional until checked in a game render. The timber style uses a thatched roof and per-piece
+    depth offsets inspected in a standalone render; actor occlusion and traversal remain unverified.
   - `path(from, to, { walkable, palette: [{ asset, facing }], seed })` returns stepping stones on the `decor` layer
     over the scene's own ground.
   - `scatter(region, [{ asset, facing, solid, footprint }], density, { seed, avoid, boundaries, boundaryDensity })`
     returns clustered dressing, denser near `boundaries`; pass the path, door entry and building cells in `avoid`.
-    Solid items go on the `wall` layer so they block movement at their origin cell.
+    Include cells occupied by existing fence and wall placements in `avoid`, too, so dressing cannot be placed through
+    connected structures. Solid items go on the `wall` layer so they block movement at their origin cell.
   - Concatenate the placements with the scene's floor and pass them to `assemblyMap(width, height, placements)`, the
     Tiled subset `IsoMap` reads. Mark an opening's floor placement with `tags: ['gate']` for scene verification.
     A placement's optional `depthOffset` adjusts its projected sort key in pixels without changing position or collision;
