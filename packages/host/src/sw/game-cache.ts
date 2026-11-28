@@ -1,19 +1,13 @@
 export const BLOB_CACHE = 'gm-blobs-v1';
 export const BUILD_CACHE = 'gm-builds-v1';
-export const RETIRED = ['gm-assets', 'gm-pages'] as const;
+export const RETIRED = ['gm-assets', 'gm-pages', BLOB_CACHE, BUILD_CACHE] as const;
 
 export type CacheRoute = { strategy: 'pass' } | { strategy: 'cache-first'; cacheName: string };
 
 export function classifyGameRequest(request: Request, workerOrigin = location.origin): CacheRoute {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== workerOrigin) return { strategy: 'pass' };
-  if (/^\/g\/[^/]+\/(?:pv|preview)-/u.test(url.pathname)) return { strategy: 'pass' };
-  if (/^\/a\/[0-9a-f]{64}\.[a-z0-9]+$/.test(url.pathname)) {
-    return { strategy: 'cache-first', cacheName: BLOB_CACHE };
-  }
-  if (/^\/g\/[^/]+\/[^/]+\/.+/.test(url.pathname)) {
-    return { strategy: 'cache-first', cacheName: BUILD_CACHE };
-  }
+  // Release and role changes must be checked by the host on every request.
   return { strategy: 'pass' };
 }
 

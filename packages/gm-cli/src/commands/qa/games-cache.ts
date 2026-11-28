@@ -219,33 +219,50 @@ export const command: GmCommand = {
           if (targetIndex < 1)
             throw new UsageError(`build ${afterPublish} has no preceding tested build`, 'publish another build first');
           const previousBuildId = builds.builds[targetIndex - 1]!.id;
-          const readPlan = async (buildId: string): Promise<BuildCacheEntry[]> => {
-            const url = new URL(
-              `/g/${encodeURIComponent(builds.gameId)}/${encodeURIComponent(buildId)}/assets/cache-plan.json`,
-              gamesUrl,
+          const apiPort = api.OGM_API_PORT ?? ctx.env?.OGM_API_PORT;
+          const internalToken = api.OGM_INTERNAL_TOKEN ?? ctx.env?.OGM_INTERNAL_TOKEN;
+          if (!apiPort || !/^\d+$/u.test(apiPort) || !internalToken)
+            throw new UsageError('configure OGM_API_PORT and OGM_INTERNAL_TOKEN in api.env', 'check api.env');
+          const access = async (buildId: string): Promise<string> => {
+            const response = await context.request.post(
+              `http://127.0.0.1:${apiPort}/internal/operator/games/${encodeURIComponent(game)}/builds/${encodeURIComponent(buildId)}/access`,
+              { headers: { 'x-ogm-internal': internalToken }, timeout: 30_000 },
             );
-            const response = await context.request.get(url.toString(), { timeout: 30_000 });
+            if (!response.ok()) throw new Error(`artifact access for ${buildId} returned HTTP ${response.status()}`);
+            const body = (await response.json()) as { url?: unknown };
+            if (typeof body.url !== 'string' || new URL(body.url).origin !== gamesUrl.origin)
+              throw new Error('artifact access returned an unexpected origin');
+            return body.url;
+          };
+          const previousUrl = await access(previousBuildId);
+          const currentUrl = await access(afterPublish);
+          const readPlan = async (buildId: string): Promise<BuildCacheEntry[]> => {
+            const buildUrl = buildId === previousBuildId ? previousUrl : currentUrl;
+            const url = new URL('assets/cache-plan.json', buildUrl);
+            const response = await context.request.get(url.toString(), { timeout: 30_000 }).catch(() => {
+              throw new Error(`cache plan request failed for ${buildId}`);
+            });
             if (!response.ok()) throw new Error(`cache plan for ${buildId} returned HTTP ${response.status()}`);
             const plan = (await response.json()) as {
-              entries?: Array<{ sourcePath?: string; url: string; bytes: number }>;
+              entries?: Array<{ sourcePath?: string; url: string; bytes: number; sha256: string }>;
             };
             if (!Array.isArray(plan.entries)) throw new Error(`cache plan for ${buildId} has no entries`);
             return plan.entries.map((entry) => ({
               sourcePath: entry.sourcePath ?? entry.url,
-              url: entry.url,
+              url: new URL(entry.url, entry.sourcePath && entry.url === entry.sourcePath ? buildUrl : url).toString(),
               bytes: entry.bytes,
+              identity: entry.sha256,
             }));
           };
           const previous = await readPlan(previousBuildId);
           const current = await readPlan(afterPublish);
-          for (const buildId of [previousBuildId, afterPublish]) {
-            await page.goto(
-              new URL(`/g/${encodeURIComponent(builds.gameId)}/${encodeURIComponent(buildId)}/`, gamesUrl).toString(),
-              { waitUntil: 'networkidle', timeout: 60_000 },
-            );
+          for (const url of [previousUrl, currentUrl]) {
+            await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 }).catch(() => {
+              throw new Error('restricted build navigation failed');
+            });
           }
           const samples = current.map((entry) => {
-            const url = new URL(entry.url, gamesUrl).toString();
+            const url = entry.url;
             const captured = networkByUrl.get(url)?.at(-1);
             return { url, transferSize: captured?.transferSize ?? 0 };
           });
@@ -253,9 +270,10 @@ export const command: GmCommand = {
             game,
             buildId: afterPublish,
             previousBuildId,
-            previous: previous.map((entry) => ({ ...entry, url: new URL(entry.url, gamesUrl).toString() })),
-            current: current.map((entry) => ({ ...entry, url: new URL(entry.url, gamesUrl).toString() })),
+            previous,
+            current,
             samples,
+            expectCache: false,
           });
           return report;
         }

@@ -12,7 +12,7 @@ describe('createGameFrame', () => {
       gamesOrigin: 'https://games.test',
       appOrigin: 'https://app.test',
       gameId: 'g1',
-      buildId: 'lv-123',
+      buildId: 'pv-123',
       live: true,
       liveVersion: 'generation',
       build: 'draft',
@@ -21,7 +21,25 @@ describe('createGameFrame', () => {
       capabilities: [],
       role: () => 'owner',
     });
-    expect(new URL(frame.iframe.src).pathname).toBe('/l/g1/lv-123/generation/index.html');
+    expect(new URL(frame.iframe.src).pathname).toBe('/l/g1/pv-123/generation/index.html');
+    expect(frame.iframe.getAttribute('sandbox')).toBe('allow-scripts allow-pointer-lock');
+    frame.dispose();
+  });
+  it('places a draft grant in a scoped URL outside the game cache worker', () => {
+    const container = document.createElement('div');
+    const frame = createGameFrame({
+      container,
+      gamesOrigin: 'https://games.test',
+      gameId: 'g1',
+      buildId: 'b1',
+      draftGrant: 'secret',
+      build: 'draft',
+      mode: 'play',
+      playerIndex: 0,
+      capabilities: [],
+      role: () => 'owner',
+    });
+    expect(new URL(frame.iframe.src).pathname).toBe('/d/g1/b1/secret/index.html');
     expect(frame.iframe.getAttribute('sandbox')).toBe('allow-scripts allow-pointer-lock');
     frame.dispose();
   });

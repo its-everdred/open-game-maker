@@ -143,7 +143,10 @@ describe('AssetLoader', () => {
       fetchSpy.mockRestore();
     }
   });
-  it('loads a private preview lazy group without persisting its files', async () => {
+  it.each([
+    'https://game.test/p/game/pv-secret/assets/manifest.json',
+    'https://game.test/d/game/build/secret/assets/manifest.json',
+  ])('loads private assets without persisting files: %s', async (manifestUrl) => {
     const grouped = structuredClone(manifest);
     grouped.assets['castle/tower-base']!.phase = 'lazy:backdrop-nim';
     const cacheStorage = { open: vi.fn(async () => ({ put: vi.fn() }) as unknown as Cache) };
@@ -153,7 +156,7 @@ describe('AssetLoader', () => {
       return new Response(fileBytes);
     });
     const loader = new AssetLoader({
-      manifestUrl: 'https://game.test/p/game/pv-secret/assets/manifest.json',
+      manifestUrl,
       tier: 'desktop',
       fetch: fetcher,
       cacheStorage,

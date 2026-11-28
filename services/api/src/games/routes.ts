@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
+import { invalidateArtifactGrants } from '../artifacts/session-grants.js';
 import { z } from 'zod';
 
 import { schema } from '@ogm/db';
@@ -164,6 +165,7 @@ const routes = new Hono<ApiBindings>()
     }
   })
   .get('/games', async (c) => {
+    c.header('Cache-Control', 'no-store');
     const principal = requirePrincipal(c, ['user']);
     requireAuthorization(
       authorize(actorFromPrincipal(principal), 'game.play', {
@@ -178,6 +180,7 @@ const routes = new Hono<ApiBindings>()
     const media = await gameMedia(
       c.get('deps'),
       games.map((game) => game.id),
+      { principal, headers: c.req.raw.headers },
     );
     const stats = gameStats(db, games);
     // A game with a published release is live: the menu's status shows it beside the game (#854).
@@ -207,6 +210,7 @@ const routes = new Hono<ApiBindings>()
     });
   })
   .get('/games/:id', async (c) => {
+    c.header('Cache-Control', 'no-store');
     const principal = requirePrincipal(c, ['user']);
     const game = findGameForFamily(c.get('deps').db, c.req.param('id'), principal.familyId);
     requireAuthorization(
@@ -217,7 +221,7 @@ const routes = new Hono<ApiBindings>()
         granted: hasGameGrant(c.get('deps').db, game.id, principal.userId),
       }),
     );
-    const media = await gameMedia(c.get('deps'), [game.id]);
+    const media = await gameMedia(c.get('deps'), [game.id], { principal, headers: c.req.raw.headers });
     const stats = gameStats(c.get('deps').db, [game]);
     return c.json({ ...gameResponse(game), ...media.get(game.id), stats: stats.get(game.id) });
   })
@@ -303,10 +307,14 @@ const routes = new Hono<ApiBindings>()
       title !== undefined && title !== game.title && !preserveSlug
         ? assignSlug(db, title, { gameId: game.id, slug: game.slug })
         : game.slug;
-    db.update(schema.games)
-      .set({ ...changes, slug })
-      .where(eq(schema.games.id, game.id))
-      .run();
+    db.transaction((tx) => {
+      tx.update(schema.games)
+        .set({ ...changes, slug })
+        .where(eq(schema.games.id, game.id))
+        .run();
+      if (changes.visibility !== undefined && changes.visibility !== game.visibility)
+        invalidateArtifactGrants(tx, 'game', game.id);
+    });
     return c.json(gameResponse(findGame(db, game.id)));
   })
   .post('/games/:id/provision', async (c) => {

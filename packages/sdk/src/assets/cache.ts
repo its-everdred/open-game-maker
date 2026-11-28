@@ -105,7 +105,7 @@ const activePersistRequests = new WeakSet<object>();
 
 export function isPrivatePreviewUrl(url: string): boolean {
   try {
-    return /^\/p\/[^/]+\/pv-[^/]+\//u.test(new URL(url).pathname);
+    return /^\/(?:p\/[^/]+\/pv-[^/]+|d\/[^/]+\/[^/]+\/[^/]+)\//u.test(new URL(url).pathname);
   } catch {
     return false;
   }

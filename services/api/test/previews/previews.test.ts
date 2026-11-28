@@ -25,12 +25,25 @@ import { buildRoutes } from '../../src/builds/routes.js';
 import { mintPreviewToken } from '../../src/builds/preview-token.js';
 import { hookPreviewToken } from '../../src/internal/bundle.js';
 import { asUser } from '../helpers.js';
+import { validPreview } from '../../src/artifacts/grants.js';
 import { builtFiles, ids, REPO, SECRET, SHA, world } from '../builds/fixtures.js';
 
 const archive = () => execFileSync('tar', ['--format=ustar', '-czf', '-', '-C', builtFiles(), '.']);
 
 function setup(authorizedLive = false) {
   const { deps } = world();
+  deps.registry.principalResolvers.push(async (c) =>
+    c.req.header('cookie') === 'session=test'
+      ? {
+          kind: 'user',
+          userId: ids.user,
+          familyId: ids.family,
+          displayName: 'Owner',
+          platformRole: 'none',
+          capability: 'creator',
+        }
+      : null,
+  );
   const app = createApp(deps);
   const publishLog = vi.fn(async () => {});
   app.route(
@@ -68,9 +81,13 @@ function setup(authorizedLive = false) {
       body,
     });
   const list = () =>
-    app.request(`http://example.test/api/v1/games/${ids.game}/previews`, { headers: asUser(ids.user) });
+    app.request(`http://example.test/api/v1/games/${ids.game}/previews`, {
+      headers: { ...asUser(ids.user), cookie: 'session=test' },
+    });
   const editorList = () =>
-    app.request(`http://example.test/api/v1/games/${ids.game}/editor/previews`, { headers: asUser(ids.user) });
+    app.request(`http://example.test/api/v1/games/${ids.game}/editor/previews`, {
+      headers: { ...asUser(ids.user), cookie: 'session=test' },
+    });
   const answer = (buildId: string, note = 'Great') =>
     app.request(`http://example.test/api/v1/games/${ids.game}/previews/12/answer`, {
       method: 'POST',
@@ -718,13 +735,15 @@ describe('review round previews', () => {
       verdictSource: 'preview',
     });
     const before = (await (
-      await app.request(`http://example.test/api/v1/games/${ids.game}/editor/previews`, { headers: asUser(ids.user) })
+      await app.request(`http://example.test/api/v1/games/${ids.game}/editor/previews`, {
+        headers: { ...asUser(ids.user), cookie: 'session=test' },
+      })
     ).json()) as { previews: { accessId: string }[] };
     expect((await upload()).status).toBe(201);
     expect(existsSync(join(previewDirectory(deps, ids.game, first.buildId), 'index.html'))).toBe(true);
     const history = (await (
       await app.request(`http://example.test/api/v1/games/${ids.game}/editor/preview-history`, {
-        headers: asUser(ids.user),
+        headers: { ...asUser(ids.user), cookie: 'session=test' },
       })
     ).json()) as { previews: { buildId: string; accessId: string }[] };
     expect(history.previews).toHaveLength(1);
@@ -734,6 +753,8 @@ describe('review round previews', () => {
       root: deps.config.gamesRoot,
       appOrigin: 'https://app.example.test',
       version: 'test',
+      authorize: async ({ preview }) => !!preview,
+      resolvePreview: (game, accessId) => validPreview(deps, game, accessId),
     });
     expect((await host.request(`/p/${ids.game}/${before.previews[0]!.accessId}/index.html`)).status).toBe(404);
     expect((await host.request(`/p/${ids.game}/${history.previews[0]!.accessId}/index.html`)).status).toBe(200);
@@ -1062,6 +1083,8 @@ describe('preview builds', () => {
       root: deps.config.gamesRoot,
       appOrigin: 'https://app.example.test',
       version: 'test',
+      authorize: async ({ preview }) => !!preview,
+      resolvePreview: (game, accessId) => validPreview(deps, game, accessId),
     });
     expect((await host.request(`/p/${ids.game}/${before.previews[0]!.accessId}/index.html`)).status).toBe(404);
     expect((await host.request(`/p/${ids.game}/${after.previews[0]!.accessId}/index.html`)).status).toBe(200);
@@ -1180,6 +1203,8 @@ describe('preview builds', () => {
       appOrigin: 'https://app.example.test',
       version: 'test',
       workerScript: '/missing',
+      authorize: async ({ preview }) => !!preview,
+      resolvePreview: (game, accessId) => validPreview(deps, game, accessId),
     });
     expect((await host.request(`/g/${ids.game}/${preview.buildId}/index.html`)).status).toBe(404);
     expect((await host.request(`/a/${hash}.png`)).status).toBe(404);

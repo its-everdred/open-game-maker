@@ -1,4 +1,5 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { redactCapabilities } from './redact.js';
 import { join } from 'node:path';
 
 import type { Browser } from 'playwright';
@@ -142,6 +143,7 @@ export async function driveJourney(
     clip,
     unchecked,
   };
-  writeFileSync(join(dir, DRIVE_RESULT), `${JSON.stringify(result, null, 2)}\n`);
-  return result;
+  const safe = redactCapabilities(result);
+  writeFileSync(join(dir, DRIVE_RESULT), `${JSON.stringify(safe, null, 2)}\n`);
+  return safe;
 }

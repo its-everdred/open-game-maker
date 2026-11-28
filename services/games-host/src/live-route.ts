@@ -98,11 +98,14 @@ async function liveRoot(
   }
 }
 
-export function liveEntry(root: string): Handler {
+type ResolvePreview = (gameId: string, accessId: string) => Promise<string | null>;
+
+export function liveEntry(root: string, resolvePreview?: ResolvePreview): Handler {
   return async (context) => {
     const gameId = context.req.param('gameId') ?? '';
     const accessId = context.req.param('accessId') ?? '';
-    const grant = await liveRoot(root, gameId, accessId);
+    const resolved = await resolvePreview?.(gameId, accessId).catch(() => null);
+    const grant = resolved && (await liveRoot(root, gameId, resolved));
     if (!grant) return context.text('Not Found', 404);
     return context.redirect(
       `/l/${gameId}/${accessId}/${grant.version}/index.html${new URL(context.req.url).search}`,
@@ -111,9 +114,11 @@ export function liveEntry(root: string): Handler {
   };
 }
 
-export function liveAsset(root: string): Handler {
+export function liveAsset(root: string, resolvePreview?: ResolvePreview): Handler {
   return async (context) => {
-    const grant = await liveRoot(root, context.req.param('gameId') ?? '', context.req.param('accessId') ?? '');
+    const gameId = context.req.param('gameId') ?? '';
+    const resolved = await resolvePreview?.(gameId, context.req.param('accessId') ?? '').catch(() => null);
+    const grant = resolved && (await liveRoot(root, gameId, resolved));
     const version = context.req.param('version') ?? '';
     if (!grant || version !== grant.version) return context.text('Not Found', 404);
     let path: string;

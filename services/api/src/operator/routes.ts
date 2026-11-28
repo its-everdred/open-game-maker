@@ -25,6 +25,8 @@ import { ensureCommit } from './ensure-commit.js';
 import { submitRound } from '../review-rounds/store.js';
 import { logReviewPublish } from '../review-rounds/feed-log.js';
 import { isReviewStill } from '../review-rounds/still.js';
+import { issueGrant } from '../artifacts/grants.js';
+import { buildDir, isComplete } from '@ogm/games-host/layout';
 
 // An operator's route to publish a build for a game the app registered against a repository whose own tickets are
 // not Game Maker jobs — the daemon's `before_remove` hook never runs for them, so nothing ever uploads a build.
@@ -314,6 +316,31 @@ const routes = new Hono<ApiBindings>()
     if (game.slug === null) throw new HttpError(409, 'game_slug_missing');
     const number = reviewNumber(deps.db, game.id, c.req.param('decisionId'));
     return c.json({ number, path: reviewPath(game.slug, number) });
+  })
+  .post('/games/:ref/builds/:buildId/access', async (c) => {
+    requireOperator(c);
+    const deps = c.get('deps');
+    const game = gameFor(deps, c.req.param('ref'));
+    const build = deps.db
+      .select()
+      .from(schema.builds)
+      .where(
+        and(
+          eq(schema.builds.id, c.req.param('buildId')),
+          eq(schema.builds.gameId, game.id),
+          eq(schema.builds.status, 'tested'),
+          eq(schema.builds.artifact, 'present'),
+        ),
+      )
+      .get();
+    if (!build || !(await isComplete(buildDir(deps.config.gamesRoot, game.id, build.id))))
+      throw new HttpError(404, 'build_not_found');
+    const grant = await issueGrant(deps, game.id, build.id, 'operator', c.req.raw.headers, 'operator');
+    return c.json(
+      { grant, url: `${deps.config.gamesOrigin.replace(/\/$/u, '')}/d/${game.id}/${build.id}/${grant}/` },
+      200,
+      { 'Cache-Control': 'no-store' },
+    );
   })
   .get('/games/:ref/builds/:jobId', (c) => {
     requireOperator(c);

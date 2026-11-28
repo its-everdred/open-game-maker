@@ -31,6 +31,8 @@ export interface GameFrameOptions {
   preview?: boolean;
   live?: boolean;
   liveVersion?: string;
+  /** Revocable owner access to a draft build. */
+  draftGrant?: string;
   build: 'draft' | 'test' | 'published';
   /** Extra query parameters the game reads at boot, such as a review deck's scenario (`speed=slow`). */
   params?: Readonly<Record<string, string>>;
@@ -81,7 +83,7 @@ export class HostError extends Error {
 }
 
 export function createGameFrame(options: GameFrameOptions): GameFrame {
-  const isPreview = !!(options.preview || options.live);
+  const isPreview = !!(options.preview || options.live || options.draftGrant);
   let gamesOrigin: URL;
   let appOrigin: URL;
   try {
@@ -112,7 +114,9 @@ export function createGameFrame(options: GameFrameOptions): GameFrame {
       ? `${encodeURIComponent(options.liveVersion)}/index.html`
       : ''
     : 'index.html';
-  const path = `/${prefix}/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/${suffix}`;
+  const path = options.draftGrant
+    ? `/d/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/${encodeURIComponent(options.draftGrant)}/index.html`
+    : `/${prefix}/${encodeURIComponent(options.gameId)}/${encodeURIComponent(options.buildId)}/${suffix}`;
   const source = new URL(path, gamesOrigin.origin);
   /* The host's own parameters are set after, so a scenario can never change the build or the protocol. */
   for (const [key, value] of Object.entries(options.params ?? {})) source.searchParams.set(key, value);

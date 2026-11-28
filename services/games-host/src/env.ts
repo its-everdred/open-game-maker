@@ -14,15 +14,29 @@ export interface GamesHostEnv {
   port: number;
   root: string;
   workerScript: string;
+  apiInternalUrl?: string;
 }
 
 export function loadGamesHostEnv(environment: NodeJS.ProcessEnv = processEnvironment): GamesHostEnv {
-  const { OGM_GAMES_SW: configuredWorkerScript } = loadEnv(
+  const { OGM_GAMES_SW: configuredWorkerScript, OGM_API_INTERNAL_URL: apiInternalUrl } = loadEnv(
     'games',
-    { OGM_GAMES_SW: { kind: 'path', required: false } },
+    { OGM_GAMES_SW: { kind: 'path', required: false }, OGM_API_INTERNAL_URL: { kind: 'string', required: false } },
     environment,
   );
   const host = environment.OGM_GAMES_BIND ?? GAMES_HOST;
+  if (apiInternalUrl) {
+    const parsed = new URL(apiInternalUrl);
+    if (
+      parsed.protocol !== 'http:' ||
+      parsed.hostname !== '127.0.0.1' ||
+      parsed.pathname !== '/' ||
+      parsed.search ||
+      parsed.hash ||
+      parsed.username ||
+      parsed.password
+    )
+      throw new Error('OGM_API_INTERNAL_URL must be a loopback HTTP origin');
+  }
   if (host !== GAMES_HOST) {
     throw new Error(`OGM_GAMES_BIND must be ${GAMES_HOST}`);
   }
@@ -42,6 +56,7 @@ export function loadGamesHostEnv(environment: NodeJS.ProcessEnv = processEnviron
     port,
     root: resolve(required(environment, 'OGM_GAMES_ROOT')),
     workerScript: configuredWorkerScript ? resolve(configuredWorkerScript) : DEFAULT_WORKER_SCRIPT,
+    ...(apiInternalUrl ? { apiInternalUrl } : {}),
   };
 }
 

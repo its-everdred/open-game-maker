@@ -5,7 +5,6 @@ import { join } from 'node:path';
 
 import { cachePlanSchema, gameToHostSchema, type CachePlan, type CachePlanEntry } from '@ogm/contracts';
 import { schema } from '@ogm/db';
-import { blobPath } from '@ogm/games-host/layout';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
@@ -112,8 +111,8 @@ function plan(deps: ReturnType<typeof world>['deps'], gameId: string, buildId: s
   );
 }
 
-describe('published cache plans', () => {
-  it('rewrites ./x, x and /x references to the same /a/ address once each (#1197)', async () => {
+describe('draft cache plans', () => {
+  it('keeps build references inside the draft rather than exposing shared addresses (#1197)', async () => {
     const { deps } = world();
     completeRun(deps);
     const dir = cachedBuild([]);
@@ -123,13 +122,14 @@ describe('published cache plans', () => {
         '<link rel="modulepreload" href="assets/main.js"><link rel="preload" href="/assets/main.js">\n',
     );
     const buildId = await publishFixture(deps, ids.job, dir, SHA);
-    const mainHash = digest(Buffer.from('console.log("fixture");\n'));
     const html = readFileSync(join(deps.config.gamesRoot, ids.game, buildId, 'index.html'), 'utf8');
     expect(html).not.toMatch(/\/\/a\//u);
-    expect(html.match(new RegExp(`"/a/${mainHash}\\.js"`, 'gu'))).toHaveLength(3);
+    expect(html).toContain('src="./assets/main.js"');
+    expect(html).toContain('href="assets/main.js"');
+    expect(html).toContain('href="/assets/main.js"');
   });
 
-  /* The SDK's Vite plugin inlines the manifest, so its media paths become shared addresses; the game must still boot. */
+  /* The SDK's Vite plugin inlines the manifest; its media paths must stay valid inside the draft. */
   it('publishes a bundle with an inlined logo and loading screen whose ready handshake passes (#1250)', async () => {
     const { deps } = world();
     completeRun(deps);
@@ -149,8 +149,8 @@ describe('published cache plans', () => {
     const main = readFileSync(join(deps.config.gamesRoot, ids.game, buildId, 'assets', 'main.js'), 'utf8');
     const published = JSON.parse(main.slice(prefix.length, -2)) as Record<string, unknown>;
     expect(published).toMatchObject({
-      logo: `/a/${digest(Buffer.from('logo bytes'))}.png`,
-      loading: { portrait: `/a/${digest(Buffer.from('loading-portrait bytes'))}.png` },
+      logo: 'media/logo.png',
+      loading: { portrait: 'media/loading-portrait.png' },
     });
     const ready = { v: 1, id: 'ready-1', t: 'ready', payload: { protocol: 1, manifest: published, marks: [] } };
     expect(gameToHostSchema.safeParse(ready).error?.issues).toBeUndefined();
@@ -169,17 +169,15 @@ describe('published cache plans', () => {
     const buildId = await publishFixture(deps, ids.job, dir, SHA);
     const read = (path: string) => readFileSync(join(deps.config.gamesRoot, ids.game, buildId, path), 'utf8');
     const urls = new Map(plan(deps, ids.game, buildId).entries.map((entry) => [entry.sourcePath, entry.url]));
-    const main = `/g/${ids.game}/${buildId}/assets/main.js`;
-    expect(urls.get('assets/main.js')).toBe(main);
-    expect(urls.get('assets/World.js')).toBe(`/g/${ids.game}/${buildId}/assets/World.js`);
-    expect(read('index.html')).toContain(`src="${main}"`);
-    expect(read('assets/World.js')).toContain(`from"${main}"`);
-    expect(read('assets/main.js')).toContain(`import("${urls.get('assets/World.js')}")`);
-    /* A file outside the cycle keeps its shared content address. */
-    expect(urls.get('assets/util.js')).toBe(`/a/${digest(Buffer.from('export const u=1;\n'))}.js`);
+    expect(urls.get('assets/main.js')).toBe('assets/main.js');
+    expect(urls.get('assets/World.js')).toBe('assets/World.js');
+    expect(read('index.html')).toContain('src="/assets/main.js"');
+    expect(read('assets/World.js')).toContain('from"./main.js"');
+    expect(read('assets/main.js')).toContain('import("./World.js")');
+    expect(urls.get('assets/util.js')).toBe('assets/util.js');
   });
 
-  it('rewrites root-relative names inside bundles and never part of a longer path (#1197)', async () => {
+  it('preserves draft-relative names without modifying external URLs (#1197)', async () => {
     const { deps } = world();
     completeRun(deps);
     const dir = cachedBuild([]);
@@ -193,15 +191,14 @@ describe('published cache plans', () => {
         'fetch("https://cdn.example/assets/data.json");\n',
     );
     const buildId = await publishFixture(deps, ids.job, dir, SHA);
-    const address = `/a/${digest(Buffer.from(data))}.json`;
     const main = readFileSync(join(deps.config.gamesRoot, ids.game, buildId, 'assets', 'main.js'), 'utf8');
     expect(main).toBe(
-      `fetch(new URL("${address}",document.baseURI).href);fetch("${address}");` +
+      'fetch(new URL("assets/data.json",document.baseURI).href);fetch("data.json");' +
         'fetch("https://cdn.example/assets/data.json");\n',
     );
   });
 
-  it('deduplicates shared blobs, records branch lineage, and keeps hashes referenced by live builds', async () => {
+  it('isolates draft blobs, records lineage, and retains assets in live builds', async () => {
     const { deps } = world();
     completeRun(deps);
     const sharedMusic = Buffer.from('shared music');
@@ -259,14 +256,13 @@ describe('published cache plans', () => {
       'd'.repeat(40),
     );
 
-    const stored = readdirSync(join(deps.config.gamesRoot, '_a'));
-    expect(stored).toEqual(expect.arrayContaining([`${firstHash}.png`, `${secondHash}.png`, `${sharedHash}.mp3`]));
+    expect(existsSync(join(deps.config.gamesRoot, '_a'))).toBe(false);
     for (const [gameId, buildId] of [
       [ids.game, firstBuild],
       [ids.game, secondBuild],
       [otherGame, otherBuild],
     ]) {
-      expect(existsSync(join(deps.config.gamesRoot, gameId, buildId, 'a'))).toBe(false);
+      expect(existsSync(join(deps.config.gamesRoot, gameId, buildId, 'a', `${sharedHash}.mp3`))).toBe(true);
     }
 
     const firstPlan = plan(deps, ids.game, firstBuild);
@@ -275,17 +271,9 @@ describe('published cache plans', () => {
     expect(firstPlan).toMatchObject({ gameId: ids.game, buildId: firstBuild, sdkVersion: '^1.0.0' });
     expect(firstPlan.lineage).toBeUndefined();
     const firstCode = firstPlan.entries.filter(({ kind }) => kind === 'code');
-    const secondCode = secondPlan.entries.filter(({ kind }) => kind === 'code');
-    const mainHash = digest(Buffer.from('console.log("fixture");\n'));
-    expect(firstCode.find(({ sourcePath }) => sourcePath === 'assets/main.js')?.url).toBe(`/a/${mainHash}.js`);
-    const indexPath = join(deps.config.gamesRoot, ids.game, firstBuild, 'index.html');
-    const indexBytes = readFileSync(indexPath);
-    const indexEntry = firstCode.find(({ sourcePath }) => sourcePath === 'index.html');
-    expect(indexEntry?.url).toBe(`/a/${digest(indexBytes)}.html`);
-    expect(secondCode.find(({ sourcePath }) => sourcePath === 'index.html')?.url).toBe(indexEntry?.url);
+    expect(firstCode.find(({ sourcePath }) => sourcePath === 'assets/main.js')?.url).toBe('assets/main.js');
     const indexHtml = readFileSync(join(deps.config.gamesRoot, ids.game, firstBuild, 'index.html'), 'utf8');
-    // `./assets/main.js` must become `/a/<hash>.js`, not `.//a/<hash>.js` (#1197: every prod game's entry 404ed).
-    expect(indexHtml).toContain(`src="/a/${mainHash}.js"`);
+    expect(indexHtml).toContain('src="./assets/main.js"');
     expect(indexHtml).not.toMatch(/\/\/a\//u);
     expect(secondPlan.lineage).toEqual({
       previousBuildId: firstBuild,
@@ -297,9 +285,9 @@ describe('published cache plans', () => {
     expect(otherPlan.lineage).toBeUndefined();
 
     await collectBuildArtifact(deps, firstBuild);
-    expect(existsSync(blobPath(deps.config.gamesRoot, `${sharedHash}.mp3`))).toBe(true);
-    expect(existsSync(blobPath(deps.config.gamesRoot, `${secondHash}.png`))).toBe(true);
-    expect(existsSync(blobPath(deps.config.gamesRoot, `${firstHash}.png`))).toBe(false);
+    expect(existsSync(join(deps.config.gamesRoot, ids.game, secondBuild, 'a', `${sharedHash}.mp3`))).toBe(true);
+    expect(existsSync(join(deps.config.gamesRoot, ids.game, secondBuild, 'a', `${secondHash}.png`))).toBe(true);
+    expect(existsSync(join(deps.config.gamesRoot, ids.game, firstBuild, 'a', `${firstHash}.png`))).toBe(false);
   });
 
   it('refuses bytes that do not match their content address before publishing the build', async () => {

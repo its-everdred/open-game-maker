@@ -19,7 +19,7 @@ The API's build publisher (`services/api/src/builds`) is the production writer.
 Live workspace generations are served at `/l/<gameId>/<capability>/<generation>/<path>` after the signed-in API issues
 a short-lived capability for an active ticket's workspace grant. The entry URL chooses a generation once per load;
 responses are not cached, and workspace files are opened with containment and link checks.
-Each served file must also match the content scanned when its capability was issued. Capabilities expire after one hour;
+Each served file must also match the content scanned when its capability was issued. Session aliases expire after 30 minutes;
 reopen the live URL to obtain another. Old generations remain available for at least one hour after replacement.
 
 The repository daemon's trusted workspace hooks must run `node <core-checkout>/scripts/preview/repository-hook.ts create`

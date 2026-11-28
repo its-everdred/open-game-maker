@@ -11,7 +11,7 @@ test('opens the signed-in ticket workspace in an isolated frame at the requested
       return route.fulfill({
         json: {
           gameId: 'g_demo',
-          accessId: 'lv-11111111-1111-1111-1111-111111111111',
+          accessId: 'pv-11111111-1111-1111-1111-111111111111',
           version: '22222222-2222-2222-2222-222222222222',
           design: { rev: 0, doc: { schemaVersion: 1, globals: {}, entities: {} } },
         },
@@ -26,6 +26,6 @@ test('opens the signed-in ticket workspace in an isolated frame at the requested
   await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-pointer-lock');
   await expect(frame).toHaveAttribute(
     'src',
-    /\/l\/g_demo\/lv-11111111-1111-1111-1111-111111111111\/22222222-2222-2222-2222-222222222222\/index\.html\?.*scenario=yard/,
+    /\/l\/g_demo\/pv-11111111-1111-1111-1111-111111111111\/22222222-2222-2222-2222-222222222222\/index\.html\?.*scenario=yard/,
   );
 });

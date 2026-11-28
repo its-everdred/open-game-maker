@@ -30,7 +30,7 @@ it('opens the authorized workspace generation at the linked scenario', async () 
               ? { game: { id: 'g1', slug: 'demo' } }
               : {
                   gameId: 'g1',
-                  accessId: 'lv-token',
+                  accessId: 'pv-token',
                   version: 'generation',
                   design: { rev: 0, doc: { entities: [] } },
                 },
@@ -51,7 +51,7 @@ it('opens the authorized workspace generation at the linked scenario', async () 
   await waitFor(() => expect(mounts).toHaveLength(1));
   expect(mounts[0]).toMatchObject({
     gameId: 'g1',
-    buildId: 'lv-token',
+    buildId: 'pv-token',
     live: true,
     liveVersion: 'generation',
     params: { scenario: 'yard' },
