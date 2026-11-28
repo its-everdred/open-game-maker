@@ -119,6 +119,8 @@ agent:
       lane:clone:
         - gm-sprite-forge
         - gm-verify
+      build-lane:web:
+        - gm-glass
   codex:
     approval_policy: on-request
     thread_sandbox: workspace-write

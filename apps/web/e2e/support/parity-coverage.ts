@@ -1,0 +1,116 @@
+/** Monday and existing artboards in docs/design/ogm-glass/screens.md. */
+const portraitScreens = [
+  'Title',
+  'SignIn',
+  'Join',
+  'Account',
+  'Home',
+  'GameSheet',
+  'NewGame',
+  'NewGameChat',
+  'PlayView',
+  'PauseMenu',
+  'Editor',
+  'EditMenu',
+  'AgentChat',
+  'VoiceLive',
+  'BugReport',
+  'Review',
+  'Activity',
+  'TicketChat',
+  'BuildOrder',
+  'Settings',
+  'Resources',
+  'LimitReached',
+  'Publish',
+  'Admin',
+  'AdminInvite',
+] as const;
+
+export const requiredParityArtboards = [
+  'Main-1440x1700',
+  'Components-1440x1560',
+  'Title-780x1688',
+  'SignIn-780x1688',
+  'Join-780x1688',
+  'Account-780x1688',
+  'Home-780x1688',
+  'GameSheet-780x1688',
+  'NewGame-780x1688',
+  'NewGameChat-780x1688',
+  'PlayView-780x1688',
+  'PauseMenu-780x1688',
+  'Editor-780x1688',
+  'EditMenu-780x1688',
+  'AgentChat-780x1688',
+  'VoiceLive-780x1688',
+  'BugReport-780x1688',
+  'Review-780x1688',
+  'Activity-780x1688',
+  'TicketChat-780x1688',
+  'BuildOrder-780x1688',
+  'Settings-780x1688',
+  'Resources-780x1688',
+  'LimitReached-780x1688',
+  'Publish-780x1688',
+  'Admin-780x1688',
+  'AdminInvite-780x1688',
+  'HomeDesktop-1440x900',
+  'HomeLandscape-844x390',
+  'EditorDesktop-1440x900',
+  'EditorLandscape-844x390',
+  'PauseLandscape-844x390',
+  'BuildOrderDesktop-1440x900',
+  // Most landscape exports are unavailable. Keep them required rather than
+  // letting a portrait-only comparison satisfy the phone coverage gate.
+  ...portraitScreens.map((screen) => `${screen === 'PauseMenu' ? 'Pause' : screen}Landscape-844x390`),
+] as const;
+
+type Capture = { name: string; screen: string; width: number; height: number; scale: number };
+
+/** A reference is covered only when a selected capture actually targets it. */
+export function missingParityCoverage(
+  required: readonly string[],
+  references: readonly string[],
+  captures: readonly Capture[],
+  selectedScreens: ReadonlySet<string>,
+) {
+  const names = new Set(references.map((file) => file.replace(/\.png$/, '')));
+  const expected = new Set([...required, ...names]);
+  const captured = new Set(
+    captures
+      .filter((target) => {
+        const size = /-(\d+)x(\d+)$/.exec(target.name);
+        return (
+          selectedScreens.has(target.screen) &&
+          size !== null &&
+          target.width * target.scale === Number(size[1]) &&
+          target.height * target.scale === Number(size[2])
+        );
+      })
+      .map((target) => target.name),
+  );
+  return {
+    missingReferences: [...expected].filter((name) => !names.has(name)).sort(),
+    missingCaptures: [...expected].filter((name) => !captured.has(name)).sort(),
+  };
+}
+
+/** Apply the same reference and capture requirements to each selected screen. */
+export function missingSelectedParityCoverage(
+  references: readonly string[],
+  captures: readonly Capture[],
+  selectedScreens: ReadonlySet<string>,
+) {
+  const belongsToSelected = (name: string) =>
+    [...selectedScreens].some((screen) =>
+      [screen, `${screen}Landscape`, `${screen}Desktop`].some((artboard) => name.startsWith(`${artboard}-`)),
+    );
+  const required = requiredParityArtboards.filter(belongsToSelected);
+  return missingParityCoverage(
+    required,
+    references.filter((file) => belongsToSelected(file.replace(/\.png$/, ''))),
+    captures,
+    selectedScreens,
+  );
+}

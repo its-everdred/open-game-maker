@@ -18,7 +18,7 @@ import './app/chrome.css';
 applyHashRedirect();
 
 const router = createAppRouter();
-installTestHook(router);
+installTestHook(router, queryClient);
 registerServiceWorker();
 if (import.meta.env.PROD) watchForNewDeploy();
 installErrorCapture();

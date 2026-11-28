@@ -45,7 +45,9 @@ describe('shared design tokens', () => {
         return [file, extname(file) === '.css' ? source : stripTypeScriptComments(file, source)] as const;
       }),
     );
-    const chromeFiles = sourceFiles.filter((file) => file !== tokenPath);
+    const chromeFiles = sourceFiles.filter(
+      (file) => file !== tokenPath && file !== resolve(sourceRoot, 'glass-tokens.css'),
+    );
     expect(chromeFiles.filter((file) => sourceByFile.get(file)!.includes('--gruvbox-'))).toEqual([]);
     const offenders = chromeFiles.flatMap((file) => {
       const source = sourceByFile.get(file)!;

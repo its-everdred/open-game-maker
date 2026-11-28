@@ -43,8 +43,7 @@ Set `IMPECCABLE_BIN="$HOME/.impeccable/bin/0.1.25/impeccable"` and `DO_NOT_TRACK
 ## Build loop
 
 **Ask, don't assume.** At any stage (prototype, failed review, spec gap), before deciding anything a player would notice, ask with `gm decide`: a 2-5 word `--topic`, options showing the thing itself (`--media` or `--playable`), and `--recommend` with a `--reason`. Related questions share a topic; `design/decisions.json` refuses repeats unless reopened with `--revisit`. At most three per edit beyond ticket inventory; new games follow gm-new-game-design. Engineering or operations questions never go to the creator: decide or tell the Executor. **You think of the decisions; the creator makes them.** `docs/<slug>/decisions.json` lists every product decision, and tickets name ids under `## Creator decisions`: at the start, raise each `open` one non-blocking, with media on every option and pack assets as a real lineup; build your recommendation and record the answer. Add discovered decisions to inventory first; never settle one silently.
-Deliver a playable build that changes what the creator can do or see only after prototype review is raised (play link, clip, works now, known limitations, what to weigh in on). Format and rules: `references/decision-inventory.md`.
-Build the choice. After every `gm run`, send exactly one still or clip with `gm chat post`, unasked. Done means
+Deliver a playable build that changes what the creator can do or see only after prototype review is raised (play link, clip, works now, known limitations, what to weigh in on). Format and rules: `references/decision-inventory.md`. Build the choice. After every `gm run`, send exactly one still or clip with `gm chat post`, unasked. Done means
 `gm check`, `gm test`, and `gm run` are green and the PR's checklist is answered from the evidence sheet; look first.
 
 For planned creator decisions, save the ticket body; run `gm decisions next --ticket <n> --body <ticket-body.md>` and
@@ -103,6 +102,7 @@ Use one of: `asset_pipeline`, `level_and_map_building`, `gameplay_code`, `animat
 | gm-genre-platformer | Building or tuning a platformer. |
 | gm-input | Adding input actions, buffering, rebinding, or accessibility. |
 | gm-ui-hud | Building menus, HUD, layout, or readable game text; includes the no-stretch image rule. |
+| gm-glass | Changing the Open Game Maker web shell, menus, editor chrome, or app screens. |
 | gm-audio | Adding or tuning music and sound effects. |
 | gm-multiplayer-ready | Structuring player state or building multiplayer. |
 | gm-image-mock | Any visual design review: step 1 is generated mocks of the player screen in the kit, before dioramas. |

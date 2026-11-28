@@ -20,3 +20,11 @@ export function captureUrlFile(dist: string, suffix: string): string | null {
     return null;
   }
 }
+
+/** Games host serves hashed shared assets at /a/ and other files under the build prefix. */
+export function captureBuildSuffix(path: string, buildId: string): string | null {
+  if (path.startsWith('/a/')) return path.slice(1);
+  const marker = `/${buildId}/`;
+  const index = path.indexOf(marker);
+  return index < 0 ? null : path.slice(index + marker.length) || 'index.html';
+}
