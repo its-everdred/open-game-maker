@@ -15,6 +15,7 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 from pathlib import Path
 
@@ -153,6 +154,148 @@ class Base(unittest.TestCase):
     def manifest(self, did):
         return json.loads((self.cfg["inbox"] / "quarantine" / self.drop(did)["quarantine"]
                            / "manifest.json").read_text())
+
+
+class IntakeTickets(Base):
+    def setUp(self):
+        super().setUp()
+        self.repo_check = patch.object(ds, "verify_intake_repo", create=True)
+        self.repo_check.start()
+        self.addCleanup(self.repo_check.stop)
+
+    def test_repo_mismatch_fails_closed(self):
+        self.repo_check.stop()
+        config = self.tmp / ".aiur/config"
+        config.parent.mkdir()
+        config.write_text("tracker:\n  github:\n    repo: other/repo\n")
+        result = subprocess.CompletedProcess([], 0, stdout=json.dumps({"nameWithOwner": self.cfg["intake_repo"]}))
+        with patch.object(ds, "REPO", self.tmp), patch.object(ds.subprocess, "run", return_value=result):
+            with self.assertRaises(ValueError):
+                ds.verify_intake_repo(self.cfg)
+            config.write_text(f"tracker:\n  github:\n    repo: {self.cfg['intake_repo']}\n")
+            ds.verify_intake_repo(self.cfg)
+            config.write_text("tracker:\n  kind: github\n  github:\n    label_prefix: agent\n")
+            ds.verify_intake_repo(self.cfg)
+            config.write_text(f'tracker:\n  github:\n    repo: "{self.cfg["intake_repo"]}"\n')
+            ds.verify_intake_repo(self.cfg)
+            config.write_text('tracker:\n  github:\n    repo: ""\n')
+            ds.verify_intake_repo(self.cfg)
+            for text in ("tracker:\n  github:\n      repo: other/repo\n",
+                         "tracker:\n  github:\n    <<: *defaults\n",
+                         'tracker:\n  github:\n    "repo": other/repo\n',
+                         'tracker:\n  "github": {repo: other/repo}\n',
+                         "tracker:\n  kind: linear\n"):
+                config.write_text(text)
+                with self.assertRaises(ValueError):
+                    ds.verify_intake_repo(self.cfg)
+
+    def test_new_queue_entry_gets_ticket_once_and_old_entries_are_ignored(self):
+        called = []
+        self.syncer.ticket_filer = lambda cfg, qdir: called.append(qdir)
+        self.drive.add_file("FILEINTAKE01", "pack.fbx", ROOT)
+        self.poll()
+        self.poll(181)
+        self.assertEqual(len(called), 1)
+        self.assertEqual(json.loads((called[0] / "ticket.json").read_text())["manifest"],
+                         self.queue()[0]["manifest"])
+
+    def test_poll_files_and_dispatches_the_new_queue_entry(self):
+        self.syncer.ticket_filer = ds.file_intake_ticket
+        self.drive.add_file("FILEINTAKE01", "pack.fbx", ROOT)
+        created = subprocess.CompletedProcess([], 0, stdout="https://github.com/o/r/issues/42\n")
+        ready = subprocess.CompletedProcess([], 0, stdout=json.dumps({"state": "OPEN", "labels": [{"name": "agent:queued"}]}))
+        with patch.object(ds.subprocess, "run", side_effect=[created, ready, subprocess.CompletedProcess([], 0)]) as run:
+            self.poll()
+            self.poll(181)
+            self.poll(181)
+        self.assertEqual(run.call_count, 3)
+        self.assertEqual(run.call_args.args[0], [str(Path.home() / ".local/bin/aiur"), "--todo", "42"])
+        record = self.cfg["inbox"] / Path(self.queue()[0]["manifest"]).parent / "ticket.json"
+        self.assertTrue(json.loads(record.read_text())["dispatched"])
+
+    def test_ticket_creation_and_dispatch_are_durable(self):
+        qdir = self.tmp / "drop"
+        qdir.mkdir()
+        ds.save_state(qdir / "ticket.json", {"manifest": "quarantine/drop/manifest.json"})
+        created = subprocess.CompletedProcess([], 0, stdout="https://github.com/o/r/issues/42\n", stderr="")
+        ready = subprocess.CompletedProcess([], 0, stdout=json.dumps({"state": "OPEN", "labels": [{"name": "agent:queued"}]}))
+        dispatched = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        with patch.object(ds.subprocess, "run", side_effect=[created, ready, dispatched]) as run:
+            ds.file_intake_ticket(self.cfg, qdir)
+            ds.file_intake_ticket(self.cfg, qdir)
+        self.assertEqual(run.call_count, 3)
+        self.assertIn("build-lane:assets", run.call_args_list[0].args[0])
+        self.assertIn("agent:queued", run.call_args_list[0].args[0])
+        self.assertEqual(run.call_args_list[2].args[0], [str(Path.home() / ".local/bin/aiur"), "--todo", "42"])
+        self.assertTrue(json.loads((qdir / "ticket.json").read_text())["dispatched"])
+
+    def test_dispatch_failure_retries_without_creating_another_issue(self):
+        qdir = self.tmp / "drop"
+        qdir.mkdir()
+        ds.save_state(qdir / "ticket.json", {"manifest": "quarantine/drop/manifest.json"})
+        created = subprocess.CompletedProcess([], 0, stdout="https://github.com/o/r/issues/42\n", stderr="")
+        ready = subprocess.CompletedProcess([], 0, stdout=json.dumps({"state": "OPEN", "labels": [{"name": "agent:queued"}]}))
+        with patch.object(ds.subprocess, "run", side_effect=[created, ready, subprocess.CalledProcessError(1, "aiur")]):
+            with self.assertRaises(subprocess.CalledProcessError):
+                ds.file_intake_ticket(self.cfg, qdir)
+        with patch.object(ds.subprocess, "run", side_effect=[ready, subprocess.CompletedProcess([], 0)]) as run:
+            ds.file_intake_ticket(self.cfg, qdir)
+        self.assertEqual(run.call_args.args[0], [str(Path.home() / ".local/bin/aiur"), "--todo", "42"])
+
+    def test_already_dispatched_ticket_is_not_requeued(self):
+        qdir = self.tmp / "drop"
+        qdir.mkdir()
+        ds.save_state(qdir / "ticket.json", {"manifest": "quarantine/drop/manifest.json", "number": 42})
+        running = subprocess.CompletedProcess([], 0, stdout=json.dumps({"state": "OPEN", "labels": [{"name": "agent:in-progress"}]}))
+        with patch.object(ds.subprocess, "run", return_value=running) as run:
+            ds.file_intake_ticket(self.cfg, qdir)
+        self.assertEqual(run.call_count, 1)
+        self.assertTrue(json.loads((qdir / "ticket.json").read_text())["dispatched"])
+
+    def test_missing_gh_can_be_retried(self):
+        qdir = self.tmp / "drop"
+        qdir.mkdir()
+        ds.save_state(qdir / "ticket.json", {"manifest": "quarantine/drop/manifest.json"})
+        with patch.object(ds.subprocess, "run", side_effect=FileNotFoundError()):
+            with self.assertRaises(FileNotFoundError):
+                ds.file_intake_ticket(self.cfg, qdir)
+        self.assertFalse(json.loads((qdir / "ticket.json").read_text())["creating"])
+
+    def test_bad_credentials_can_be_retried(self):
+        qdir = self.tmp / "drop"
+        qdir.mkdir()
+        ds.save_state(qdir / "ticket.json", {"manifest": "quarantine/drop/manifest.json"})
+        failure = subprocess.CalledProcessError(1, "gh", stderr="HTTP 401: Bad credentials")
+        with patch.object(ds.subprocess, "run", side_effect=failure):
+            with self.assertRaises(subprocess.CalledProcessError):
+                ds.file_intake_ticket(self.cfg, qdir)
+        self.assertFalse(json.loads((qdir / "ticket.json").read_text())["creating"])
+
+    def test_uncertain_issue_creation_is_not_repeated(self):
+        qdir = self.tmp / "drop"
+        qdir.mkdir()
+        ds.save_state(qdir / "ticket.json", {"manifest": "quarantine/drop/manifest.json"})
+        empty = subprocess.CompletedProcess([], 0, stdout="[]", stderr="")
+        with patch.object(ds.subprocess, "run", side_effect=[subprocess.TimeoutExpired("gh", 120), empty]) as run:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                ds.file_intake_ticket(self.cfg, qdir)
+            ds.file_intake_ticket(self.cfg, qdir)
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args.args[0][:3], ["gh", "issue", "list"])
+
+    def test_uncertain_creation_recovers_issue_by_marker(self):
+        qdir = self.tmp / "drop"
+        qdir.mkdir()
+        manifest = "quarantine/drop/manifest.json"
+        ds.save_state(qdir / "ticket.json", {"manifest": manifest, "creating": True})
+        marker = "ogm-drive-intake-" + hashlib.sha256(manifest.encode()).hexdigest()
+        found = subprocess.CompletedProcess([], 0, stdout=json.dumps([
+            {"number": 42, "body": f"<!-- {marker} -->"}]), stderr="")
+        ready = subprocess.CompletedProcess([], 0, stdout=json.dumps({"state": "OPEN", "labels": [{"name": "agent:queued"}]}))
+        with patch.object(ds.subprocess, "run", side_effect=[found, ready, subprocess.CompletedProcess([], 0)]) as run:
+            ds.file_intake_ticket(self.cfg, qdir)
+        self.assertEqual(run.call_args.args[0], [str(Path.home() / ".local/bin/aiur"), "--todo", "42"])
+        self.assertTrue(json.loads((qdir / "ticket.json").read_text())["dispatched"])
 
 
 class FolderFiltering(Base):

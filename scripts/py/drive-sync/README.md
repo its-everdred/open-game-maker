@@ -14,8 +14,9 @@ The local, single-machine version of the Drive watch folder in C2 §7. Kevin dro
 
    Unsafe paths (absolute, drive letters, `..`), symlinks, device files, encrypted members, CRC or stream errors, zip-bomb compression ratios, and member-count or unpacked-size limits are all recorded as problems. Executables and nested archives are noted.
 6. **Manifest and queue.** The listener writes `manifest.json` next to `files/` and appends one line to `assets-local/inbox/queue.jsonl`. The manifest lists Drive ids, names, paths, sizes, MD5s, times, the kind (guessed from the extension), any license-looking files (including ones inside archives), problems and warnings. It also sets strict default rights (C2 §10): `uses: [vision-input]`, `audience: private`, `redistribution: none`, `basis: unknown`. Only the intake skill proposes wider rights, and only Kevin confirms them. The `tagging` block is the hook where the asset-metadata standard (C3) plugs in later.
-7. **Notifications.** Every notice goes to the log, and to `notify-send` if it's installed. Add `"command"` to `notify` to run your own program with the title and body as two arguments. Adding a new notifier means adding one function to `NOTIFIERS`.
-8. **Re-changes.** The listener remembers each processed file by Drive id and MD5. If a file in an already-downloaded drop changes its bytes, the drop settles again and only the changed file is downloaded, into a new quarantine folder with a new manifest revision. Unchanged files point to the earlier quarantine folder. Renames, and files touched without their bytes changing, are never downloaded again.
+7. **Intake tickets.** Each new queue entry gets a GitHub issue labelled `build-lane:assets` and `agent:queued`; `aiur --todo` adds the dispatch state. The service needs authenticated `gh`, a running Aiur daemon for this repository, and permission to create issues. `intake_repo` selects the GitHub repository and must match both the checkout and the effective `tracker.github.repo` in its Aiur configuration (or the checkout origin when omitted); ambiguous configuration fails closed. A durable `ticket.json` records the issue and dispatch state; dispatch failures retry on later polls. If issue creation has an uncertain result, the listener searches for its unique marker and never blindly creates a duplicate. If no matching issue appears, inspect the log and reconcile the record before retrying.
+8. **Notifications.** Every notice goes to the log, and to `notify-send` if it's installed. Add `"command"` to `notify` to run your own program with the title and body as two arguments. Adding a new notifier means adding one function to `NOTIFIERS`.
+9. **Re-changes.** The listener remembers each processed file by Drive id and MD5. If a file in an already-downloaded drop changes its bytes, the drop settles again and only the changed file is downloaded, into a new quarantine folder with a new manifest revision. Unchanged files point to the earlier quarantine folder. Renames, and files touched without their bytes changing, are never downloaded again.
 
 The listener's state (page token, the folders and files it knows about, drops, processed MD5s) is a JSON file outside the repo at `~/.local/state/ogm/drive-sync/state.json`, and so is the log.
 
@@ -28,6 +29,7 @@ assets-local/inbox/                       # gitignored with the rest of assets-l
     manifest.json                         # written by the listener
     files/<drop name>/...                 # downloaded files, read-only
     intake.json                           # written by gm-asset-intake when it has handled the drop
+    ticket.json                           # intake issue creation and dispatch state
 ```
 
 A queue entry is open until `intake.json` exists next to its manifest.
