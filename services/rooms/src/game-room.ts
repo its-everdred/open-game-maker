@@ -1145,7 +1145,7 @@ export class GameRoom extends Room<{ state: GameRoomState }> {
     return (
       this.revokedJtis.has(grant.jti) ||
       this.revokedUsers.has(grant.sub) ||
-      grant.iat <= (this.invalidatedUsers.get(grant.sub) ?? -1)
+      (grant.iat ?? 0) <= (this.invalidatedUsers.get(grant.sub) ?? -1)
     );
   }
 
