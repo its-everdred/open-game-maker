@@ -5,7 +5,6 @@ import {
   GRANT_SECRET,
   INTERNAL_SECRET,
   defaultTimings,
-  joinOptions,
   newRoom,
   startHarness,
 } from '../../../services/rooms/test/helpers';
@@ -384,7 +383,10 @@ for (const viewport of [
       await signIn(page, system);
       system.seedChat();
       const game = await system.seedEditor(dist);
-      const rooms = await startHarness({}, 0);
+      const rooms = await startHarness(
+        { timings: { ...defaultTimings, idleDisposeSec: 300, seatReconnectSec: 30 } },
+        0,
+      );
       let peerBrowser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
       let peerPage: Page | undefined;
       let onlineRoom: Awaited<ReturnType<typeof newRoom>> | undefined;
@@ -392,7 +394,6 @@ for (const viewport of [
         peerBrowser = await chromium.launch({ headless: true, args: launchArgs() });
         const peerContext = await peerBrowser.newContext({
           baseURL: new URL(page.url()).origin,
-          storageState: await page.context().storageState(),
           viewport,
           isMobile: true,
           hasTouch: true,
@@ -402,19 +403,6 @@ for (const viewport of [
         peerPage = peer;
         const address = rooms.gameServer.transport.server?.address();
         if (!address || typeof address === 'string') throw new Error('rooms server did not bind');
-        const room = await newRoom(rooms.testServer, {
-          protocol: 2,
-          mode: 'per-seat',
-          gameId: game.gameId,
-          branchId: game.branchId,
-          buildId: game.buildId,
-          maxPlayers: 2,
-          timings: { idleDisposeSec: 300, seatReconnectSec: 30 },
-        });
-        onlineRoom = room;
-        const ownerGrant = await joinOptions(room, 'owner', 'owner');
-        const peerGrant = await joinOptions(room, 'peer', 'player');
-        // The second context copies the real sign-in session; requests still reach the local API.
         await peer.route(/\/(auth|api)\//, async (route) => {
           const incoming = new URL(route.request().url());
           if (incoming.origin !== new URL(page.url()).origin) return route.continue();
@@ -432,10 +420,40 @@ for (const viewport of [
             await route.abort('failed').catch(() => undefined);
           }
         });
-        for (const [target, grant] of [
-          [page, ownerGrant.grant],
-          [peer, peerGrant.grant],
-        ] as const) {
+        await signIn(peer, system, 'peer@example.test');
+        system.addPeerToFamily();
+        system.publishForFamily();
+        system.configureRooms(`http://127.0.0.1:${address.port}`, INTERNAL_SECRET, GRANT_SECRET);
+        const created = await page.evaluate(async ({ gameId, branchId, buildId }) => {
+          const response = await fetch(`/api/v1/games/${gameId}/rooms`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ branchId, buildId, protocol: 2, mode: 'per-seat', maxPlayers: 2 }),
+          });
+          return { status: response.status, body: await response.json() };
+        }, game);
+        expect(created.status).toBe(201);
+        const roomId = created.body.roomId as string;
+        const room = rooms.testServer.getRoomById<Awaited<ReturnType<typeof newRoom>>>(roomId);
+        onlineRoom = room;
+        const invitation = await page.evaluate(async (id) => {
+          const response = await fetch(`/api/v1/rooms/${id}/invites`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({}),
+          });
+          return { status: response.status, body: await response.json() };
+        }, roomId);
+        expect(invitation.status).toBe(201);
+        const token = new URL(invitation.body.url as string).pathname.split('/').pop();
+        if (!token) throw new Error('room invitation has no token');
+        expect(
+          await peer.evaluate(
+            (value) => fetch(`/api/v1/join/${encodeURIComponent(value)}`).then((r) => r.status),
+            token,
+          ),
+        ).toBe(200);
+        for (const target of [page, peer]) {
           await target.route(
             (url) => [bridgeOrigin, 'http://127.0.0.1:10000'].includes(url.origin),
             async (route) => {
@@ -448,17 +466,14 @@ for (const viewport of [
               }
             },
           );
-          // Grants are fixture-issued; transport, room and both hosted games are real local services.
-          await target.route('**/api/v1/rooms/*/grant', (route) =>
-            route.fulfill({
-              json: {
-                roomId: room.roomId,
-                grant,
-                pin: { gameId: game.gameId, branchId: game.branchId, buildId: game.buildId },
-                roomsUrl: `ws://127.0.0.1:${address.port}`,
-              },
-            }),
-          );
+          // The real API issues each grant. Replace only the proxy URL with the direct local rooms server.
+          await target.route('**/api/v1/rooms/*/grant', async (route) => {
+            const request = new URL(route.request().url());
+            const response = await route.fetch({ url: new URL(request.pathname + request.search, system.origin).href });
+            if (!response.ok()) return route.fulfill({ response });
+            const body = (await response.json()) as Record<string, unknown>;
+            await route.fulfill({ response, json: { ...body, roomsUrl: `ws://127.0.0.1:${address.port}` } });
+          });
           await target.goto(`/g/${game.gameId}?room=${room.roomId}&test`, { waitUntil: 'domcontentloaded' });
           await expect
             .poll(
@@ -490,7 +505,11 @@ for (const viewport of [
         await ownerFlow.getByRole('button', { name: 'Start match' }).tap();
         await expect.poll(() => room.state.epoch, { timeout: 120_000 }).not.toBe('');
         for (const target of [page, peer]) {
-          const frame = target.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`));
+          const frame = target
+            .frames()
+            .find((candidate) =>
+              [`${bridgeOrigin}/d/`, `${bridgeOrigin}/g/`].some((origin) => candidate.url().startsWith(origin)),
+            );
           if (!frame) throw new Error('hosted Blobs frame is missing');
           await expect
             .poll(
@@ -526,7 +545,11 @@ for (const viewport of [
           });
         }
         if (peerPage && !peerPage.isClosed()) {
-          const frame = peerPage.frames().find((candidate) => candidate.url().startsWith(`${bridgeOrigin}/d/`));
+          const frame = peerPage
+            .frames()
+            .find((candidate) =>
+              [`${bridgeOrigin}/d/`, `${bridgeOrigin}/g/`].some((origin) => candidate.url().startsWith(origin)),
+            );
           const lobby = await frame
             ?.locator('#blobs-flow')
             .textContent({ timeout: 5_000 })

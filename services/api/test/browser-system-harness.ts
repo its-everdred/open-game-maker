@@ -85,6 +85,43 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('API did not bind a TCP port');
     const apiOrigin = `http://127.0.0.1:${address.port}`;
+    const publishBuild = (owner: string) => {
+      const gameId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01';
+      const buildId = 'build_01BX5ZZKBKACTAV9WEVGEMMVRZ';
+      const branch = ensureMainBranch(deps!.sqlite, gameId);
+      const publishedAt = new Date().toISOString();
+      deps!.db
+        .insert(schema.overrideSnapshots)
+        .values({
+          id: 'snapshot-system-test',
+          gameId,
+          branchId: branch.id,
+          buildId,
+          headRev: 0,
+          sha256: 'c'.repeat(64),
+          entriesJson: '[]',
+          entityOpsJson: '[]',
+          createdAt: publishedAt,
+        })
+        .run();
+      deps!.db
+        .insert(schema.releases)
+        .values({
+          id: 'release-system-test',
+          gameId,
+          seq: 1,
+          version: '1.0.0',
+          buildId,
+          snapshotId: 'snapshot-system-test',
+          gitTag: 'system-test',
+          kind: 'publish',
+          changelogJson: '[]',
+          publishedBy: owner,
+          publishedAt,
+        })
+        .run();
+      deps!.sqlite.prepare('UPDATE games SET published_release_id = ? WHERE id = ?').run('release-system-test', gameId);
+    };
     return {
       origin: apiOrigin,
       configureRooms(url: string, internalSecret: string, grantSecret: string) {
@@ -204,6 +241,13 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
             commands_json: string;
           }[]
         ).map(({ label, commands_json }) => ({ label, commands: JSON.parse(commands_json) as unknown })),
+      publishForFamily() {
+        const game = deps!.sqlite.prepare('SELECT owner_id FROM games LIMIT 1').get() as
+          { owner_id: string } | undefined;
+        if (!game) throw new Error('seed a game before publishing');
+        deps!.sqlite.prepare("UPDATE games SET visibility = 'listed'").run();
+        publishBuild(game.owner_id);
+      },
       makePlayer() {
         const owner = 'u_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e03';
         deps!.sqlite
@@ -219,43 +263,7 @@ export async function startBrowserSystem(appOrigin: string, editorBuildDirectory
           )
           .run(owner);
         deps!.sqlite.prepare("UPDATE games SET owner_id = ?, visibility = 'listed'").run(owner);
-        const gameId = 'g_8f1c2a4e-5b6d-4c7e-9f00-1a2b3c4d5e01';
-        const buildId = 'build_01BX5ZZKBKACTAV9WEVGEMMVRZ';
-        const branch = ensureMainBranch(deps!.sqlite, gameId);
-        const publishedAt = new Date().toISOString();
-        deps!.db
-          .insert(schema.overrideSnapshots)
-          .values({
-            id: 'snapshot-system-test',
-            gameId,
-            branchId: branch.id,
-            buildId,
-            headRev: 0,
-            sha256: 'c'.repeat(64),
-            entriesJson: '[]',
-            entityOpsJson: '[]',
-            createdAt: publishedAt,
-          })
-          .run();
-        deps!.db
-          .insert(schema.releases)
-          .values({
-            id: 'release-system-test',
-            gameId,
-            seq: 1,
-            version: '1.0.0',
-            buildId,
-            snapshotId: 'snapshot-system-test',
-            gitTag: 'system-test',
-            kind: 'publish',
-            changelogJson: '[]',
-            publishedBy: owner,
-            publishedAt,
-          })
-          .run();
-        deps!.sqlite
-          .prepare('UPDATE games SET published_release_id = ? WHERE id = ?')
-          .run('release-system-test', gameId);
+        publishBuild(owner);
       },
       reports: () =>
         deps!.sqlite.prepare('SELECT game_id, build_hash, text FROM reports ORDER BY created_at').all() as {
