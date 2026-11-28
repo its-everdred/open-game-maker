@@ -23,6 +23,7 @@ export const RESERVED_GAME_SLUGS: ReadonlySet<string> = new Set([
   'icons',
   'internal',
   'join',
+  'live',
   'login',
   'logout',
   'new',
